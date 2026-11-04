@@ -16,7 +16,7 @@ renamed = {"className": "class", "htmlFor": "for", "defaultValue": "value", "def
 events = {
     "onDoubleClick": "dblclick", "onChange": "input", "onFocus": "focusin", "onBlur": "focusout",
 }
-skipped = {"key", "ref", "children"}
+skipped = {"key", "children"}
 hyphenated = set("""accentHeight alignmentBaseline arabicForm baselineShift capHeight clipPath clipRule
 colorInterpolation colorInterpolationFilters colorProfile colorRendering dominantBaseline enableBackground
 fillOpacity fillRule floodColor floodOpacity fontFamily fontSize fontSizeAdjust fontStretch fontStyle

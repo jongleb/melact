@@ -260,10 +260,14 @@ let component ~loc ~name expression =
         let olds = List.map (fun name -> name ^ "_old") names in
         let news = List.map (fun name -> name ^ "_new") names in
         let same =
-          List.fold_right2
-            (fun old_name new_name rest ->
-              [%expr [%e evar ~loc old_name] == [%e evar ~loc new_name] && [%e rest]])
-            olds news [%expr true]
+          List.map2
+            (fun old_name new_name -> [%expr [%e evar ~loc old_name] == [%e evar ~loc new_name]])
+            olds news
+          |> List.rev
+          |> function
+          | [] -> [%expr true]
+          | last :: earlier ->
+              List.fold_left (fun rest test -> [%expr [%e test] && [%e rest]]) last earlier
         in
         ( pexp_tuple ~loc (List.map (evar ~loc) names),
           ppat_tuple ~loc patterns,

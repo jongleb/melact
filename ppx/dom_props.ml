@@ -13,6 +13,7 @@ type kind =
 
 let find name =
   match name with
+  | "ref" -> Some (Ref)
   | "ariaActivedescendant" -> Some (Attribute ("aria-activedescendant", Text))
   | "ariaAtomic" -> Some (Attribute ("aria-atomic", Booleanish))
   | "ariaAutocomplete" -> Some (Attribute ("aria-autocomplete", Text))
