@@ -74,51 +74,51 @@ let prop frontend ~loc ~label kind requirement value =
   | Dom_props.Ignored, _, _ -> Absent
   | Attribute (name, Text), `Required, `String text -> Static (name, Valued text)
   | Attribute (name, Text), `Required, _ ->
-      hole (Attr name) [%expr Melact_view.View.HAttr (Some ([%e value] : string))]
+      hole (Attr name) [%expr Mehole.View.HAttr (Some ([%e value] : string))]
   | Attribute (name, Flag), `Required, `True -> Static (name, Bare)
   | Attribute (_, Flag), `Required, `False -> Absent
   | Attribute (name, Flag), `Required, _ ->
       hole (Attr name)
-        [%expr Melact_view.View.HAttr (if ([%e value] : bool) then Some "" else None)]
+        [%expr Mehole.View.HAttr (if ([%e value] : bool) then Some "" else None)]
   | Attribute (name, Booleanish), `Required, `True -> Static (name, Valued "true")
   | Attribute (name, Booleanish), `Required, `False -> Static (name, Valued "false")
   | Attribute (name, Booleanish), `Required, _ ->
       hole (Attr name)
         [%expr
-          Melact_view.View.HAttr (Some (if ([%e value] : bool) then "true" else "false"))]
+          Mehole.View.HAttr (Some (if ([%e value] : bool) then "true" else "false"))]
   | Attribute (name, (Integer | Decimal)), `Required, `Number digits ->
       Static (name, Valued digits)
   | Attribute (name, Integer), `Required, _ ->
       hole (Attr name)
-        [%expr Melact_view.View.HAttr (Some (string_of_int ([%e value] : int)))]
+        [%expr Mehole.View.HAttr (Some (string_of_int ([%e value] : int)))]
   | Attribute (name, Decimal), `Required, _ ->
       hole (Attr name)
-        [%expr Melact_view.View.HAttr (Some (Js.Float.toString ([%e value] : float)))]
+        [%expr Mehole.View.HAttr (Some (Js.Float.toString ([%e value] : float)))]
   | Attribute (name, Text), `Optional, _ ->
-      hole (Attr name) [%expr Melact_view.View.HAttr ([%e value] : string option)]
+      hole (Attr name) [%expr Mehole.View.HAttr ([%e value] : string option)]
   | Attribute (name, Flag), `Optional, _ ->
       hole (Attr name)
         [%expr
-          Melact_view.View.HAttr
+          Mehole.View.HAttr
             (match ([%e value] : bool option) with
             | Some true -> Some ""
             | Some false | None -> None)]
   | Attribute (name, Booleanish), `Optional, _ ->
       hole (Attr name)
         [%expr
-          Melact_view.View.HAttr
+          Mehole.View.HAttr
             (Option.map
                (fun flag -> if flag then "true" else "false")
                ([%e value] : bool option))]
   | Attribute (name, Integer), `Optional, _ ->
       hole (Attr name)
-        [%expr Melact_view.View.HAttr (Option.map string_of_int ([%e value] : int option))]
+        [%expr Mehole.View.HAttr (Option.map string_of_int ([%e value] : int option))]
   | Attribute (name, Decimal), `Optional, _ ->
       hole (Attr name)
         [%expr
-          Melact_view.View.HAttr (Option.map Js.Float.toString ([%e value] : float option))]
+          Mehole.View.HAttr (Option.map Js.Float.toString ([%e value] : float option))]
   | Property (name, kind), `Required, _ ->
-      hole (Prop name) [%expr Melact_view.View.HProp ([%e value] : [%t type_of kind])]
+      hole (Prop name) [%expr Mehole.View.HProp ([%e value] : [%t type_of kind])]
   | Property (name, kind), `Optional, _ ->
       let default =
         match kind with
@@ -129,18 +129,18 @@ let prop frontend ~loc ~label kind requirement value =
       in
       hole (Prop name)
         [%expr
-          Melact_view.View.HProp
+          Mehole.View.HProp
             (Option.value ~default:[%e default] ([%e value] : [%t type_of kind] option))]
   | Handler (event, family), requirement, _ ->
       hole (Handler event) (frontend.handler loc { label; event; family; requirement; value })
   | Style, requirement, _ -> hole Style (frontend.style loc requirement value)
   | Ref, requirement, _ -> hole Ref (frontend.reference loc requirement value)
   | Inner_html, `Required, _ ->
-      hole (Prop "innerHTML") [%expr Melact_view.View.HProp [%e value]##__html]
+      hole (Prop "innerHTML") [%expr Mehole.View.HProp [%e value]##__html]
   | Inner_html, `Optional, _ ->
       hole (Prop "innerHTML")
         [%expr
-          Melact_view.View.HProp
+          Mehole.View.HProp
             (Option.fold ~none:"" ~some:(fun html -> html##__html) [%e value])]
 
 let rec analyse frontend ~loc tag arguments =
@@ -158,7 +158,7 @@ let rec analyse frontend ~loc tag arguments =
                 [
                   Markup.Slot
                     ( Child_slot,
-                      [%expr Melact_view.View.HChild [%e frontend.unwrap loc (frontend.map value)]] );
+                      [%expr Mehole.View.HChild [%e frontend.unwrap loc (frontend.map value)]] );
                 ])
       | Labelled name | Optional name -> (
           let requirement =
@@ -206,22 +206,22 @@ and child frontend item =
           Some
             (Markup.Slot
                ( Text_slot,
-                 [%expr Melact_view.View.HText (string_of_int ([%e frontend.map value] : int))] ))
+                 [%expr Mehole.View.HText (string_of_int ([%e frontend.map value] : int))] ))
       | Some (Text (Float_text, value)) ->
           Some
             (Markup.Slot
                ( Text_slot,
                  [%expr
-                   Melact_view.View.HText (Js.Float.toString ([%e frontend.map value] : float))] ))
+                   Mehole.View.HText (Js.Float.toString ([%e frontend.map value] : float))] ))
       | Some (Text (String_text, value)) ->
           Some
             (Markup.Slot
-               (Text_slot, [%expr Melact_view.View.HText ([%e frontend.map value] : string)]))
+               (Text_slot, [%expr Mehole.View.HText ([%e frontend.map value] : string)]))
       | None ->
           Some
             (Markup.Slot
                ( Child_slot,
-                 [%expr Melact_view.View.HChild [%e frontend.unwrap loc (frontend.map item)]] )))
+                 [%expr Mehole.View.HChild [%e frontend.unwrap loc (frontend.map item)]] )))
 
 let lowercase frontend ~loc tag arguments =
   let element, key = analyse frontend ~loc tag arguments in
@@ -233,25 +233,25 @@ let lowercase frontend ~loc tag arguments =
          (fun (hole : expression Markup.hole) ->
            match hole with
            | On_element (indices, Attr name, value) ->
-               ([%expr Melact_view.Template.Attr ([%e path indices], [%e estring ~loc name])], value)
+               ([%expr Mehole.Template.Attr ([%e path indices], [%e estring ~loc name])], value)
            | On_element (indices, Prop name, value) ->
-               ([%expr Melact_view.Template.Prop ([%e path indices], [%e estring ~loc name])], value)
+               ([%expr Mehole.Template.Prop ([%e path indices], [%e estring ~loc name])], value)
            | On_element (indices, Handler event, value) ->
-               ( [%expr Melact_view.Template.Handler ([%e path indices], [%e estring ~loc event])],
+               ( [%expr Mehole.Template.Handler ([%e path indices], [%e estring ~loc event])],
                  value )
-           | On_element (indices, Ref, value) -> ([%expr Melact_view.Template.Ref [%e path indices]], value)
+           | On_element (indices, Ref, value) -> ([%expr Mehole.Template.Ref [%e path indices]], value)
            | On_element (indices, Style, value) ->
-               ([%expr Melact_view.Template.Style [%e path indices]], value)
+               ([%expr Mehole.Template.Style [%e path indices]], value)
            | At_position (indices, index, Text_slot, value) ->
-               ([%expr Melact_view.Template.Text ([%e path indices], [%e eint ~loc index])], value)
+               ([%expr Mehole.Template.Text ([%e path indices], [%e eint ~loc index])], value)
            | At_position (indices, index, Child_slot, value) ->
-               ([%expr Melact_view.Template.Child ([%e path indices], [%e eint ~loc index])], value))
+               ([%expr Mehole.Template.Child ([%e path indices], [%e eint ~loc index])], value))
          holes)
   in
   let template =
     Hoist.hoist ~loc "template"
       [%expr
-        Melact_view.Template.make ~html:[%e estring ~loc html] ~holes:[%e pexp_array ~loc specs]]
+        Mehole.Template.make ~html:[%e estring ~loc html] ~holes:[%e pexp_array ~loc specs]]
   in
   let guards =
     List.map
@@ -276,7 +276,7 @@ let lowercase frontend ~loc tag arguments =
       guards
   in
   let slots = constant + Option.fold ~none:0 ~some:(fun _ -> 1) mounted in
-  let flag_name index = Printf.sprintf "__melact_changed_%d" index in
+  let flag_name index = Printf.sprintf "__mehole_changed_%d" index in
   let flag index = evar ~loc (flag_name index) in
   let slot name =
     let rec find index names =
@@ -286,18 +286,18 @@ let lowercase frontend ~loc tag arguments =
     in
     find 0 variables
   in
-  let block = [%expr __melact_block] in
+  let block = [%expr __mehole_block] in
   let puts =
     List.mapi
       (fun index (guard, value) ->
-        let put = [%expr Melact_view.View.put [%e block] [%e eint ~loc index] [%e value]] in
+        let put = [%expr Mehole.View.put [%e block] [%e eint ~loc index] [%e value]] in
         match guard with
         | Free.Volatile -> put
         | Free.Reads names ->
             let flags = match names with [] -> [ flag constant ] | _ :: _ -> List.map (fun name -> flag (slot name)) names in
             let unchanged =
               ppat_tuple ~loc
-                (List.map (fun _ -> [%pat? Melact_view.View.Unchanged]) flags)
+                (List.map (fun _ -> [%pat? Mehole.View.Unchanged]) flags)
             in
             pexp_match ~loc (pexp_tuple ~loc flags)
               [
@@ -315,7 +315,7 @@ let lowercase frontend ~loc tag arguments =
       (fun (index, value) body ->
         [%expr
           let [%p pvar ~loc (flag_name index)] =
-            Melact_view.View.check [%e block] [%e eint ~loc index] [%e value]
+            Mehole.View.check [%e block] [%e eint ~loc index] [%e value]
           in
           [%e body]])
       checks
@@ -325,21 +325,21 @@ let lowercase frontend ~loc tag arguments =
     match values with
     | [] ->
         Hoist.hoist ~loc "element"
-          (frontend.wrap loc [%expr Melact_view.View.tpl_instance [%e template] [||]])
+          (frontend.wrap loc [%expr Mehole.View.tpl_instance [%e template] [||]])
     | _ :: _ ->
         frontend.wrap loc
           [%expr
-            Melact_view.View.guarded [%e template] [%e eint ~loc slots] (fun __melact_block ->
+            Mehole.View.guarded [%e template] [%e eint ~loc slots] (fun __mehole_block ->
                 [%e body])]
   in
   Option.fold ~none:instance
     ~some:(fun key ->
       frontend.wrap loc
-        [%expr Melact_view.View.with_key ([%e key] : string) [%e frontend.unwrap loc instance]])
+        [%expr Mehole.View.with_key ([%e key] : string) [%e frontend.unwrap loc instance]])
     key
 
 let fragment frontend ~loc items =
   frontend.wrap loc
     [%expr
-      Melact_view.View.list
+      Mehole.View.list
         [%e elist ~loc (List.map (fun item -> frontend.unwrap loc (frontend.map item)) items)]]

@@ -1,5 +1,5 @@
 open Ppxlib
-open Melact_compiler
+open Mehole_compiler
 
 let html_text expression =
   match expression.pexp_desc with
@@ -21,44 +21,44 @@ let mapper =
     method private frontend =
       {
         Element.name = "meltea";
-        locals = "__melact_dispatch" :: self#locals;
+        locals = "__mehole_dispatch" :: self#locals;
         map = self#expression;
-        wrap = (fun loc child -> [%expr Html.Node (fun __melact_dispatch -> [%e child])]);
+        wrap = (fun loc child -> [%expr Html.Node (fun __mehole_dispatch -> [%e child])]);
         unwrap =
           (fun loc element ->
             [%expr
-              let (Html.Node __melact_render) = [%e element] in
-              __melact_render __melact_dispatch]);
+              let (Html.Node __mehole_render) = [%e element] in
+              __mehole_render __mehole_dispatch]);
         handler =
           (fun loc { label; requirement; value; _ } ->
             let send message =
               match label with
               | "onInput" | "onChange" ->
-                  [%expr __melact_dispatch ([%e message] (Html.target_value __melact_event))]
+                  [%expr __mehole_dispatch ([%e message] (Html.target_value __mehole_event))]
               | "onCheck" ->
-                  [%expr __melact_dispatch ([%e message] (Html.target_checked __melact_event))]
+                  [%expr __mehole_dispatch ([%e message] (Html.target_checked __mehole_event))]
               | "onKeyDown" | "onKeyUp" | "onKeyPress" ->
-                  [%expr __melact_dispatch ([%e message] (Html.key __melact_event))]
+                  [%expr __mehole_dispatch ([%e message] (Html.key __mehole_event))]
               | "onSubmit" ->
                   [%expr
-                    Html.prevent_default __melact_event;
-                    __melact_dispatch [%e message]]
-              | _ -> [%expr __melact_dispatch [%e message]]
+                    Html.prevent_default __mehole_event;
+                    __mehole_dispatch [%e message]]
+              | _ -> [%expr __mehole_dispatch [%e message]]
             in
             match requirement with
-            | `Required -> [%expr Melact_view.View.HHandler (fun __melact_event -> [%e send value])]
+            | `Required -> [%expr Mehole.View.HHandler (fun __mehole_event -> [%e send value])]
             | `Optional ->
                 [%expr
-                  Melact_view.View.HHandler
-                    (fun __melact_event ->
-                      Option.iter (fun __melact_message -> [%e send [%expr __melact_message]]) [%e value])]);
+                  Mehole.View.HHandler
+                    (fun __mehole_event ->
+                      Option.iter (fun __mehole_message -> [%e send [%expr __mehole_message]]) [%e value])]);
         style =
           (fun loc requirement value ->
             match requirement with
-            | `Required -> [%expr Melact_view.View.HStyle ([%e value] : (string * string) list)]
+            | `Required -> [%expr Mehole.View.HStyle ([%e value] : (string * string) list)]
             | `Optional ->
                 [%expr
-                  Melact_view.View.HStyle
+                  Mehole.View.HStyle
                     (Option.value ~default:[] ([%e value] : (string * string) list option))]);
         reference =
           (fun loc _ _ ->

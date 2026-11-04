@@ -21,8 +21,8 @@
 (maintainers "Gleb")
 
 (package
- (name melact)
- (synopsis "reason-react-compatible UI library for Melange without a virtual DOM")
+ (name mehole)
+ (synopsis "Templates with holes for Melange: the runtime and the compiler shared by Melact and Meltea")
  (depends
   (ocaml
    (>= 5.3))
@@ -30,15 +30,31 @@
    (>= 3.16))
   (melange
    (>= 5.1))
-  (reason-react :with-test)
-  (reason-react-ppx :with-test)
-  (reason :with-test)
-  (mlx :with-test)
+  (ppxlib
+   (>= 0.34))
+  ppx_deriving_variant_string
+  ppx_enumerate
   (qcheck-core :with-test)))
 
 (package
+ (name melact)
+ (synopsis "reason-react for Melange without React and without a virtual DOM")
+ (depends
+  (ocaml
+   (>= 5.3))
+  (dune
+   (>= 3.16))
+  (melange
+   (>= 5.1))
+  mehole
+  (reason-react :with-test)
+  (reason-react-ppx :with-test)
+  (reason :with-test)
+  (mlx :with-test)))
+
+(package
  (name melact-ppx)
- (synopsis "JSX to DOM templates with holes, for melact")
+ (synopsis "reason-react's JSX and [@react.component], compiled to templates, for Melact")
  (depends
   (ocaml
    (>= 5.3))
@@ -46,9 +62,7 @@
    (>= 3.16))
   (ppxlib
    (>= 0.34))
-  ppx_deriving_variant_string
-  ppx_enumerate
-  (qcheck-core :with-test)))
+  mehole))
 
 (package
  (name meltea)
@@ -60,7 +74,7 @@
    (>= 3.16))
   (melange
    (>= 5.1))
-  melact
+  mehole
   (mlx :with-test)))
 
 (package
@@ -73,4 +87,4 @@
    (>= 3.16))
   (ppxlib
    (>= 0.34))
-  melact-ppx))
+  mehole))

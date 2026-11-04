@@ -1,6 +1,6 @@
 (copy_files
- (files ../../view/reconcile.{ml,mli}))
+ (files ../../mehole/runtime/reconcile.{ml,mli}))
 
 (test
  (name laws)
- (libraries qcheck-core qcheck-core.runner melact-ppx.compiler))
+ (libraries qcheck-core qcheck-core.runner mehole.compiler))

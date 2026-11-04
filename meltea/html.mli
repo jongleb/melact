@@ -2,7 +2,7 @@
     meltea-ppx compiles each JSX tree to a template. *)
 
 (** A view sending ['msg]: given the program's dispatch, the content to show. *)
-type 'msg t = Node of (('msg -> unit) -> Melact_view.View.child) [@@unboxed]
+type 'msg t = Node of (('msg -> unit) -> Mehole.View.child) [@@unboxed]
 
 val none : 'msg t
 val text : string -> 'msg t

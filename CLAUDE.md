@@ -21,7 +21,7 @@ Read `docs/vision.md` and `docs/compiler.md` before changing anything.
 
 - Talk to the user in Russian; code, docs, README, figures and commits are in English.
 - Write **Melact** and **Meltea** capitalized in prose; package and library identifiers stay
-  lowercase (`melact`, `melact-ppx`, `meltea`, `Melact_view`).
+  lowercase (`mehole`, `melact`, `melact-ppx`, `meltea`, `meltea-ppx`, `Mehole`).
 - Examples and README code use mlx.
 - Commit and push when a piece is done; every commit message is exactly `wip`; never add
   Co-Authored-By or any other attribution.

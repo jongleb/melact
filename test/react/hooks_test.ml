@@ -1,4 +1,4 @@
-open Melact_view
+open Mehole
 open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"

@@ -218,8 +218,8 @@ a `Type.Id` created once at module level, and passes it as a hidden first argume
 let count, setCount = React.useState (fun () -> 0)
 
 (* melact-ppx emits *)
-let __melact_hook_2 = Melact_view.Hook.key ()
-let count, setCount = (React.useState __melact_hook_2) (fun () -> 0)
+let __mehole_hook_2 = Mehole.Hook.key ()
+let count, setCount = (React.useState __mehole_hook_2) (fun () -> 0)
 ```
 
 A slot stores its value with the key that made it, so reading it back is a typed
@@ -359,11 +359,14 @@ The full plan is in [`SPEC.md`](SPEC.md).
 ## Layout
 
 ```
-view/       melact.view     Template, View, Reconcile, Events (Melange)
-program/    melact.program  Elm-style Program.sandbox over View
-react/      melact          React, ReactDOM, ReactEvent
-ppx/        melact-ppx      JSX, [@react.component] and hook keys; DOM props table from reason-react
-test/view/                  vitest + jsdom, written in OCaml
-examples/                   counter, later TodoMVC and js-framework-benchmark
-assets/                     the figures above: python3 assets/make.py
+mehole/runtime     mehole           shared runtime: templates, guards, keyed moves, events
+mehole/compiler    mehole.compiler  shared compiler: templates, scopes, guards, DOM props
+ppx/melact         melact-ppx       JSX, [@react.component], hook keys
+ppx/meltea         meltea-ppx       mlx views with messages
+react/             melact           React, ReactDOM, ReactEvent
+meltea/            meltea           the Elm architecture: Program, Cmd, Sub, Html
+test/                               laws: QCheck, fast-check in jsdom, React vs Melact
+examples/                           counter (Meltea), counter-react (Melact)
+compat/                             real reason-react apps built against Melact
+assets/                             the figures above: python3 assets/make.py
 ```

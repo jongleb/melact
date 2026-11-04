@@ -19,7 +19,7 @@ let take : type a. slots -> a key -> (unit -> a) -> a =
     | Some Equal -> value
     | None ->
         Js.Exn.raiseError
-          "Melact: hooks were called in a different order than in the previous render"
+          "mehole: hooks were called in a different order than in the previous render"
   else
     let value = init () in
     let slot = Slot (key, value) in

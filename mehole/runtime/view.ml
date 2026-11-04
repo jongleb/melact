@@ -343,7 +343,7 @@ let rec build position child =
       let root, sites = Template.clone template in
       if Array.length sites <> Array.length holes then
         Js.Exn.raiseError
-          (Printf.sprintf "Melact template expects %d hole values, got %d"
+          (Printf.sprintf "mehole: template expects %d hole values, got %d"
              (Array.length sites) (Array.length holes));
       attach position { template; root; bindings = Array.map2 bind sites holes; deps = [||] }
   | Guarded (template, count, refresh) ->
@@ -373,7 +373,7 @@ and attach position block =
   Array.iter
     (fun binding ->
       match binding with
-      | Unbound_site _ -> Js.Exn.raiseError "Melact: a compiled template left a hole unfilled"
+      | Unbound_site _ -> Js.Exn.raiseError "mehole: a compiled template left a hole unfilled"
       | Attr_site _ | Prop_site _ | Text_site _ | Child_site _ | Handler_site _ | Ref_site _
       | Style_site _ | Class_site _ ->
           ())
@@ -446,7 +446,7 @@ and bind site hole =
   | ( ( Attr _ | Prop _ | Text _ | Child _ | Handler _ | Ref _ | Style _
       | Class_list _ ),
       _ ) ->
-      Js.Exn.raiseError "Melact hole value does not match its template hole"
+      Js.Exn.raiseError "mehole: hole value does not match its template hole"
 
 and replace position live child =
   let replacement = build position child in
@@ -590,7 +590,7 @@ and rewrite binding hole =
   | ( ( Attr_site _ | Prop_site _ | Text_site _ | Child_site _ | Handler_site _
       | Ref_site _ | Style_site _ | Class_site _ | Unbound_site _ ),
       _ ) ->
-      Js.Exn.raiseError "Melact hole value does not match its template hole"
+      Js.Exn.raiseError "mehole: hole value does not match its template hole"
 
 let put block index hole =
   match block.bindings.(index) with
@@ -633,7 +633,7 @@ let settle () =
       back (Component_live instance) None
     with
     | Some parent, Some last -> { Template.parent; before = Dom_api.next_sibling last }
-    | None, _ | _, None -> Js.Exn.raiseError "Melact: a mounted component is not in the DOM"
+    | None, _ | _, None -> Js.Exn.raiseError "mehole: a mounted component is not in the DOM"
   in
   run_layout ();
   let rec drain () =
@@ -685,14 +685,14 @@ let unmount mounted =
 let current () =
   match !rendering with
   | Some instance -> instance
-  | None -> Js.Exn.raiseError "Melact: hooks can only be called while a component renders"
+  | None -> Js.Exn.raiseError "mehole: hooks can only be called while a component renders"
 
 let slot instance key init = Hook.take instance.slots key init
 
 let invalidate instance =
   match !rendering with
   | Some _ ->
-      Js.Exn.raiseError "Melact: a state setter was called while a component was rendering"
+      Js.Exn.raiseError "mehole: a state setter was called while a component was rendering"
   | None -> (
       mark_dirty instance;
       match !render_schedule with

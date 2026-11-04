@@ -3,6 +3,6 @@
  (public_name melact)
  (wrapped false)
  (modes melange)
- (libraries melact.view melange.dom)
+ (libraries mehole melange.dom)
  (preprocess
   (pps melange.ppx)))

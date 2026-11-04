@@ -1,5 +1,5 @@
 open QCheck2
-open Melact_compiler
+open Mehole_compiler
 
 (** A template node as an HTML parser builds it, plus content inserted at a position. *)
 type parsed =

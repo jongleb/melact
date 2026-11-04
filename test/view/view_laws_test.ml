@@ -1,4 +1,4 @@
-open Melact_view
+open Mehole
 open Testing
 
 let words = [| ""; "a"; "b"; "ab"; "<&>" |]

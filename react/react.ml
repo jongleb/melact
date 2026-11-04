@@ -1,10 +1,10 @@
-open Melact_view
+open Mehole
 
 type element = Element of View.child [@@unboxed]
 type 'value ref = { mutable current : 'value }
 
 module Context = struct
-  type 'value t = Context of 'value Melact_view.Context.t [@@unboxed]
+  type 'value t = Context of 'value Mehole.Context.t [@@unboxed]
 
   let provider (Context context) ~value ~children:(Element children) () =
     Element (View.provide context value children)
@@ -73,7 +73,7 @@ let cloneElement _ _ =
 
 let setDisplayName _ _ = ()
 let displayName _ = None
-let createContext default = Context.Context (Melact_view.Context.make default)
+let createContext default = Context.Context (Mehole.Context.make default)
 let useContext (Context.Context context) = View.consume (View.current ()) context
 
 let reducer key reduce initial =
