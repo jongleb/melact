@@ -676,41 +676,74 @@ def compiled(p):
 
 
 def controlled(p):
-    def field(x, y, w, content, stroke, dash=None, cls="mono"):
-        return (box(x, y, w, 30, p["card"], stroke, rx=6, dash=dash, width=1.6)
-                + text(x + 10, y + 20, content, size=13, cls=cls))
+    def field(x, y, w, content, stroke, caret=False, placeholder=False, dash=None):
+        out = box(x, y, w, 34, p["card"], stroke, rx=7, dash=dash, width=1.6)
+        out += text(x + 12, y + 23, content, size=15 if not placeholder else 13.5,
+                    cls="faint" if placeholder else "mono", weight=None if placeholder else 600)
+        if caret:
+            cx = x + 12 + len(content) * 9.1 + 2
+            out += f'<line x1="{cx}" y1="{y + 8}" x2="{cx}" y2="{y + 26}" stroke="{p["accent"]}" stroke-width="2" class="pulse"/>'
+        return out
 
-    steps = [
-        ("1 · the user types", [("input → ", "muted"), ("Type \"milk\"", "accent")], "model.field = \"milk\""),
-        ("2 · Enter, same tick", [("keydown → ", "muted"), ("Add", "accent")], "model.field = \"\""),
-        ("3 · the redraw", [("new \"\" === last \"\"", "mono")], "unchanged → no write"),
-    ]
-    body = text(0, 18, "One tick: the user types and presses Enter before the next draw", size=13, weight=700)
-    for i, (title, line, model) in enumerate(steps):
-        x = i * 305
-        body += box(x, 34, 270, 92, p["card"], p["line"], rx=12, lift=True)
-        body += text(x + 16, 58, title, size=13, weight=600)
-        body += text(x + 16, 84, "".join(span(t, c) for t, c in line), size=12.5, cls="mono", raw=True)
-        body += text(x + 16, 108, model, size=12, cls="mono muted")
+    def badge(x, y, color, mark):
+        out = f'<circle cx="{x}" cy="{y}" r="12" fill="{p[color]}"/>'
+        path = f"M{x - 5},{y} l3.5,3.8 l6.5,-7.6" if mark == "yes" else f"M{x - 4.5},{y - 4.5} l9,9 M{x + 4.5},{y - 4.5} l-9,9"
+        return out + f'<path d="{path}" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'
+
+    def chip(cx, y, label, color, soft):
+        w = len(label) * 7.4 + 30
+        return (box(cx - w / 2, y, w, 24, p[soft], p[color], rx=12, width=1.3)
+                + f'<circle cx="{cx - w / 2 + 12}" cy="{y + 12}" r="4" fill="{p[color]}" class="pulse"/>'
+                + text(cx + 6, y + 16.5, label, size=12, cls=f"mono {color}", weight=700, anchor="middle"))
+
+    def mono(x, y, parts, size=12.5, anchor="start"):
+        return text(x, y, "".join(span(t, c) if c else escape(t) for t, c in parts), size=size, cls="mono", raw=True, anchor=anchor)
+
+    body = text(20, 20, "One tick: the user types and presses Enter before the next draw", size=14, weight=700)
+    body += f'<line x1="20" y1="66" x2="860" y2="66" stroke="{p["line"]}" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/>'
+    centers = (145, 440, 735)
+    body += chip(centers[0], 54, "input", "orange", "orange_soft")
+    body += chip(centers[1], 54, "keydown Enter", "orange", "orange_soft")
+    body += chip(centers[2], 54, "redraw", "blue", "blue_soft")
+
+    for i, cx in enumerate(centers):
+        body += box(cx - 125, 94, 250, 132, p["card"], p["line"], rx=14, lift=True)
         if i < 2:
-            body += arrow(p, x + 276, 80, x + 299, 80, "accent", flow=True)
+            body += arrow(p, cx + 131, 160, cx + 164, 160, "accent", flow=True)
+    x0, x1, x2 = (cx - 109 for cx in centers)
+    body += text(x0, 116, "the DOM", size=11.5, cls="faint", weight=600)
+    body += field(x0, 124, 218, "milk", p["accent"], caret=True)
+    body += mono(x0, 186, [("Type ", "accent"), ("\"milk\"", "accent")])
+    body += mono(x0, 210, [("field = \"milk\"", "muted")])
 
-    body += box(0, 150, 420, 150, p["orange_soft"], p["orange"], rx=14, width=1.4)
-    body += text(20, 176, "a guard alone", size=13.5, weight=700, cls="orange")
-    body += field(20, 194, 300, "milk", p["orange"])
-    body += text(20, 252, "the field still shows milk,", size=12, cls="muted")
-    body += text(20, 272, "the model says \"\"", size=12, cls="muted")
+    body += text(x1, 116, "the DOM, untouched", size=11.5, cls="faint", weight=600)
+    body += field(x1, 124, 218, "milk", p["line"])
+    body += mono(x1, 186, [("Add", "accent"), ("  → a new todo", "muted")])
+    body += mono(x1, 210, [("field = \"\"", "muted")])
 
-    body += box(460, 150, 420, 150, p["green_soft"], p["green"], rx=14, width=1.4)
-    body += text(480, 176, "value and checked are controlled holes", size=13.5, weight=700, cls="green")
-    body += field(480, 194, 300, "What needs to be done?", p["green"], dash="4 3", cls="faint")
-    body += text(480, 252, "after input or change, and the redraw it causes:", size=12, cls="muted")
-    body += text(480, 274, "".join([escape("if (el.value !== last) "), span("el.value = last", "green")]),
-                 size=12.5, cls="mono", raw=True)
+    body += text(x2, 116, "the guard on field", size=11.5, cls="faint", weight=600)
+    body += box(x2, 124, 218, 34, p["blue_soft"], p["blue"], rx=17, width=1.4)
+    body += mono(x2 + 109, 148, [("\"\"", ""), (" === ", "blue"), ("\"\"", "")], size=14, anchor="middle")
+    body += mono(x2, 186, [("new \"\" is last \"\"", "muted")])
+    body += mono(x2, 210, [("unchanged → ", "muted"), ("no write", "blue")])
 
-    body += text(440, 330, "the guard still skips unchanged values; the field shows the model, as React's controlled inputs",
+    body += box(20, 250, 410, 150, p["orange_soft"], p["orange"], rx=14, width=1.5)
+    body += text(40, 278, "a guard alone", size=14, weight=700, cls="orange")
+    body += field(40, 294, 320, "milk", p["orange"])
+    body += badge(396, 311, "orange", "no")
+    body += mono(40, 352, [("nothing writes the field again:", "muted")], size=11.5)
+    body += mono(40, 376, [("DOM ", "muted"), ("\"milk\"", ""), ("  ≠  ", "orange"), ("model ", "muted"), ("\"\"", "")], size=15)
+
+    body += box(450, 250, 410, 150, p["green_soft"], p["green"], rx=14, width=1.5)
+    body += text(470, 278, "value and checked: controlled holes", size=14, weight=700, cls="green")
+    body += field(470, 294, 320, "What needs to be done?", p["green"], placeholder=True, dash="4 3")
+    body += badge(826, 311, "green", "yes")
+    body += mono(470, 352, [("after input/change and the redraw:", "muted")], size=11.5)
+    body += mono(470, 376, [("if (el.value !== last) ", ""), ("el.value = last", "green")], size=13)
+
+    body += text(440, 430, "the guard still skips unchanged values, and the field always shows the model, as React's controlled inputs",
                  size=12.5, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 342, "Controlled inputs: the user types milk and presses Enter in the same tick; the model's field goes from empty to milk and back to empty, so the redraw sees an unchanged value and writes nothing. A guard alone leaves milk in the field. In Meltea and Melact value and checked are controlled holes: after an input or change event and the redraw it causes, the hole writes its last value back if the DOM differs, as React does", body)
+    return svg(p, 880, 442, "Controlled inputs: in one tick the user types milk and presses Enter; the model's field goes from empty to milk and back to empty while the DOM still shows milk, so the redraw's guard sees an unchanged value and writes nothing. A guard alone leaves milk in the field, out of step with the model. In Meltea and Melact value and checked are controlled holes: after an input or change event and the redraw it causes, the hole writes its last value back if the DOM differs, as React does", body)
 
 
 def roadmap(p):
