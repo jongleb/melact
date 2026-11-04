@@ -127,7 +127,7 @@ let backwards count (position : Template.position) make =
   let rec fill i before =
     if i >= 0 then (
       let live = make i { position with before } in
-      result.(i) <- live;
+      Array.unsafe_set result i live;
       fill (i - 1) (live.front before))
   in
   fill (count - 1) position.before;
@@ -178,12 +178,12 @@ let many children =
             let children = Array.of_list children in
             let old_count = Array.length items in
             for i = Array.length children to old_count - 1 do
-              remove position items.(i)
+              remove position (Array.unsafe_get items i)
             done;
             let items =
               backwards (Array.length children) position (fun i at ->
-                  if i < old_count then update at items.(i) children.(i)
-                  else children.(i).build at)
+                  if i < old_count then update at (Array.unsafe_get items i) (Array.unsafe_get children i)
+                  else (Array.unsafe_get children i).build at)
             in
             Some (group (List_state items) items)
         | _ -> None);
@@ -203,14 +203,14 @@ let keyed entries =
         match live.state with
         | Keyed_state (old_keys, items) ->
             let plan = Reconcile.plan ~old:old_keys ~next:keys in
-            List.iter (fun i -> remove position items.(i)) plan.dropped;
+            List.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped;
             let items =
               backwards (Array.length children) position (fun j at ->
-                  match plan.steps.(j) with
-                  | Create -> children.(j).build at
-                  | Keep i -> update at items.(i) children.(j)
+                  match Array.unsafe_get plan.steps j with
+                  | Create -> (Array.unsafe_get children j).build at
+                  | Keep i -> update at (Array.unsafe_get items i) (Array.unsafe_get children j)
                   | Move i ->
-                      let live = update at items.(i) children.(j) in
+                      let live = update at (Array.unsafe_get items i) (Array.unsafe_get children j) in
                       live.each (insert at);
                       live)
             in
@@ -337,10 +337,10 @@ let static markup =
   }
 
 let check scope index value =
-  let (Input remembered) = scope.deps.(index) in
+  let (Input remembered) = Array.unsafe_get scope.deps index in
   if Dom_api.same remembered value then Unchanged
   else (
-    scope.deps.(index) <- Input value;
+    Array.unsafe_set scope.deps index (Input value);
     Changed)
 
 module Hole = struct

@@ -10,8 +10,11 @@ type ('element, 'position) hole =
 
 type position = { parent : Dom.node; before : Dom.node option }
 
+(** The markup until the first clone parses it, then the parsed root. *)
+type source = Markup of { markup : string; root : Dom.node -> Dom.node } | Parsed of Dom.element
+
 type t = {
-  root : Dom.element Lazy.t;
+  mutable source : source;
   paths : (int list, int list * int) hole array;
 }
 
@@ -26,30 +29,35 @@ external next_or_end : Dom.node -> Dom.node option = "nextSibling"
 
 external element : Dom.node -> Dom.element = "%identity"
 
-let parse markup within =
-  lazy
-    (let template = Dom_api.create_element Dom_api.document "template" in
-     Dom_api.set_inner_html template markup;
-     let root = within (Dom_api.to_node (Dom_api.template_content template)) in
-     let rec unmark node =
-       Option.iter unmark (Dom_api.first_child node);
-       let following = Dom_api.next_sibling node in
-       (match Dom_api.node_type node with
-       | 8 ->
-           Option.iter
-             (fun parent ->
-               Dom_api.replace_child parent (Dom_api.create_text_node Dom_api.document "") node)
-             (Dom_api.parent_node node)
-       | _ -> ());
-       Option.iter unmark following
-     in
-     Option.iter unmark (Dom_api.first_child root);
-     element root)
+let html markup = { source = Markup { markup; root = first }; paths = [||] }
 
-let html markup = { root = parse markup first; paths = [||] }
-let svg markup = { root = parse ("<svg>" ^ markup ^ "</svg>") (fun content -> first (first content)); paths = [||] }
-let make ~html ~holes = { root = parse html first; paths = holes }
-let clone t = Dom_api.clone_node (Lazy.force t.root)
+let svg markup =
+  { source = Markup { markup = "<svg>" ^ markup ^ "</svg>"; root = (fun content -> first (first content)) }; paths = [||] }
+
+let make ~html ~holes = { source = Markup { markup = html; root = first }; paths = holes }
+
+let clone t =
+  match t.source with
+  | Parsed root -> Dom_api.clone_node root
+  | Markup { markup; root } ->
+      let template = Dom_api.create_element Dom_api.document "template" in
+      Dom_api.set_inner_html template markup;
+      let parsed = root (Dom_api.to_node (Dom_api.template_content template)) in
+      let rec unmark node =
+        Option.iter unmark (Dom_api.first_child node);
+        let following = Dom_api.next_sibling node in
+        (match Dom_api.node_type node with
+        | 8 ->
+            Option.iter
+              (fun parent ->
+                Dom_api.replace_child parent (Dom_api.create_text_node Dom_api.document "") node)
+              (Dom_api.parent_node node)
+        | _ -> ());
+        Option.iter unmark following
+      in
+      Option.iter unmark (Dom_api.first_child parsed);
+      t.source <- Parsed (element parsed);
+      Dom_api.clone_node (element parsed)
 
 let locate t root =
   let fail () = Js.Exn.raiseError "melhole: a template path does not resolve" in
