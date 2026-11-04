@@ -49,3 +49,28 @@
   ppx_deriving_variant_string
   ppx_enumerate
   (qcheck-core :with-test)))
+
+(package
+ (name meltea)
+ (synopsis "The Elm architecture for Melange: pure functions, mlx views, compiled templates")
+ (depends
+  (ocaml
+   (>= 5.3))
+  (dune
+   (>= 3.16))
+  (melange
+   (>= 5.1))
+  melact
+  (mlx :with-test)))
+
+(package
+ (name meltea-ppx)
+ (synopsis "mlx views with messages, compiled to templates, for Meltea")
+ (depends
+  (ocaml
+   (>= 5.3))
+  (dune
+   (>= 3.16))
+  (ppxlib
+   (>= 0.34))
+  melact-ppx))

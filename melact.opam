@@ -13,6 +13,7 @@ depends: [
   "reason-react-ppx" {with-test}
   "reason" {with-test}
   "mlx" {with-test}
+  "qcheck-core" {with-test}
   "odoc" {with-doc}
 ]
 build: [

@@ -9,6 +9,7 @@ type child =
   | Component of Component.t * input array * (unit -> child)
   | Provide : 'value Context.t * 'value * child -> child
   | Portal of Dom.element * child
+  | Memo of input array * (unit -> child)
 
 and hole =
   | HText of string
@@ -50,6 +51,7 @@ type live =
   | Lazy_live of thunk * live
   | Component_live of instance
   | Portal_live of Dom.element * live
+  | Memo_live of input array * live
 
 (** A template hole bound to its DOM site, with the value last written. *)
 and binding =
@@ -135,6 +137,7 @@ let lazy2 render a b = Lazy (Lazy2 (render, a, b))
 let component definition inputs render = Component (definition, inputs, render)
 let provide context value children = Provide (context, value, children)
 let portal container child = Portal (container, child)
+let memo inputs render = Memo (inputs, render)
 
 let list children =
   let rec entries collected children =
@@ -142,7 +145,7 @@ let list children =
     | [] -> Some (List.rev collected)
     | Key (key, child) :: rest -> entries ((key, child) :: collected) rest
     | ( Text _ | Empty | List _ | Keyed _ | Element _ | Lazy _ | Component _
-      | Provide _ | Portal _ )
+      | Provide _ | Portal _ | Memo _ )
       :: _ ->
         None
   in
@@ -171,6 +174,7 @@ let rec items child =
   | List children -> List.concat_map items children
   | Keyed entries -> List.map (fun (key, child) -> Key (key, child)) entries
   | Lazy thunk -> items (force thunk)
+  | Memo (_, render) -> items (render ())
   | Text _ | Key _ | Element _ | Component _ | Provide _ | Portal _ -> [ child ]
 
 let insert (position : Template.position) node =
@@ -242,6 +246,7 @@ let rec each_node visit live =
       | Marker node -> visit (Dom_api.to_node node)
       | Nodes -> ())
   | Portal_live _ -> ()
+  | Memo_live (_, inner) -> each_node visit inner
 
 let rec front live after =
   match live with
@@ -256,6 +261,7 @@ let rec front live after =
         | Marker node -> Some (Dom_api.to_node node)
         | Nodes -> after)
   | Portal_live _ -> after
+  | Memo_live (_, inner) -> front inner after
 
 let remove (position : Template.position) live =
   let rec release live =
@@ -280,6 +286,7 @@ let remove (position : Template.position) live =
     | Portal_live (container, inner) ->
         each_node (Dom_api.remove_child (Dom_api.to_node container)) inner;
         release inner
+    | Memo_live (_, inner) -> release inner
   in
   each_node (Dom_api.remove_child position.parent) live;
   release live
@@ -346,6 +353,7 @@ let rec build position child =
       Portal_live
         ( container,
           build { Template.parent = Dom_api.to_node container; before = None } child )
+  | Memo (inputs, render) -> Memo_live (inputs, build position (render ()))
 
 and mount_instance position kind =
   let instance =
@@ -491,8 +499,14 @@ and update position live child =
       Portal_live
         ( container,
           update { Template.parent = Dom_api.to_node container; before = None } inner child )
+  | Memo_live (old, inner), Memo (inputs, render) ->
+      if
+        Array.length old = Array.length inputs
+        && Array.for_all2 (fun (Input a) (Input b) -> Dom_api.same a b) old inputs
+      then live
+      else Memo_live (inputs, update position inner (render ()))
   | ( ( Text_live _ | Empty_live | List_live _ | Keyed_live _ | Element_live _
-      | Lazy_live _ | Component_live _ | Portal_live _ ),
+      | Lazy_live _ | Component_live _ | Portal_live _ | Memo_live _ ),
       _ ) ->
       replace position live child
 
@@ -560,6 +574,7 @@ let settle () =
           | Marker node -> Some (Dom_api.to_node node)
           | Nodes -> back inner.output before)
       | Portal_live _ -> before
+      | Memo_live (_, inner) -> back inner before
     in
     match
       Option.bind (front (Component_live instance) None) Dom_api.parent_node,

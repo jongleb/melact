@@ -1,6 +1,6 @@
 (library
- (name program)
- (public_name melact.program)
+ (name meltea)
+ (public_name meltea)
  (wrapped false)
  (modes melange)
  (libraries melact.view melange.dom)

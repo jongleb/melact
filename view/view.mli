@@ -29,6 +29,7 @@ val lazy2 : ('a -> 'b -> child) -> 'a -> 'b -> child
 val component : Component.t -> input array -> (unit -> child) -> child
 val provide : 'value Context.t -> 'value -> child -> child
 val portal : Dom.element -> child -> child
+val memo : input array -> (unit -> child) -> child
 val items : child -> child list
 
 type mounted
