@@ -9,7 +9,7 @@ A static tree becomes one template and one hoisted element:
       ~html:"<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>"
       ~holes:[||]
   let __melhole_element_2 =
-    React.Element (Melhole.View.tpl_instance __melhole_template_1 [||])
+    React.Element (Melhole.View.static __melhole_template_1)
   let header = __melhole_element_2
 
 Holes at every depth; markers only between neighbours that would merge:

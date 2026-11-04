@@ -12,7 +12,8 @@ from Elm.
 ## Status
 
 Guards are implemented in the shared compiler (`melhole/compiler/free.ml`, `scope.ml`, `element.ml`)
-and used by both front ends. Next: compiled patchers.
+and used by both front ends. The runtime is split so that a bundle carries only what the compiled
+code calls. Next: compiled patchers.
 
 ## Guards at the JSX site
 
@@ -22,15 +23,19 @@ its free variables, scope-aware, from the AST. Module-qualified names (`String.l
 are constants. The ppx then emits, per template site, a refresh function:
 
 ```ocaml
-fun block ->
-  View.put block 0 (HHandler dec);                         (* handlers: swapped, never guarded *)
-  if View.changed block 0 count then                       (* one === against the last count *)
-    View.put block 1 (HText (string_of_int count));        (* evaluated only now *)
-  if View.changed block 1 rows then
-    View.put block 2 (HChild (React.array (Array.map row rows)))
+View.guarded template 2 (fun block ->
+  let count_changed = View.check block 0 count in          (* one === against the last count *)
+  let rows_changed = View.check block 1 rows in
+  View.put_handler block 0 dec;                            (* handlers: swapped, never guarded *)
+  (match count_changed with
+   | Unchanged -> ()
+   | Changed -> View.put_text block 1 (string_of_int count));   (* evaluated only now *)
+  match rows_changed with
+  | Unchanged -> ()
+  | Changed -> View.put_child block 2 (React.array (Array.map row rows)))
 ```
 
-`View.changed block k value` compares `value` with the `k`-th remembered dependency and stores
+`View.check block k value` compares `value` with the `k`-th remembered dependency and stores
 it. On mount nothing is remembered yet, so every hole is evaluated once. A hole whose free
 variables are all physically unchanged is neither evaluated nor compared, and a nested JSX tree
 inside it is not built at all: `lazy` everywhere, without writing it.
@@ -41,6 +46,15 @@ inside it is not built at all: `lazy` everywhere, without writing it.
 - an expression that reads mutable state: `!r`, `r.contents`, `r.current`, `Js.Date`,
   `Js.Math.random`, an assignment, or a variable bound by `for`/`while`;
 - an expression with no free variables is constant: evaluated on mount only.
+
+## A runtime made of parts
+
+Nothing at run time interprets a description of the whole view. Every kind of child (text, list,
+keyed list, template block, memo, portal, component, context provider) is a value that carries
+its own code to mount itself and to patch a mounted child of its kind, and every hole is written
+by its own typed `put_*`. Component instances, hook slots and the update scheduler are installed
+by the first component that mounts. A bundle therefore contains only the parts its compiled code
+names: Meltea's counter has no components, so it has no scheduler, no hooks and no portals.
 
 ## Compiled patchers
 
