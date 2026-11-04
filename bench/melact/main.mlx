@@ -1,0 +1,125 @@
+external document : Dom.document = "document"
+
+external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
+[@@mel.send] [@@mel.return nullable]
+
+type item = { id : int; label : string }
+
+(** How a row is painted: [Danger] for the selected one. *)
+type tone = Danger | Plain
+
+(** The row whose label was clicked last. *)
+type selection = Unselected | Selected of int
+
+type state = { data : item array; selection : selection; next : int }
+
+type action = Run | Run_lots | Add | Update | Clear | Swap_rows | Select of int | Remove of int
+
+let build next count =
+  let adjectives =
+    [| "pretty"; "large"; "big"; "small"; "tall"; "short"; "long"; "handsome"; "plain"; "quaint";
+       "clean"; "elegant"; "easy"; "angry"; "crazy"; "helpful"; "mushy"; "odd"; "unsightly";
+       "adorable"; "important"; "inexpensive"; "cheap"; "expensive"; "fancy" |]
+  and colours =
+    [| "red"; "yellow"; "blue"; "green"; "pink"; "brown"; "purple"; "brown"; "white"; "black";
+       "orange" |]
+  and nouns =
+    [| "table"; "chair"; "house"; "bbq"; "desk"; "car"; "pony"; "cookie"; "sandwich"; "burger";
+       "pizza"; "mouse"; "keyboard" |]
+  in
+  let pick words = words.(Js.Math.random_int 0 (Array.length words)) in
+  Array.init count (fun index ->
+      { id = next + index; label = pick adjectives ^ " " ^ pick colours ^ " " ^ pick nouns })
+
+let reducer state action =
+  match action with
+  | Run -> { data = build state.next 1000; selection = Unselected; next = state.next + 1000 }
+  | Run_lots -> { data = build state.next 10000; selection = Unselected; next = state.next + 10000 }
+  | Add -> { state with data = Array.append state.data (build state.next 1000); next = state.next + 1000 }
+  | Update ->
+      {
+        state with
+        data =
+          Array.mapi
+            (fun index item ->
+              match index mod 10 with 0 -> { item with label = item.label ^ " !!!" } | _ -> item)
+            state.data;
+      }
+  | Clear -> { state with data = [||]; selection = Unselected }
+  | Swap_rows -> (
+      match Array.length state.data > 998 with
+      | true ->
+          let data = Array.copy state.data in
+          data.(1) <- state.data.(998);
+          data.(998) <- state.data.(1);
+          { state with data }
+      | false -> state)
+  | Select id -> { state with selection = Selected id }
+  | Remove id -> { state with data = Js.Array.filter ~f:(fun item -> item.id <> id) state.data }
+
+module Row = struct
+  let[@react.component] make =
+    React.memo (fun ~item ~tone ~dispatch ->
+        <tr className=(match tone with Danger -> "danger" | Plain -> "")>
+          <td className="col-md-1">(React.int item.id)</td>
+          <td className="col-md-4">
+            <a onClick=(fun _ -> dispatch (Select item.id))>(React.string item.label)</a>
+          </td>
+          <td className="col-md-1">
+            <a onClick=(fun _ -> dispatch (Remove item.id))>
+              <span className="glyphicon glyphicon-remove" ariaHidden=true />
+            </a>
+          </td>
+          <td className="col-md-6" />
+        </tr>)
+end
+
+module Button = struct
+  let[@react.component] make ~id ~title ~onClick =
+    <div className="col-sm-6 smallpad">
+      <button type_="button" className="btn btn-primary btn-block" id onClick>
+        (React.string title)
+      </button>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reducer { data = [||]; selection = Unselected; next = 1 } in
+    <div className="container">
+      <div className="jumbotron">
+        <div className="row">
+          <div className="col-md-6"><h1>(React.string "Melact keyed")</h1></div>
+          <div className="col-md-6">
+            <div className="row">
+              <Button id="run" title="Create 1,000 rows" onClick=(fun _ -> dispatch Run) />
+              <Button id="runlots" title="Create 10,000 rows" onClick=(fun _ -> dispatch Run_lots) />
+              <Button id="add" title="Append 1,000 rows" onClick=(fun _ -> dispatch Add) />
+              <Button id="update" title="Update every 10th row" onClick=(fun _ -> dispatch Update) />
+              <Button id="clear" title="Clear" onClick=(fun _ -> dispatch Clear) />
+              <Button id="swaprows" title="Swap Rows" onClick=(fun _ -> dispatch Swap_rows) />
+            </div>
+          </div>
+        </div>
+      </div>
+      <table className="table table-hover table-striped test-data">
+        <tbody>
+          (React.array
+             (Array.map
+                (fun item ->
+                  <Row
+                    key=(string_of_int item.id)
+                    item
+                    tone=(match state.selection with Selected id when id = item.id -> Danger | _ -> Plain)
+                    dispatch />)
+                state.data))
+        </tbody>
+      </table>
+      <span className="preloadicon glyphicon glyphicon-remove" ariaHidden=true />
+    </div>
+end
+
+let () =
+  Option.iter
+    (fun root -> ReactDOM.Client.render (ReactDOM.Client.createRoot root) <App />)
+    (element_by_id document "main")
