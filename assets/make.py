@@ -86,22 +86,95 @@ def logo(p):
     return svg(p, 120, 120, "melact: a template with a hole in it", body)
 
 
-def stats(p):
-    cards = [
-        ("2", "moves to swap two rows", "out of 1,000 keyed rows"),
-        ("999", "moves to reverse 1,000 rows", "n − 1, the fewest possible"),
-        ("0", "DOM calls to swap a handler", "handlers live on the element"),
-        ("0 kB", "of React in the bundle", "no virtual DOM, no fiber"),
+def overview(p):
+    def chips(x, y, width, labels, tone):
+        out, cx, cy = "", x, y
+        for label in labels:
+            w = int(len(label) * 7.6) + 24
+            if cx + w > x + width:
+                cx, cy = x, cy + 38
+            fill = {"gone": p["card"], "stays": p["accent_soft"]}[tone]
+            stroke = {"gone": p["line"], "stays": p["accent"]}[tone]
+            out += box(cx, cy, w, 28, fill, stroke, rx=14, width=1.2)
+            out += text(cx + w / 2, cy + 19, label, size=12, cls="muted" if tone == "gone" else "accent",
+                        weight=600, anchor="middle")
+            if tone == "gone":
+                out += f'<line x1="{cx + 12}" y1="{cy + 15}" x2="{cx + w - 12}" y2="{cy + 15}" stroke="{p["orange"]}" stroke-width="1.6"/>'
+            cx += w + 10
+        return out
+
+    def step(x, y, n, title):
+        return (f'<circle cx="{x + 11}" cy="{y - 5}" r="11" fill="{p["accent"]}"/>'
+                + text(x + 11, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
+                + text(x + 30, y, title, size=14.5, weight=600))
+
+    body = step(0, 24, "1", "Your reason-react app") + step(305, 24, "2", "melact-ppx, at build time") + step(610, 24, "3", "In the browser")
+
+    body += box(0, 40, 270, 158, p["card"], p["line"])
+    code = [
+        [("let[@react.component] make () =", "")],
+        [("  let n, set =", "")],
+        [("    React.useState (fun () -> 0) in", "")],
+        [("  <button onClick=", ""), ("(fun _ ->", "accent")],
+        [("      set (fun n -> n + 1))", "accent"), (">", "")],
+        [("    ", ""), ("(React.int n)", "accent")],
+        [("  </button>", "")],
     ]
-    body = ""
-    for i, (number, title, note) in enumerate(cards):
-        x = i * 225
-        body += box(x + 1, 1, 203, 130, p["card"], p["line"], rx=14)
-        body += f'<rect x="{x + 22}" y="22" width="28" height="4" rx="2" fill="{p["accent"]}"/>'
-        body += text(x + 22, 74, number, size=42, cls="accent", weight=700)
-        body += text(x + 22, 98, title, size=14.5, weight=600)
-        body += text(x + 22, 118, note, size=12.5, cls="muted")
-    return svg(p, 880, 132, "2 DOM moves to swap two of 1,000 rows, 999 moves to reverse 1,000 rows, 0 DOM calls to replace a handler, 0 kB of React in the bundle", body)
+    for i, parts in enumerate(code):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(12, 68 + i * 19, line, size=11.2, cls="mono", raw=True)
+
+    body += box(0, 208, 270, 92, p["card"], p["line"])
+    body += text(12, 228, "dune: the whole migration", size=11.5, cls="muted", weight=600)
+    for i, (line, cls) in enumerate([("- (libraries reason-react)", "orange"), ("+ (libraries melact)", "green"),
+                                     ("- (pps reason-react-ppx)", "orange"), ("+ (pps melact-ppx)", "green")]):
+        body += text(12, 248 + i * 15, line, size=11.2, cls=f"mono {cls}")
+
+    body += box(305, 40, 270, 120, p["accent_soft"], p["accent"], dash="4 4")
+    body += text(321, 62, "template · parsed once", size=12, cls="accent", weight=700)
+    tpl = escape("<button>") + span("●", "accent") + escape("</button>")
+    body += text(321, 92, tpl, size=13, cls="mono", raw=True)
+    body += text(321, 118, "static markup: cloned per mount,", size=12, cls="muted")
+    body += text(321, 136, "never rebuilt, never compared", size=12, cls="muted")
+    body += text(321, 152, "+ hole paths: Handler [] · Text [] @0", size=10.5, cls="mono faint")
+
+    body += box(305, 172, 270, 128, p["blue_soft"], p["blue"])
+    body += text(321, 194, "holes · all a render builds", size=12, cls="blue", weight=700)
+    for i, (label, value) in enumerate([("HHandler", "fun _ -> …"), ("HText", "\"1\"")]):
+        y = 208 + i * 34
+        body += box(321, y, 238, 26, p["card"], p["line"], rx=8)
+        body += text(333, y + 18, label, size=12, cls="mono blue", weight=600)
+        body += text(549, y + 18, value, size=12, cls="mono", anchor="end")
+    body += text(321, 290, "one array per element, any size", size=12, cls="muted")
+
+    body += box(610, 40, 270, 260, p["card"], p["line"])
+    flow = [("setState", "orange"), ("only this component renders", "line"),
+            ("=== on each hole", "accent"), ("text.data = \"1\"", "green")]
+    for i, (label, tone) in enumerate(flow):
+        y = 56 + i * 61
+        fill = {"orange": p["orange_soft"], "line": p["card"], "accent": p["accent_soft"], "green": p["green_soft"]}[tone]
+        stroke = {"orange": p["orange"], "line": p["line"], "accent": p["accent"], "green": p["green"]}[tone]
+        body += box(626, y, 238, 40, fill, stroke, rx=10, width=1.4)
+        body += text(745, y + 25, label, size=13, weight=600, anchor="middle",
+                     cls="mono green" if tone == "green" else ("mono accent" if tone == "accent" else ""))
+        if i < len(flow) - 1:
+            body += arrow(p, 745, y + 42, 745, y + 57, "accent", width=1.4)
+    body += text(745, 296, "the handler is swapped, not diffed", size=11, cls="faint", anchor="middle")
+
+    body += arrow(p, 273, 170, 301, 170, "accent", flow=True)
+    body += arrow(p, 578, 170, 606, 170, "accent", flow=True)
+
+    body += box(0, 326, 430, 124, p["card"], p["line"], rx=14)
+    body += text(18, 352, "Gone", size=14.5, weight=700)
+    body += text(62, 352, "from the bundle and from every render", size=12.5, cls="muted")
+    body += chips(18, 366, 400, ["React", "react-dom", "virtual DOM", "a tree per render",
+                                 "tree diff", "fiber"], "gone")
+    body += box(450, 326, 430, 124, p["accent_soft"], p["accent"], rx=14)
+    body += text(468, 352, "Stays", size=14.5, weight=700)
+    body += text(512, 352, "your code compiles unchanged", size=12.5, cls="muted")
+    body += chips(468, 366, 400, ["your components", "hooks", "mlx · Reason · OCaml",
+                                  "ReactDOM", "ReactEvent"], "stays")
+    return svg(p, 880, 452, "melact in one picture: a reason-react component in mlx switches two dune lines; melact-ppx splits its JSX into a template parsed once and a hole array built per render; in the browser a setState re-renders only that component, compares each hole with === and writes only what changed. Gone: React, react-dom, the virtual DOM, the element tree per render, the tree diff, fiber. Stays: your components, hooks, JSX, ReactDOM.Client, ReactEvent", body)
 
 
 def pipeline(p):
@@ -380,7 +453,7 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: 1 View done; then hooks, melact-ppx, compatibility, speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, stats=stats, pipeline=pipeline, patch=patch, reconcile=reconcile,
+FIGURES = dict(logo=logo, overview=overview, pipeline=pipeline, patch=patch, reconcile=reconcile,
                runtime=runtime, events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":
