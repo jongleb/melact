@@ -75,7 +75,8 @@
   (melange
    (>= 5.1))
   melhole
-  (mlx :with-test)))
+  (mlx :with-test)
+  (jsonkit-melange :with-test)))
 
 (package
  (name meltea-ppx)
