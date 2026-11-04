@@ -281,7 +281,8 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 | | |
 |---|---|
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
-| **Tests** | 63 vitest + jsdom tests: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Size** | the whole counter app, runtime and the Melange stdlib it uses included: 10.2 kB gzip (Meltea) and 10.2 kB (Melact); React 18.3 and react-dom alone are 45 kB |
+| **Tests** | 74 vitest + jsdom tests and 15 native QCheck laws: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx), Meltea |
 | **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, real hydration, benchmarks, SSR |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
