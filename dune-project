@@ -33,7 +33,6 @@
 
 (package
  (name melact-ppx)
- (allow_empty)
  (synopsis "JSX to DOM templates with holes, for melact")
  (depends
   (ocaml

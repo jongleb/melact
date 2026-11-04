@@ -1,0 +1,11 @@
+let[@react.component] make ~initial () =
+  let count, setCount = React.useState (fun () -> initial) in
+  let tone = if count < 0 then "negative" else "" in
+  <div className="counter">
+    <button onClick=(fun _ -> setCount (fun n -> n - 1))>(React.string "-")</button>
+    <output className=tone>(React.int count)</output>
+    <button onClick=(fun _ -> setCount (fun n -> n + 1))>(React.string "+")</button>
+    <button onClick=(fun _ -> setCount (fun _ -> initial)) disabled=(count = initial)>
+      (React.string "reset")
+    </button>
+  </div>

@@ -1,0 +1,7 @@
+(library
+ (name melact_ppx)
+ (public_name melact-ppx)
+ (kind ppx_rewriter)
+ (libraries ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot)))

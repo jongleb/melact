@@ -1,0 +1,7 @@
+(executable
+ (name pp)
+ (modules pp)
+ (libraries melact-ppx ppxlib))
+
+(cram
+ (deps pp.exe))
