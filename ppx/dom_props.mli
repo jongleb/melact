@@ -1,5 +1,13 @@
 (** reason-react's DOM props, and how melact-ppx writes each one. *)
 
+(** A prop a lowercase element accepts, parsed from its JSX label. *)
+module Prop : sig
+  type t
+
+  val of_string : string -> t option
+  val to_string : t -> string
+end
+
 (** The OCaml type of a prop and how it becomes an attribute value. *)
 type value =
   | Text  (** [string], written as is. *)
@@ -17,4 +25,4 @@ type kind =
   | Inner_html  (** [dangerouslySetInnerHTML]. *)
   | Ignored  (** Accepted and dropped, like [suppressHydrationWarning]. *)
 
-val find : string -> kind option
+val kind : Prop.t -> kind

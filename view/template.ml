@@ -25,12 +25,25 @@ let make ~html ~holes =
   let root =
     lazy
       (let template = Dom_api.create_element Dom_api.document "template" in
-       Dom_api.set_inner_html template html;
-       match
-         Option.bind
-           (Dom_api.first_child (Dom_api.template_content template))
-           element_of
-       with
+       let rec stop index =
+         if index >= String.length html || String.contains " />" html.[index] then index
+         else stop (index + 1)
+       in
+       let tag = String.sub html 1 (max 0 (stop 1 - 1)) in
+       let parent =
+         match tag with
+         | "circle" | "clipPath" | "defs" | "ellipse" | "feBlend" | "feColorMatrix"
+         | "feComposite" | "feFlood" | "feGaussianBlur" | "feMerge" | "feMergeNode" | "feOffset"
+         | "filter" | "foreignObject" | "g" | "image" | "line" | "linearGradient" | "marker"
+         | "mask" | "path" | "pattern" | "polygon" | "polyline" | "radialGradient" | "rect"
+         | "stop" | "symbol" | "text" | "textPath" | "tspan" | "use" ->
+             Dom_api.set_inner_html template ("<svg>" ^ html ^ "</svg>");
+             Dom_api.first_child (Dom_api.template_content template)
+         | _ ->
+             Dom_api.set_inner_html template html;
+             Some (Dom_api.to_node (Dom_api.template_content template))
+       in
+       match Option.bind (Option.bind parent Dom_api.first_child) element_of with
        | Some root ->
            let rec unmark node =
              Option.iter unmark (Dom_api.first_child node);

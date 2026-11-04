@@ -29,7 +29,11 @@
   (dune
    (>= 3.16))
   (melange
-   (>= 5.1))))
+   (>= 5.1))
+  (reason-react :with-test)
+  (reason-react-ppx :with-test)
+  (reason :with-test)
+  (mlx :with-test)))
 
 (package
  (name melact-ppx)
@@ -40,4 +44,5 @@
   (dune
    (>= 3.16))
   (ppxlib
-   (>= 0.34))))
+   (>= 0.34))
+  ppx_deriving_variant_string))

@@ -345,6 +345,7 @@ val useTransition : unit -> bool * ((unit -> unit) -> unit)
 val startTransition : (unit -> unit) -> unit
 val act : (unit -> unit) -> unit Js.Promise.t
 val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t
+val forwardRef : ('props -> 'value ref Js.Nullable.t -> element) -> 'props -> element
 val memo : ('props -> element) -> 'props -> element
 
 val memoCustomCompareProps :

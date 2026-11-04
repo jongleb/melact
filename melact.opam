@@ -9,6 +9,10 @@ depends: [
   "ocaml" {>= "5.3"}
   "dune" {>= "3.16" & >= "3.16"}
   "melange" {>= "5.1"}
+  "reason-react" {with-test}
+  "reason-react-ppx" {with-test}
+  "reason" {with-test}
+  "mlx" {with-test}
   "odoc" {with-doc}
 ]
 build: [

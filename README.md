@@ -231,7 +231,7 @@ builds new values, so this rarely matters, but it is a rule rather than an optim
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dual-dark.svg">
-  <img src="assets/dual.svg" alt="One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 9 assertions pass in both" width="100%">
+  <img src="assets/dual.svg" alt="One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 11 tests pass in both" width="100%">
 </picture>
 
 *The compatibility check that matters: the same reason-react code, built against React and against melact, passes the same assertions.*
@@ -248,9 +248,9 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 | | |
 |---|---|
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
-| **Tests** | 59 vitest + jsdom tests: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Tests** | 63 vitest + jsdom tests: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx) in reason-react style, and [`examples/counter`](examples/counter/main.ml) hand-written against `View` |
-| **Not yet** | `createPortal`, `forwardRef`, the rest of `ReactEvent`, SVG-rooted templates, benchmarks, SSR |
+| **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, real hydration, benchmarks, SSR |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 
 A whole tree compiles to one template. This mlx counter is one `<template>` with six holes,
@@ -280,8 +280,8 @@ $ dune build @runtest-js && npx vitest run
  ✓ test/view/view_test.mjs (17 tests)
  ✓ test/view/reconcile_test.mjs (9 tests)
  ✓ test/react/hooks_test.mjs (15 tests)
- ✓ test/dual/react/dual_test.mjs (9 tests)
- ✓ test/dual/melact/dual_test.mjs (9 tests)
+ ✓ test/dual/react/dual_test.mjs (11 tests)
+ ✓ test/dual/melact/dual_test.mjs (11 tests)
 $ dune test test/ppx                  # melact-ppx expect tests
 $ npx vite                            # then open http://localhost:5173/examples/counter/
 ```

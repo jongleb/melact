@@ -84,8 +84,7 @@ Every kind of prop, static and dynamic, required and optional:
              Melact_view.View.HProp (text : string));(Melact_view.View.HProp
                                                         (flag : bool));(
              Melact_view.View.HStyle (ReactDOM.Style.declarations style));(
-             Melact_view.View.HRef
-               ((let ReactDOM.Dom_ref apply = ref in apply)));(Melact_view.View.HAttr
+             Melact_view.View.HRef (ReactDOM.Ref.attach ref));(Melact_view.View.HAttr
                                                                  (maybe : 
                                                                  string option));(
              Melact_view.View.HHandler
@@ -150,6 +149,37 @@ A component with optional, defaulted and children props, and its signature:
     title:string ->
       ?size:int ->
         ?subtitle:string -> children:React.element -> unit -> React.element
+
+React.forwardRef: the ref becomes an optional prop and reaches the body as reason-react passes it:
+
+  $ cat > fancy.ml <<'EOF'
+  > let make = React.forwardRef (fun ~label ref ->
+  >   ((input ~placeholder:label ?ref:(Option.map ReactDOM.Ref.domRef (Js.Nullable.toOption ref)) ()) [@JSX]))
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl fancy.ml
+  let __melact_component_1 = Melact_view.Component.make ~name:"Fancy.make"
+  let __melact_template_2 =
+    Melact_view.Template.make ~html:"<input>"
+      ~holes:[|(Melact_view.Template.Attr ([], "placeholder"));(Melact_view.Template.Ref
+                                                                  [])|]
+  let make ~label:(label as __melact_prop_0)
+    ?ref:(__melact_forwarded_ref as __melact_prop_1) () =
+    React.Element
+      (Melact_view.View.component __melact_component_1
+         [|(Melact_view.View.Input __melact_prop_0);(Melact_view.View.Input
+                                                       __melact_prop_1)|]
+         (fun () ->
+            let React.Element __melact_child =
+              let ref = ReactDOM.Ref.forwarded __melact_forwarded_ref in
+              React.Element
+                (Melact_view.View.tpl_instance __melact_template_2
+                   [|(Melact_view.View.HAttr (Some (label : string)));(
+                     Melact_view.View.HRef
+                       (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach
+                          (Option.map ReactDOM.Ref.domRef
+                             (Js.Nullable.toOption ref))))|]) in
+            __melact_child))
 
 Calls with children, keys and fragments:
 

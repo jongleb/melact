@@ -357,12 +357,16 @@ module Style : sig
   val declarations : t -> (string * string) list
 end
 
-(** What a [ref] prop receives: a callback given the element once it is mounted. *)
-type domRef = Dom_ref of (Dom.element -> unit) [@@unboxed]
+(** What a [ref] prop receives. *)
+type domRef =
+  | Current of Dom.element Js.nullable React.ref  (** Set to the element once mounted. *)
+  | Callback of (Dom.element Js.nullable -> unit)  (** Called with the element once mounted. *)
 
 module Ref : sig
   val domRef : Dom.element Js.nullable React.ref -> domRef
   val callbackDomRef : (Dom.element Js.nullable -> unit) -> domRef
+  val attach : domRef -> Dom.element -> unit
+  val forwarded : domRef option -> Dom.element Js.nullable React.ref Js.Nullable.t
 end
 
 module Client : sig

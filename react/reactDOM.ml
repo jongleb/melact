@@ -362,13 +362,23 @@ module Style = struct
   let declarations (Declarations declarations) = declarations
 end
 
-type domRef = Dom_ref of (Dom.element -> unit) [@@unboxed]
+type domRef =
+  | Current of Dom.element Js.nullable React.ref
+  | Callback of (Dom.element Js.nullable -> unit)
 
 module Ref = struct
-  let domRef (target : Dom.element Js.nullable React.ref) =
-    Dom_ref (fun element -> target.current <- Js.Nullable.return element)
+  let domRef target = Current target
+  let callbackDomRef apply = Callback apply
 
-  let callbackDomRef apply = Dom_ref (fun element -> apply (Js.Nullable.return element))
+  let attach reference element =
+    match reference with
+    | Current target -> target.current <- Js.Nullable.return element
+    | Callback apply -> apply (Js.Nullable.return element)
+
+  let forwarded reference =
+    match reference with
+    | Some (Current target) -> Js.Nullable.return target
+    | Some (Callback _) | None -> Js.Nullable.null
 end
 
 external set_text_content : Dom.element -> string -> unit = "textContent" [@@mel.set]

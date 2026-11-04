@@ -261,5 +261,6 @@ let actAsync run =
       Js.Promise.resolve ())
     (run ())
 
+let forwardRef render props = render props Js.Nullable.null
 let memo component props = component props
 let memoCustomCompareProps component _ props = component props

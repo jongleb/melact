@@ -189,16 +189,11 @@ let prop ~loc kind requirement value =
           Melact_view.View.HStyle
             (Option.fold ~none:[] ~some:ReactDOM.Style.declarations [%e value])]
   | Ref, `Required, _ ->
-      hole Ref
-        [%expr
-          Melact_view.View.HRef
-            (let (ReactDOM.Dom_ref apply) = [%e value] in
-             apply)]
+      hole Ref [%expr Melact_view.View.HRef (ReactDOM.Ref.attach [%e value])]
   | Ref, `Optional, _ ->
       hole Ref
         [%expr
-          Melact_view.View.HRef
-            (Option.fold ~none:ignore ~some:(fun (ReactDOM.Dom_ref apply) -> apply) [%e value])]
+          Melact_view.View.HRef (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]
   | Inner_html, `Required, _ ->
       hole (Prop "innerHTML") [%expr Melact_view.View.HProp [%e value]##__html]
   | Inner_html, `Optional, _ ->
@@ -208,7 +203,7 @@ let prop ~loc kind requirement value =
             (Option.fold ~none:"" ~some:(fun html -> html##__html) [%e value])]
 
 let component ~loc ~name expression =
-  let rec gather expression =
+  let rec gather forwarding expression =
     match expression.pexp_desc with
     | Pexp_apply
         ( {
@@ -218,18 +213,42 @@ let component ~loc ~name expression =
             _;
           },
           (Nolabel, inner) :: _ ) ->
-        gather inner
+        gather forwarding inner
+    | Pexp_apply
+        ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "forwardRef"); _ }; _ },
+          [ (Nolabel, inner) ] ) ->
+        gather `Forwards_ref inner
     | Pexp_function (params, None, Pfunction_body body) ->
-        let more, body = gather body in
-        (params @ more, body)
+        let more, body, forwarding = gather forwarding body in
+        (params @ more, body, forwarding)
     | Pexp_function (params, Some (Pconstraint result), Pfunction_body body) ->
-        (params, pexp_constraint ~loc:body.pexp_loc body result)
+        (params, pexp_constraint ~loc:body.pexp_loc body result, forwarding)
     | Pexp_function (_, _, _) ->
         Location.raise_errorf ~loc:expression.pexp_loc
           "melact: a [@react.component] takes labelled arguments and returns an element"
-    | _ -> ([], expression)
+    | _ -> ([], expression, forwarding)
   in
-  let params, body = gather expression in
+  let params, body =
+    match gather `Plain expression with
+    | params, body, `Plain -> (params, body)
+    | params, body, `Forwards_ref -> (
+        match List.rev params with
+        | { pparam_desc = Pparam_val (Nolabel, None, reference); _ } :: labelled ->
+            ( List.rev labelled
+              @ [
+                  {
+                    pparam_loc = loc;
+                    pparam_desc =
+                      Pparam_val (Optional "ref", None, [%pat? __melact_forwarded_ref]);
+                  };
+                ],
+              [%expr
+                let [%p reference] = ReactDOM.Ref.forwarded __melact_forwarded_ref in
+                [%e body]] )
+        | _ ->
+            Location.raise_errorf ~loc
+              "melact: React.forwardRef takes a function whose last argument is the ref")
+  in
   let rec trailing params =
     match params with
     | [] -> `Missing
@@ -508,12 +527,12 @@ let mapper =
                 | Optional _ -> `Optional
                 | Labelled _ | Nolabel -> `Required
               in
-              match Dom_props.find name with
+              match Dom_props.Prop.of_string name with
               | None ->
                   Location.raise_errorf ~loc:value.pexp_loc "melact: <%s> has no prop %s" tag
                     name
-              | Some kind -> (
-                  match prop ~loc kind requirement (self#expression value) with
+              | Some parsed -> (
+                  match prop ~loc (Dom_props.kind parsed) requirement (self#expression value) with
                   | Static (attribute, static) -> statics := (attribute, static) :: !statics
                   | Dynamic (site, hole) -> dynamics := (site, hole) :: !dynamics
                   | Absent -> ())))

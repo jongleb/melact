@@ -496,7 +496,7 @@ def dual(p):
     body += text(18, 58, "dual_test.mlx", size=14, cls="mono", weight=700)
     body += text(18, 78, "one file, reason-react style", size=11.5, cls="muted")
     covered = ["state and batching", "memo children skipped", "effect order, cleanups, deps",
-               "context below memo", "refs", "keys keep state", "show and hide"]
+               "context below memo", "refs and forwardRef", "svg components", "keys, show and hide"]
     for i, item in enumerate(covered):
         y = 104 + i * 17
         body += f'<circle cx="24" cy="{y - 4}" r="2.5" fill="{p["accent"]}"/>'
@@ -515,10 +515,10 @@ def dual(p):
                 body += arrow(p, x + 132, y + 22, x + 146, y + 22, color)
         body += arrow(p, 732, y + 22, 748, y + 22, color)
         body += box(752, y, 124, 44, p["green_soft"], p["green"], rx=10, width=1.6)
-        body += text(814, y + 28, "9 / 9 ✓", size=15, cls="green", weight=700, anchor="middle")
+        body += text(814, y + 28, "11 / 11 ✓", size=15, cls="green", weight=700, anchor="middle")
     body += text(814, 122, "same assertions", size=11.5, cls="muted", anchor="middle")
     body += text(300, 18, "built twice by dune, run by vitest + jsdom", size=12, cls="muted")
-    return svg(p, 880, 232, "One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 9 assertions pass in both", body)
+    return svg(p, 880, 232, "One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 11 tests pass in both", body)
 
 
 

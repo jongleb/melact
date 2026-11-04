@@ -2,6 +2,8 @@ open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
 external tag_name : Dom.element -> string = "tagName" [@@mel.get]
+external namespace_uri : Dom.element -> string = "namespaceURI" [@@mel.get]
+external get_attribute : Dom.element -> string -> string = "getAttribute" [@@mel.send]
 
 external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
 
@@ -117,6 +119,27 @@ module Focus = struct
     <input ref=(ReactDOM.Ref.domRef input) />
 end
 
+module Fancy_input = struct
+  let[@react.component] make = React.forwardRef (fun ~label ref ->
+    let ref = Option.map ReactDOM.Ref.domRef (Js.Nullable.toOption ref) in
+    <input placeholder=label ?ref />)
+end
+
+module Forward = struct
+  let[@react.component] make () =
+    let input = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+      Option.iter
+        (fun element -> log ("forwarded " ^ tag_name element ^ " " ^ get_attribute element "placeholder"))
+        (Js.Nullable.toOption input.current);
+      None);
+    <Fancy_input label="name" ref=(ReactDOM.Ref.domRef input) />
+end
+
+module Icon = struct
+  let[@react.component] make ~d = <path d />
+end
+
 module Rows = struct
   let[@react.component] make ~labels =
     <div>(React.array (Array.map (fun label -> <Counter key=label label />) labels))</div>
@@ -181,6 +204,18 @@ let () =
       let client = ReactDOM.Client.createRoot root in
       let* () = act (fun () -> ReactDOM.Client.render client <Focus />) in
       expect (take ()) |. to_equal [ "ref INPUT" ];
+      finish ()));
+  describe "forwardRef and svg" (fun () ->
+    test_async "forward a ref to an element inside the component" (fun () ->
+      let root = attached () in
+      let client = ReactDOM.Client.createRoot root in
+      let* () = act (fun () -> ReactDOM.Client.render client <Forward />) in
+      expect (take ()) |. to_equal [ "forwarded INPUT name" ];
+      finish ());
+    test_async "create a component's svg root in the svg namespace" (fun () ->
+      let* root, _ = mount <svg><Icon d="M0 0L9 9" /></svg> in
+      expect (namespace_uri (select root "path"), inner_html root)
+      |. to_equal ("http://www.w3.org/2000/svg", "<svg><path d=\"M0 0L9 9\"></path></svg>");
       finish ()));
   describe "lists and conditions" (fun () ->
     test_async "keep component state with its key" (fun () ->
