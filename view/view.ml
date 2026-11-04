@@ -1,3 +1,11 @@
+(** When an effect runs after its instance is patched. *)
+type timing =
+  | Layout  (** Synchronously, before the browser paints. *)
+  | Passive  (** After the whole flush, once the browser has painted. *)
+
+(** Within one commit every cleanup runs before any effect, as in React. *)
+type phase = Cleanup | Run
+
 type child =
   | Text of string
   | Empty
@@ -10,6 +18,7 @@ type child =
   | Provide : 'value Context.t * 'value * child -> child
   | Portal of Dom.element * child
   | Memo of input array * (unit -> child)
+  | Guarded of Template.t * int * (block -> unit)
 
 and hole =
   | HText of string
@@ -29,32 +38,30 @@ and thunk =
   | Lazy1 : ('a -> child) * 'a -> thunk
   | Lazy2 : ('a -> 'b -> child) * 'a * 'b -> thunk
 
-(** When an effect runs after its instance is patched. *)
-type timing =
-  | Layout  (** Synchronously, before the browser paints. *)
-  | Passive  (** After the whole flush, once the browser has painted. *)
-
-(** Within one commit every cleanup runs before any effect, as in React. *)
-type phase = Cleanup | Run
-
 (** What a mounted description owns in the DOM. *)
-type live =
+and live =
   | Text_live of Dom.text * string
   | Empty_live
   | List_live of live array
   | Keyed_live of string array * live array
-  | Element_live of {
-      template : Template.t;
-      root : Dom.element;
-      bindings : binding array;
-    }
+  | Element_live of block
   | Lazy_live of thunk * live
   | Component_live of instance
   | Portal_live of Dom.element * live
   | Memo_live of input array * live
 
+(** A mounted template: its root, its holes and the values its compiled refresh last read. *)
+and block = {
+  template : Template.t;
+  root : Dom.element;
+  bindings : binding array;
+  deps : input array;
+}
+
 (** A template hole bound to its DOM site, with the value last written. *)
 and binding =
+  | Unbound_site of (Dom.element, Template.position) Template.hole
+      (** Not filled yet: a compiled refresh fills every hole on mount. *)
   | Attr_site of {
       element : Dom.element;
       name : string;
@@ -109,6 +116,9 @@ and region =
   | Nodes  (** The output's own nodes locate it. *)
   | Marker of Dom.text  (** An empty text node holds its place. *)
 
+(** Whether a value differs from the one a block remembers for it. *)
+type change = Changed | Unchanged
+
 type mounted = {
   position : Template.position;
   mutable source : child;
@@ -138,6 +148,8 @@ let component definition inputs render = Component (definition, inputs, render)
 let provide context value children = Provide (context, value, children)
 let portal container child = Portal (container, child)
 let memo inputs render = Memo (inputs, render)
+let guarded template count refresh = Guarded (template, count, refresh)
+let unset = Input (ref ())
 
 let list children =
   let rec entries collected children =
@@ -145,7 +157,7 @@ let list children =
     | [] -> Some (List.rev collected)
     | Key (key, child) :: rest -> entries ((key, child) :: collected) rest
     | ( Text _ | Empty | List _ | Keyed _ | Element _ | Lazy _ | Component _
-      | Provide _ | Portal _ | Memo _ )
+      | Provide _ | Portal _ | Memo _ | Guarded _ )
       :: _ ->
         None
   in
@@ -175,7 +187,7 @@ let rec items child =
   | Keyed entries -> List.map (fun (key, child) -> Key (key, child)) entries
   | Lazy thunk -> items (force thunk)
   | Memo (_, render) -> items (render ())
-  | Text _ | Key _ | Element _ | Component _ | Provide _ | Portal _ -> [ child ]
+  | Text _ | Key _ | Element _ | Guarded _ | Component _ | Provide _ | Portal _ -> [ child ]
 
 let insert (position : Template.position) node =
   Dom_api.insert_before position.parent node (Js.Null.fromOption position.before)
@@ -275,7 +287,7 @@ let remove (position : Template.position) live =
             | Child_site site -> release site.live
             | Handler_site handler -> Events.release handler
             | Attr_site _ | Prop_site _ | Text_site _ | Ref_site _
-            | Style_site _ | Class_site _ ->
+            | Style_site _ | Class_site _ | Unbound_site _ ->
                 ())
           element.bindings
     | Lazy_live (_, inner) -> release inner
@@ -333,17 +345,19 @@ let rec build position child =
         Js.Exn.raiseError
           (Printf.sprintf "Melact template expects %d hole values, got %d"
              (Array.length sites) (Array.length holes));
-      let bindings = Array.map2 bind sites holes in
-      insert position root;
-      Array.iter
-        (fun binding ->
-          match binding with
-          | Ref_site site -> site.callback site.element
-          | Attr_site _ | Prop_site _ | Text_site _ | Child_site _
-          | Handler_site _ | Style_site _ | Class_site _ ->
-              ())
-        bindings;
-      Element_live { template; root; bindings }
+      attach position { template; root; bindings = Array.map2 bind sites holes; deps = [||] }
+  | Guarded (template, count, refresh) ->
+      let root, sites = Template.clone template in
+      let block =
+        {
+          template;
+          root;
+          bindings = Array.map (fun site -> Unbound_site site) sites;
+          deps = Array.make count unset;
+        }
+      in
+      refresh block;
+      attach position block
   | Lazy thunk -> Lazy_live (thunk, build position (force thunk))
   | Component (component, inputs, render) ->
       mount_instance position (Renders { component; inputs; render })
@@ -354,6 +368,26 @@ let rec build position child =
         ( container,
           build { Template.parent = Dom_api.to_node container; before = None } child )
   | Memo (inputs, render) -> Memo_live (inputs, build position (render ()))
+
+and attach position block =
+  Array.iter
+    (fun binding ->
+      match binding with
+      | Unbound_site _ -> Js.Exn.raiseError "Melact: a compiled template left a hole unfilled"
+      | Attr_site _ | Prop_site _ | Text_site _ | Child_site _ | Handler_site _ | Ref_site _
+      | Style_site _ | Class_site _ ->
+          ())
+    block.bindings;
+  insert position block.root;
+  Array.iter
+    (fun binding ->
+      match binding with
+      | Ref_site site -> site.callback site.element
+      | Attr_site _ | Prop_site _ | Text_site _ | Child_site _ | Handler_site _ | Style_site _
+      | Class_site _ | Unbound_site _ ->
+          ())
+    block.bindings;
+  Element_live block
 
 and mount_instance position kind =
   let instance =
@@ -457,6 +491,9 @@ and update position live child =
     when Dom_api.same element.template template ->
       Array.iter2 rewrite element.bindings holes;
       live
+  | Element_live block, Guarded (template, _, refresh) when Dom_api.same block.template template ->
+      refresh block;
+      live
   | Lazy_live (old, inner), Lazy next -> (
       match (old, next) with
       | Lazy1 (f, a), Lazy1 (g, b) when Dom_api.same f g && Dom_api.same a b -> live
@@ -551,9 +588,24 @@ and rewrite binding hole =
         reclass site.element site.value value;
         site.value <- value)
   | ( ( Attr_site _ | Prop_site _ | Text_site _ | Child_site _ | Handler_site _
-      | Ref_site _ | Style_site _ | Class_site _ ),
+      | Ref_site _ | Style_site _ | Class_site _ | Unbound_site _ ),
       _ ) ->
       Js.Exn.raiseError "Melact hole value does not match its template hole"
+
+let put block index hole =
+  match block.bindings.(index) with
+  | Unbound_site site -> block.bindings.(index) <- bind site hole
+  | ( Attr_site _ | Prop_site _ | Text_site _ | Child_site _ | Handler_site _ | Ref_site _
+    | Style_site _ | Class_site _ ) as binding ->
+      rewrite binding hole
+
+let check block index value =
+  let (Input remembered) = block.deps.(index) in
+  if Dom_api.same remembered value then Unchanged
+  else begin
+    block.deps.(index) <- Input value;
+    Changed
+  end
 
 let run_passive () =
   passive_schedule := Idle;

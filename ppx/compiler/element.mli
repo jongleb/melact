@@ -20,6 +20,7 @@ type handler = {
 (** How a front end shapes elements around the templates. *)
 type frontend = {
   name : string;  (** For error messages. *)
+  locals : string list;  (** Names local at the JSX site; only they can change between renders. *)
   map : Ppxlib.expression -> Ppxlib.expression;  (** The front end's own rewriting of sub-expressions. *)
   wrap : Ppxlib.location -> Ppxlib.expression -> Ppxlib.expression;  (** A [View.child] into an element. *)
   unwrap : Ppxlib.location -> Ppxlib.expression -> Ppxlib.expression;  (** An element into a [View.child]. *)

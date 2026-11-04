@@ -165,11 +165,12 @@ let rec with_unit typ =
 
 let mapper =
   object (self)
-    inherit Ast_traverse.map as super
+    inherit Scope.mapper as super
 
     method private frontend =
       {
         Element.name = "melact";
+        locals = self#locals;
         map = self#expression;
         wrap = (fun loc child -> [%expr React.Element [%e child]]);
         unwrap = (fun loc element -> unwrap ~loc element);

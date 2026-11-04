@@ -28,15 +28,39 @@ Holes at every depth; markers only between neighbours that would merge:
                Melact_view.Template.Text ([4], 0))|]
   let row ~name ~count ~extra =
     React.Element
-      (Melact_view.View.tpl_instance __melact_template_1
-         [|(Melact_view.View.HText (name : string));(Melact_view.View.HChild
-                                                       ((let React.Element
-                                                           __melact_child =
-                                                           extra in
-                                                         __melact_child)));(
-           Melact_view.View.HChild
-             ((let React.Element __melact_child = extra in __melact_child)));(
-           Melact_view.View.HText (string_of_int (count : int)))|])
+      (Melact_view.View.guarded __melact_template_1 3
+         (fun __melact_block ->
+            let __melact_changed_0 =
+              Melact_view.View.check __melact_block 0 count in
+            let __melact_changed_1 =
+              Melact_view.View.check __melact_block 1 extra in
+            let __melact_changed_2 =
+              Melact_view.View.check __melact_block 2 name in
+            (match __melact_changed_2 with
+             | Melact_view.View.Unchanged -> ()
+             | _ ->
+                 Melact_view.View.put __melact_block 0
+                   (Melact_view.View.HText (name : string)));
+            (match __melact_changed_1 with
+             | Melact_view.View.Unchanged -> ()
+             | _ ->
+                 Melact_view.View.put __melact_block 1
+                   (Melact_view.View.HChild
+                      (let React.Element __melact_child = extra in
+                       __melact_child)));
+            (match __melact_changed_1 with
+             | Melact_view.View.Unchanged -> ()
+             | _ ->
+                 Melact_view.View.put __melact_block 2
+                   (Melact_view.View.HChild
+                      (let React.Element __melact_child = extra in
+                       __melact_child)));
+            (match __melact_changed_0 with
+             | Melact_view.View.Unchanged -> ()
+             | _ ->
+                 Melact_view.View.put __melact_block 3
+                   (Melact_view.View.HText (string_of_int (count : int))));
+            ()))
 
 Every kind of prop, static and dynamic, required and optional:
 
@@ -67,38 +91,86 @@ Every kind of prop, static and dynamic, required and optional:
       ~holes:[|(Melact_view.Template.Prop ([], "innerHTML"))|]
   let form ~text ~flag ~tab ~opacity ~style ~ref ~maybe ~html ~onInput =
     ((React.Element
-        (Melact_view.View.tpl_instance __melact_template_1
-           [|(Melact_view.View.HAttr (Some (text : string)));(Melact_view.View.HAttr
-                                                                (if
-                                                                   (flag : 
-                                                                   bool)
-                                                                 then Some ""
-                                                                 else None));(
-             Melact_view.View.HAttr
-               (Some (if (flag : bool) then "true" else "false")));(Melact_view.View.HAttr
-                                                                      (
-                                                                      Some
-                                                                      (string_of_int
-                                                                      (tab : 
-                                                                      int))));(
-             Melact_view.View.HProp (text : string));(Melact_view.View.HProp
-                                                        (flag : bool));(
-             Melact_view.View.HStyle (ReactDOM.Style.declarations style));(
-             Melact_view.View.HRef (ReactDOM.Ref.attach ref));(Melact_view.View.HAttr
-                                                                 (maybe : 
-                                                                 string option));(
-             Melact_view.View.HHandler
-               ((fun __melact_event ->
-                   onInput (ReactEvent.Form.Native __melact_event))));(
-             Melact_view.View.HHandler
-               ((fun __melact_event ->
-                   Option.iter
-                     (fun handle ->
-                        handle (ReactEvent.Keyboard.Native __melact_event))
-                     None)))|])),
+        (Melact_view.View.guarded __melact_template_1 5
+           (fun __melact_block ->
+              let __melact_changed_0 =
+                Melact_view.View.check __melact_block 0 flag in
+              let __melact_changed_1 =
+                Melact_view.View.check __melact_block 1 maybe in
+              let __melact_changed_2 =
+                Melact_view.View.check __melact_block 2 style in
+              let __melact_changed_3 =
+                Melact_view.View.check __melact_block 3 tab in
+              let __melact_changed_4 =
+                Melact_view.View.check __melact_block 4 text in
+              (match __melact_changed_4 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 0
+                     (Melact_view.View.HAttr (Some (text : string))));
+              (match __melact_changed_0 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 1
+                     (Melact_view.View.HAttr
+                        (if (flag : bool) then Some "" else None)));
+              (match __melact_changed_0 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 2
+                     (Melact_view.View.HAttr
+                        (Some (if (flag : bool) then "true" else "false"))));
+              (match __melact_changed_3 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 3
+                     (Melact_view.View.HAttr (Some (string_of_int (tab : int)))));
+              (match __melact_changed_4 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 4
+                     (Melact_view.View.HProp (text : string)));
+              (match __melact_changed_0 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 5
+                     (Melact_view.View.HProp (flag : bool)));
+              (match __melact_changed_2 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 6
+                     (Melact_view.View.HStyle
+                        (ReactDOM.Style.declarations style)));
+              Melact_view.View.put __melact_block 7
+                (Melact_view.View.HRef (ReactDOM.Ref.attach ref));
+              (match __melact_changed_1 with
+               | Melact_view.View.Unchanged -> ()
+               | _ ->
+                   Melact_view.View.put __melact_block 8
+                     (Melact_view.View.HAttr (maybe : string option)));
+              Melact_view.View.put __melact_block 9
+                (Melact_view.View.HHandler
+                   (fun __melact_event ->
+                      onInput (ReactEvent.Form.Native __melact_event)));
+              Melact_view.View.put __melact_block 10
+                (Melact_view.View.HHandler
+                   (fun __melact_event ->
+                      Option.iter
+                        (fun handle ->
+                           handle (ReactEvent.Keyboard.Native __melact_event))
+                        None));
+              ()))),
       (React.Element
-         (Melact_view.View.tpl_instance __melact_template_2
-            [|(Melact_view.View.HProp (html ## __html))|])))
+         (Melact_view.View.guarded __melact_template_2 1
+            (fun __melact_block ->
+               let __melact_changed_0 =
+                 Melact_view.View.check __melact_block 0 html in
+               (match __melact_changed_0 with
+                | Melact_view.View.Unchanged -> ()
+                | _ ->
+                    Melact_view.View.put __melact_block 0
+                      (Melact_view.View.HProp (html ## __html)));
+               ()))))
 
 A component with optional, defaulted and children props, and its signature:
 
@@ -126,13 +198,25 @@ A component with optional, defaulted and children props, and its signature:
          (fun () ->
             let React.Element __melact_child =
               React.Element
-                (Melact_view.View.tpl_instance __melact_template_2
-                   [|(Melact_view.View.HText (title : string));(Melact_view.View.HChild
-                                                                  ((let React.Element
-                                                                      __melact_child
-                                                                      =
-                                                                      children in
-                                                                    __melact_child)))|]) in
+                (Melact_view.View.guarded __melact_template_2 2
+                   (fun __melact_block ->
+                      let __melact_changed_0 =
+                        Melact_view.View.check __melact_block 0 children in
+                      let __melact_changed_1 =
+                        Melact_view.View.check __melact_block 1 title in
+                      (match __melact_changed_1 with
+                       | Melact_view.View.Unchanged -> ()
+                       | _ ->
+                           Melact_view.View.put __melact_block 0
+                             (Melact_view.View.HText (title : string)));
+                      (match __melact_changed_0 with
+                       | Melact_view.View.Unchanged -> ()
+                       | _ ->
+                           Melact_view.View.put __melact_block 1
+                             (Melact_view.View.HChild
+                                (let React.Element __melact_child = children in
+                                 __melact_child)));
+                      ())) in
             __melact_child))
   let __melact_component_3 = Melact_view.Component.make ~name:"Card.nothing"
   let nothing () =
@@ -173,12 +257,21 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
             let React.Element __melact_child =
               let ref = ReactDOM.Ref.forwarded __melact_forwarded_ref in
               React.Element
-                (Melact_view.View.tpl_instance __melact_template_2
-                   [|(Melact_view.View.HAttr (Some (label : string)));(
-                     Melact_view.View.HRef
-                       (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach
-                          (Option.map ReactDOM.Ref.domRef
-                             (Js.Nullable.toOption ref))))|]) in
+                (Melact_view.View.guarded __melact_template_2 1
+                   (fun __melact_block ->
+                      let __melact_changed_0 =
+                        Melact_view.View.check __melact_block 0 label in
+                      (match __melact_changed_0 with
+                       | Melact_view.View.Unchanged -> ()
+                       | _ ->
+                           Melact_view.View.put __melact_block 0
+                             (Melact_view.View.HAttr (Some (label : string))));
+                      Melact_view.View.put __melact_block 1
+                        (Melact_view.View.HRef
+                           (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach
+                              (Option.map ReactDOM.Ref.domRef
+                                 (Js.Nullable.toOption ref))));
+                      ())) in
             __melact_child))
 
 Calls with children, keys and fragments:
@@ -212,8 +305,16 @@ Calls with children, keys and fragments:
               (Melact_view.View.with_key (item : string)
                  (let React.Element __melact_child =
                     React.Element
-                      (Melact_view.View.tpl_instance __melact_template_1
-                         [|(Melact_view.View.HText (item : string))|]) in
+                      (Melact_view.View.guarded __melact_template_1 1
+                         (fun __melact_block ->
+                            let __melact_changed_0 =
+                              Melact_view.View.check __melact_block 0 item in
+                            (match __melact_changed_0 with
+                             | Melact_view.View.Unchanged -> ()
+                             | _ ->
+                                 Melact_view.View.put __melact_block 0
+                                   (Melact_view.View.HText (item : string)));
+                            ())) in
                   __melact_child))) items)
   let both =
     React.Element
@@ -265,8 +366,17 @@ Reason input:
          (fun () ->
             let React.Element __melact_child =
               React.Element
-                (Melact_view.View.tpl_instance __melact_template_2
-                   [|(Melact_view.View.HText ("Hello, " ^ name : string))|]) in
+                (Melact_view.View.guarded __melact_template_2 1
+                   (fun __melact_block ->
+                      let __melact_changed_0 =
+                        Melact_view.View.check __melact_block 0 name in
+                      (match __melact_changed_0 with
+                       | Melact_view.View.Unchanged -> ()
+                       | _ ->
+                           Melact_view.View.put __melact_block 0
+                             (Melact_view.View.HText
+                                ("Hello, " ^ name : string)));
+                      ())) in
             __melact_child))
 
 mlx input:
@@ -288,8 +398,17 @@ mlx input:
          (fun () ->
             let React.Element __melact_child =
               React.Element
-                (Melact_view.View.tpl_instance __melact_template_2
-                   [|(Melact_view.View.HText ("Hello, " ^ name : string))|]) in
+                (Melact_view.View.guarded __melact_template_2 1
+                   (fun __melact_block ->
+                      let __melact_changed_0 =
+                        Melact_view.View.check __melact_block 0 name in
+                      (match __melact_changed_0 with
+                       | Melact_view.View.Unchanged -> ()
+                       | _ ->
+                           Melact_view.View.put __melact_block 0
+                             (Melact_view.View.HText
+                                ("Hello, " ^ name : string)));
+                      ())) in
             __melact_child))
 
 Errors point at the source:

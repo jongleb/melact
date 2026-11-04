@@ -16,11 +16,12 @@ let html_text expression =
 
 let mapper =
   object (self)
-    inherit Ast_traverse.map as super
+    inherit Scope.mapper as super
 
     method private frontend =
       {
         Element.name = "meltea";
+        locals = "__melact_dispatch" :: self#locals;
         map = self#expression;
         wrap = (fun loc child -> [%expr Html.Node (fun __melact_dispatch -> [%e child])]);
         unwrap =

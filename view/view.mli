@@ -32,6 +32,16 @@ val portal : Dom.element -> child -> child
 val memo : input array -> (unit -> child) -> child
 val items : child -> child list
 
+(** A mounted template whose holes a compiled refresh fills. *)
+type block
+
+(** Whether a value differs from the one a block remembers for it. *)
+type change = Changed | Unchanged
+
+val guarded : Template.t -> int -> (block -> unit) -> child
+val check : block -> int -> 'a -> change
+val put : block -> int -> hole -> unit
+
 type mounted
 
 val mount :

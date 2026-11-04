@@ -14,6 +14,7 @@ type handler = {
 
 type frontend = {
   name : string;
+  locals : string list;
   map : expression -> expression;
   wrap : location -> expression -> expression;
   unwrap : location -> expression -> expression;
@@ -252,6 +253,74 @@ let lowercase frontend ~loc tag arguments =
       [%expr
         Melact_view.Template.make ~html:[%e estring ~loc html] ~holes:[%e pexp_array ~loc specs]]
   in
+  let guards =
+    List.map
+      (fun (hole : expression Markup.hole) ->
+        match hole with
+        | On_element (_, (Handler _ | Ref), _) -> Free.Volatile
+        | On_element (_, (Attr _ | Prop _ | Style), value) | At_position (_, _, _, value) ->
+            match Free.of_expression value with
+            | Free.Reads names ->
+                Free.Reads (List.filter (fun name -> List.mem name frontend.locals) names)
+            | Free.Volatile -> Free.Volatile)
+      holes
+  in
+  let variables =
+    List.sort_uniq String.compare
+      (List.concat_map (fun guard -> match guard with Free.Reads names -> names | Free.Volatile -> []) guards)
+  in
+  let constant = List.length variables in
+  let mounted =
+    List.find_map
+      (fun guard -> match guard with Free.Reads [] -> Some constant | Free.Reads (_ :: _) | Free.Volatile -> None)
+      guards
+  in
+  let slots = constant + Option.fold ~none:0 ~some:(fun _ -> 1) mounted in
+  let flag_name index = Printf.sprintf "__melact_changed_%d" index in
+  let flag index = evar ~loc (flag_name index) in
+  let slot name =
+    let rec find index names =
+      match names with
+      | [] -> constant
+      | other :: rest -> if String.equal other name then index else find (index + 1) rest
+    in
+    find 0 variables
+  in
+  let block = [%expr __melact_block] in
+  let puts =
+    List.mapi
+      (fun index (guard, value) ->
+        let put = [%expr Melact_view.View.put [%e block] [%e eint ~loc index] [%e value]] in
+        match guard with
+        | Free.Volatile -> put
+        | Free.Reads names ->
+            let flags = match names with [] -> [ flag constant ] | _ :: _ -> List.map (fun name -> flag (slot name)) names in
+            let unchanged =
+              ppat_tuple ~loc
+                (List.map (fun _ -> [%pat? Melact_view.View.Unchanged]) flags)
+            in
+            pexp_match ~loc (pexp_tuple ~loc flags)
+              [
+                case ~lhs:unchanged ~guard:None ~rhs:[%expr ()];
+                case ~lhs:[%pat? _] ~guard:None ~rhs:put;
+              ])
+      (List.combine guards values)
+  in
+  let checks =
+    List.mapi (fun index name -> (index, evar ~loc name)) variables
+    @ Option.fold ~none:[] ~some:(fun index -> [ (index, [%expr ()]) ]) mounted
+  in
+  let body =
+    List.fold_right
+      (fun (index, value) body ->
+        [%expr
+          let [%p pvar ~loc (flag_name index)] =
+            Melact_view.View.check [%e block] [%e eint ~loc index] [%e value]
+          in
+          [%e body]])
+      checks
+      (List.fold_right (fun put rest -> [%expr [%e put]; [%e rest]]) puts [%expr ()])
+  in
   let instance =
     match values with
     | [] ->
@@ -259,7 +328,9 @@ let lowercase frontend ~loc tag arguments =
           (frontend.wrap loc [%expr Melact_view.View.tpl_instance [%e template] [||]])
     | _ :: _ ->
         frontend.wrap loc
-          [%expr Melact_view.View.tpl_instance [%e template] [%e pexp_array ~loc values]]
+          [%expr
+            Melact_view.View.guarded [%e template] [%e eint ~loc slots] (fun __melact_block ->
+                [%e body])]
   in
   Option.fold ~none:instance
     ~some:(fun key ->
