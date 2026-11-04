@@ -1,3 +1,9 @@
+<!-- monorepo -->
+> **Meltea lives at [github.com/jongleb/meltea](https://github.com/jongleb/meltea).** This folder
+> is its source; `scripts/publish-meltea.sh` exports it there together with the shared core,
+> `melhole`.
+<!-- /monorepo -->
+
 <div align="center">
 
 # Meltea

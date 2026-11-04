@@ -29,7 +29,8 @@ copy test/meltea
 copy test/laws
 copy vite.config.js
 copy test/setup.js
-mv meltea/README.md README.md
+sed '/<!-- monorepo -->/,/<!-- \/monorepo -->/d' meltea/README.md | sed '1{/^$/d;}' > README.md
+rm meltea/README.md
 mkdir -p assets
 cp "$root"/assets/loop.svg "$root"/assets/loop-dark.svg assets/
 
