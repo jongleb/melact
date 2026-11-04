@@ -600,42 +600,61 @@ def family(p):
 
 
 def compiled(p):
-    char = 8.43
+    char = 7.83
 
-    def code(x, y, parts):
+    def code(x, y, parts, size=13):
         line = "".join(span(t, c) if c else escape(t) for t, c in parts)
-        return text(x, y, line, size=14, cls="mono", raw=True)
+        return text(x, y, line, size=size, cls="mono", raw=True)
 
-    def mark(x, y, chars):
-        return box(x - 4, y - 17, chars * char + 8, 24, p["green_soft"], p["green"], rx=6, dash="4 3", width=1.3)
+    def hole(x, y, w):
+        return box(x, y, w, 26, p["green_soft"], p["green"], rx=6, dash="4 3", width=1.3)
 
-    body = box(0, 0, 370, 190, p["card"], p["accent"], rx=14, width=1.6, lift=True)
-    body += text(20, 30, "you write", size=13, weight=700, cls="accent")
-    body += code(20, 66, [("let view count =", "")])
-    body += code(20, 94, [("  <output>", "")])
-    body += mark(20 + 4 * char, 122, 16)
-    body += code(20, 122, [("    (Html.int ", ""), ("count", "accent"), (")", "")])
-    body += code(20, 150, [("  </output>", "")])
+    def counter(y, value, changed):
+        out = box(570, y, 240, 60, p["card"], p["line"], rx=12, lift=True)
+        for bx, sign in ((582, "−"), (754, "+")):
+            out += box(bx, y + 12, 44, 36, p["card"], p["line"], rx=8)
+            out += text(bx + 22, y + 37, sign, size=18, anchor="middle", weight=600)
+        if changed:
+            out += hole(660, y + 15, 60)
+        out += text(690, y + 39, value, size=22, cls="mono green" if changed else "mono", weight=700, anchor="middle")
+        return out
 
-    body += text(440, 83, "Meltea", size=13, weight=800, cls="accent", anchor="middle")
-    body += arrow(p, 384, 95, 496, 95, "accent", flow=True, width=2)
-    body += text(440, 117, "compiles it once,", size=11.5, cls="muted", anchor="middle")
-    body += text(440, 133, "at build time", size=11.5, cls="muted", anchor="middle")
+    body = box(0, 0, 380, 340, p["card"], p["accent"], rx=14, width=1.6, lift=True)
+    body += text(20, 32, "you write the counter", size=13.5, weight=700, cls="accent")
+    lines = [
+        [("let view count =", "")],
+        [("  <div>", "")],
+        [("    <button onClick=", ""), ("Decrement", "accent"), (">", "")],
+        [("      (Html.text \"-\")</button>", "")],
+        [("    <output>", "")],
+        [("      (Html.int ", ""), ("count", "green"), (")", "")],
+        [("    </output>", "")],
+        [("    <button onClick=", ""), ("Increment", "accent"), (">", "")],
+        [("      (Html.text \"+\")</button>", "")],
+        [("  </div>", "")],
+    ]
+    for i, parts in enumerate(lines):
+        if i == 5:
+            body += hole(20 + 6 * char - 5, 72 + i * 25 - 18, 16 * char + 10)
+        body += code(20, 72 + i * 25, parts)
 
-    body += box(510, 0, 370, 190, p["card"], p["green"], rx=14, width=1.6, lift=True)
-    body += text(530, 30, "and gets", size=13, weight=700, cls="green")
-    body += text(530, 56, "the static HTML, cloned on mount", size=11, cls="faint")
-    body += code(530, 80, [("<output>", "")])
-    body += mark(530 + 8 * char + 12, 80, 4)
-    body += text(530 + 8 * char + 12, 80, "text", size=14, cls="mono green", weight=700)
-    body += code(530 + 12 * char + 24, 80, [("</output>", "")])
-    body += text(530, 120, "on every update", size=11, cls="faint")
-    body += code(530, 146, [("if (", ""), ("count", "accent"), (" !== last)", "")])
-    body += code(530, 172, [("  ", ""), ("text", "green"), (".data = String(", ""), ("count", "accent"), (")", "")])
+    right = text(690, 14, "in the page: click +", size=12.5, weight=700, anchor="middle")
+    right += counter(24, "41", False)
+    right += f'<path d="M786,52 l0,17 l4.5,-4 l3,7 l3,-1.4 l-3,-7 l6,0 z" fill="{p["text"]}" stroke="{p["card"]}" stroke-width="1"/>'
+    right += arrow(p, 690, 88, 690, 116, "accent", flow=True)
+    right += text(700, 106, "".join([span("Increment", "accent"), escape(" → update: count = 42")]), size=11.5, cls="muted", raw=True)
+    right += box(530, 122, 320, 84, p["green_soft"], p["green"], rx=12, width=1.5)
+    right += text(546, 144, "Meltea runs only this", size=11.5, cls="green", weight=700)
+    right += code(546, 168, [("if (", ""), ("count", "green"), (" !== last)", "")])
+    right += code(546, 192, [("  text.data = \"42\"", "")])
+    right += arrow(p, 690, 210, 690, 238, "green", flow=True)
+    right += counter(244, "42", True)
+    right += text(690, 330, "one text node written; the rest of the DOM is untouched", size=11.5, cls="muted", anchor="middle")
 
-    body += text(440, 222, "no virtual DOM: when count changes, one comparison and one write",
+    body += f'<g transform="translate(-30,0)">{right}</g>'
+    body += text(440, 372, "no virtual DOM: Meltea compiles the view at build time into code like Svelte's",
                  size=13, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 232, "Meltea is compiled like Svelte: the dynamic part of the view you write in mlx becomes a hole in static HTML that is cloned on mount, and every update compares count with its last value and writes the hole's text node directly; there is no virtual DOM", body)
+    return svg(p, 880, 384, "The counter in Meltea: you write the view in mlx; when + is clicked the update makes count 42, and the code Meltea compiled from the view compares count with its last value and writes 42 into the one text node; the buttons and the rest of the DOM are untouched; there is no virtual DOM", body)
 
 
 def roadmap(p):
