@@ -40,6 +40,8 @@ for attributes, name, kind in fields:
     if name in hyphenated:
         html = re.sub(r"([A-Z0-9])", lambda m: "-" + m.group(1).lower(), name)
     html = namespaced.get(name, html)
+    if re.match(r"aria[A-Z]", html):
+        html = "aria-" + html[4:].lower()
     family = re.match(r"React\.Event\.(\w+)\.t => unit", kind.strip())
     if family:
         event = events.get(name, name[2:].lower())

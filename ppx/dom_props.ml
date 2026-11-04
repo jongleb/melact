@@ -30,7 +30,7 @@ let find name =
   | "ariaErrormessage" -> Some (Attribute ("aria-errormessage", Text))
   | "ariaExpanded" -> Some (Attribute ("aria-expanded", Booleanish))
   | "ariaFlowto" -> Some (Attribute ("aria-flowto", Text))
-  | "ariaGrabbed" -> Some (Attribute ("ariaGrabbed", Flag))
+  | "ariaGrabbed" -> Some (Attribute ("aria-grabbed", Booleanish))
   | "ariaHaspopup" -> Some (Attribute ("aria-haspopup", Text))
   | "ariaHidden" -> Some (Attribute ("aria-hidden", Booleanish))
   | "ariaInvalid" -> Some (Attribute ("aria-invalid", Text))
