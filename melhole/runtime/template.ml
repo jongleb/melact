@@ -61,7 +61,7 @@ let make ~html ~holes =
            in
            Option.iter unmark (Dom_api.first_child root);
            root
-       | None -> Js.Exn.raiseError ("mehole: template needs a root element: " ^ html))
+       | None -> Js.Exn.raiseError ("melhole: template needs a root element: " ^ html))
   in
   { html; holes; root }
 
@@ -69,7 +69,7 @@ let clone t =
   let root = Dom_api.clone_node (Lazy.force t.root) in
   let fail path =
     Js.Exn.raiseError
-      (Printf.sprintf "mehole: template path [%s] does not resolve in %s"
+      (Printf.sprintf "melhole: template path [%s] does not resolve in %s"
          (String.concat "; " (List.map string_of_int path))
          t.html)
   in

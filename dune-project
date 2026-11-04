@@ -21,7 +21,7 @@
 (maintainers "Gleb")
 
 (package
- (name mehole)
+ (name melhole)
  (synopsis "Templates with holes for Melange: the runtime and the compiler shared by Melact and Meltea")
  (depends
   (ocaml
@@ -46,7 +46,7 @@
    (>= 3.16))
   (melange
    (>= 5.1))
-  mehole
+  melhole
   (reason-react :with-test)
   (reason-react-ppx :with-test)
   (reason :with-test)
@@ -62,7 +62,7 @@
    (>= 3.16))
   (ppxlib
    (>= 0.34))
-  mehole))
+  melhole))
 
 (package
  (name meltea)
@@ -74,7 +74,7 @@
    (>= 3.16))
   (melange
    (>= 5.1))
-  mehole
+  melhole
   (mlx :with-test)))
 
 (package
@@ -87,4 +87,4 @@
    (>= 3.16))
   (ppxlib
    (>= 0.34))
-  mehole))
+  melhole))

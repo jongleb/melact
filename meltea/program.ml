@@ -1,4 +1,4 @@
-open Mehole
+open Melhole
 
 external queue_microtask : (unit -> unit) -> unit = "queueMicrotask"
 

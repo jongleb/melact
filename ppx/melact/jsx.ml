@@ -1,5 +1,5 @@
 open Ppxlib
-open Mehole_compiler
+open Melhole_compiler
 open Ast_builder.Default
 
 let keyed_hooks =
@@ -25,8 +25,8 @@ let without_component attributes =
 
 let unwrap ~loc element =
   [%expr
-    let (React.Element __mehole_child) = [%e element] in
-    __mehole_child]
+    let (React.Element __melhole_child) = [%e element] in
+    __melhole_child]
 
 let react_text expression =
   let text name =
@@ -86,11 +86,11 @@ let component ~loc ~name expression =
                   {
                     pparam_loc = loc;
                     pparam_desc =
-                      Pparam_val (Optional "ref", None, [%pat? __mehole_forwarded_ref]);
+                      Pparam_val (Optional "ref", None, [%pat? __melhole_forwarded_ref]);
                   };
                 ],
               [%expr
-                let [%p reference] = ReactDOM.Ref.forwarded __mehole_forwarded_ref in
+                let [%p reference] = ReactDOM.Ref.forwarded __melhole_forwarded_ref in
                 [%e body]] )
         | _ ->
             Location.raise_errorf ~loc
@@ -107,7 +107,7 @@ let component ~loc ~name expression =
   in
   let names =
     List.mapi
-      (fun index _ -> Printf.sprintf "__mehole_prop_%d" index)
+      (fun index _ -> Printf.sprintf "__melhole_prop_%d" index)
       (List.filter
          (fun param ->
            match param.pparam_desc with
@@ -141,17 +141,17 @@ let component ~loc ~name expression =
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
   let definition =
-    Hoist.hoist ~loc "component" [%expr Mehole.Component.make ~name:[%e estring ~loc name]]
+    Hoist.hoist ~loc "component" [%expr Melhole.Component.make ~name:[%e estring ~loc name]]
   in
   let inputs =
     pexp_array ~loc
-      (List.map (fun name -> [%expr Mehole.View.Input [%e evar ~loc name]]) names)
+      (List.map (fun name -> [%expr Melhole.View.Input [%e evar ~loc name]]) names)
   in
   pexp_function ~loc complete None
     (Pfunction_body
        [%expr
          React.Element
-           (Mehole.View.component [%e definition] [%e inputs] (fun () ->
+           (Melhole.View.component [%e definition] [%e inputs] (fun () ->
                 [%e unwrap ~loc body]))])
 
 let rec with_unit typ =
@@ -179,30 +179,30 @@ let mapper =
             let native =
               pexp_construct ~loc
                 { loc; txt = Ldot (Ldot (Lident "ReactEvent", family), "Native") }
-                (Some [%expr __mehole_event])
+                (Some [%expr __melhole_event])
             in
             match requirement with
             | `Required ->
-                [%expr Mehole.View.HHandler (fun __mehole_event -> [%e value] [%e native])]
+                [%expr Melhole.View.HHandler (fun __melhole_event -> [%e value] [%e native])]
             | `Optional ->
                 [%expr
-                  Mehole.View.HHandler
-                    (fun __mehole_event -> Option.iter (fun handle -> handle [%e native]) [%e value])]);
+                  Melhole.View.HHandler
+                    (fun __melhole_event -> Option.iter (fun handle -> handle [%e native]) [%e value])]);
         style =
           (fun loc requirement value ->
             match requirement with
-            | `Required -> [%expr Mehole.View.HStyle (ReactDOM.Style.declarations [%e value])]
+            | `Required -> [%expr Melhole.View.HStyle (ReactDOM.Style.declarations [%e value])]
             | `Optional ->
                 [%expr
-                  Mehole.View.HStyle
+                  Melhole.View.HStyle
                     (Option.fold ~none:[] ~some:ReactDOM.Style.declarations [%e value])]);
         reference =
           (fun loc requirement value ->
             match requirement with
-            | `Required -> [%expr Mehole.View.HRef (ReactDOM.Ref.attach [%e value])]
+            | `Required -> [%expr Melhole.View.HRef (ReactDOM.Ref.attach [%e value])]
             | `Optional ->
                 [%expr
-                  Mehole.View.HRef
+                  Melhole.View.HRef
                     (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
         classify = react_text;
         extra = (fun _ -> None);
@@ -265,7 +265,7 @@ let mapper =
       | Pexp_ident { txt = Ldot (Lident "React", name); _ }
         when List.exists (String.equal name) keyed_hooks ->
           pexp_apply ~loc expression
-            [ (Nolabel, Hoist.hoist ~loc "hook" [%expr Mehole.Hook.key ()]) ]
+            [ (Nolabel, Hoist.hoist ~loc "hook" [%expr Melhole.Hook.key ()]) ]
       | Pexp_apply (callee, arguments) -> (
           match (Element.without_jsx expression.pexp_attributes, callee.pexp_desc) with
           | None, _ -> super#expression expression
@@ -318,7 +318,7 @@ let mapper =
         ~some:(fun key ->
           [%expr
             React.Element
-              (Mehole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
+              (Melhole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
         key
   end
 

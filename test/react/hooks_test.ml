@@ -1,4 +1,4 @@
-open Mehole
+open Melhole
 open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"

@@ -46,13 +46,13 @@ and a microtask scheduler, because React's semantics need them; Meltea does not.
 ## Layout
 
 ```
-mehole/runtime     mehole           shared runtime: templates, guards, keyed moves, events
-mehole/compiler    mehole.compiler  shared compiler: templates, scopes, guards, DOM props
+melhole/runtime     melhole           shared runtime: templates, guards, keyed moves, events
+melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
 react/             melact           React, ReactDOM, ReactEvent
 meltea/            meltea           Program (sandbox, element), Cmd, Sub, Html
 ```
 
-Meltea depends on `mehole` only. It is mirrored to github.com/jongleb/meltea by
+Meltea depends on `melhole` only. It is mirrored to github.com/jongleb/meltea by
 `scripts/publish-meltea.sh`; development happens here.

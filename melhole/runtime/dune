@@ -1,6 +1,6 @@
 (library
- (name mehole)
- (public_name mehole)
+ (name melhole)
+ (public_name melhole)
  (modes melange)
  (libraries melange.dom)
  (modules_without_implementation dom_api)

@@ -1,4 +1,4 @@
-open Mehole
+open Melhole
 open Testing
 
 let words = [| ""; "a"; "b"; "ab"; "<&>" |]

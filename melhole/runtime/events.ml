@@ -13,7 +13,7 @@ type t = {
 let delegated_types = Hashtbl.create 32
 
 let bind element event handler =
-  let key = "$$mehole:" ^ event in
+  let key = "$$melhole:" ^ event in
   Dom_api.set_handler element key handler;
   let registration =
     match event with

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Exports Meltea and the core it shares with Melact, mehole, to github.com/jongleb/meltea.
+# Exports Meltea and the core it shares with Melact, melhole, to github.com/jongleb/meltea.
 # Development happens in this repository; the export is a plain snapshot, committed as "wip".
 set -eu
 
@@ -20,7 +20,7 @@ copy() {
   cp -R "$root/$1" "$1"
 }
 
-copy mehole
+copy melhole
 copy meltea
 copy ppx/meltea
 copy examples/counter
@@ -60,7 +60,7 @@ cat > dune-project <<'EOF'
  (github jongleb/meltea))
 
 (package
- (name mehole)
+ (name melhole)
  (synopsis "Templates with holes for Melange: the runtime and the compiler shared by Meltea and Melact")
  (depends
   (ocaml (>= 5.3))
@@ -78,7 +78,7 @@ cat > dune-project <<'EOF'
   (ocaml (>= 5.3))
   (dune (>= 3.16))
   (melange (>= 5.1))
-  mehole
+  melhole
   (mlx :with-test)))
 
 (package
@@ -88,7 +88,7 @@ cat > dune-project <<'EOF'
   (ocaml (>= 5.3))
   (dune (>= 3.16))
   (ppxlib (>= 0.34))
-  mehole))
+  melhole))
 EOF
 
 cat > package.json <<'EOF'
@@ -110,7 +110,7 @@ cat > package.json <<'EOF'
 EOF
 
 printf '_build/\n_opam/\nnode_modules/\n*.install\n' > .gitignore
-cp "$root"/mehole.opam "$root"/meltea.opam "$root"/meltea-ppx.opam .
+cp "$root"/melhole.opam "$root"/meltea.opam "$root"/meltea-ppx.opam .
 
 git add -A
 if git diff --cached --quiet; then

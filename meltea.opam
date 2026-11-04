@@ -9,7 +9,7 @@ depends: [
   "ocaml" {>= "5.3"}
   "dune" {>= "3.16" & >= "3.16"}
   "melange" {>= "5.1"}
-  "mehole"
+  "melhole"
   "mlx" {with-test}
   "odoc" {with-doc}
 ]

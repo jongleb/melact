@@ -218,8 +218,8 @@ a `Type.Id` created once at module level, and passes it as a hidden first argume
 let count, setCount = React.useState (fun () -> 0)
 
 (* melact-ppx emits *)
-let __mehole_hook_2 = Mehole.Hook.key ()
-let count, setCount = (React.useState __mehole_hook_2) (fun () -> 0)
+let __melhole_hook_2 = Melhole.Hook.key ()
+let count, setCount = (React.useState __melhole_hook_2) (fun () -> 0)
 ```
 
 A slot stores its value with the key that made it, so reading it back is a typed
@@ -359,8 +359,8 @@ The full plan is in [`SPEC.md`](SPEC.md).
 ## Layout
 
 ```
-mehole/runtime     mehole           shared runtime: templates, guards, keyed moves, events
-mehole/compiler    mehole.compiler  shared compiler: templates, scopes, guards, DOM props
+melhole/runtime     melhole           shared runtime: templates, guards, keyed moves, events
+melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
 react/             melact           React, ReactDOM, ReactEvent

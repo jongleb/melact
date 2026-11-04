@@ -1,4 +1,4 @@
-open Mehole
+open Melhole
 open Testing
 
 let row = Template.make ~html:"<li></li>" ~holes:[| Text ([], 0) |]

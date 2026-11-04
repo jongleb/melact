@@ -336,8 +336,8 @@ def reconcile(p):
 
 
 def events(p):
-    nodes = [("document", 60, "1 listener per event type"), ("div", 108, "$$mehole:click = outer"), ("ul", 156, None),
-             ("li", 204, None), ("button", 252, "$$mehole:click = inner")]
+    nodes = [("document", 60, "1 listener per event type"), ("div", 108, "$$melhole:click = outer"), ("ul", 156, None),
+             ("li", 204, None), ("button", 252, "$$melhole:click = inner")]
     body = ""
     for name, y, note in nodes:
         handler = note and note.startswith("$$")
@@ -352,11 +352,11 @@ def events(p):
     body += text(326, 172, "walk", size=11.5, cls="accent", weight=600)
     body += f'<circle cx="152" cy="246" r="6" fill="{p["orange"]}" class="pulse"/>'
     body += text(118, 276, "click", size=11.5, cls="orange", weight=600)
-    body += text(150, 26, "Melact walks from the target up, calling each $$mehole:click; stopPropagation ends the walk", size=12, cls="muted")
+    body += text(150, 26, "Melact walks from the target up, calling each $$melhole:click; stopPropagation ends the walk", size=12, cls="muted")
 
     body += box(560, 40, 320, 236, p["card"], p["line"], rx=14)
     body += text(580, 68, "Replacing a handler", size=14, weight=600)
-    body += text(580, 92, "el[\"$$mehole:click\"] = next", size=12, cls="mono accent")
+    body += text(580, 92, "el[\"$$melhole:click\"] = next", size=12, cls="mono accent")
     body += text(580, 114, "0 addEventListener, 0 setAttribute", size=12, cls="muted")
     body += text(580, 150, "Non-bubbling events", size=14, weight=600)
     body += text(580, 174, "scroll, focus, load …", size=12, cls="muted")

@@ -11,7 +11,7 @@ from Elm.
 
 ## Status
 
-Guards are implemented in the shared compiler (`mehole/compiler/free.ml`, `scope.ml`, `element.ml`)
+Guards are implemented in the shared compiler (`melhole/compiler/free.ml`, `scope.ml`, `element.ml`)
 and used by both front ends. Next: compiled patchers.
 
 ## Guards at the JSX site

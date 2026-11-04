@@ -2,6 +2,6 @@
  (name melact_ppx)
  (public_name melact-ppx)
  (kind ppx_rewriter)
- (libraries ppxlib mehole.compiler)
+ (libraries ppxlib melhole.compiler)
  (preprocess
   (pps ppxlib.metaquot)))

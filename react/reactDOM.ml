@@ -1,4 +1,4 @@
-open Mehole
+open Melhole
 
 module Style = struct
   type t = Declarations of (string * string) list [@@unboxed]

@@ -75,7 +75,7 @@ their OCaml types; a typo is a compile error that names the element.
 ```
 
 and `(dialect (name mlx) …)` in `dune-project` for `.mlx` files. Until the opam release, pin it:
-`opam pin add mehole meltea meltea-ppx https://github.com/jongleb/meltea.git`.
+`opam pin add melhole meltea meltea-ppx https://github.com/jongleb/meltea.git`.
 
 ## Tested by laws
 
@@ -94,7 +94,7 @@ $ dune build && dune test && dune build @runtest-js && npx vitest run
 
 ## Where it is developed
 
-Meltea shares its runtime and compiler, `mehole`, with [Melact](https://github.com/jongleb/melact),
+Meltea shares its runtime and compiler, `melhole`, with [Melact](https://github.com/jongleb/melact),
 the reason-react-compatible sibling for code that already lives on React. Both are developed in
 that repository; this one is a mirror of Meltea's part, exported by `scripts/publish-meltea.sh`.
 Issues and ideas are welcome here.

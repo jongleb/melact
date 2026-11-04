@@ -1,4 +1,4 @@
-open Mehole
+open Melhole
 
 type 'msg t = Node of (('msg -> unit) -> View.child) [@@unboxed]
 
