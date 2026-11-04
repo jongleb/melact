@@ -12,11 +12,32 @@ type input = Input : 'a -> input [@@unboxed]
 (** Whether a value differs from the one remembered for it. *)
 type change = Changed | Unchanged
 
+(** Whether a template's root is in the document yet. *)
+type placement = Detached | Placed
+
+(** A mounted template: the values its refresh last read, what to release, which refs to call. *)
+type scope = {
+  deps : input array;
+  mutable cleanups : (unit -> unit) list;  (** Newest first. *)
+  mutable references : (unit -> unit) list;  (** Called once the root is placed. *)
+  mutable placement : placement;
+}
+
 (** What a mounted child is, so that the next child can tell whether it can patch it. *)
-type state = ..
+type state =
+  | Empty_state
+  | Text_state of { node : Dom.text; mutable value : string }
+  | List_state of live array
+  | Keyed_state of string array * live array
+  | Memo_state of input array * live
+  | Portal_state of Dom.element * live
+  | Compiled_state of { identity : input; scope : scope; lend : unit -> unit }
+  | Static_state of Template.t
+  | Paths_state of Template.t * (hole array -> unit)  (** Writes the next values to its holes. *)
+  | Instance_state of instance
 
 (** A mounted child: its own nodes and how to let go of what they hold. *)
-type live = {
+and live = {
   state : state;
   each : (Dom.node -> unit) -> unit;  (** Visits the top-level nodes in document order. *)
   front : Dom.node Js.null -> Dom.node Js.null;  (** The first node, or the given one. *)
@@ -24,7 +45,7 @@ type live = {
 }
 
 (** How a child takes part in [list] and [items]. *)
-type shape =
+and shape =
   | Single
   | Nothing
   | Entry of string * child  (** A keyed child. *)
@@ -39,7 +60,7 @@ and child = {
   shape : shape;
 }
 
-type hole =
+and hole =
   | HText of string
   | HAttr of string option
   | HProp : 'a -> hole
@@ -49,16 +70,39 @@ type hole =
   | HRef of (Dom.element -> unit)
   | HChild of child
 
-(** Whether a template's root is in the document yet. *)
-type placement = Detached | Placed
-
-(** A mounted template: the values its refresh last read, what to release, which refs to call. *)
-type scope = {
-  deps : input array;
-  mutable cleanups : (unit -> unit) list;  (** Newest first. *)
-  mutable references : (unit -> unit) list;  (** Called once the root is placed. *)
-  mutable placement : placement;
+(** A mounted component: its hook slots, its output and its effects. *)
+and instance = {
+  parent : instance option;  (** The nearest enclosing instance. *)
+  depth : int;
+  slots : Hook.slots;
+  kind : kind;
+  mutable status : status;
+  mutable output : live;
+  mutable region : region;
+  mutable pending : (timing * phase * (unit -> unit)) list;  (** Effects of the last render, newest first. *)
+  mutable teardown : (unit -> unit) list;  (** Run on unmount, newest first. *)
 }
+
+and kind =
+  | Renders of {
+      component : Component.t;
+      mutable inputs : input array;
+      mutable render : unit -> child;
+    }
+  | Provides : {
+      context : 'value Context.t;
+      mutable value : 'value;
+      mutable children : child;
+      mutable consumers : instance list;
+    }
+      -> kind
+
+and status = Clean | Dirty | Unmounted
+
+(** Where an instance sits in the DOM when its output has no nodes. *)
+and region =
+  | Nodes  (** The output's own nodes locate it. *)
+  | Marker of Dom.text  (** An empty text node holds its place. *)
 
 (** A compiled template: its markup and how to make its holes on a fresh clone. *)
 type 'holes template = {
@@ -75,16 +119,6 @@ type mounted = {
 
 (** The component scheduler, installed by the first component that mounts. *)
 type scheduler = Absent | Installed of { settle : unit -> unit; flush : unit -> unit }
-
-type state +=
-  | Empty_state
-  | Text_state of { node : Dom.text; mutable value : string }
-  | List_state of live array
-  | Keyed_state of string array * live array
-  | Memo_state of input array * live
-  | Portal_state of Dom.element * live
-  | Compiled_state of { identity : input; scope : scope; lend : unit -> unit }
-  | Static_state of Template.t
 
 let scheduler = ref Absent
 
@@ -456,11 +490,10 @@ type site =
   | Reference_hole of Hole.reference
   | Content_hole of Hole.content
 
-type state += Paths_state of Template.t * site array
 
 let tpl_instance markup values =
   let mismatch () = Js.Exn.raiseError "melhole: hole value does not match its template hole" in
-  let refresh sites =
+  let refresh sites values =
     if Array.length sites <> Array.length values then
       Js.Exn.raiseError
         ("melhole: template expects "
@@ -504,13 +537,13 @@ let tpl_instance markup values =
               | Class_list element -> Class_hole (classes_hole element))
             (Template.locate markup (Dom_api.to_node root))
         in
-        refresh sites;
-        place position root scope (Paths_state (markup, sites)));
+        refresh sites values;
+        place position root scope (Paths_state (markup, refresh sites)));
     patch =
       (fun _ live ->
         match live.state with
-        | Paths_state (shown, sites) when Dom_api.same shown markup ->
-            refresh sites;
+        | Paths_state (shown, write) when Dom_api.same shown markup ->
+            write values;
             Some live
         | _ -> None);
   }
@@ -539,44 +572,9 @@ let unmount mounted =
 
 let flush () = match !scheduler with Absent -> () | Installed components -> components.flush ()
 
-(** A mounted component: its hook slots, its output and its effects. *)
-type instance = {
-  parent : instance option;  (** The nearest enclosing instance. *)
-  depth : int;
-  slots : Hook.slots;
-  kind : kind;
-  mutable status : status;
-  mutable output : live;
-  mutable region : region;
-  mutable pending : (timing * phase * (unit -> unit)) list;  (** Effects of the last render, newest first. *)
-  mutable teardown : (unit -> unit) list;  (** Run on unmount, newest first. *)
-}
-
-and kind =
-  | Renders of {
-      component : Component.t;
-      mutable inputs : input array;
-      mutable render : unit -> child;
-    }
-  | Provides : {
-      context : 'value Context.t;
-      mutable value : 'value;
-      mutable children : child;
-      mutable consumers : instance list;
-    }
-      -> kind
-
-and status = Clean | Dirty | Unmounted
-
-(** Where an instance sits in the DOM when its output has no nodes. *)
-and region =
-  | Nodes  (** The output's own nodes locate it. *)
-  | Marker of Dom.text  (** An empty text node holds its place. *)
-
 (** Whether a flush is already queued. *)
 type schedule = Idle | Queued
 
-type state += Instance_state of instance
 
 let rendering = ref None
 let owner = ref None
