@@ -156,6 +156,37 @@ module Toggle = struct
     </p>
 end
 
+external typed : 'event -> string = "value" [@@mel.get] [@@mel.scope "target"]
+
+let digits text =
+  String.of_seq (Seq.filter (fun letter -> letter >= '0' && letter <= '9') (String.to_seq text))
+
+module Controlled = struct
+  let[@react.component] make () =
+    let text, setText = React.useState (fun () -> "") in
+    let on, setOn = React.useState (fun () -> false) in
+    <div>
+      <input
+        value=text
+        onChange=(fun event ->
+          setText (fun _ -> digits (typed event))) />
+      <input type_="checkbox" checked=on onChange=(fun _ -> setOn (fun on -> on)) />
+    </div>
+end
+
+external bubbling : string -> < bubbles : bool > Js.t -> Dom.event = "Event" [@@mel.new]
+external checked : Dom.element -> bool = "checked" [@@mel.get]
+external value_of : Dom.element -> string = "value" [@@mel.get]
+
+let type_into : Dom.element -> string -> unit =
+  [%mel.raw
+    {|function (element, text) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, text);
+      }|}]
+
+let later : unit -> unit Js.Promise.t =
+  [%mel.raw {|function () { return new Promise((resolve) => setTimeout(resolve, 0)); }|}]
+
 let setters : (string, (int -> int) -> unit) Hashtbl.t = Hashtbl.create 16
 let set_labels = ref (fun (_ : string array -> string array) -> ())
 let fresh_labels = ref 0
@@ -339,6 +370,48 @@ let () =
       expect (namespace_uri (select root "path"), inner_html root)
       |. to_equal ("http://www.w3.org/2000/svg", "<svg><path d=\"M0 0L9 9\"></path></svg>");
       finish ()));
+  describe "forms" (fun () ->
+    test_async "a controlled input and checkbox show the state after any input, kept or rejected"
+      (fun () ->
+        check_async
+          (async_property (tapes ~shortest:2 ~longest:16) (fun values ->
+               let tape = tape values in
+               let words = [| "12"; "a"; "3b4"; ""; "x9" |] in
+               let actions =
+                 List.init 8 (fun _ ->
+                     let word = words.(draw tape (Array.length words)) in
+                     match draw tape 2 with 0 -> `Type word | _ -> `Click)
+               in
+               let _, wanted =
+                 List.fold_left_map
+                   (fun shown action ->
+                     let shown = match action with `Type word -> digits word | `Click -> shown in
+                     (shown, (shown, false)))
+                   "" actions
+               in
+               let* root, client = mount <Controlled /> in
+               let field = select root "input" and box = select root "input[type=checkbox]" in
+               let rec step remaining shown =
+                 match remaining with
+                 | [] ->
+                     let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                     Js.Promise.resolve (List.rev shown)
+                 | action :: rest ->
+                     let* () =
+                       act (fun () ->
+                           match action with
+                           | `Type word ->
+                               type_into field word;
+                               dispatch field (bubbling "input" [%mel.obj { bubbles = true }])
+                           | `Click -> click box)
+                     in
+                     let* () = later () in
+                     step rest ((value_of field, checked box) :: shown)
+               in
+               let* shown = step actions [] in
+               expect shown |. to_equal wanted;
+               finish ()))
+          [%mel.obj { numRuns = 60 }]));
   describe "lists and conditions" (fun () ->
     test_async "keep component state with its key" (fun () ->
       let* root, client = mount <Rows labels=[| "a"; "b"; "c" |] /> in

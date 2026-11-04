@@ -24,8 +24,10 @@ copy melhole
 copy meltea
 copy ppx/meltea
 copy examples/counter
+copy examples/todomvc
 copy test/support
 copy test/meltea
+copy test/todomvc
 copy test/laws
 copy vite.config.js
 copy test/setup.js

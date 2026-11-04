@@ -184,6 +184,19 @@ The 22 delegated types are the bubbling set Solid uses: `click`, `input`, `keydo
 `pointer*`, `mouse*`, `touch*` and the rest. Any other event gets one listener on its element that
 reads the same property, so replacing its handler is free too. That listener is removed on unmount.
 
+### Inputs show the state
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/controlled-dark.svg">
+  <img src="assets/controlled.svg" alt="Controlled inputs: the user types milk and presses Enter in the same tick; the model's field goes from empty to milk and back to empty, so the redraw sees an unchanged value and writes nothing. A guard alone leaves milk in the field. In Meltea and Melact value and checked are controlled holes: after an input or change event and the redraw it causes, the hole writes its last value back if the DOM differs, as React does" width="100%">
+</picture>
+
+A guard compares a value with the one written last, but the user changes `value` and `checked`
+too. So these two props are controlled holes: after an `input` or `change` event, and the redraw
+it causes, the hole writes its last value back if the DOM differs. A handler that filters or
+rejects input keeps the field in step with the state, as in React; one law types into such a
+field and checkbox under React 18 and under Melact and compares the page.
+
 ### Components re-render where state changed
 
 <picture>
@@ -264,7 +277,9 @@ let () = Option.iter (fun root -> ignore (Program.sandbox ~init:0 ~update ~view 
 sends a message, `onInput` and `onKeyDown` take a function of the value or key, `onCheck` of the
 checked state. `Program.sandbox` and `Program.element` run it, with `Cmd` and `Sub` as plain
 values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries meltea)` and
-`(pps melange.ppx meltea-ppx)`. Example: [`examples/counter`](examples/counter/main.mlx).
+`(pps melange.ppx meltea-ppx)`. Examples: [`examples/counter`](examples/counter/main.mlx) and
+[`examples/todomvc`](examples/todomvc/todomvc.mlx), the full TodoMVC with routing, editing and
+`localStorage`.
 
 ## Status
 
@@ -281,9 +296,9 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 | | |
 |---|---|
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
-| **Size** | the whole counter app, runtime and the Melange stdlib it uses included: 4.0 kB gzip with Meltea, 5.7 kB with Melact; React 18.3 and react-dom alone are 45 kB |
-| **Tests** | 74 vitest + jsdom tests and 16 native QCheck laws: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
-| **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx), Meltea |
+| **Size** | whole apps, runtime and the Melange stdlib they use included: the counter is 4.2 kB gzip with Meltea and 5.7 kB with Melact, TodoMVC in Meltea is 8.7 kB; React 18.3 and react-dom alone are 45 kB |
+| **Tests** | 81 vitest + jsdom tests and 16 native QCheck laws: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
 | **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, real hydration, benchmarks, SSR |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 

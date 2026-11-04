@@ -675,6 +675,44 @@ def compiled(p):
     return svg(p, 880, 456, "The counter in Meltea: you write the view in mlx; Meltea compiles it into a template tree of div, two buttons and an output whose text is the only hole; when + is clicked the update makes count 42, the compiled code compares count with its last value and writes 42 into that one text node; the grey static nodes get no DOM writes; there is no virtual DOM", body)
 
 
+def controlled(p):
+    def field(x, y, w, content, stroke, dash=None, cls="mono"):
+        return (box(x, y, w, 30, p["card"], stroke, rx=6, dash=dash, width=1.6)
+                + text(x + 10, y + 20, content, size=13, cls=cls))
+
+    steps = [
+        ("1 · the user types", [("input → ", "muted"), ("Type \"milk\"", "accent")], "model.field = \"milk\""),
+        ("2 · Enter, same tick", [("keydown → ", "muted"), ("Add", "accent")], "model.field = \"\""),
+        ("3 · the redraw", [("new \"\" === last \"\"", "mono")], "unchanged → no write"),
+    ]
+    body = text(0, 18, "One tick: the user types and presses Enter before the next draw", size=13, weight=700)
+    for i, (title, line, model) in enumerate(steps):
+        x = i * 305
+        body += box(x, 34, 270, 92, p["card"], p["line"], rx=12, lift=True)
+        body += text(x + 16, 58, title, size=13, weight=600)
+        body += text(x + 16, 84, "".join(span(t, c) for t, c in line), size=12.5, cls="mono", raw=True)
+        body += text(x + 16, 108, model, size=12, cls="mono muted")
+        if i < 2:
+            body += arrow(p, x + 276, 80, x + 299, 80, "accent", flow=True)
+
+    body += box(0, 150, 420, 150, p["orange_soft"], p["orange"], rx=14, width=1.4)
+    body += text(20, 176, "a guard alone", size=13.5, weight=700, cls="orange")
+    body += field(20, 194, 300, "milk", p["orange"])
+    body += text(20, 252, "the field still shows milk,", size=12, cls="muted")
+    body += text(20, 272, "the model says \"\"", size=12, cls="muted")
+
+    body += box(460, 150, 420, 150, p["green_soft"], p["green"], rx=14, width=1.4)
+    body += text(480, 176, "value and checked are controlled holes", size=13.5, weight=700, cls="green")
+    body += field(480, 194, 300, "What needs to be done?", p["green"], dash="4 3", cls="faint")
+    body += text(480, 252, "after input or change, and the redraw it causes:", size=12, cls="muted")
+    body += text(480, 274, "".join([escape("if (el.value !== last) "), span("el.value = last", "green")]),
+                 size=12.5, cls="mono", raw=True)
+
+    body += text(440, 330, "the guard still skips unchanged values; the field shows the model, as React's controlled inputs",
+                 size=12.5, cls="muted", anchor="middle", weight=600)
+    return svg(p, 880, 342, "Controlled inputs: the user types milk and presses Enter in the same tick; the model's field goes from empty to milk and back to empty, so the redraw sees an unchanged value and writes nothing. A guard alone leaves milk in the field. In Meltea and Melact value and checked are controlled holes: after an input or change event and the redraw it causes, the hole writes its last value back if the DOM differs, as React does", body)
+
+
 def roadmap(p):
     stages = [
         ("View", "templates, holes,", "reconcile, events"),
@@ -708,7 +746,7 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
+FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
                events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":

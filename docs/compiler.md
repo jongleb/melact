@@ -84,6 +84,17 @@ each hole expression appears once in the generated code. A later render of the s
 finds the mounted holes through its template: the mounted clone lends them to the template, and
 the refresh that belongs to that template takes them back, typed, without `Obj` or a type witness.
 
+## Controlled inputs
+
+`value` and `checked` are properties the user changes too. A guard compares a value with the one
+written last, so when typing changes the DOM but not the state (an update that rejects or
+filters the text, or a field cleared to the `""` it already held), nothing would write it back.
+These two props become controlled holes, as in React: after an `input` or `change` event on the
+element, and after the redraw the event causes, the hole puts its last written value back if the
+DOM differs. The guard stays; the check after input costs one property read. One law, run against
+reason-react with React 18 and against Melact, types and clicks into a controlled field and
+checkbox whose handlers keep or reject the input, and compares what the page shows.
+
 ## Laws
 
 Accepted only with these holding, by property-based tests:

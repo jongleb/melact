@@ -104,10 +104,10 @@ Every kind of prop, static and dynamic, required and optional:
               "aria-hidden"),
            (Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
               "tabIndex"),
-           (Melhole.View.prop_hole (Melhole.Template.element __melhole_node)
-              "value"),
-           (Melhole.View.prop_hole (Melhole.Template.element __melhole_node)
-              "checked"),
+           (Melhole.View.controlled_hole
+              (Melhole.Template.element __melhole_node) "value"),
+           (Melhole.View.controlled_hole
+              (Melhole.Template.element __melhole_node) "checked"),
            (Melhole.View.style_hole (Melhole.Template.element __melhole_node)),
            (Melhole.View.reference_hole __melhole_scope
               (Melhole.Template.element __melhole_node)),
