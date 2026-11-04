@@ -11,7 +11,7 @@
 
 JSX compiles to DOM templates with holes. A re-render writes only the holes whose values changed.
 
-![status](https://img.shields.io/badge/status-milestone%203%20of%207-8250df)
+![status](https://img.shields.io/badge/status-milestone%204%20of%207-8250df)
 ![Melange](https://img.shields.io/badge/Melange-%E2%89%A5%205.1-ec6813?logo=ocaml&logoColor=white)
 ![OCaml](https://img.shields.io/badge/OCaml-%E2%89%A5%205.3-ec6813?logo=ocaml&logoColor=white)
 ![syntax](https://img.shields.io/badge/JSX-mlx%20%C2%B7%20Reason%20%C2%B7%20OCaml-1f6feb)
@@ -198,6 +198,11 @@ component that renders nothing keeps its place with an empty text node.
 
 ### Hooks are typed by their call site
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hooks-dark.svg">
+  <img src="assets/hooks.svg" alt="melact-ppx gives every hook call site its own Type.Id key, hoisted to module level; the instance stores each slot with the key that made it; reading a slot checks provably_equal, so values come back typed, and a hook called out of order raises an error instead of returning a wrong value" width="100%">
+</picture>
+
 Hooks keep state in slots read in call order, as in React. Instead of casting what a slot holds,
 `melact-ppx` gives every `React.useState`, `useEffect`, `useMemo`… call site its own key,
 a `Type.Id` created once at module level, and passes it as a hidden first argument:
@@ -223,6 +228,13 @@ record in place and passes the same reference back will not re-render that part.
 builds new values, so this rarely matters, but it is a rule rather than an optimisation.
 
 ## Status
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dual-dark.svg">
+  <img src="assets/dual.svg" alt="One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 9 assertions pass in both" width="100%">
+</picture>
+
+*The compatibility check that matters: the same reason-react code, built against React and against melact, passes the same assertions.*
 
 | | |
 |---|---|

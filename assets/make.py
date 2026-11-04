@@ -10,11 +10,13 @@ LIGHT = dict(
     text="#1f2328", muted="#59636e", faint="#8c959f", card="#f6f8fa", line="#d0d7de",
     accent="#8250df", accent_soft="#f5f0ff", green="#1a7f37", green_soft="#ecfdf0",
     orange="#bc4c00", orange_soft="#fff4e8", blue="#0969da", blue_soft="#eef6ff",
+    shadow="#1f2328", shadow_opacity="0.10",
 )
 DARK = dict(
     text="#e6edf3", muted="#9198a1", faint="#6e7681", card="#161b22", line="#30363d",
     accent="#b58cff", accent_soft="#221a38", green="#3fb950", green_soft="#12261a",
     orange="#f0883e", orange_soft="#2b1d12", blue="#58a6ff", blue_soft="#0f2136",
+    shadow="#000000", shadow_opacity="0.55",
 )
 
 SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
@@ -40,14 +42,20 @@ def svg(p, width, height, label, body):
         ".pulse { animation: pulse 2.2s ease-in-out infinite; }"
         "@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }"
         "@media (prefers-reduced-motion: reduce) { .flow, .pulse { animation: none; } }"
-        f"</style><defs>{markers}</defs>{body}</svg>"
+        f"</style><defs>{markers}"
+        f'<filter id="lift" x="-5%" y="-5%" width="110%" height="125%"><feDropShadow dx="0" dy="2" '
+        f'stdDeviation="3" flood-color="{p["shadow"]}" flood-opacity="{p["shadow_opacity"]}"/></filter>'
+        f'<linearGradient id="glow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{p["accent"]}"/>'
+        f'<stop offset="1" stop-color="{p["blue"]}"/></linearGradient>'
+        f"</defs>{body}</svg>"
     )
 
 
-def box(x, y, w, h, fill, stroke, rx=12, dash=None, width=1):
+def box(x, y, w, h, fill, stroke, rx=12, dash=None, width=1, lift=False):
     dashed = f' stroke-dasharray="{dash}"' if dash else ""
+    lifted = ' filter="url(#lift)"' if lift else ""
     return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{fill}" '
-            f'stroke="{stroke}" stroke-width="{width}"{dashed}/>')
+            f'stroke="{stroke}" stroke-width="{width}"{dashed}{lifted}/>')
 
 
 def text(x, y, content, size=13, cls="", weight=None, anchor="start", raw=False, fill=None):
@@ -110,7 +118,7 @@ def overview(p):
 
     body = step(0, 24, "1", "Your reason-react app") + step(305, 24, "2", "melact-ppx, at build time") + step(610, 24, "3", "In the browser")
 
-    body += box(0, 40, 270, 158, p["card"], p["line"])
+    body += box(0, 40, 270, 158, p["card"], p["line"], lift=True)
     code = [
         [("let[@react.component] make () =", "")],
         [("  let n, set =", "")],
@@ -124,7 +132,7 @@ def overview(p):
         line = "".join(span(t, c) if c else escape(t) for t, c in parts)
         body += text(12, 68 + i * 19, line, size=11.2, cls="mono", raw=True)
 
-    body += box(0, 208, 270, 92, p["card"], p["line"])
+    body += box(0, 208, 270, 92, p["card"], p["line"], lift=True)
     body += text(12, 228, "dune: the whole migration", size=11.5, cls="muted", weight=600)
     for i, (line, cls) in enumerate([("- (libraries reason-react)", "orange"), ("+ (libraries melact)", "green"),
                                      ("- (pps reason-react-ppx)", "orange"), ("+ (pps melact-ppx)", "green")]):
@@ -138,7 +146,7 @@ def overview(p):
     body += text(321, 136, "never rebuilt, never compared", size=12, cls="muted")
     body += text(321, 152, "+ hole paths: Handler [] · Text [] @0", size=10.5, cls="mono faint")
 
-    body += box(305, 172, 270, 128, p["blue_soft"], p["blue"])
+    body += box(305, 172, 270, 128, p["blue_soft"], p["blue"], lift=True)
     body += text(321, 194, "holes · all a render builds", size=12, cls="blue", weight=700)
     for i, (label, value) in enumerate([("HHandler", "fun _ -> …"), ("HText", "\"1\"")]):
         y = 208 + i * 34
@@ -147,7 +155,7 @@ def overview(p):
         body += text(549, y + 18, value, size=12, cls="mono", anchor="end")
     body += text(321, 290, "one array per element, any size", size=12, cls="muted")
 
-    body += box(610, 40, 270, 260, p["card"], p["line"])
+    body += box(610, 40, 270, 260, p["card"], p["line"], lift=True)
     flow = [("setState", "orange"), ("only this component renders", "line"),
             ("=== on each hole", "accent"), ("text.data = \"1\"", "green")]
     for i, (label, tone) in enumerate(flow):
@@ -183,7 +191,7 @@ def pipeline(p):
     for x, title in heads:
         body += text(x + 2, 22, title, size=14, weight=600)
 
-    body += box(0, 40, 230, 236, p["card"], p["line"])
+    body += box(0, 40, 230, 236, p["card"], p["line"], lift=True)
     jsx = [
         [("<div className=\"counter\">", "")],
         [("  <button onClick=", ""), ("dec", "accent"), (">", "")],
@@ -221,7 +229,7 @@ def pipeline(p):
     body += text(470, 234, "no tags,", size=11.5, cls="muted")
     body += text(470, 250, "no attributes", size=11.5, cls="muted")
 
-    body += box(650, 40, 230, 236, p["card"], p["line"])
+    body += box(650, 40, 230, 236, p["card"], p["line"], lift=True)
     tree = [
         (664, 76, "div.counter", ""),
         (680, 106, "button", "click → dec"),
@@ -405,15 +413,15 @@ def updates(p):
         body += text(x, y + 5, name, size=13, cls="faint" if tone == "faint" else "", weight=600, anchor="middle")
     body += f'<circle cx="400" cy="132" r="9" fill="{p["orange"]}" class="pulse"/>'
     body += text(414, 124, "setState", size=11.5, cls="orange", weight=600)
-    body += text(230, 288, "props tuple == → skipped", size=11, cls="green", anchor="middle")
-    body += text(470, 288, "props tuple == → skipped", size=11, cls="green", anchor="middle")
+    body += text(230, 288, "every prop === → skipped", size=11, cls="green", anchor="middle")
+    body += text(470, 288, "every prop === → skipped", size=11, cls="green", anchor="middle")
     body += text(350, 288, "props changed", size=11, cls="accent", anchor="middle")
 
     steps = [
         ("1", "The setter marks TodoList dirty", "nothing renders yet"),
         ("2", "One microtask flushes", "dirty instances, parents first"),
         ("3", "TodoList renders again", "App and Header are not visited"),
-        ("4", "Each Row gets a props tuple", "all fields == → the subtree is skipped"),
+        ("4", "Each Row's props are compared", "one by one with === → equal ones are skipped"),
     ]
     for i, (n, head, note) in enumerate(steps):
         y = 54 + i * 60
@@ -422,6 +430,95 @@ def updates(p):
         body += text(616, y, head, size=13.5, weight=600)
         body += text(616, y + 18, note, size=12, cls="muted")
     return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows whose props are physically equal are skipped", body)
+
+
+def hooks(p):
+    body = ""
+    heads = [(0, "1", "Your component"), (300, "2", "melact-ppx: a key per call site"), (620, "3", "The instance's slots")]
+    for x, n, title in heads:
+        body += f'<circle cx="{x + 11}" cy="17" r="11" fill="{p["accent"]}"/>'
+        body += text(x + 11, 22, n, size=12, weight=700, anchor="middle", fill="#ffffff")
+        body += text(x + 30, 22, title, size=14.5, weight=600)
+
+    body += box(0, 40, 270, 168, p["card"], p["line"], lift=True)
+    code = [
+        [("let[@react.component] make () =", "")],
+        [("  let n, setN =", "")],
+        [("    ", ""), ("React.useState", "accent"), (" (fun () -> 0) in", "")],
+        [("  ", ""), ("React.useEffect1", "blue"), (" (fun () ->", "")],
+        [("      Js.log n; None)", "")],
+        [("    [| n |];", "")],
+        [("  <b>(React.int n)</b>", "")],
+    ]
+    for i, parts in enumerate(code):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(14, 68 + i * 19, line, size=11.5, cls="mono", raw=True)
+
+    keys = [
+        (60, "accent", "accent_soft", "k1", "(int, int -> int) state key"),
+        (138, "blue", "blue_soft", "k2", "int array effect_cell key"),
+    ]
+    for y, color, soft, name, typ in keys:
+        body += box(300, y, 290, 58, p[soft], p[color], rx=10, width=1.4, lift=True)
+        body += text(316, y + 23, f"let {name} = Hook.key ()", size=12, cls=f"mono {color}", weight=600)
+        body += text(316, y + 43, typ, size=11, cls="mono muted")
+    body += text(300, 222, "hoisted once per module; the call becomes", size=11.5, cls="muted")
+    body += text(300, 240, "React.useState k1 (fun () -> 0)", size=11.5, cls="mono accent")
+
+    body += box(620, 40, 260, 168, p["card"], p["line"], lift=True)
+    slots = [(64, "accent", "accent_soft", "k1", "{ value = 3 }"), (136, "blue", "blue_soft", "k2", "{ deps = [|3|] }")]
+    for y, color, soft, name, value in slots:
+        body += box(636, y, 52, 52, p[soft], p[color], rx=8, width=1.4)
+        body += text(662, y + 31, name, size=13, cls=f"mono {color}", weight=700, anchor="middle")
+        body += box(694, y, 170, 52, p["card"], p["line"], rx=8)
+        body += text(779, y + 31, value, size=12, cls="mono", anchor="middle")
+    body += text(636, 58, "slot 0", size=10.5, cls="faint")
+    body += text(636, 130, "slot 1", size=10.5, cls="faint")
+
+    for y, color in ((89, "accent"), (167, "blue")):
+        body += arrow(p, 594, y, 630, y, color, flow=True, width=1.8)
+    body += text(612, 80, "✓", size=12, cls="green", weight=700, anchor="middle")
+    body += text(612, 158, "✓", size=12, cls="green", weight=700, anchor="middle")
+
+    body += box(0, 262, 432, 72, p["green_soft"], p["green"], rx=12)
+    body += text(18, 288, "Reading a slot: Type.Id.provably_equal k_slot k_call", size=12.5, cls="green", weight=700)
+    body += text(18, 308, "Some Equal → the value comes back typed. No Obj.magic,", size=12, cls="muted")
+    body += text(18, 325, "and one key used at two types does not compile.", size=12, cls="muted")
+    body += box(448, 262, 432, 72, p["orange_soft"], p["orange"], rx=12)
+    body += text(466, 288, "A hook behind an if: slot 1 holds k2, the call brings k3", size=12.5, cls="orange", weight=700)
+    body += text(466, 308, "None → \"hooks were called in a different order\"", size=12, cls="muted")
+    body += text(466, 325, "instead of a value of the wrong type.", size=12, cls="muted")
+    return svg(p, 880, 338, "melact-ppx gives every hook call site its own Type.Id key, hoisted to module level; the instance stores each slot with the key that made it; reading a slot checks provably_equal, so values come back typed, and a hook called out of order raises an error instead of returning a wrong value", body)
+
+
+def dual(p):
+    body = box(0, 30, 250, 196, p["card"], p["line"], lift=True)
+    body += text(18, 58, "dual_test.mlx", size=14, cls="mono", weight=700)
+    body += text(18, 78, "one file, reason-react style", size=11.5, cls="muted")
+    covered = ["state and batching", "memo children skipped", "effect order, cleanups, deps",
+               "context below memo", "refs", "keys keep state", "show and hide"]
+    for i, item in enumerate(covered):
+        y = 104 + i * 17
+        body += f'<circle cx="24" cy="{y - 4}" r="2.5" fill="{p["accent"]}"/>'
+        body += text(34, y, item, size=11.5)
+    lanes = [
+        (48, "blue", "blue_soft", ["reason-react-ppx", "reason-react", "React 18.3"]),
+        (148, "accent", "accent_soft", ["melact-ppx", "melact", "no React"]),
+    ]
+    for y, color, soft, steps in lanes:
+        body += curve(p, f"M252,128 C276,128 276,{y + 22} 296,{y + 22}", color, flow=True, width=1.8)
+        for i, label in enumerate(steps):
+            x = 300 + i * 150
+            body += box(x, y, 130, 44, p[soft], p[color], rx=10, width=1.4)
+            body += text(x + 65, y + 27, label, size=12.5, cls="mono" if i < 2 else "", weight=600, anchor="middle")
+            if i < len(steps) - 1:
+                body += arrow(p, x + 132, y + 22, x + 146, y + 22, color)
+        body += arrow(p, 732, y + 22, 748, y + 22, color)
+        body += box(752, y, 124, 44, p["green_soft"], p["green"], rx=10, width=1.6)
+        body += text(814, y + 28, "9 / 9 ✓", size=15, cls="green", weight=700, anchor="middle")
+    body += text(814, 122, "same assertions", size=11.5, cls="muted", anchor="middle")
+    body += text(300, 18, "built twice by dune, run by vitest + jsdom", size=12, cls="muted")
+    return svg(p, 880, 232, "One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 9 assertions pass in both", body)
 
 
 def roadmap(p):
@@ -437,23 +534,27 @@ def roadmap(p):
     step = 124
     body = f'<line x1="66" y1="44" x2="{66 + step * 6}" y2="44" stroke="{p["line"]}" stroke-width="3"/>'
     body += f'<line x1="66" y1="44" x2="{66 + step * 2}" y2="44" stroke="{p["accent"]}" stroke-width="3"/>'
-    body += f'<line x1="{66 + step * 2}" y1="44" x2="{66 + step * 2 + step // 2}" y2="44" stroke="{p["accent"]}" stroke-width="3" class="flow"/>'
+    body += f'<line x1="{66 + step * 2}" y1="44" x2="{66 + step * 3}" y2="44" stroke="{p["accent"]}" stroke-width="3" class="flow"/>'
     for i, (name, a, b) in enumerate(stages):
         x = 66 + i * step
         if i < 3:
             body += f'<circle cx="{x}" cy="44" r="16" fill="{p["accent"]}"/>'
             body += f'<path d="M{x - 7},44 l5,5 l9,-10" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
             body += text(x, 16, "done", size=11, cls="accent", weight=700, anchor="middle")
+        elif i == 3:
+            body += f'<circle cx="{x}" cy="44" r="16" fill="{p["accent_soft"]}" stroke="{p["accent"]}" stroke-width="2.5" class="pulse"/>'
+            body += text(x, 49, "4", size=12, cls="accent", weight=700, anchor="middle")
+            body += text(x, 16, "now", size=11, cls="accent", weight=700, anchor="middle")
         else:
             body += f'<circle cx="{x}" cy="44" r="13" fill="{p["card"]}" stroke="{p["line"]}" stroke-width="2"/>'
             body += text(x, 49, str(i + 1), size=12, cls="muted", weight=700, anchor="middle")
         body += text(x, 84, name, size=13.5, weight=600, anchor="middle")
         body += text(x, 104, a, size=11.5, cls="muted", anchor="middle")
         body += text(x, 120, b, size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; then compatibility, speed, SSR, publish", body)
+    return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, pipeline=pipeline, patch=patch, reconcile=reconcile,
+FIGURES = dict(logo=logo, overview=overview, hooks=hooks, dual=dual, pipeline=pipeline, patch=patch, reconcile=reconcile,
                runtime=runtime, events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":
