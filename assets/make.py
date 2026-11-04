@@ -116,7 +116,7 @@ def overview(p):
                 + text(x + 11, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
                 + text(x + 30, y, title, size=14.5, weight=600))
 
-    body = step(0, 24, "1", "Your reason-react app") + step(305, 24, "2", "melact-ppx, at build time") + step(610, 24, "3", "In the browser")
+    body = step(0, 24, "1", "Your reason-react app") + step(305, 24, "2", "Melact, at build time") + step(610, 24, "3", "In the browser")
 
     body += box(0, 40, 270, 158, p["card"], p["line"], lift=True)
     code = [
@@ -144,11 +144,11 @@ def overview(p):
     body += text(321, 92, tpl, size=13, cls="mono", raw=True)
     body += text(321, 118, "static markup: cloned per mount,", size=12, cls="muted")
     body += text(321, 136, "never rebuilt, never compared", size=12, cls="muted")
-    body += text(321, 152, "+ hole paths: Handler [] · Text [] @0", size=10.5, cls="mono faint")
+    body += text(321, 152, "+ 2 holes: the click, the text", size=10.5, cls="mono faint")
 
     body += box(305, 172, 270, 128, p["blue_soft"], p["blue"], lift=True)
     body += text(321, 194, "refresh · all a render runs", size=12, cls="blue", weight=700)
-    for i, (label, value) in enumerate([("check n", "=== once"), ("put HText", "if n changed")]):
+    for i, (label, value) in enumerate([("check n", "=== once"), ("set text", "if n changed")]):
         y = 208 + i * 34
         body += box(321, y, 238, 26, p["card"], p["line"], rx=8)
         body += text(333, y + 18, label, size=12, cls="mono blue", weight=600)
@@ -224,7 +224,7 @@ def pipeline(p):
 
     body += box(290, 172, 300, 104, p["card"], p["line"])
     body += text(306, 194, "every render: the compiled refresh", size=11.5, cls="blue", weight=600)
-    for i, line in enumerate(["check count; check tone", "if tone: put class", "if count: put text"]):
+    for i, line in enumerate(["check count; check tone", "if tone: set class", "if count: set text"]):
         body += text(306, 216 + i * 18, line, size=12, cls="mono")
     body += text(500, 234, "others:", size=11.5, cls="muted")
     body += text(500, 250, "not evaluated", size=11.5, cls="muted")
