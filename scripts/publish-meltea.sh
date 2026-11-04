@@ -32,7 +32,7 @@ copy test/setup.js
 sed '/<!-- monorepo -->/,/<!-- \/monorepo -->/d' meltea/README.md | sed '1{/^$/d;}' > README.md
 rm meltea/README.md
 mkdir -p assets
-cp "$root"/assets/loop.svg "$root"/assets/loop-dark.svg assets/
+cp "$root"/assets/compiled.svg "$root"/assets/compiled-dark.svg assets/
 
 cat > dune-project <<'EOF'
 (lang dune 3.16)

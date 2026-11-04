@@ -599,25 +599,37 @@ def family(p):
     return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates and dynamic parts into holes, and the shared runtime that clones templates, writes changed holes, moves keyed rows and delegates events; Melact alone adds hook slots and an update scheduler", body)
 
 
-def loop(p):
-    stops = [
-        (0, "click", "a DOM event", "orange"),
-        (150, "Increment", "the message", "accent"),
-        (300, "update", "pure: model → model", "accent"),
-        (450, "refresh", "compiled, per template", "accent"),
-        (600, "count 41 → 42", "one === on a local", "blue"),
-        (750, "node.data", "written straight in", "green"),
-    ]
-    body = text(0, 18, "the Meltea loop: no tree is built and none is diffed; the compiled refresh checks the locals and writes the nodes", size=12.5, cls="muted", weight=600)
-    for i, (x, title, note, color) in enumerate(stops):
-        body += box(x, 40, 130, 64, p[color + "_soft"], p[color], rx=12, width=1.5, lift=True)
-        body += text(x + 65, 68, title, size=13, weight=700, cls="mono" if i in (1, 3, 4, 5) else "", anchor="middle")
-        body += text(x + 65, 90, note, size=11, cls="muted", anchor="middle")
-        if i < len(stops) - 1:
-            body += arrow(p, x + 132, 72, x + 146, 72, "accent", flow=True)
-    body += curve(p, "M815,106 C815,170 65,170 65,108", "muted", flow=True)
-    body += text(440, 178, "the next event", size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 186, "The Meltea loop: a DOM event becomes a message, the pure update returns the next model, and the refresh the compiler generated for the view checks the local it reads with one === and writes the changed text straight into its node; no tree is built or diffed; the next event starts the loop again", body)
+def compiled(p):
+    def card(x, title, color, lines):
+        out = box(x, 0, 370, 190, p["card"], p[color], rx=14, width=1.6, lift=True)
+        out += text(x + 20, 30, title, size=13, weight=700, cls=color)
+        for i, parts in enumerate(lines):
+            line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+            out += text(x + 20, 62 + i * 26, line, size=14, cls="mono", raw=True)
+        return out
+
+    body = card(0, "you write", "accent", [
+        [("let view count =", "")],
+        [("  <output>", "")],
+        [("    (Html.int ", ""), ("count", "accent"), (")", "")],
+        [("  </output>", "")],
+    ])
+    body += arrow(p, 384, 95, 496, 95, "accent", flow=True, width=2)
+    body += text(440, 83, "meltea-ppx", size=12, cls="mono accent", weight=700, anchor="middle")
+    body += text(440, 117, "at build time", size=11.5, cls="muted", anchor="middle")
+    body += card(510, "the compiler writes", "green", [
+        [("<output> </output>", "")],
+        [("", "")],
+        [("", "")],
+        [("if (", ""), ("count", "accent"), (" changed)", "")],
+        [("  text.data = String(", "green"), ("count", "accent"), (")", "green")],
+    ])
+    body += text(530, 84, "the template, cloned once", size=11, cls="faint")
+    body += text(530, 120, "every update", size=11, cls="faint")
+    body += text(440, 222, "no virtual DOM: an update compares count once and writes one text node",
+                 size=13, cls="muted", anchor="middle", weight=600)
+    return svg(p, 880, 232, "Meltea is compiled like Svelte: the view you write in mlx becomes, at build time, a template cloned once and an update that checks count and writes its text node directly; there is no virtual DOM", body)
+
 
 def roadmap(p):
     stages = [
@@ -652,7 +664,7 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, family=family, loop=loop, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
+FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
                events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":
