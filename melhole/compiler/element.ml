@@ -374,11 +374,14 @@ let lowercase frontend ~loc tag arguments =
     match values with
     | [] -> Hoist.hoist ~loc "element" (frontend.wrap loc [%expr Melhole.View.static [%e markup]])
     | _ :: _ ->
+        let uncurried lambda =
+          pexp_record ~loc [ ({ txt = Ldot (Ldot (Lident "Js", "Fn"), "I2"); loc }, lambda) ] None
+        in
         let template =
           Hoist.hoist ~loc "template"
             [%expr
-              Melhole.View.template [%e markup] (fun __melhole_scope [%p pvar ~loc (name [])] ->
-                  [%e made])]
+              Melhole.View.template [%e markup]
+                [%e uncurried [%expr fun __melhole_scope [%p pvar ~loc (name [])] -> [%e made]]]]
         in
         let holes =
           match List.mapi (fun index _ -> pvar ~loc (hole_name index)) values with
@@ -387,8 +390,8 @@ let lowercase frontend ~loc tag arguments =
         in
         frontend.wrap loc
           [%expr
-            Melhole.View.compiled [%e template] [%e eint ~loc slots] (fun __melhole_scope [%p holes] ->
-                [%e body])]
+            Melhole.View.compiled [%e template] [%e eint ~loc slots]
+              [%e uncurried [%expr fun __melhole_scope [%p holes] -> [%e body]]]]
   in
   Option.fold ~none:instance
     ~some:(fun key ->

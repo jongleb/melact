@@ -18,8 +18,8 @@ type placement = Detached | Placed
 (** A mounted template: the values its refresh last read, what to release, which refs to call. *)
 type scope = {
   deps : input array;
-  mutable cleanups : (unit -> unit) list;  (** Newest first. *)
-  mutable references : (unit -> unit) list;  (** Called once the root is placed. *)
+  mutable cleanups : (unit -> unit[@u]) list;  (** Newest first. *)
+  mutable references : (unit -> unit[@u]) list;  (** Called once the root is placed. *)
   mutable placement : placement;
 }
 
@@ -31,7 +31,7 @@ type state =
   | Keyed_state of string array * live array
   | Memo_state of input array * live
   | Portal_state of Dom.element * live
-  | Compiled_state of { identity : input; scope : scope; lend : unit -> unit }
+  | Compiled_state of { identity : input; scope : scope; lend : (unit -> unit[@u]) }
   | Static_state of Template.t
   | Paths_state of Template.t * (hole array -> unit)  (** Writes the next values to its holes. *)
   | Instance_state of instance
@@ -39,9 +39,9 @@ type state =
 (** A mounted child: its own nodes and how to let go of what they hold. *)
 and live = {
   state : state;
-  each : (Dom.node -> unit) -> unit;  (** Visits the top-level nodes in document order. *)
-  front : Dom.node Js.null -> Dom.node Js.null;  (** The first node, or the given one. *)
-  release : unit -> unit;  (** Releases handlers, effects and portals; the nodes stay. *)
+  each : ((Dom.node -> unit[@u]) -> unit[@u]);  (** Visits the top-level nodes in document order. *)
+  front : (Dom.node Js.null -> Dom.node Js.null[@u]);  (** The first node, or the given one. *)
+  release : (unit -> unit[@u]);  (** Releases handlers, effects and portals; the nodes stay. *)
 }
 
 (** How a child takes part in [list] and [items]. *)
@@ -55,8 +55,8 @@ and shape =
 
 (** A description that mounts itself and patches a live child of its own kind. *)
 and child = {
-  build : Template.position -> live;
-  patch : Template.position -> live -> live option;  (** [None] for another kind of child. *)
+  build : (Template.position -> live[@u]);
+  patch : (Template.position -> live -> live option[@u]);  (** [None] for another kind of child. *)
   shape : shape;
 }
 
@@ -107,7 +107,7 @@ and region =
 (** A compiled template: its markup and how to make its holes on a fresh clone. *)
 type 'holes template = {
   markup : Template.t;
-  holes : scope -> Dom.node -> 'holes;
+  holes : (scope -> Dom.node -> 'holes[@u]);
   mutable lent : 'holes option;  (** The holes of a mounted clone, handed over to one refresh. *)
 }
 
@@ -118,25 +118,27 @@ type mounted = {
 }
 
 (** The component scheduler, installed by the first component that mounts. *)
-type scheduler = Absent | Installed of { settle : unit -> unit; flush : unit -> unit }
+type scheduler =
+  | Absent
+  | Installed of { settle : (unit -> unit[@u]); flush : (unit -> unit[@u]) }
 
 let scheduler = ref Absent
 
 let nothing =
-  { state = Empty_state; each = (fun _ -> ()); front = (fun after -> after); release = ignore }
+  { state = Empty_state; each = (fun [@u] _ -> ()); front = (fun [@u] after -> after); release = (fun [@u] () -> ()) }
 
 let insert (position : Template.position) node =
   Dom_api.insert_before position.parent node position.before
 
 let remove (position : Template.position) live =
-  live.each (Dom_api.remove_child position.parent);
-  live.release ()
+  live.each (fun [@u] node -> Dom_api.remove_child position.parent node) [@u];
+  live.release () [@u]
 
 let update position live child =
-  match child.patch position live with
+  match child.patch position live [@u] with
   | Some next -> next
   | None ->
-      let next = child.build position in
+      let next = child.build position [@u] in
       remove position live;
       next
 
@@ -151,18 +153,18 @@ let compare_inputs old next =
 let group state items =
   {
     state;
-    each = (fun visit -> Array.iter (fun item -> item.each visit) items);
-    front = (fun after -> Array.fold_right (fun item after -> item.front after) items after);
-    release = (fun () -> Array.iter (fun item -> item.release ()) items);
+    each = (fun [@u] visit -> Array.iter (fun item -> item.each visit [@u]) items);
+    front = (fun [@u] after -> Array.fold_right (fun item after -> item.front after [@u]) items after);
+    release = (fun [@u] () -> Array.iter (fun item -> item.release () [@u]) items);
   }
 
 let backwards count (position : Template.position) make =
   let result = Array.make count nothing in
   let rec fill i before =
     if i >= 0 then (
-      let live = make i { position with before } in
+      let live = make i { position with before } [@u] in
       Array.unsafe_set result i live;
-      fill (i - 1) (live.front before))
+      fill (i - 1) (live.front before [@u]))
   in
   fill (count - 1) position.before;
   result
@@ -171,17 +173,17 @@ let text value =
   {
     shape = Single;
     build =
-      (fun position ->
+      (fun [@u] position ->
         let node = Dom_api.create_text_node Dom_api.document value in
         insert position node;
         {
           state = Text_state { node; value };
-          each = (fun visit -> visit (Dom_api.to_node node));
-          front = (fun _ -> Js.Null.return (Dom_api.to_node node));
-          release = ignore;
+          each = (fun [@u] visit -> visit (Dom_api.to_node node) [@u]);
+          front = (fun [@u] _ -> Js.Null.return (Dom_api.to_node node));
+          release = (fun [@u] () -> ());
         });
     patch =
-      (fun _ live ->
+      (fun [@u] _ live ->
         match live.state with
         | Text_state site ->
             if not (Dom_api.same site.value value) then (
@@ -194,19 +196,19 @@ let text value =
 let empty =
   {
     shape = Nothing;
-    build = (fun _ -> nothing);
-    patch = (fun _ live -> match live.state with Empty_state -> Some live | _ -> None);
+    build = (fun [@u] _ -> nothing);
+    patch = (fun [@u] _ live -> match live.state with Empty_state -> Some live | _ -> None);
   }
 
 let many children =
   {
     shape = Many children;
     build =
-      (fun position ->
-        let items = Array.of_list (List.map (fun child -> child.build position) children) in
+      (fun [@u] position ->
+        let items = Array.of_list (List.map (fun child -> child.build position [@u]) children) in
         group (List_state items) items);
     patch =
-      (fun position live ->
+      (fun [@u] position live ->
         match live.state with
         | List_state items ->
             let children = Array.of_list children in
@@ -215,9 +217,9 @@ let many children =
               remove position (Array.unsafe_get items i)
             done;
             let items =
-              backwards (Array.length children) position (fun i at ->
+              backwards (Array.length children) position (fun [@u] i at ->
                   if i < old_count then update at (Array.unsafe_get items i) (Array.unsafe_get children i)
-                  else (Array.unsafe_get children i).build at)
+                  else (Array.unsafe_get children i).build at [@u])
             in
             Some (group (List_state items) items)
         | _ -> None);
@@ -229,23 +231,23 @@ let keyed entries =
   {
     shape = Entries entries;
     build =
-      (fun position ->
-        let items = Array.map (fun child -> child.build position) children in
+      (fun [@u] position ->
+        let items = Array.map (fun child -> child.build position [@u]) children in
         group (Keyed_state (keys, items)) items);
     patch =
-      (fun position live ->
+      (fun [@u] position live ->
         match live.state with
         | Keyed_state (old_keys, items) ->
             let plan = Reconcile.plan ~old:old_keys ~next:keys in
             List.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped;
             let items =
-              backwards (Array.length children) position (fun j at ->
+              backwards (Array.length children) position (fun [@u] j at ->
                   match Array.unsafe_get plan.steps j with
-                  | Create -> (Array.unsafe_get children j).build at
+                  | Create -> (Array.unsafe_get children j).build at [@u]
                   | Keep i -> update at (Array.unsafe_get items i) (Array.unsafe_get children j)
                   | Move i ->
                       let live = update at (Array.unsafe_get items i) (Array.unsafe_get children j) in
-                      live.each (insert at);
+                      live.each (fun [@u] node -> insert at node) [@u];
                       live)
             in
             Some (group (Keyed_state (keys, items)) items)
@@ -277,9 +279,9 @@ let memo inputs render =
   let skipping inner = { inner with state = Memo_state (inputs, inner) } in
   {
     shape = Deferred render;
-    build = (fun position -> skipping ((render ()).build position));
+    build = (fun [@u] position -> skipping ((render ()).build position [@u]));
     patch =
-      (fun position live ->
+      (fun [@u] position live ->
         match live.state with
         | Memo_state (old, inner) -> (
             match compare_inputs old inputs with
@@ -296,19 +298,19 @@ let portal container child =
   let held inner =
     {
       state = Portal_state (container, inner);
-      each = (fun _ -> ());
-      front = (fun after -> after);
+      each = (fun [@u] _ -> ());
+      front = (fun [@u] after -> after);
       release =
-        (fun () ->
-          inner.each (Dom_api.remove_child (Dom_api.to_node container));
-          inner.release ());
+        (fun [@u] () ->
+          inner.each (fun [@u] node -> Dom_api.remove_child (Dom_api.to_node container) node) [@u];
+          inner.release () [@u]);
     }
   in
   {
     shape = Single;
-    build = (fun _ -> held (child.build inside));
+    build = (fun [@u] _ -> held (child.build inside [@u]));
     patch =
-      (fun _ live ->
+      (fun [@u] _ live ->
         match live.state with
         | Portal_state (target, inner) when Dom_api.same target container ->
             Some (held (update inside inner child))
@@ -318,12 +320,12 @@ let portal container child =
 let place position root scope state =
   insert position root;
   scope.placement <- Placed;
-  List.iter (fun reference -> reference ()) (List.rev scope.references);
+  List.iter (fun reference -> reference () [@u]) (List.rev scope.references);
   {
     state;
-    each = (fun visit -> visit (Dom_api.to_node root));
-    front = (fun _ -> Js.Null.return (Dom_api.to_node root));
-    release = (fun () -> List.iter (fun cleanup -> cleanup ()) (List.rev scope.cleanups));
+    each = (fun [@u] visit -> visit (Dom_api.to_node root) [@u]);
+    front = (fun [@u] _ -> Js.Null.return (Dom_api.to_node root));
+    release = (fun [@u] () -> List.iter (fun cleanup -> cleanup () [@u]) (List.rev scope.cleanups));
   }
 
 let fresh count = { deps = Array.make count (Input (ref ())); cleanups = []; references = []; placement = Detached }
@@ -334,25 +336,25 @@ let compiled template count refresh =
   {
     shape = Single;
     build =
-      (fun position ->
+      (fun [@u] position ->
         let root = Template.clone template.markup in
         let scope = fresh count in
-        let holes = template.holes scope (Dom_api.to_node root) in
-        refresh scope holes;
+        let holes = template.holes scope (Dom_api.to_node root) [@u] in
+        refresh scope holes [@u];
         place position root scope
           (Compiled_state
-             { identity = Input template; scope; lend = (fun () -> template.lent <- Some holes) }));
+             { identity = Input template; scope; lend = (fun [@u] () -> template.lent <- Some holes) }));
     patch =
-      (fun _ live ->
+      (fun [@u] _ live ->
         match live.state with
         | Compiled_state mounted ->
             let (Input identity) = mounted.identity in
             if Dom_api.same identity template then (
-              mounted.lend ();
+              mounted.lend () [@u];
               Option.iter
                 (fun holes ->
                   template.lent <- None;
-                  refresh mounted.scope holes)
+                  refresh mounted.scope holes [@u])
                 template.lent;
               Some live)
             else None
@@ -362,9 +364,9 @@ let compiled template count refresh =
 let static markup =
   {
     shape = Single;
-    build = (fun position -> place position (Template.clone markup) (fresh 0) (Static_state markup));
+    build = (fun [@u] position -> place position (Template.clone markup) (fresh 0) (Static_state markup));
     patch =
-      (fun _ live ->
+      (fun [@u] _ live ->
         match live.state with
         | Static_state shown when Dom_api.same shown markup -> Some live
         | _ -> None);
@@ -455,14 +457,14 @@ let set_classes (hole : Hole.classes) value =
 
 let handler_hole scope element event =
   let binding = Events.bind element event ignore in
-  scope.cleanups <- (fun () -> Events.release binding) :: scope.cleanups;
+  scope.cleanups <- (fun [@u] () -> Events.release binding) :: scope.cleanups;
   ({ binding } : Hole.handler)
 
 let set_handler (hole : Hole.handler) next = Events.set hole.binding next
 
 let reference_hole scope element =
   let hole : Hole.reference = { scope; element; callback = ignore } in
-  scope.references <- (fun () -> hole.callback hole.element) :: scope.references;
+  scope.references <- (fun [@u] () -> hole.callback hole.element) :: scope.references;
   hole
 
 let set_reference (hole : Hole.reference) callback =
@@ -472,7 +474,7 @@ let set_reference (hole : Hole.reference) callback =
 
 let content_hole scope position =
   let hole : Hole.content = { position; source = empty; live = nothing } in
-  scope.cleanups <- (fun () -> hole.live.release ()) :: scope.cleanups;
+  scope.cleanups <- (fun [@u] () -> hole.live.release () [@u]) :: scope.cleanups;
   hole
 
 let set_content (hole : Hole.content) child =
@@ -520,7 +522,7 @@ let tpl_instance markup values =
   {
     shape = Single;
     build =
-      (fun position ->
+      (fun [@u] position ->
         let root = Template.clone markup in
         let scope = fresh 0 in
         let sites =
@@ -540,7 +542,7 @@ let tpl_instance markup values =
         refresh sites values;
         place position root scope (Paths_state (markup, refresh sites)));
     patch =
-      (fun _ live ->
+      (fun [@u] _ live ->
         match live.state with
         | Paths_state (shown, write) when Dom_api.same shown markup ->
             write values;
@@ -555,22 +557,22 @@ let mount child ~parent ~before =
       before = Js.Null.fromOption (Option.map Dom_api.to_node before);
     }
   in
-  let mounted = { position; source = child; live = child.build position } in
-  (match !scheduler with Absent -> () | Installed components -> components.settle ());
+  let mounted = { position; source = child; live = child.build position [@u] } in
+  (match !scheduler with Absent -> () | Installed components -> components.settle () [@u]);
   mounted
 
 let patch mounted child =
   if not (Dom_api.same mounted.source child) then (
     mounted.live <- update mounted.position mounted.live child;
     mounted.source <- child;
-    match !scheduler with Absent -> () | Installed components -> components.settle ())
+    match !scheduler with Absent -> () | Installed components -> components.settle () [@u])
 
 let unmount mounted =
   remove mounted.position mounted.live;
   mounted.live <- nothing;
   mounted.source <- empty
 
-let flush () = match !scheduler with Absent -> () | Installed components -> components.flush ()
+let flush () = match !scheduler with Absent -> () | Installed components -> components.flush () [@u]
 
 (** Whether a flush is already queued. *)
 type schedule = Idle | Queued
@@ -625,20 +627,20 @@ let instance_live instance =
   {
     state = Instance_state instance;
     each =
-      (fun visit ->
-        instance.output.each visit;
+      (fun [@u] visit ->
+        instance.output.each visit [@u];
         match instance.region with
-        | Marker node -> visit (Dom_api.to_node node)
+        | Marker node -> visit (Dom_api.to_node node) [@u]
         | Nodes -> ());
     front =
-      (fun after ->
+      (fun [@u] after ->
         instance.output.front
           (match instance.region with
           | Marker node -> Js.Null.return (Dom_api.to_node node)
-          | Nodes -> after));
+          | Nodes -> after) [@u]);
     release =
-      (fun () ->
-        instance.output.release ();
+      (fun [@u] () ->
+        instance.output.release () [@u];
         instance.status <- Unmounted;
         List.iter (fun cleanup -> cleanup ()) (List.rev instance.teardown));
   }
@@ -652,7 +654,7 @@ let render instance =
   | Provides provision -> provision.children
 
 let commit (position : Template.position) instance =
-  (match (Js.Null.toOption (instance.output.front Js.null), instance.region) with
+  (match (Js.Null.toOption (instance.output.front Js.null [@u]), instance.region) with
   | Some _, Nodes | None, Marker _ -> ()
   | Some _, Marker node ->
       Dom_api.remove_child position.parent node;
@@ -685,8 +687,8 @@ let settle () =
   let position_of instance =
     let live = instance_live instance in
     let last = ref None in
-    live.each (fun node -> last := Some node);
-    match (Option.bind (Js.Null.toOption (live.front Js.null)) Dom_api.parent_node, !last) with
+    live.each (fun [@u] node -> last := Some node) [@u];
+    match (Option.bind (Js.Null.toOption (live.front Js.null [@u])) Dom_api.parent_node, !last) with
     | Some parent, Some last ->
         { Template.parent; before = Js.Null.fromOption (Dom_api.next_sibling last) }
     | None, _ | _, None -> Js.Exn.raiseError "melhole: a mounted component is not in the DOM"
@@ -704,8 +706,8 @@ let settle () =
           (List.stable_sort
              (fun a b ->
                match
-                 ( Js.Null.toOption ((instance_live a).front Js.null),
-                   Js.Null.toOption ((instance_live b).front Js.null) )
+                 ( Js.Null.toOption ((instance_live a).front Js.null [@u]),
+                   Js.Null.toOption ((instance_live b).front Js.null [@u]) )
                with
                | Some first, Some second when not (Dom_api.same first second) ->
                    if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
@@ -729,9 +731,9 @@ let mount_instance position kind =
       scheduler :=
         Installed
           {
-            settle;
+            settle = (fun [@u] () -> settle ());
             flush =
-              (fun () ->
+              (fun [@u] () ->
                 render_schedule := Idle;
                 settle ();
                 run_passive ());
@@ -750,16 +752,16 @@ let mount_instance position kind =
     }
   in
   let child = render instance in
-  instance.output <- within owner (Some instance) (fun () -> child.build position);
+  instance.output <- within owner (Some instance) (fun () -> child.build position [@u]);
   commit position instance;
   instance_live instance
 
 let component definition inputs render =
   {
     shape = Single;
-    build = (fun position -> mount_instance position (Renders { component = definition; inputs; render }));
+    build = (fun [@u] position -> mount_instance position (Renders { component = definition; inputs; render }));
     patch =
-      (fun position live ->
+      (fun [@u] position live ->
         match live.state with
         | Instance_state instance -> (
             match instance.kind with
@@ -780,10 +782,10 @@ let provide : type value. value Context.t -> value -> child -> child =
   {
     shape = Single;
     build =
-      (fun position ->
+      (fun [@u] position ->
         mount_instance position (Provides { context; value; children; consumers = [] }));
     patch =
-      (fun position live ->
+      (fun [@u] position live ->
         match live.state with
         | Instance_state instance -> (
             match instance.kind with
