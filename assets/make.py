@@ -600,35 +600,42 @@ def family(p):
 
 
 def compiled(p):
-    def card(x, title, color, lines):
-        out = box(x, 0, 370, 190, p["card"], p[color], rx=14, width=1.6, lift=True)
-        out += text(x + 20, 30, title, size=13, weight=700, cls=color)
-        for i, parts in enumerate(lines):
-            line = "".join(span(t, c) if c else escape(t) for t, c in parts)
-            out += text(x + 20, 62 + i * 26, line, size=14, cls="mono", raw=True)
-        return out
+    char = 8.43
 
-    body = card(0, "you write", "accent", [
-        [("let view count =", "")],
-        [("  <output>", "")],
-        [("    (Html.int ", ""), ("count", "accent"), (")", "")],
-        [("  </output>", "")],
-    ])
+    def code(x, y, parts):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        return text(x, y, line, size=14, cls="mono", raw=True)
+
+    def mark(x, y, chars):
+        return box(x - 4, y - 17, chars * char + 8, 24, p["green_soft"], p["green"], rx=6, dash="4 3", width=1.3)
+
+    body = box(0, 0, 370, 190, p["card"], p["accent"], rx=14, width=1.6, lift=True)
+    body += text(20, 30, "you write", size=13, weight=700, cls="accent")
+    body += code(20, 66, [("let view count =", "")])
+    body += code(20, 94, [("  <output>", "")])
+    body += mark(20 + 4 * char, 122, 16)
+    body += code(20, 122, [("    (Html.int ", ""), ("count", "accent"), (")", "")])
+    body += code(20, 150, [("  </output>", "")])
+
+    body += text(440, 83, "Meltea", size=13, weight=800, cls="accent", anchor="middle")
     body += arrow(p, 384, 95, 496, 95, "accent", flow=True, width=2)
-    body += text(440, 83, "meltea-ppx", size=12, cls="mono accent", weight=700, anchor="middle")
-    body += text(440, 117, "at build time", size=11.5, cls="muted", anchor="middle")
-    body += card(510, "the compiler writes", "green", [
-        [("<output> </output>", "")],
-        [("", "")],
-        [("", "")],
-        [("if (", ""), ("count", "accent"), (" changed)", "")],
-        [("  text.data = String(", "green"), ("count", "accent"), (")", "green")],
-    ])
-    body += text(530, 84, "the template, cloned once", size=11, cls="faint")
-    body += text(530, 120, "every update", size=11, cls="faint")
-    body += text(440, 222, "no virtual DOM: an update compares count once and writes one text node",
+    body += text(440, 117, "compiles it once,", size=11.5, cls="muted", anchor="middle")
+    body += text(440, 133, "at build time", size=11.5, cls="muted", anchor="middle")
+
+    body += box(510, 0, 370, 190, p["card"], p["green"], rx=14, width=1.6, lift=True)
+    body += text(530, 30, "and gets", size=13, weight=700, cls="green")
+    body += text(530, 56, "the static HTML, cloned on mount", size=11, cls="faint")
+    body += code(530, 80, [("<output>", "")])
+    body += mark(530 + 8 * char + 12, 80, 4)
+    body += text(530 + 8 * char + 12, 80, "text", size=14, cls="mono green", weight=700)
+    body += code(530 + 12 * char + 24, 80, [("</output>", "")])
+    body += text(530, 120, "on every update", size=11, cls="faint")
+    body += code(530, 146, [("if (", ""), ("count", "accent"), (" !== last)", "")])
+    body += code(530, 172, [("  ", ""), ("text", "green"), (".data = String(", ""), ("count", "accent"), (")", "")])
+
+    body += text(440, 222, "no virtual DOM: when count changes, one comparison and one write",
                  size=13, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 232, "Meltea is compiled like Svelte: the view you write in mlx becomes, at build time, a template cloned once and an update that checks count and writes its text node directly; there is no virtual DOM", body)
+    return svg(p, 880, 232, "Meltea is compiled like Svelte: the dynamic part of the view you write in mlx becomes a hole in static HTML that is cloned on mount, and every update compares count with its last value and writes the hole's text node directly; there is no virtual DOM", body)
 
 
 def roadmap(p):
