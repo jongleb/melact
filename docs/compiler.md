@@ -9,12 +9,10 @@ It relies on the contract React already sets, the Rules of React: rendering is a
 of props, state and context. React Compiler relies on the same contract; dartea gets it for free
 from Elm.
 
-## Today
+## Status
 
-`melact-ppx` turns a JSX tree into one `Template.t` (static HTML, parsed once) and builds, on
-every render, an array with the value of every hole. `View` compares each value with `===` and
-writes what changed. Every hole expression is evaluated on every render, including nested JSX
-and `List.map` over rows.
+Guards are implemented in the shared compiler (`ppx/compiler/free.ml`, `scope.ml`, `element.ml`)
+and used by both front ends. Next: compiled patchers.
 
 ## Guards at the JSX site
 

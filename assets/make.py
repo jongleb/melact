@@ -147,17 +147,17 @@ def overview(p):
     body += text(321, 152, "+ hole paths: Handler [] · Text [] @0", size=10.5, cls="mono faint")
 
     body += box(305, 172, 270, 128, p["blue_soft"], p["blue"], lift=True)
-    body += text(321, 194, "holes · all a render builds", size=12, cls="blue", weight=700)
-    for i, (label, value) in enumerate([("HHandler", "fun _ -> …"), ("HText", "\"1\"")]):
+    body += text(321, 194, "refresh · all a render runs", size=12, cls="blue", weight=700)
+    for i, (label, value) in enumerate([("check n", "=== once"), ("put HText", "if n changed")]):
         y = 208 + i * 34
         body += box(321, y, 238, 26, p["card"], p["line"], rx=8)
         body += text(333, y + 18, label, size=12, cls="mono blue", weight=600)
-        body += text(549, y + 18, value, size=12, cls="mono", anchor="end")
-    body += text(321, 290, "one array per element, any size", size=12, cls="muted")
+        body += text(549, y + 18, value, size=11.5, cls="muted", anchor="end")
+    body += text(321, 290, "generated per template, like Svelte", size=12, cls="muted")
 
     body += box(610, 40, 270, 260, p["card"], p["line"], lift=True)
     flow = [("setState", "orange"), ("only this component renders", "line"),
-            ("=== on each hole", "accent"), ("text.data = \"1\"", "green")]
+            ("n: === once", "accent"), ("text.data = \"1\"", "green")]
     for i, (label, tone) in enumerate(flow):
         y = 56 + i * 61
         fill = {"orange": p["orange_soft"], "line": p["card"], "accent": p["accent_soft"], "green": p["green_soft"]}[tone]
@@ -223,11 +223,11 @@ def pipeline(p):
         body += text(486, 102 + i * 16, hole, size=10.5, cls="mono accent")
 
     body += box(290, 172, 300, 104, p["card"], p["line"])
-    body += text(306, 194, "every render: one array", size=11.5, cls="blue", weight=600)
-    for i, line in enumerate(["[| HHandler dec;", "   HAttr (Some tone);", "   HText \"42\" |]"]):
+    body += text(306, 194, "every render: the compiled refresh", size=11.5, cls="blue", weight=600)
+    for i, line in enumerate(["check count; check tone", "if tone: put class", "if count: put text"]):
         body += text(306, 216 + i * 18, line, size=12, cls="mono")
-    body += text(470, 234, "no tags,", size=11.5, cls="muted")
-    body += text(470, 250, "no attributes", size=11.5, cls="muted")
+    body += text(500, 234, "others:", size=11.5, cls="muted")
+    body += text(500, 250, "not evaluated", size=11.5, cls="muted")
 
     body += box(650, 40, 230, 236, p["card"], p["line"], lift=True)
     tree = [
@@ -534,25 +534,26 @@ def vdom(p):
         body += text(476, 82 + i * 20, line, size=12, cls="mono faint", raw=True)
     body += text(476, 178, "</div>", size=12, cls="mono faint")
 
-    body += text(460, 212, "render 2 builds one array of 6 values and compares each with ===", size=11.5, cls="accent", weight=600)
-    cells = [("fn", "blue", "swap"), ("\"\"", "green", "✓"), ("\"2\"", "orange", "write"),
-             ("fn", "blue", "swap"), ("fn", "blue", "swap"), ("None", "green", "✓")]
-    for i, (value, color, verdict) in enumerate(cells):
-        x = 460 + i * 70
-        soft = {"blue": "blue_soft", "green": "green_soft", "orange": "orange_soft"}[color]
-        body += box(x, 222, 62, 30, p[soft], p[color], rx=7, width=1.4, lift=color == "orange")
-        body += text(x + 31, 242, value, size=12, cls="mono", anchor="middle", weight=600)
-        body += text(x + 31, 268, verdict, size=10.5, cls=color, anchor="middle", weight=600)
+    body += text(460, 212, "render 2 runs the compiled refresh: one === per local it reads", size=11.5, cls="accent", weight=600)
+    cells = [("count", "1 → 2", "orange", "changed"), ("initial", "0 = 0", "green", "same"),
+             ("tone", "\"\" = \"\"", "green", "same")]
+    for i, (name, value, color, verdict) in enumerate(cells):
+        x = 460 + i * 142
+        soft = {"green": "green_soft", "orange": "orange_soft"}[color]
+        body += box(x, 222, 134, 30, p[soft], p[color], rx=7, width=1.4, lift=color == "orange")
+        body += text(x + 10, 242, name, size=12, cls="mono", weight=700)
+        body += text(x + 124, 242, value, size=11.5, cls="mono muted", anchor="end")
+        body += text(x + 67, 268, verdict, size=10.5, cls=color, anchor="middle", weight=600)
     steps = [
-        ("accent", "accent_soft", "1 array of 6 values allocated, markup untouched"),
-        ("accent", "accent_soft", "6 === checks; handlers swapped without the DOM"),
+        ("accent", "accent_soft", "class reads tone: not even evaluated"),
+        ("accent", "accent_soft", "text and disabled read count: evaluated; handlers swapped"),
         ("green", "green_soft", "1 DOM write: the text \"2\""),
     ]
     for i, (color, soft, label) in enumerate(steps):
         y = 260 + 24 + i * 36
         body += box(460, y, 420, 28, p[soft], p[color], rx=14, width=1.2)
         body += text(476, y + 19, label, size=12.5, cls=color, weight=600)
-    return svg(p, 880, 396, "One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once, builds one array of 6 hole values, compares each with === and writes the same one text", body)
+    return svg(p, 880, 396, "One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once and runs the refresh the compiler generated for it: one === on each of the three locals the view reads, only the holes that read the changed one are evaluated, and it writes the same one text", body)
 
 
 def family(p):

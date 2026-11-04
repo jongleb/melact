@@ -136,8 +136,10 @@ same signatures. Pure-OCaml reason-react code is the compatibility target.
 - **Holes.** Each dynamic attribute, handler, text or child is a hole with a path into the clone:
   child indices for an element, a parent path and the index it goes before for inserted content.
   All paths are resolved before anything is inserted, so they never shift.
-- **Hole array.** A render evaluates to `tpl_instance template [| … |]`: one array allocation for
-  the whole element, whatever its size.
+- **Refresh.** For every template the compiler also emits a refresh function, as Svelte and
+  dartea do. It checks each local the view reads with one `===`, and evaluates and writes only
+  the holes that read a changed one. Holes that read nothing that changed are not even computed,
+  so a nested tree or a `List.map` over rows behind an unchanged local costs nothing.
 
 ### A patch is one `===` per hole
 
