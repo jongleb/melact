@@ -8,7 +8,7 @@ type ('element, 'position) hole =
   | Style of 'element
   | Class_list of 'element
 
-type position = { parent : Dom.node; before : Dom.node option }
+type position = { parent : Dom.node; before : Dom.node Js.null }
 
 (** The markup until the first clone parses it, then the parsed root. *)
 type source = Markup of { markup : string; root : Dom.node -> Dom.node } | Parsed of Dom.element
@@ -21,11 +21,8 @@ type t = {
 external first : Dom.node -> Dom.node = "firstChild" [@@mel.get]
 external next : Dom.node -> Dom.node = "nextSibling" [@@mel.get]
 
-external first_or_end : Dom.node -> Dom.node option = "firstChild"
-[@@mel.get] [@@mel.return nullable]
-
-external next_or_end : Dom.node -> Dom.node option = "nextSibling"
-[@@mel.get] [@@mel.return nullable]
+external first_or_end : Dom.node -> Dom.node Js.null = "firstChild" [@@mel.get]
+external next_or_end : Dom.node -> Dom.node Js.null = "nextSibling" [@@mel.get]
 
 external element : Dom.node -> Dom.element = "%identity"
 
@@ -78,7 +75,7 @@ let locate t root =
   let at path = element (descend root path) in
   let position (path, index) =
     let parent = descend root path in
-    { parent; before = slot (Dom_api.first_child parent) index }
+    { parent; before = Js.Null.fromOption (slot (Dom_api.first_child parent) index) }
   in
   Array.map
     (fun hole ->

@@ -125,7 +125,7 @@ Every kind of prop, static and dynamic, required and optional:
            "innerHTML")
   let form ~text ~flag ~tab ~opacity ~style ~ref ~maybe ~html ~onInput =
     ((React.Element
-        (Melhole.View.compiled __melhole_template_1 5
+        (Melhole.View.compiled __melhole_template_1 7
            (fun __melhole_scope
               (__melhole_hole_0, __melhole_hole_1, __melhole_hole_2,
                __melhole_hole_3, __melhole_hole_4, __melhole_hole_5,
@@ -137,12 +137,15 @@ Every kind of prop, static and dynamic, required and optional:
               let __melhole_changed_1 =
                 Melhole.View.check __melhole_scope 1 maybe in
               let __melhole_changed_2 =
-                Melhole.View.check __melhole_scope 2 style in
+                Melhole.View.check __melhole_scope 2 onInput in
               let __melhole_changed_3 =
-                Melhole.View.check __melhole_scope 3 tab in
+                Melhole.View.check __melhole_scope 3 style in
               let __melhole_changed_4 =
-                Melhole.View.check __melhole_scope 4 text in
-              (match __melhole_changed_4 with
+                Melhole.View.check __melhole_scope 4 tab in
+              let __melhole_changed_5 =
+                Melhole.View.check __melhole_scope 5 text in
+              let __melhole_changed_6 = Melhole.View.check __melhole_scope 6 () in
+              (match __melhole_changed_5 with
                | Melhole.View.Unchanged -> ()
                | _ ->
                    Melhole.View.set_attr __melhole_hole_0
@@ -157,18 +160,18 @@ Every kind of prop, static and dynamic, required and optional:
                | _ ->
                    Melhole.View.set_attr __melhole_hole_2
                      (Some (if (flag : bool) then "true" else "false")));
-              (match __melhole_changed_3 with
+              (match __melhole_changed_4 with
                | Melhole.View.Unchanged -> ()
                | _ ->
                    Melhole.View.set_attr __melhole_hole_3
                      (Some (string_of_int (tab : int))));
-              (match __melhole_changed_4 with
+              (match __melhole_changed_5 with
                | Melhole.View.Unchanged -> ()
                | _ -> Melhole.View.set_prop __melhole_hole_4 (text : string));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
                | _ -> Melhole.View.set_prop __melhole_hole_5 (flag : bool));
-              (match __melhole_changed_2 with
+              (match __melhole_changed_3 with
                | Melhole.View.Unchanged -> ()
                | _ ->
                    Melhole.View.set_style __melhole_hole_6
@@ -180,15 +183,22 @@ Every kind of prop, static and dynamic, required and optional:
                | _ ->
                    Melhole.View.set_attr __melhole_hole_8
                      (maybe : string option));
-              Melhole.View.set_handler __melhole_hole_9
-                (fun __melhole_event ->
-                   onInput (ReactEvent.Form.Native __melhole_event));
-              Melhole.View.set_handler __melhole_hole_10
-                (fun __melhole_event ->
-                   Option.iter
-                     (fun handle ->
-                        handle (ReactEvent.Keyboard.Native __melhole_event))
-                     None);
+              (match __melhole_changed_2 with
+               | Melhole.View.Unchanged -> ()
+               | _ ->
+                   Melhole.View.set_handler __melhole_hole_9
+                     (fun __melhole_event ->
+                        onInput (ReactEvent.Form.Native __melhole_event)));
+              (match __melhole_changed_6 with
+               | Melhole.View.Unchanged -> ()
+               | _ ->
+                   Melhole.View.set_handler __melhole_hole_10
+                     (fun __melhole_event ->
+                        Option.iter
+                          (fun handle ->
+                             handle
+                               (ReactEvent.Keyboard.Native __melhole_event))
+                          None));
               ()))),
       (React.Element
          (Melhole.View.compiled __melhole_template_2 1

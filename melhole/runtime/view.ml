@@ -19,7 +19,7 @@ type state = ..
 type live = {
   state : state;
   each : (Dom.node -> unit) -> unit;  (** Visits the top-level nodes in document order. *)
-  front : Dom.node option -> Dom.node option;  (** The first node, or the given one. *)
+  front : Dom.node Js.null -> Dom.node Js.null;  (** The first node, or the given one. *)
   release : unit -> unit;  (** Releases handlers, effects and portals; the nodes stay. *)
 }
 
@@ -92,7 +92,7 @@ let nothing =
   { state = Empty_state; each = (fun _ -> ()); front = (fun after -> after); release = ignore }
 
 let insert (position : Template.position) node =
-  Dom_api.insert_before position.parent node (Js.Null.fromOption position.before)
+  Dom_api.insert_before position.parent node position.before
 
 let remove (position : Template.position) live =
   live.each (Dom_api.remove_child position.parent);
@@ -143,7 +143,7 @@ let text value =
         {
           state = Text_state { node; value };
           each = (fun visit -> visit (Dom_api.to_node node));
-          front = (fun _ -> Some (Dom_api.to_node node));
+          front = (fun _ -> Js.Null.return (Dom_api.to_node node));
           release = ignore;
         });
     patch =
@@ -258,7 +258,7 @@ let lazy1 render a = memo [| Input render; Input a |] (fun () -> render a)
 let lazy2 render a b = memo [| Input render; Input a; Input b |] (fun () -> render a b)
 
 let portal container child =
-  let inside = { Template.parent = Dom_api.to_node container; before = None } in
+  let inside = { Template.parent = Dom_api.to_node container; before = Js.null } in
   let held inner =
     {
       state = Portal_state (container, inner);
@@ -288,7 +288,7 @@ let place position root scope state =
   {
     state;
     each = (fun visit -> visit (Dom_api.to_node root));
-    front = (fun _ -> Some (Dom_api.to_node root));
+    front = (fun _ -> Js.Null.return (Dom_api.to_node root));
     release = (fun () -> List.iter (fun cleanup -> cleanup ()) (List.rev scope.cleanups));
   }
 
@@ -517,7 +517,10 @@ let tpl_instance markup values =
 
 let mount child ~parent ~before =
   let position =
-    { Template.parent = Dom_api.to_node parent; before = Option.map Dom_api.to_node before }
+    {
+      Template.parent = Dom_api.to_node parent;
+      before = Js.Null.fromOption (Option.map Dom_api.to_node before);
+    }
   in
   let mounted = { position; source = child; live = child.build position } in
   (match !scheduler with Absent -> () | Installed components -> components.settle ());
@@ -633,7 +636,7 @@ let instance_live instance =
       (fun after ->
         instance.output.front
           (match instance.region with
-          | Marker node -> Some (Dom_api.to_node node)
+          | Marker node -> Js.Null.return (Dom_api.to_node node)
           | Nodes -> after));
     release =
       (fun () ->
@@ -651,7 +654,7 @@ let render instance =
   | Provides provision -> provision.children
 
 let commit (position : Template.position) instance =
-  (match (instance.output.front None, instance.region) with
+  (match (Js.Null.toOption (instance.output.front Js.null), instance.region) with
   | Some _, Nodes | None, Marker _ -> ()
   | Some _, Marker node ->
       Dom_api.remove_child position.parent node;
@@ -674,7 +677,7 @@ let refresh (position : Template.position) instance =
   let child = render instance in
   let at =
     match instance.region with
-    | Marker node -> { position with before = Some (Dom_api.to_node node) }
+    | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
     | Nodes -> position
   in
   instance.output <- within owner (Some instance) (fun () -> update at instance.output child);
@@ -685,8 +688,9 @@ let settle () =
     let live = instance_live instance in
     let last = ref None in
     live.each (fun node -> last := Some node);
-    match (Option.bind (live.front None) Dom_api.parent_node, !last) with
-    | Some parent, Some last -> { Template.parent; before = Dom_api.next_sibling last }
+    match (Option.bind (Js.Null.toOption (live.front Js.null)) Dom_api.parent_node, !last) with
+    | Some parent, Some last ->
+        { Template.parent; before = Js.Null.fromOption (Dom_api.next_sibling last) }
     | None, _ | _, None -> Js.Exn.raiseError "melhole: a mounted component is not in the DOM"
   in
   let rec drain () =
@@ -701,7 +705,10 @@ let settle () =
             | Clean | Unmounted -> ())
           (List.stable_sort
              (fun a b ->
-               match ((instance_live a).front None, (instance_live b).front None) with
+               match
+                 ( Js.Null.toOption ((instance_live a).front Js.null),
+                   Js.Null.toOption ((instance_live b).front Js.null) )
+               with
                | Some first, Some second when not (Dom_api.same first second) ->
                    if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
                | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
