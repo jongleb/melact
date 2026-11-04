@@ -11,7 +11,7 @@
 
 JSX compiles to DOM templates with holes. A re-render writes only the holes whose values changed.
 
-![status](https://img.shields.io/badge/status-milestone%201%20of%207-8250df)
+![status](https://img.shields.io/badge/status-milestone%203%20of%207-8250df)
 ![Melange](https://img.shields.io/badge/Melange-%E2%89%A5%205.1-ec6813?logo=ocaml&logoColor=white)
 ![OCaml](https://img.shields.io/badge/OCaml-%E2%89%A5%205.3-ec6813?logo=ocaml&logoColor=white)
 ![syntax](https://img.shields.io/badge/JSX-mlx%20%C2%B7%20Reason%20%C2%B7%20OCaml-1f6feb)
@@ -30,9 +30,10 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 </picture>
 
 > [!NOTE]
-> **Milestone 1 of 7 is done:** the `View` layer, which is everything below the React API. Hooks,
-> `melact-ppx` and `ReactDOM` come next. Until then, apps are written against `View` directly, like
-> [`examples/counter`](examples/counter/main.ml).
+> **Milestones 1–3 of 7 are done:** the `View` layer, components with hooks, and `melact-ppx`.
+> A reason-react component in mlx, Reason or OCaml compiles and runs, and one test suite passes
+> both against reason-react with React 18 and against melact. The rest of the reason-react surface
+> (`ReactDOM.createPortal`, the full `ReactEvent`, TodoMVC unmodified) is milestone 4.
 
 ## The idea
 
@@ -82,8 +83,8 @@ unchanged value, so a physically equal child list or `lazy` argument skips its w
 <tr>
 <td valign="top">
 
-**Updates start where state changed** *(milestone 2)*. A `setState` re-renders its own
-component, not the root. Children with physically unchanged props are skipped without `memo`.
+**Updates start where state changed.** A `setState` re-renders its own component, not the
+root. Children with physically unchanged props are skipped without `memo`.
 
 </td>
 <td valign="top">
@@ -184,17 +185,36 @@ reads the same property, so replacing its handler is free too. That listener is 
 
 ### Components re-render where state changed
 
-*Milestone 2, planned as follows.*
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/updates-dark.svg">
   <img src="assets/updates.svg" alt="A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows whose props are physically equal are skipped" width="100%">
 </picture>
 
-Each `[@react.component]` will get a `Type.Id`-backed id at module level. Its props travel as a
-tuple compared element-wise with `==`. Hook state lives in per-instance slots. Updates are
-batched like React's, without its machinery. Layout effects run right after their instance's
-patch. Passive effects run after the whole flush, and cleanups go children before parents.
+Each `[@react.component]` gets a `Type.Id`-backed identity at module level. Its props travel
+as a tuple compared element-wise with `==`. A setter marks its instance dirty, and one microtask
+renders the dirty instances parents first. Layout effects run right after their instance's
+patch. Passive effects run after the whole flush, and cleanups go children before parents. A
+component that renders nothing keeps its place with an empty text node.
+
+### Hooks are typed by their call site
+
+Hooks keep state in slots read in call order, as in React. Instead of casting what a slot holds,
+`melact-ppx` gives every `React.useState`, `useEffect`, `useMemo`… call site its own key,
+a `Type.Id` created once at module level, and passes it as a hidden first argument:
+
+```ocaml
+(* you write *)
+let count, setCount = React.useState (fun () -> 0)
+
+(* melact-ppx emits *)
+let __melact_hook_2 = Melact_view.Hook.key ()
+let count, setCount = (React.useState __melact_hook_2) (fun () -> 0)
+```
+
+A slot stores its value with the key that made it, so reading it back is a typed
+`Type.Id.provably_equal`, with no `Obj.magic`. Calling hooks conditionally raises
+*"hooks were called in a different order"* instead of handing back the wrong value. Using one
+key at two types is a compile error. Hooks inside custom hooks get keys the same way.
 
 ### Mutate in place, and nothing updates
 
@@ -206,29 +226,27 @@ builds new values, so this rarely matters, but it is a rule rather than an optim
 
 | | |
 |---|---|
-| **Works** | `Template`, `View` (mount, patch, unmount; text, attributes, properties, styles, classes, refs, handlers, child holes; positional and keyed lists; `lazy1`/`lazy2`), `Reconcile`, delegated events, `Program.sandbox` |
-| **Tests** | 26 vitest + jsdom tests. They cover every patch pair, the benchmark list operations, attribute removal, handler replacement with zero DOM calls, `lazy` skipping, and unmount removing nodes and listeners |
-| **Example** | [`examples/counter`](examples/counter/main.ml), hand-written against `View` with `Program.sandbox` |
-| **Not yet** | hooks, `melact-ppx`, `ReactDOM` / `ReactEvent`, SSR, benchmarks |
+| **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
+| **Tests** | 59 vitest + jsdom tests: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx) in reason-react style, and [`examples/counter`](examples/counter/main.ml) hand-written against `View` |
+| **Not yet** | `createPortal`, `forwardRef`, the rest of `ReactEvent`, SVG-rooted templates, benchmarks, SSR |
+| **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 
-Writing against `View` today looks like this, and it is what `melact-ppx` will generate:
+A whole tree compiles to one template. This mlx counter is one `<template>` with six holes,
+the same as the hand-written one:
 
 ```ocaml
-let counter =
-  Template.make
-    ~html:"<div class=\"counter\"><button>-</button><output></output><button>+</button></div>"
-    ~holes:[| Handler ([ 0 ], "click"); Text ([ 1 ], 0); Handler ([ 2 ], "click") |]
-
-let view dispatch count =
-  View.tpl_instance counter
-    [| HHandler (fun _ -> dispatch Decrement);
-       HText (string_of_int count);
-       HHandler (fun _ -> dispatch Increment) |]
-
-let () =
-  Option.iter
-    (Program.sandbox ~init:0 ~update ~view)
-    (element_by_id document "root")
+let[@react.component] make ~initial () =
+  let count, setCount = React.useState (fun () -> initial) in
+  let tone = if count < 0 then "negative" else "" in
+  <div className="counter">
+    <button onClick=(fun _ -> setCount (fun n -> n - 1))>(React.string "-")</button>
+    <output className=tone>(React.int count)</output>
+    <button onClick=(fun _ -> setCount (fun n -> n + 1))>(React.string "+")</button>
+    <button onClick=(fun _ -> setCount (fun _ -> initial)) disabled=(count = initial)>
+      (React.string "reset")
+    </button>
+  </div>
 ```
 
 ## Try it
@@ -240,6 +258,10 @@ $ dune build                          # libraries and examples
 $ dune build @runtest-js && npx vitest run
  ✓ test/view/view_test.mjs (17 tests)
  ✓ test/view/reconcile_test.mjs (9 tests)
+ ✓ test/react/hooks_test.mjs (15 tests)
+ ✓ test/dual/react/dual_test.mjs (9 tests)
+ ✓ test/dual/melact/dual_test.mjs (9 tests)
+$ dune test test/ppx                  # melact-ppx expect tests
 $ npx vite                            # then open http://localhost:5173/examples/counter/
 ```
 
@@ -256,8 +278,8 @@ $ npx vite                            # then open http://localhost:5173/examples
 | # | milestone | done when |
 |---|---|---|
 | 1 | **View** ✓ | patch pairs, reconcile operations, events and `lazy` pass in jsdom; the counter runs |
-| 2 | **Hooks** | one test suite passes twice: against reason-react with real React, and against melact |
-| 3 | **melact-ppx** | the counter in reason-react style compiles to one template with the same holes as by hand |
+| 2 | **Hooks** ✓ | one test suite passes twice: against reason-react with real React, and against melact |
+| 3 | **melact-ppx** ✓ | the counter in reason-react style compiles to one template with the same holes as by hand |
 | 4 | **Compat** | reason-react's examples and TodoMVC build unmodified and behave identically |
 | 5 | **Speed** | js-framework-benchmark within Solid's band on keyed results, memory ≤ 1.5× vanilla |
 | 6 | **SSR** | `to_string` on native, hydration that binds holes to existing nodes by path |
@@ -280,8 +302,8 @@ The full plan is in [`SPEC.md`](SPEC.md).
 ```
 view/       melact.view     Template, View, Reconcile, Events (Melange)
 program/    melact.program  Elm-style Program.sandbox over View
-react/      melact          React, ReactDOM, ReactEvent, ReactDOMStyle      (milestone 2)
-ppx/        melact-ppx      reason-react-ppx frontend, template emission    (milestone 3)
+react/      melact          React, ReactDOM, ReactEvent
+ppx/        melact-ppx      JSX, [@react.component] and hook keys; DOM props table from reason-react
 test/view/                  vitest + jsdom, written in OCaml
 examples/                   counter, later TodoMVC and js-framework-benchmark
 assets/                     the figures above: python3 assets/make.py

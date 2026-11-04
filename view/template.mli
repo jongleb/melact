@@ -1,5 +1,4 @@
-(** A static DOM fragment with numbered holes, created once per JSX site and
-    cloned for every instance. *)
+(** A static DOM fragment with holes, cloned per instance; HTML comments become empty text anchors. *)
 
 (** Paths are child indices; a position is a parent path and the index it precedes. *)
 type ('element, 'position) hole =

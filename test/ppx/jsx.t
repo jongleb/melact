@@ -25,7 +25,7 @@ Holes at every depth; markers only between neighbours that would merge:
       ~holes:[|(Melact_view.Template.Text ([], 1));(Melact_view.Template.Child
                                                       ([], 3));(Melact_view.Template.Child
                                                                   ([], 4));(
-               Melact_view.Template.Child ([4], 0))|]
+               Melact_view.Template.Text ([4], 0))|]
   let row ~name ~count ~extra =
     React.Element
       (Melact_view.View.tpl_instance __melact_template_1
@@ -36,9 +36,7 @@ Holes at every depth; markers only between neighbours that would merge:
                                                          __melact_child)));(
            Melact_view.View.HChild
              ((let React.Element __melact_child = extra in __melact_child)));(
-           Melact_view.View.HChild
-             ((let React.Element __melact_child = React.int count in
-               __melact_child)))|])
+           Melact_view.View.HText (string_of_int (count : int)))|])
 
 Every kind of prop, static and dynamic, required and optional:
 

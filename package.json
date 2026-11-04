@@ -2,13 +2,15 @@
   "name": "melact",
   "private": true,
   "type": "module",
-  "description": "Dev-only JS tooling for melact tests and examples; melact has no runtime npm dependencies",
+  "description": "Dev-only JS tooling for melact tests and examples (react is only for the reason-react side of the dual test suite); melact has no runtime npm dependencies",
   "scripts": {
     "test": "vitest run"
   },
   "devDependencies": {
     "jsdom": "25.0.1",
     "vite": "5.4.11",
-    "vitest": "2.1.8"
+    "vitest": "2.1.8",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }

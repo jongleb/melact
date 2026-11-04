@@ -1,0 +1,202 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external tag_name : Dom.element -> string = "tagName" [@@mel.get]
+
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+let act run = adopt (React.act run)
+let events = ref []
+let log event = events := event :: !events
+
+let take () =
+  let taken = List.rev !events in
+  events := [];
+  taken
+
+let mount element =
+  let root = attached () in
+  let client = ReactDOM.Client.createRoot root in
+  let* () = act (fun () -> ReactDOM.Client.render client element) in
+  ignore (take ());
+  Js.Promise.resolve (root, client)
+
+let finish () = Js.Promise.resolve ()
+
+module Counter = struct
+  let[@react.component] make ~label =
+    let count, setCount = React.useState (fun () -> 0) in
+    log ("render " ^ label);
+    <button onClick=(fun _ -> setCount (fun n -> n + 1))>
+      (React.string (label ^ string_of_int count))
+    </button>
+end
+
+module Quiet = struct
+  let[@react.component] make = React.memo (fun ~label ->
+    log ("render quiet " ^ label);
+    <span>(React.string label)</span>)
+end
+
+module Parent = struct
+  let[@react.component] make () =
+    let n, setN = React.useState (fun () -> 0) in
+    log "render parent";
+    <div>
+      <button onClick=(fun _ -> setN (fun n -> n + 1))>(React.int n)</button>
+      <Quiet label="fixed" />
+      <Quiet label=(if n > 0 then "moved" else "still") />
+    </div>
+end
+
+module Effects = struct
+  let[@react.component] make ~name ~dep =
+    React.useLayoutEffect0 (fun () ->
+      log ("layout " ^ name);
+      Some (fun () -> log ("layout cleanup " ^ name)));
+    React.useEffect0 (fun () ->
+      log ("passive " ^ name);
+      Some (fun () -> log ("passive cleanup " ^ name)));
+    React.useEffect1 (fun () ->
+      log ("deps " ^ name ^ " " ^ dep);
+      Some (fun () -> log ("deps cleanup " ^ name ^ " " ^ dep)))
+      [| dep |];
+    React.null
+end
+
+module Effect_tree = struct
+  let[@react.component] make () =
+    let dep, setDep = React.useState (fun () -> "a") in
+    <div>
+      <button onClick=(fun _ -> setDep (fun _ -> "b"))>(React.string dep)</button>
+      <Effects name="child" dep="x" />
+      <Effects name="parent" dep />
+    </div>
+end
+
+let theme = React.createContext "light"
+
+module Theme_provider = struct
+  let make = React.Context.provider theme
+
+  external makeProps :
+    value:string -> children:React.element -> unit -> < value : string ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Leaf = struct
+  let[@react.component] make () =
+    let value = React.useContext theme in
+    log ("render leaf " ^ value);
+    <em>(React.string value)</em>
+end
+
+module Middle = struct
+  let[@react.component] make = React.memo (fun () ->
+    log "render middle";
+    <Leaf />)
+end
+
+module Themed = struct
+  let[@react.component] make () =
+    let value, setValue = React.useState (fun () -> "dark") in
+    <section>
+      <button onClick=(fun _ -> setValue (fun _ -> "blue"))>(React.string "switch")</button>
+      <Theme_provider value><Middle /></Theme_provider>
+    </section>
+end
+
+module Focus = struct
+  let[@react.component] make () =
+    let input = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+      Option.iter (fun element -> log ("ref " ^ tag_name element)) (Js.Nullable.toOption input.current);
+      None);
+    <input ref=(ReactDOM.Ref.domRef input) />
+end
+
+module Rows = struct
+  let[@react.component] make ~labels =
+    <div>(React.array (Array.map (fun label -> <Counter key=label label />) labels))</div>
+end
+
+module Toggle = struct
+  let[@react.component] make () =
+    let shown, setShown = React.useState (fun () -> false) in
+    <p>
+      (React.string "<")
+      (if shown then <b>(React.string "on")</b> else React.null)
+      (React.string ">")
+      <button onClick=(fun _ -> setShown (fun shown -> not shown))>(React.string "toggle")</button>
+    </p>
+end
+
+let () =
+  describe "state" (fun () ->
+    test_async "batches updates and re-renders the component" (fun () ->
+      let* root, _ = mount <Counter label="n" /> in
+      let* () = act (fun () -> click (select root "button"); click (select root "button")) in
+      expect (inner_html root, take ()) |. to_equal ("<button>n2</button>", [ "render n" ]);
+      finish ());
+    test_async "skips memo children whose props are unchanged" (fun () ->
+      let* root, _ = mount <Parent /> in
+      let* () = act (fun () -> click (select root "button")) in
+      expect (take ()) |. to_equal [ "render parent"; "render quiet moved" ];
+      finish ()));
+  describe "effects" (fun () ->
+    test_async "run children first, layout before passive" (fun () ->
+      let root = attached () in
+      let client = ReactDOM.Client.createRoot root in
+      let* () = act (fun () -> ReactDOM.Client.render client <Effect_tree />) in
+      expect (take ())
+      |. to_equal
+           [ "layout child"; "layout parent"; "passive child"; "deps child x"; "passive parent"; "deps parent a" ];
+      finish ());
+    test_async "clean up before running again when a dependency changes" (fun () ->
+      let* root, _ = mount <Effect_tree /> in
+      let* () = act (fun () -> click (select root "button")) in
+      expect (take ()) |. to_equal [ "deps cleanup parent a"; "deps parent b" ];
+      finish ());
+    test_async "clean up everything on unmount" (fun () ->
+      let* _, client = mount <Effect_tree /> in
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      expect (List.sort compare (take ()))
+      |. to_equal
+           [
+             "deps cleanup child x"; "deps cleanup parent a"; "layout cleanup child"; "layout cleanup parent";
+             "passive cleanup child"; "passive cleanup parent";
+           ];
+      finish ()));
+  describe "context" (fun () ->
+    test_async "reaches consumers below memo components" (fun () ->
+      let* root, _ = mount <Themed /> in
+      let* () = act (fun () -> click (select root "button")) in
+      expect (inner_html (select root "em"), take ()) |. to_equal ("blue", [ "render leaf blue" ]);
+      finish ()));
+  describe "refs" (fun () ->
+    test_async "point at the element before effects run" (fun () ->
+      let root = attached () in
+      let client = ReactDOM.Client.createRoot root in
+      let* () = act (fun () -> ReactDOM.Client.render client <Focus />) in
+      expect (take ()) |. to_equal [ "ref INPUT" ];
+      finish ()));
+  describe "lists and conditions" (fun () ->
+    test_async "keep component state with its key" (fun () ->
+      let* root, client = mount <Rows labels=[| "a"; "b"; "c" |] /> in
+      let* () = act (fun () -> click (select root "button")) in
+      let* () = act (fun () -> ReactDOM.Client.render client <Rows labels=[| "c"; "a"; "d" |] />) in
+      expect (inner_html root)
+      |. to_equal "<div><button>c0</button><button>a1</button><button>d0</button></div>";
+      finish ());
+    test_async "show and hide content between siblings" (fun () ->
+      let* root, _ = mount <Toggle /> in
+      let* () = act (fun () -> click (select root "button")) in
+      let shown = inner_html root in
+      let* () = act (fun () -> click (select root "button")) in
+      expect (shown, inner_html root)
+      |. to_equal
+           ( "<p>&lt;<b>on</b>&gt;<button>toggle</button></p>",
+             "<p>&lt;&gt;<button>toggle</button></p>" );
+      finish ()))

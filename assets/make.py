@@ -389,8 +389,7 @@ def events(p):
 
 
 def updates(p):
-    body = box(0, 0, 150, 26, p["accent_soft"], p["accent"], rx=13)
-    body += text(75, 18, "milestone 2 · planned", size=11.5, cls="accent", weight=600, anchor="middle")
+    body = ""
     nodes = {
         "App": (230, 64, "faint"), "Header": (110, 150, "faint"), "TodoList": (350, 150, "accent"),
         "Row a": (230, 240, "green"), "Row b": (350, 240, "accent"), "Row c": (470, 240, "green"),
@@ -437,10 +436,11 @@ def roadmap(p):
     ]
     step = 124
     body = f'<line x1="66" y1="44" x2="{66 + step * 6}" y2="44" stroke="{p["line"]}" stroke-width="3"/>'
-    body += f'<line x1="66" y1="44" x2="{66 + step // 2}" y2="44" stroke="{p["accent"]}" stroke-width="3" class="flow"/>'
+    body += f'<line x1="66" y1="44" x2="{66 + step * 2}" y2="44" stroke="{p["accent"]}" stroke-width="3"/>'
+    body += f'<line x1="{66 + step * 2}" y1="44" x2="{66 + step * 2 + step // 2}" y2="44" stroke="{p["accent"]}" stroke-width="3" class="flow"/>'
     for i, (name, a, b) in enumerate(stages):
         x = 66 + i * step
-        if i == 0:
+        if i < 3:
             body += f'<circle cx="{x}" cy="44" r="16" fill="{p["accent"]}"/>'
             body += f'<path d="M{x - 7},44 l5,5 l9,-10" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
             body += text(x, 16, "done", size=11, cls="accent", weight=700, anchor="middle")
@@ -450,7 +450,7 @@ def roadmap(p):
         body += text(x, 84, name, size=13.5, weight=600, anchor="middle")
         body += text(x, 104, a, size=11.5, cls="muted", anchor="middle")
         body += text(x, 120, b, size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 132, "Roadmap: 1 View done; then hooks, melact-ppx, compatibility, speed, SSR, publish", body)
+    return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; then compatibility, speed, SSR, publish", body)
 
 
 FIGURES = dict(logo=logo, overview=overview, pipeline=pipeline, patch=patch, reconcile=reconcile,

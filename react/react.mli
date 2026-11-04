@@ -276,6 +276,8 @@ val useImperativeHandle7 :
 val useId : string Melact_view.Hook.key -> unit -> string
 val useTransition : unit -> bool * ((unit -> unit) -> unit)
 val startTransition : (unit -> unit) -> unit
+val act : (unit -> unit) -> unit Js.Promise.t
+val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t
 val memo : ('props -> element) -> 'props -> element
 
 val memoCustomCompareProps :

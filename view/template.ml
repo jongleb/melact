@@ -31,7 +31,23 @@ let make ~html ~holes =
            (Dom_api.first_child (Dom_api.template_content template))
            element_of
        with
-       | Some root -> root
+       | Some root ->
+           let rec unmark node =
+             Option.iter unmark (Dom_api.first_child node);
+             let next = Dom_api.next_sibling node in
+             (match Dom_api.node_type node with
+             | 8 ->
+                 Option.iter
+                   (fun parent ->
+                     Dom_api.replace_child parent
+                       (Dom_api.create_text_node Dom_api.document "")
+                       node)
+                   (Dom_api.parent_node node)
+             | _ -> ());
+             Option.iter unmark next
+           in
+           Option.iter unmark (Dom_api.first_child root);
+           root
        | None -> Js.Exn.raiseError ("Melact template needs a root element: " ^ html))
   in
   { html; holes; root }

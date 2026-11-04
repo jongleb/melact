@@ -166,5 +166,17 @@ let useId key () =
 
 let startTransition run = run ()
 let useTransition () = (false, startTransition)
+let act run =
+  run ();
+  View.flush ();
+  Js.Promise.resolve ()
+
+let actAsync run =
+  Js.Promise.then_
+    (fun () ->
+      View.flush ();
+      Js.Promise.resolve ())
+    (run ())
+
 let memo component props = component props
 let memoCustomCompareProps component _ props = component props

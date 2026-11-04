@@ -60,19 +60,28 @@ let lowercase expression =
       Option.map (fun _ -> (tag, arguments)) (without_jsx expression.pexp_attributes)
   | _ -> None
 
-let react_string expression =
+let react_text expression =
   match expression.pexp_desc with
   | Pexp_apply
-      ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "string"); _ }; _ },
-        [ (Nolabel, text) ] )
+      ( {
+          pexp_desc =
+            Pexp_ident { txt = Ldot (Lident "React", (("string" | "int" | "float") as kind)); _ };
+          _;
+        },
+        [ (Nolabel, value) ] )
   | Pexp_apply
       ( { pexp_desc = Pexp_ident { txt = Lident "|."; _ }; _ },
         [
-          (Nolabel, text);
+          (Nolabel, value);
           ( Nolabel,
-            { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "string"); _ }; _ } );
+            {
+              pexp_desc =
+                Pexp_ident
+                  { txt = Ldot (Lident "React", (("string" | "int" | "float") as kind)); _ };
+              _;
+            } );
         ] ) ->
-      Some text
+      Some (kind, value)
   | _ -> None
 
 let prop ~loc kind requirement value =
@@ -198,6 +207,15 @@ let prop ~loc kind requirement value =
 let component ~loc ~name expression =
   let rec gather expression =
     match expression.pexp_desc with
+    | Pexp_apply
+        ( {
+            pexp_desc =
+              Pexp_ident
+                { txt = Ldot (Lident "React", ("memo" | "memoCustomCompareProps")); _ };
+            _;
+          },
+          (Nolabel, inner) :: _ ) ->
+        gather inner
     | Pexp_function (params, None, Pfunction_body body) ->
         let more, body = gather body in
         (params @ more, body)
@@ -541,14 +559,31 @@ let mapper =
       match lowercase item with
       | Some (tag, arguments) -> Some (Markup.Element (fst (self#element ~loc tag arguments)))
       | None -> (
-          match (item.pexp_desc, react_string item) with
+          match (item.pexp_desc, react_text item) with
           | Pexp_ident { txt = Ldot (Lident "React", "null"); _ }, _ -> None
-          | _, Some { pexp_desc = Pexp_constant (Pconst_string (text, _, _)); _ } ->
+          | _, Some ("string", { pexp_desc = Pexp_constant (Pconst_string (text, _, _)); _ })
+            ->
               Some (Markup.Text text)
-          | _, Some text ->
+          | _, Some (("int" | "float"), { pexp_desc = Pexp_constant (Pconst_integer (digits, None) | Pconst_float (digits, None)); _ })
+            ->
+              Some (Markup.Text digits)
+          | _, Some ("int", value) ->
               Some
                 (Markup.Slot
-                   (Text_slot, [%expr Melact_view.View.HText ([%e self#expression text] : string)]))
+                   ( Text_slot,
+                     [%expr Melact_view.View.HText (string_of_int ([%e self#expression value] : int))]
+                   ))
+          | _, Some ("float", value) ->
+              Some
+                (Markup.Slot
+                   ( Text_slot,
+                     [%expr
+                       Melact_view.View.HText (Js.Float.toString ([%e self#expression value] : float))]
+                   ))
+          | _, Some (_, value) ->
+              Some
+                (Markup.Slot
+                   (Text_slot, [%expr Melact_view.View.HText ([%e self#expression value] : string)]))
           | _, None ->
               Some
                 (Markup.Slot

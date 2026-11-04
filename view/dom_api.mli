@@ -46,6 +46,10 @@ external insert_before :
 external remove_child : Dom.node -> 'a Dom.node_like -> unit = "removeChild"
 [@@mel.send]
 
+external replace_child : Dom.node -> 'a Dom.node_like -> 'b Dom.node_like -> unit
+  = "replaceChild"
+[@@mel.send]
+
 external clone_node :
   Dom.element -> (_[@mel.as {json|true|json}]) -> Dom.element = "cloneNode"
 [@@mel.send]
