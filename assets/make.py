@@ -91,7 +91,7 @@ def logo(p):
         + box(42, 44, 36, 32, "none", p["muted"], rx=9, dash="5 4", width=2.2)
         + f'<rect x="48" y="50" width="24" height="20" rx="6" fill="{p["accent"]}" class="pulse"/>'
     )
-    return svg(p, 120, 120, "melact: a template with a hole in it", body)
+    return svg(p, 120, 120, "Melact: a template with a hole in it", body)
 
 
 def overview(p):
@@ -182,7 +182,7 @@ def overview(p):
     body += text(512, 352, "your code compiles unchanged", size=12.5, cls="muted")
     body += chips(468, 366, 400, ["your components", "hooks", "mlx · Reason · OCaml",
                                   "ReactDOM", "ReactEvent"], "stays")
-    return svg(p, 880, 452, "melact in one picture: a reason-react component in mlx switches two dune lines; melact-ppx splits its JSX into a template parsed once and a hole array built per render; in the browser a setState re-renders only that component, compares each hole with === and writes only what changed. Gone: React, react-dom, the virtual DOM, the element tree per render, the tree diff, fiber. Stays: your components, hooks, JSX, ReactDOM.Client, ReactEvent", body)
+    return svg(p, 880, 452, "Melact in one picture: a reason-react component in mlx switches two dune lines; melact-ppx splits its JSX into a template parsed once and a hole array built per render; in the browser a setState re-renders only that component, compares each hole with === and writes only what changed. Gone: React, react-dom, the virtual DOM, the element tree per render, the tree diff, fiber. Stays: your components, hooks, JSX, ReactDOM.Client, ReactEvent", body)
 
 
 def pipeline(p):
@@ -335,35 +335,6 @@ def reconcile(p):
     return svg(p, 880, 326, "Keyed reconcile: the common prefix a and suffix f stay, c and d form the longest increasing run of old positions and stay, b and e are moved with one insertBefore each. Measured on 1,000 rows: swap 2 moves, reverse 999 moves, remove one keeps 999 rows", body)
 
 
-def runtime(p):
-    lanes = [
-        ("React with a virtual DOM", 0, [
-            ("setState", None, "line"), ("render component", None, "line"),
-            ("new element tree", "every tag allocated", "orange"),
-            ("diff the trees", "node by node", "orange"), ("commit changes", None, "line")]),
-        ("melact", 132, [
-            ("setState", None, "line"), ("render component", None, "line"),
-            ("hole array", "static markup: nothing", "accent"),
-            ("=== per hole", "no tree to walk", "accent"), ("write changed holes", None, "line")]),
-    ]
-    body = ""
-    for title, y, steps in lanes:
-        body += text(0, y + 18, title, size=14, weight=600)
-        for i, (head, note, tone) in enumerate(steps):
-            x = i * 182
-            fill = {"line": p["card"], "orange": p["orange_soft"], "accent": p["accent_soft"]}[tone]
-            stroke = {"line": p["line"], "orange": p["orange"], "accent": p["accent"]}[tone]
-            body += box(x, y + 32, 152, 68, fill, stroke, rx=12, width=1.4)
-            if note:
-                body += text(x + 76, y + 62, head, size=13.5, weight=600, anchor="middle")
-                body += text(x + 76, y + 82, note, size=11.5, cls="orange" if tone == "orange" else "accent", anchor="middle")
-            else:
-                body += text(x + 76, y + 71, head, size=13.5, weight=600, anchor="middle")
-            if i < len(steps) - 1:
-                body += arrow(p, x + 154, y + 66, x + 178, y + 66, "accent" if y else "muted", flow=bool(y))
-    return svg(p, 880, 236, "React allocates a new element tree on every render and diffs it node by node; melact builds only an array of hole values and compares each with ===, then writes the changed holes", body)
-
-
 def events(p):
     nodes = [("document", 60, "1 listener per event type"), ("div", 108, "$$melact:click = outer"), ("ul", 156, None),
              ("li", 204, None), ("button", 252, "$$melact:click = inner")]
@@ -381,7 +352,7 @@ def events(p):
     body += text(326, 172, "walk", size=11.5, cls="accent", weight=600)
     body += f'<circle cx="152" cy="246" r="6" fill="{p["orange"]}" class="pulse"/>'
     body += text(118, 276, "click", size=11.5, cls="orange", weight=600)
-    body += text(150, 26, "melact walks from the target up, calling each $$melact:click; stopPropagation ends the walk", size=12, cls="muted")
+    body += text(150, 26, "Melact walks from the target up, calling each $$melact:click; stopPropagation ends the walk", size=12, cls="muted")
 
     body += box(560, 40, 320, 236, p["card"], p["line"], rx=14)
     body += text(580, 68, "Replacing a handler", size=14, weight=600)
@@ -491,37 +462,6 @@ def hooks(p):
     return svg(p, 880, 338, "melact-ppx gives every hook call site its own Type.Id key, hoisted to module level; the instance stores each slot with the key that made it; reading a slot checks provably_equal, so values come back typed, and a hook called out of order raises an error instead of returning a wrong value", body)
 
 
-def dual(p):
-    body = box(0, 30, 250, 196, p["card"], p["line"], lift=True)
-    body += text(18, 58, "dual_test.mlx", size=14, cls="mono", weight=700)
-    body += text(18, 78, "one file, reason-react style", size=11.5, cls="muted")
-    covered = ["state and batching", "memo children skipped", "effect order, cleanups, deps",
-               "context below memo", "refs and forwardRef", "svg components", "keys, show and hide"]
-    for i, item in enumerate(covered):
-        y = 104 + i * 17
-        body += f'<circle cx="24" cy="{y - 4}" r="2.5" fill="{p["accent"]}"/>'
-        body += text(34, y, item, size=11.5)
-    lanes = [
-        (48, "blue", "blue_soft", ["reason-react-ppx", "reason-react", "React 18.3"]),
-        (148, "accent", "accent_soft", ["melact-ppx", "melact", "no React"]),
-    ]
-    for y, color, soft, steps in lanes:
-        body += curve(p, f"M252,128 C276,128 276,{y + 22} 296,{y + 22}", color, flow=True, width=1.8)
-        for i, label in enumerate(steps):
-            x = 300 + i * 150
-            body += box(x, y, 130, 44, p[soft], p[color], rx=10, width=1.4)
-            body += text(x + 65, y + 27, label, size=12.5, cls="mono" if i < 2 else "", weight=600, anchor="middle")
-            if i < len(steps) - 1:
-                body += arrow(p, x + 132, y + 22, x + 146, y + 22, color)
-        body += arrow(p, 732, y + 22, 748, y + 22, color)
-        body += box(752, y, 124, 44, p["green_soft"], p["green"], rx=10, width=1.6)
-        body += text(814, y + 28, "11 / 11 ✓", size=15, cls="green", weight=700, anchor="middle")
-    body += text(814, 122, "same assertions", size=11.5, cls="muted", anchor="middle")
-    body += text(300, 18, "built twice by dune, run by vitest + jsdom", size=12, cls="muted")
-    return svg(p, 880, 232, "One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 11 tests pass in both", body)
-
-
-
 def compat(p):
     body = box(0, 30, 262, 230, p["card"], p["line"], lift=True)
     body += text(18, 58, "reason-react/demo/main.re", size=13, cls="mono", weight=700)
@@ -536,7 +476,7 @@ def compat(p):
     body += text(18, 234, "- (pps reason-react-ppx)", size=11, cls="mono orange")
     body += text(18, 250, "+ (pps melact-ppx)", size=11, cls="mono green")
     preview = "<main><section><h3>Stateful</h3>…"
-    lanes = [(40, "blue", "blue_soft", "React 18.3"), (150, "accent", "accent_soft", "melact")]
+    lanes = [(40, "blue", "blue_soft", "React 18.3"), (150, "accent", "accent_soft", "Melact")]
     for y, color, soft, name in lanes:
         body += curve(p, f"M264,145 C290,145 290,{y + 34} 312,{y + 34}", color, flow=True, width=1.8)
         body += box(316, y, 300, 68, p[soft], p[color], rx=12, width=1.4, lift=True)
@@ -551,6 +491,68 @@ def compat(p):
     body += text(766, 174, "the same after every click", size=11.5, cls="muted", anchor="middle")
     body += text(766, 204, "compat/run.sh", size=11.5, cls="mono green", anchor="middle")
     return svg(p, 880, 264, "reason-react's own demo, switched to melact with two dune lines, rendered by React 18.3 and by melact in jsdom: after mounting and after each of 32 clicks, 33 of 33 steps have identical DOM", body)
+
+
+
+def vdom(p):
+    body = text(0, 20, "React", size=16, weight=800) + text(52, 20, "builds a virtual DOM every render", size=13.5, cls="muted")
+    body += text(460, 20, "Melact", size=16, weight=800, cls="accent") + text(522, 20, "has no virtual DOM", size=13.5, cls="muted")
+    body += f'<line x1="440" y1="0" x2="440" y2="392" stroke="{p["line"]}" stroke-dasharray="3 5"/>'
+
+    nodes = [("div.counter", 0), ("button  onClick", 1), ("output  className", 1), ("button  onClick", 1), ("button  disabled", 1)]
+    for column, (x, caption) in enumerate([(0, "tree of render 1"), (226, "tree of render 2: all new objects")]):
+        body += text(x, 50, caption, size=11.5, cls="muted" if column == 0 else "orange", weight=600)
+        for i, (label, indent) in enumerate(nodes):
+            y = 62 + i * 34
+            fill, stroke = (p["card"], p["line"]) if column == 0 else (p["orange_soft"], p["orange"])
+            body += box(x + indent * 16, y, 188 - indent * 16, 26, fill, stroke, rx=7, width=1.2, lift=column == 1)
+            body += text(x + indent * 16 + 10, y + 17, label, size=11, cls="mono")
+            if column == 1:
+                body += arrow(p, 192, y + 13, 222 + indent * 16, y + 13, "orange", width=1.2)
+    body += text(207, 238, "diff", size=11, cls="orange", weight=700, anchor="middle")
+    steps = [
+        ("orange", "orange_soft", "5 elements + 5 props objects allocated"),
+        ("orange", "orange_soft", "5 nodes walked, every prop compared"),
+        ("green", "green_soft", "1 DOM write: the text \"2\""),
+    ]
+    for i, (color, soft, label) in enumerate(steps):
+        y = 260 + i * 36
+        body += box(0, y, 414, 28, p[soft], p[color], rx=14, width=1.2)
+        body += text(16, y + 19, label, size=12.5, cls=color, weight=600)
+
+    body += box(460, 36, 420, 150, p["card"], p["line"], rx=12, dash="4 4")
+    body += text(476, 58, "template · parsed once, never rebuilt, never compared", size=11.5, cls="faint", weight=600)
+    html = [
+        [("<div class=\"counter\">", "")],
+        [("  <button", ""), (" ●", "blue"), (">-</button>", "")],
+        [("  <output", ""), (" ●", "green"), (">", ""), ("●", "orange"), ("</output>", "")],
+        [("  <button", ""), (" ●", "blue"), (">+</button>", "")],
+        [("  <button", ""), (" ●", "blue"), ("●", "green"), (">reset</button>", "")],
+    ]
+    for i, parts in enumerate(html):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(476, 82 + i * 20, line, size=12, cls="mono faint", raw=True)
+    body += text(476, 178, "</div>", size=12, cls="mono faint")
+
+    body += text(460, 212, "render 2 builds one array of 6 values and compares each with ===", size=11.5, cls="accent", weight=600)
+    cells = [("fn", "blue", "swap"), ("\"\"", "green", "✓"), ("\"2\"", "orange", "write"),
+             ("fn", "blue", "swap"), ("fn", "blue", "swap"), ("None", "green", "✓")]
+    for i, (value, color, verdict) in enumerate(cells):
+        x = 460 + i * 70
+        soft = {"blue": "blue_soft", "green": "green_soft", "orange": "orange_soft"}[color]
+        body += box(x, 222, 62, 30, p[soft], p[color], rx=7, width=1.4, lift=color == "orange")
+        body += text(x + 31, 242, value, size=12, cls="mono", anchor="middle", weight=600)
+        body += text(x + 31, 268, verdict, size=10.5, cls=color, anchor="middle", weight=600)
+    steps = [
+        ("accent", "accent_soft", "1 array of 6 values allocated, markup untouched"),
+        ("accent", "accent_soft", "6 === checks; handlers swapped without the DOM"),
+        ("green", "green_soft", "1 DOM write: the text \"2\""),
+    ]
+    for i, (color, soft, label) in enumerate(steps):
+        y = 260 + 24 + i * 36
+        body += box(460, y, 420, 28, p[soft], p[color], rx=14, width=1.2)
+        body += text(476, y + 19, label, size=12.5, cls=color, weight=600)
+    return svg(p, 880, 396, "One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once, builds one array of 6 hole values, compares each with === and writes the same one text", body)
 
 def roadmap(p):
     stages = [
@@ -585,8 +587,8 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, hooks=hooks, dual=dual, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
-               runtime=runtime, events=events, updates=updates, roadmap=roadmap)
+FIGURES = dict(logo=logo, overview=overview, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
+               events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":
     out = Path(__file__).parent

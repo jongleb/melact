@@ -113,11 +113,11 @@ same signatures. Pure-OCaml reason-react code is the compatibility target.
 ## How it works
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/runtime-dark.svg">
-  <img src="assets/runtime.svg" alt="React allocates a new element tree on every render and diffs it node by node; melact builds only an array of hole values and compares each with ===, then writes the changed holes" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/vdom-dark.svg">
+  <img src="assets/vdom.svg" alt="One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once, builds one array of 6 hole values, compares each with === and writes the same one text" width="100%">
 </picture>
 
-*The same update in both: the two middle steps are the difference.*
+*No virtual DOM: the DOM writes are the same, what disappears is the copy of the tree that React rebuilds and walks on every render.*
 
 ### JSX becomes a template and a hole array
 
@@ -229,12 +229,6 @@ builds new values, so this rarely matters, but it is a rule rather than an optim
 
 ## Status
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/dual-dark.svg">
-  <img src="assets/dual.svg" alt="One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 11 tests pass in both" width="100%">
-</picture>
-
-*The compatibility check that matters: the same reason-react code, built against React and against melact, passes the same assertions.*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/compat-dark.svg">
