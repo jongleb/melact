@@ -3,3 +3,4 @@ _opam/
 node_modules/
 *.install
 _compat/
+_publish/
