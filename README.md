@@ -39,7 +39,7 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 > Melact has a sibling, **Meltea**: the Elm architecture in OCaml, pure functions everywhere,
 > views in mlx. Both share one Svelte-like compiler and a runtime that tends to zero. See
-> [`docs/vision.md`](docs/vision.md).
+> [Meltea](#meltea) below and [`docs/vision.md`](docs/vision.md).
 
 Take a reason-react + Melange app, change two lines in its `dune` files:
 
@@ -231,6 +231,44 @@ Change detection is physical equality, exactly as in Elm. Code that mutates an a
 record in place and passes the same reference back will not re-render that part. Idiomatic OCaml
 builds new values, so this rarely matters, but it is a rule rather than an optimisation.
 
+## Meltea
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/family-dark.svg">
+  <img src="assets/family.svg" alt="Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler and the shared runtime; Melact alone adds hook slots and an update scheduler" width="100%">
+</picture>
+
+Meltea is the Elm architecture in OCaml: a model, messages, a pure `update` and a pure `view`
+in mlx. No hooks and no components with state: an event handler is a message.
+
+```ocaml
+type message = Increment | Decrement | Reset
+
+let update message count =
+  match message with Increment -> count + 1 | Decrement -> count - 1 | Reset -> 0
+
+let view count =
+  <div className="counter">
+    <button onClick=Decrement>(Html.text "-")</button>
+    <output>(Html.int count)</output>
+    <button onClick=Increment>(Html.text "+")</button>
+    <button onClick=Reset disabled=(count = 0)>(Html.text "reset")</button>
+  </div>
+
+let () = Option.iter (fun root -> ignore (Program.sandbox ~init:0 ~update ~view root)) root
+```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/loop-dark.svg">
+  <img src="assets/loop.svg" alt="The Meltea loop: a DOM event becomes a message, the pure update returns the next model, the pure view gives the hole values, each is compared with === and only the changed one is written to the DOM" width="100%">
+</picture>
+
+`meltea-ppx` compiles the view with the same template compiler as `melact-ppx`. `onClick=Increment`
+sends a message, `onInput` and `onKeyDown` take a function of the value or key, `onCheck` of the
+checked state. `Program.sandbox` and `Program.element` run it, with `Cmd` and `Sub` as plain
+values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries meltea)` and
+`(pps melange.ppx meltea-ppx)`. Example: [`examples/counter`](examples/counter/main.mlx).
+
 ## Status
 
 
@@ -247,7 +285,7 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 |---|---|
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
 | **Tests** | 63 vitest + jsdom tests: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
-| **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx) in reason-react style, and [`examples/counter`](examples/counter/main.ml) hand-written against `View` |
+| **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx), Meltea |
 | **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, real hydration, benchmarks, SSR |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 

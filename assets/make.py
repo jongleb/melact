@@ -554,6 +554,74 @@ def vdom(p):
         body += text(476, y + 19, label, size=12.5, cls=color, weight=600)
     return svg(p, 880, 396, "One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once, builds one array of 6 hole values, compares each with === and writes the same one text", body)
 
+
+def family(p):
+    def source(x, title, subtitle, color, lines):
+        out = box(x, 30, 410, 150, p["card"], p[color], rx=14, width=1.6, lift=True)
+        out += text(x + 18, 56, title, size=15, weight=800, cls=color)
+        out += text(x + 18 + len(title) * 9 + 8, 56, subtitle, size=12, cls="muted")
+        for i, parts in enumerate(lines):
+            line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+            out += text(x + 18, 84 + i * 20, line, size=11.5, cls="mono", raw=True)
+        return out
+
+    body = text(0, 18, "two front ends, one compiler, one runtime", size=12.5, cls="muted", weight=600)
+    body += source(0, "Meltea", "the Elm architecture, pure functions", "accent", [
+        [("let view count =", "")],
+        [("  <button onClick=", ""), ("Increment", "accent"), (">", "")],
+        [("    (Html.int count)", "")],
+        [("  </button>", "")],
+    ])
+    body += source(470, "Melact", "pretends to be React", "blue", [
+        [("let[@react.component] make () =", "")],
+        [("  let n, set = ", ""), ("React.useState", "blue"), (" … in", "")],
+        [("  <button onClick=(fun _ -> set …)>", "")],
+        [("    (React.int n)</button>", "")],
+    ])
+    for x, color, label, note in [(0, "accent", "meltea-ppx", "messages, no hooks, no components"),
+                                  (470, "blue", "melact-ppx", "[@react.component], hook keys")]:
+        body += arrow(p, x + 205, 182, x + 205, 202, color, flow=True)
+        body += box(x + 105, 206, 200, 30, p[color + "_soft"], p[color], rx=15, width=1.4)
+        body += text(x + 205, 226, label, size=12.5, cls=f"mono {color}", weight=700, anchor="middle")
+        body += text(x + 205, 254, note, size=11, cls="muted", anchor="middle")
+    body += curve(p, "M205,262 C205,286 330,282 330,300", "accent", flow=True)
+    body += curve(p, "M675,262 C675,286 550,282 550,300", "blue", flow=True)
+    body += box(200, 304, 480, 62, p["card"], p["text"], rx=14, width=1.6, lift=True)
+    body += f'<rect x="200" y="304" width="480" height="5" rx="2.5" fill="url(#glow)"/>'
+    body += text(440, 330, "the shared compiler", size=14.5, weight=800, anchor="middle")
+    body += text(440, 352, "static markup → template · dynamic parts → holes with paths · DOM props table",
+                 size=11.5, cls="muted", anchor="middle")
+    body += arrow(p, 440, 368, 440, 392, "muted", flow=True)
+    body += box(110, 396, 520, 50, p["card"], p["line"], rx=14, lift=True)
+    body += text(370, 418, "shared runtime", size=13.5, weight=700, anchor="middle")
+    body += text(370, 436, "clone a template · write changed holes · keyed moves · delegated events",
+                 size=11, cls="muted", anchor="middle")
+    body += box(642, 396, 238, 50, p["blue_soft"], p["blue"], rx=14)
+    body += text(761, 418, "Melact only", size=13, weight=700, cls="blue", anchor="middle")
+    body += text(761, 436, "hook slots · update scheduler", size=11, cls="muted", anchor="middle")
+    return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates and dynamic parts into holes, and the shared runtime that clones templates, writes changed holes, moves keyed rows and delegates events; Melact alone adds hook slots and an update scheduler", body)
+
+
+def loop(p):
+    stops = [
+        (0, "click", "a DOM event", "orange"),
+        (150, "Increment", "the message", "accent"),
+        (300, "update", "pure: model → model", "accent"),
+        (450, "view", "pure: model → holes", "accent"),
+        (600, "\"42\" != \"41\"", "=== per hole", "blue"),
+        (750, "text \"42\"", "one DOM write", "green"),
+    ]
+    body = text(0, 18, "the Meltea loop: everything between the event and the write is a pure function", size=12.5, cls="muted", weight=600)
+    for i, (x, title, note, color) in enumerate(stops):
+        body += box(x, 40, 130, 64, p[color + "_soft"], p[color], rx=12, width=1.5, lift=True)
+        body += text(x + 65, 68, title, size=13, weight=700, cls="mono" if i in (1, 4, 5) else "", anchor="middle")
+        body += text(x + 65, 90, note, size=11, cls="muted", anchor="middle")
+        if i < len(stops) - 1:
+            body += arrow(p, x + 132, 72, x + 146, 72, "accent", flow=True)
+    body += curve(p, "M815,106 C815,170 65,170 65,108", "muted", flow=True)
+    body += text(440, 178, "the next event", size=11.5, cls="muted", anchor="middle")
+    return svg(p, 880, 186, "The Meltea loop: a DOM event becomes a message, the pure update returns the next model, the pure view gives the hole values, each is compared with === and only the changed one is written to the DOM; the next event starts the loop again", body)
+
 def roadmap(p):
     stages = [
         ("View", "templates, holes,", "reconcile, events"),
@@ -587,7 +655,7 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
+FIGURES = dict(logo=logo, overview=overview, family=family, loop=loop, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
                events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":
