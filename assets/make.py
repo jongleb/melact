@@ -1,0 +1,390 @@
+"""Writes the README figures, each in a light and a dark palette.
+
+Run from the repository root: python3 assets/make.py
+"""
+
+from html import escape
+from pathlib import Path
+
+LIGHT = dict(
+    text="#1f2328", muted="#59636e", faint="#8c959f", card="#f6f8fa", line="#d0d7de",
+    accent="#8250df", accent_soft="#f5f0ff", green="#1a7f37", green_soft="#ecfdf0",
+    orange="#bc4c00", orange_soft="#fff4e8", blue="#0969da", blue_soft="#eef6ff",
+)
+DARK = dict(
+    text="#e6edf3", muted="#9198a1", faint="#6e7681", card="#161b22", line="#30363d",
+    accent="#b58cff", accent_soft="#221a38", green="#3fb950", green_soft="#12261a",
+    orange="#f0883e", orange_soft="#2b1d12", blue="#58a6ff", blue_soft="#0f2136",
+)
+
+SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+
+
+def svg(p, width, height, label, body):
+    markers = "".join(
+        f'<marker id="arrow-{name}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
+        f'markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{p[name]}"/></marker>'
+        for name in ("muted", "accent", "green", "orange", "blue")
+    )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
+        f'height="{height}" role="img" aria-label="{escape(label)}"><style>'
+        f"text {{ font-family: {SANS}; fill: {p['text']}; }}"
+        f".mono {{ font-family: {MONO}; white-space: pre; }}"
+        f".muted {{ fill: {p['muted']}; }} .faint {{ fill: {p['faint']}; }}"
+        f".accent {{ fill: {p['accent']}; }} .green {{ fill: {p['green']}; }}"
+        f".orange {{ fill: {p['orange']}; }} .blue {{ fill: {p['blue']}; }}"
+        ".flow { stroke-dasharray: 6 8; animation: flow 1.1s linear infinite; }"
+        "@keyframes flow { to { stroke-dashoffset: -28; } }"
+        ".pulse { animation: pulse 2.2s ease-in-out infinite; }"
+        "@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }"
+        "@media (prefers-reduced-motion: reduce) { .flow, .pulse { animation: none; } }"
+        f"</style><defs>{markers}</defs>{body}</svg>"
+    )
+
+
+def box(x, y, w, h, fill, stroke, rx=12, dash=None, width=1):
+    dashed = f' stroke-dasharray="{dash}"' if dash else ""
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{fill}" '
+            f'stroke="{stroke}" stroke-width="{width}"{dashed}/>')
+
+
+def text(x, y, content, size=13, cls="", weight=None, anchor="start", raw=False, fill=None):
+    attrs = f' class="{cls}"' if cls else ""
+    attrs += f' style="fill:{fill}"' if fill else ""
+    attrs += f' font-weight="{weight}"' if weight else ""
+    attrs += f' text-anchor="{anchor}"' if anchor != "start" else ""
+    body = content if raw else escape(content)
+    return f'<text x="{x}" y="{y}" font-size="{size}" xml:space="preserve"{attrs}>{body}</text>'
+
+
+def span(content, cls):
+    return f'<tspan class="{cls}">{escape(content)}</tspan>'
+
+
+def arrow(p, x1, y1, x2, y2, color="muted", flow=False, width=1.6):
+    cls = ' class="flow"' if flow else ""
+    return (f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{p[color]}" '
+            f'stroke-width="{width}" marker-end="url(#arrow-{color})"{cls}/>')
+
+
+def curve(p, d, color="muted", flow=False, width=1.6):
+    cls = ' class="flow"' if flow else ""
+    return (f'<path d="{d}" fill="none" stroke="{p[color]}" stroke-width="{width}" '
+            f'marker-end="url(#arrow-{color})"{cls}/>')
+
+
+def logo(p):
+    body = (
+        box(6, 6, 108, 108, p["card"], p["text"], rx=26, width=3)
+        + f'<polyline points="34,38 18,60 34,82" fill="none" stroke="{p["text"]}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+        + f'<polyline points="86,38 102,60 86,82" fill="none" stroke="{p["text"]}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+        + box(42, 44, 36, 32, "none", p["muted"], rx=9, dash="5 4", width=2.2)
+        + f'<rect x="48" y="50" width="24" height="20" rx="6" fill="{p["accent"]}" class="pulse"/>'
+    )
+    return svg(p, 120, 120, "melact: a template with a hole in it", body)
+
+
+def stats(p):
+    cards = [
+        ("2", "moves to swap two rows", "out of 1,000 keyed rows"),
+        ("999", "moves to reverse 1,000 rows", "n − 1, the fewest possible"),
+        ("0", "DOM calls to swap a handler", "handlers live on the element"),
+        ("0 kB", "of React in the bundle", "no virtual DOM, no fiber"),
+    ]
+    body = ""
+    for i, (number, title, note) in enumerate(cards):
+        x = i * 225
+        body += box(x + 1, 1, 203, 130, p["card"], p["line"], rx=14)
+        body += f'<rect x="{x + 22}" y="22" width="28" height="4" rx="2" fill="{p["accent"]}"/>'
+        body += text(x + 22, 74, number, size=42, cls="accent", weight=700)
+        body += text(x + 22, 98, title, size=14.5, weight=600)
+        body += text(x + 22, 118, note, size=12.5, cls="muted")
+    return svg(p, 880, 132, "2 DOM moves to swap two of 1,000 rows, 999 moves to reverse 1,000 rows, 0 DOM calls to replace a handler, 0 kB of React in the bundle", body)
+
+
+def pipeline(p):
+    body = ""
+    heads = [(0, "1 · You write JSX in mlx"), (290, "2 · melact-ppx hoists a template"), (650, "3 · The DOM")]
+    for x, title in heads:
+        body += text(x + 2, 22, title, size=14, weight=600)
+
+    body += box(0, 40, 230, 236, p["card"], p["line"])
+    jsx = [
+        [("<div className=\"counter\">", "")],
+        [("  <button onClick=", ""), ("dec", "accent"), (">", "")],
+        [("    (React.string \"-\")", "")],
+        [("  </button>", "")],
+        [("  <output className=", ""), ("tone", "accent"), (">", "")],
+        [("    ", ""), ("(React.int count)", "accent")],
+        [("  </output>", "")],
+        [("</div>", "")],
+    ]
+    for i, parts in enumerate(jsx):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(14, 74 + i * 22, line, size=12, cls="mono", raw=True)
+    body += text(14, 262, "purple: dynamic, everything else static", size=11.5, cls="muted")
+
+    body += box(290, 40, 300, 118, p["accent_soft"], p["accent"], dash="4 4")
+    body += text(306, 62, "once, at module level", size=11.5, cls="accent", weight=600)
+    html = [
+        [("<div class=\"counter\">", "")],
+        [(" <button>-</button>", "")],
+        [(" <output", ""), (" ●", "accent"), (">", ""), ("●", "accent"), ("</output>", "")],
+        [("</div>", "")],
+    ]
+    for i, parts in enumerate(html):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(306, 84 + i * 18, line, size=12, cls="mono", raw=True)
+    body += text(486, 84, "holes", size=11.5, cls="muted")
+    for i, hole in enumerate(["Handler [0]", "Attr [1] class", "Text [1] @0"]):
+        body += text(486, 102 + i * 16, hole, size=10.5, cls="mono accent")
+
+    body += box(290, 172, 300, 104, p["card"], p["line"])
+    body += text(306, 194, "every render: one array", size=11.5, cls="blue", weight=600)
+    for i, line in enumerate(["[| HHandler dec;", "   HAttr (Some tone);", "   HText \"42\" |]"]):
+        body += text(306, 216 + i * 18, line, size=12, cls="mono")
+    body += text(470, 234, "no tags,", size=11.5, cls="muted")
+    body += text(470, 250, "no attributes", size=11.5, cls="muted")
+
+    body += box(650, 40, 230, 236, p["card"], p["line"])
+    tree = [
+        (664, 76, "div.counter", ""),
+        (680, 106, "button", "click → dec"),
+        (696, 130, "\"-\"", ""),
+        (680, 166, "output", "class=\"warm\""),
+        (696, 196, "\"42\"", "text node"),
+    ]
+    for x, y, node, hole in tree:
+        body += text(x, y, node, size=12.5, cls="mono")
+        if hole:
+            body += box(774, y - 14, 96, 20, p["accent_soft"], p["accent"], rx=10)
+            body += text(822, y, hole, size=10.5, cls="accent", anchor="middle")
+    body += f'<path d="M670,82 V166 M670,106 H676 M670,166 H676 M686,112 V130 M686,130 H692 M686,172 V196 M686,196 H692" fill="none" stroke="{p["line"]}" stroke-width="1.4"/>'
+    body += text(664, 236, "3 holes bound by path,", size=11.5, cls="muted")
+    body += text(664, 254, "the rest is never touched", size=11.5, cls="muted")
+
+    body += arrow(p, 234, 140, 284, 140, "accent", flow=True)
+    body += text(259, 124, "ppx", size=11, cls="muted", anchor="middle")
+    body += arrow(p, 594, 98, 644, 98, "accent", flow=True)
+    body += text(619, 84, "clone", size=11, cls="muted", anchor="middle")
+    body += arrow(p, 594, 224, 644, 224, "blue", flow=True)
+    body += text(619, 210, "patch", size=11, cls="muted", anchor="middle")
+    return svg(p, 880, 280, "mlx JSX is compiled by melact-ppx into a template hoisted to module level, with three holes; each render builds only an array of three hole values; the template is cloned once per mount and the hole array patches the clone", body)
+
+
+def patch(p):
+    columns = [(16, "hole"), (190, "render 41"), (340, "render 42"), (500, "compared"), (630, "DOM work")]
+    body = "".join(text(x, 22, c, size=12, cls="muted", weight=600) for x, c in columns)
+    rows = [
+        ("HHandler", "onClick", "fun#1", "fun#2", "never", "muted", "property swapped, 0 DOM calls", "blue", None),
+        ("HAttr", "class", "\"warm\"", "\"warm\"", "=== ✓", "green", "skipped", "green", None),
+        ("HText", "count", "\"41\"", "\"42\"", "!==", "orange", "text.data = \"42\"", "orange", "pulse"),
+        ("HChild", "list", "rows #7", "rows #7", "=== ✓", "green", "whole subtree skipped", "green", None),
+    ]
+    for i, (kind, what, old, new, compared, ccls, work, wcls, anim) in enumerate(rows):
+        y = 36 + i * 54
+        changed = ccls == "orange"
+        body += box(0, y, 880, 44, p["orange_soft"] if changed else p["card"], p["orange"] if changed else p["line"], rx=10)
+        body += text(16, y + 27, kind, size=13, cls="mono", weight=600)
+        body += text(96, y + 27, what, size=12, cls="muted")
+        for x, value in ((190, old), (340, new)):
+            body += box(x, y + 10, 118, 24, "none", p["line"], rx=6)
+            body += text(x + 59, y + 27, value, size=12, cls="mono", anchor="middle")
+        body += arrow(p, 312, y + 22, 334, y + 22, "muted", width=1.2)
+        body += text(500, y + 27, compared, size=13, cls=f"mono {ccls}", weight=600)
+        body += text(630, y + 27, work, size=12.5, cls=f"{wcls}{' pulse' if anim else ''}", weight=600 if changed else None)
+    body += text(0, 268, "One patch: a template identity check, then one === per hole. Static markup is not in the array, so it is never compared.", size=12, cls="muted")
+    return svg(p, 880, 276, "Patching compares hole values with ===: the handler is swapped without DOM calls, the unchanged class and the unchanged child list are skipped, only the changed text is written", body)
+
+
+def reconcile(p):
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "e", "c", "d", "b", "f"]
+    kind = {"a": "muted", "f": "muted", "c": "green", "d": "green", "b": "accent", "e": "accent"}
+    x0, step, top, bottom = 70, 80, 52, 196
+
+    def chip(x, y, key):
+        color = kind[key]
+        fill = {"muted": p["card"], "green": p["green_soft"], "accent": p["accent_soft"]}[color]
+        stroke = {"muted": p["line"], "green": p["green"], "accent": p["accent"]}[color]
+        return box(x - 26, y, 52, 34, fill, stroke, rx=8, width=1.4) + text(x, y + 22, key, size=14, cls="mono", weight=600, anchor="middle")
+
+    body = text(0, 74, "old", size=12, cls="muted", weight=600) + text(0, 218, "new", size=12, cls="muted", weight=600)
+    for i, key in enumerate(old):
+        j = new.index(key)
+        x1, x2 = x0 + i * step, x0 + j * step
+        color = {"muted": "muted", "green": "green", "accent": "accent"}[kind[key]]
+        if i == j:
+            body += arrow(p, x1, top + 36, x2, bottom - 4, color)
+        else:
+            body += curve(p, f"M{x1},{top + 36} C{x1},{top + 90} {x2},{bottom - 60} {x2},{bottom - 4}", color, flow=True, width=2)
+    for i, key in enumerate(old):
+        body += chip(x0 + i * step, top, key)
+    for j, key in enumerate(new):
+        body += chip(x0 + j * step, bottom, key)
+
+    legend = [
+        ("muted", "common prefix and suffix: patched in place"),
+        ("green", "longest increasing run of old positions: stays"),
+        ("accent", "everything else: one insertBefore each"),
+    ]
+    for i, (color, label) in enumerate(legend):
+        y = 258 + i * 20
+        body += f'<rect x="0" y="{y - 10}" width="14" height="10" rx="3" fill="{p[color]}"/>'
+        body += text(22, y, label, size=12, cls="muted")
+
+    body += box(540, 24, 340, 300, p["card"], p["line"], rx=14)
+    body += text(560, 52, "Measured in test/view (jsdom), 1,000 rows", size=12.5, cls="muted", weight=600)
+    numbers = [
+        ("swap rows 1 and 998", "2 moves"),
+        ("reverse all", "999 moves"),
+        ("remove one row", "999 rows kept"),
+        ("append 1,000", "1,000 kept"),
+        ("update every 10th", "every node kept"),
+        ("replace all keys", "1,000 new"),
+    ]
+    for i, (op, result) in enumerate(numbers):
+        y = 92 + i * 38
+        body += text(560, y, op, size=13)
+        body += text(860, y, result, size=13, cls="accent", weight=700, anchor="end")
+        if i < len(numbers) - 1:
+            body += f'<line x1="560" y1="{y + 15}" x2="860" y2="{y + 15}" stroke="{p["line"]}"/>'
+    return svg(p, 880, 326, "Keyed reconcile: the common prefix a and suffix f stay, c and d form the longest increasing run of old positions and stay, b and e are moved with one insertBefore each. Measured on 1,000 rows: swap 2 moves, reverse 999 moves, remove one keeps 999 rows", body)
+
+
+def runtime(p):
+    lanes = [
+        ("React with a virtual DOM", 0, [
+            ("setState", None, "line"), ("render component", None, "line"),
+            ("new element tree", "every tag allocated", "orange"),
+            ("diff the trees", "node by node", "orange"), ("commit changes", None, "line")]),
+        ("melact", 132, [
+            ("setState", None, "line"), ("render component", None, "line"),
+            ("hole array", "static markup: nothing", "accent"),
+            ("=== per hole", "no tree to walk", "accent"), ("write changed holes", None, "line")]),
+    ]
+    body = ""
+    for title, y, steps in lanes:
+        body += text(0, y + 18, title, size=14, weight=600)
+        for i, (head, note, tone) in enumerate(steps):
+            x = i * 182
+            fill = {"line": p["card"], "orange": p["orange_soft"], "accent": p["accent_soft"]}[tone]
+            stroke = {"line": p["line"], "orange": p["orange"], "accent": p["accent"]}[tone]
+            body += box(x, y + 32, 152, 68, fill, stroke, rx=12, width=1.4)
+            if note:
+                body += text(x + 76, y + 62, head, size=13.5, weight=600, anchor="middle")
+                body += text(x + 76, y + 82, note, size=11.5, cls="orange" if tone == "orange" else "accent", anchor="middle")
+            else:
+                body += text(x + 76, y + 71, head, size=13.5, weight=600, anchor="middle")
+            if i < len(steps) - 1:
+                body += arrow(p, x + 154, y + 66, x + 178, y + 66, "accent" if y else "muted", flow=bool(y))
+    return svg(p, 880, 236, "React allocates a new element tree on every render and diffs it node by node; melact builds only an array of hole values and compares each with ===, then writes the changed holes", body)
+
+
+def events(p):
+    nodes = [("document", 60, "1 listener per event type"), ("div", 108, "$$melact:click = outer"), ("ul", 156, None),
+             ("li", 204, None), ("button", 252, "$$melact:click = inner")]
+    body = ""
+    for name, y, note in nodes:
+        handler = note and note.startswith("$$")
+        body += box(150, y - 22, 120, 32, p["accent_soft"] if handler else p["card"], p["accent"] if handler else p["line"], rx=8, width=1.4)
+        body += text(210, y - 1, name, size=13, cls="mono", weight=600, anchor="middle")
+        if note:
+            body += text(370, y - 1, note, size=11.5, cls="mono accent" if handler else "muted")
+    body += curve(p, "M146,236 C96,200 96,80 146,48", "muted", flow=True)
+    body += text(18, 146, "native", size=11.5, cls="muted")
+    body += text(18, 162, "bubbling", size=11.5, cls="muted")
+    body += curve(p, "M274,240 C336,200 336,130 274,96", "accent", flow=True, width=2)
+    body += text(326, 172, "walk", size=11.5, cls="accent", weight=600)
+    body += f'<circle cx="152" cy="246" r="6" fill="{p["orange"]}" class="pulse"/>'
+    body += text(118, 276, "click", size=11.5, cls="orange", weight=600)
+    body += text(150, 26, "melact walks from the target up, calling each $$melact:click; stopPropagation ends the walk", size=12, cls="muted")
+
+    body += box(560, 40, 320, 236, p["card"], p["line"], rx=14)
+    body += text(580, 68, "Replacing a handler", size=14, weight=600)
+    body += text(580, 92, "el[\"$$melact:click\"] = next", size=12, cls="mono accent")
+    body += text(580, 114, "0 addEventListener, 0 setAttribute", size=12, cls="muted")
+    body += text(580, 150, "Non-bubbling events", size=14, weight=600)
+    body += text(580, 174, "scroll, focus, load …", size=12, cls="muted")
+    body += text(580, 196, "one listener on the element,", size=12, cls="muted")
+    body += text(580, 214, "removed on unmount", size=12, cls="muted")
+    body += text(580, 250, "Delegated: click, input, keydown,", size=12, cls="muted")
+    body += text(580, 268, "pointer*, mouse*, touch* … 22 types", size=12, cls="muted")
+    return svg(p, 880, 296, "One listener per event type on the document; on a click melact walks from the target up through parent nodes and calls the handler stored on each element; replacing a handler is one property write", body)
+
+
+def updates(p):
+    body = box(0, 0, 150, 26, p["accent_soft"], p["accent"], rx=13)
+    body += text(75, 18, "milestone 2 · planned", size=11.5, cls="accent", weight=600, anchor="middle")
+    nodes = {
+        "App": (230, 64, "faint"), "Header": (110, 150, "faint"), "TodoList": (350, 150, "accent"),
+        "Row a": (230, 240, "green"), "Row b": (350, 240, "accent"), "Row c": (470, 240, "green"),
+    }
+    edges = [("App", "Header"), ("App", "TodoList"), ("TodoList", "Row a"), ("TodoList", "Row b"), ("TodoList", "Row c")]
+    for a, b in edges:
+        (x1, y1, _), (x2, y2, _) = nodes[a], nodes[b]
+        body += f'<line x1="{x1}" y1="{y1 + 18}" x2="{x2}" y2="{y2 - 18}" stroke="{p["line"]}" stroke-width="1.4"/>'
+    for name, (x, y, tone) in nodes.items():
+        fill = {"faint": p["card"], "accent": p["accent_soft"], "green": p["green_soft"]}[tone]
+        stroke = {"faint": p["line"], "accent": p["accent"], "green": p["green"]}[tone]
+        body += box(x - 50, y - 18, 100, 36, fill, stroke, rx=10, width=1.6 if tone != "faint" else 1, dash="4 3" if tone == "green" else None)
+        body += text(x, y + 5, name, size=13, cls="faint" if tone == "faint" else "", weight=600, anchor="middle")
+    body += f'<circle cx="400" cy="132" r="9" fill="{p["orange"]}" class="pulse"/>'
+    body += text(414, 124, "setState", size=11.5, cls="orange", weight=600)
+    body += text(230, 288, "props tuple == → skipped", size=11, cls="green", anchor="middle")
+    body += text(470, 288, "props tuple == → skipped", size=11, cls="green", anchor="middle")
+    body += text(350, 288, "props changed", size=11, cls="accent", anchor="middle")
+
+    steps = [
+        ("1", "The setter marks TodoList dirty", "nothing renders yet"),
+        ("2", "One microtask flushes", "dirty instances, parents first"),
+        ("3", "TodoList renders again", "App and Header are not visited"),
+        ("4", "Each Row gets a props tuple", "all fields == → the subtree is skipped"),
+    ]
+    for i, (n, head, note) in enumerate(steps):
+        y = 54 + i * 60
+        body += f'<circle cx="594" cy="{y - 5}" r="12" fill="{p["accent"]}"/>'
+        body += text(594, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
+        body += text(616, y, head, size=13.5, weight=600)
+        body += text(616, y + 18, note, size=12, cls="muted")
+    return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows whose props are physically equal are skipped", body)
+
+
+def roadmap(p):
+    stages = [
+        ("View", "templates, holes,", "reconcile, events"),
+        ("Hooks", "instances, useState,", "effects, context"),
+        ("melact-ppx", "JSX → templates", "Reason, OCaml, mlx"),
+        ("Compat", "ReactDOM, ReactEvent,", "TodoMVC unmodified"),
+        ("Speed", "js-framework-", "benchmark"),
+        ("SSR", "to_string,", "hydration"),
+        ("Publish", "opam, CI,", "README numbers"),
+    ]
+    step = 124
+    body = f'<line x1="66" y1="44" x2="{66 + step * 6}" y2="44" stroke="{p["line"]}" stroke-width="3"/>'
+    body += f'<line x1="66" y1="44" x2="{66 + step // 2}" y2="44" stroke="{p["accent"]}" stroke-width="3" class="flow"/>'
+    for i, (name, a, b) in enumerate(stages):
+        x = 66 + i * step
+        if i == 0:
+            body += f'<circle cx="{x}" cy="44" r="16" fill="{p["accent"]}"/>'
+            body += f'<path d="M{x - 7},44 l5,5 l9,-10" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
+            body += text(x, 16, "done", size=11, cls="accent", weight=700, anchor="middle")
+        else:
+            body += f'<circle cx="{x}" cy="44" r="13" fill="{p["card"]}" stroke="{p["line"]}" stroke-width="2"/>'
+            body += text(x, 49, str(i + 1), size=12, cls="muted", weight=700, anchor="middle")
+        body += text(x, 84, name, size=13.5, weight=600, anchor="middle")
+        body += text(x, 104, a, size=11.5, cls="muted", anchor="middle")
+        body += text(x, 120, b, size=11.5, cls="muted", anchor="middle")
+    return svg(p, 880, 132, "Roadmap: 1 View done; then hooks, melact-ppx, compatibility, speed, SSR, publish", body)
+
+
+FIGURES = dict(logo=logo, stats=stats, pipeline=pipeline, patch=patch, reconcile=reconcile,
+               runtime=runtime, events=events, updates=updates, roadmap=roadmap)
+
+if __name__ == "__main__":
+    out = Path(__file__).parent
+    for name, draw in FIGURES.items():
+        (out / f"{name}.svg").write_text(draw(LIGHT))
+        (out / f"{name}-dark.svg").write_text(draw(DARK))
