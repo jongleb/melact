@@ -35,28 +35,24 @@ Holes at every depth; markers only between neighbours that would merge:
             let __melhole_changed_2 = Melhole.View.check __melhole_block 2 name in
             (match __melhole_changed_2 with
              | Melhole.View.Unchanged -> ()
-             | _ ->
-                 Melhole.View.put __melhole_block 0
-                   (Melhole.View.HText (name : string)));
+             | _ -> Melhole.View.put_text __melhole_block 0 (name : string));
             (match __melhole_changed_1 with
              | Melhole.View.Unchanged -> ()
              | _ ->
-                 Melhole.View.put __melhole_block 1
-                   (Melhole.View.HChild
-                      (let React.Element __melhole_child = extra in
-                       __melhole_child)));
+                 Melhole.View.put_child __melhole_block 1
+                   (let React.Element __melhole_child = extra in
+                    __melhole_child));
             (match __melhole_changed_1 with
              | Melhole.View.Unchanged -> ()
              | _ ->
-                 Melhole.View.put __melhole_block 2
-                   (Melhole.View.HChild
-                      (let React.Element __melhole_child = extra in
-                       __melhole_child)));
+                 Melhole.View.put_child __melhole_block 2
+                   (let React.Element __melhole_child = extra in
+                    __melhole_child));
             (match __melhole_changed_0 with
              | Melhole.View.Unchanged -> ()
              | _ ->
-                 Melhole.View.put __melhole_block 3
-                   (Melhole.View.HText (string_of_int (count : int))));
+                 Melhole.View.put_text __melhole_block 3
+                   (string_of_int (count : int)));
             ()))
 
 Every kind of prop, static and dynamic, required and optional:
@@ -102,58 +98,49 @@ Every kind of prop, static and dynamic, required and optional:
               (match __melhole_changed_4 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put __melhole_block 0
-                     (Melhole.View.HAttr (Some (text : string))));
+                   Melhole.View.put_attr __melhole_block 0
+                     (Some (text : string)));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put __melhole_block 1
-                     (Melhole.View.HAttr
-                        (if (flag : bool) then Some "" else None)));
+                   Melhole.View.put_attr __melhole_block 1
+                     (if (flag : bool) then Some "" else None));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put __melhole_block 2
-                     (Melhole.View.HAttr
-                        (Some (if (flag : bool) then "true" else "false"))));
+                   Melhole.View.put_attr __melhole_block 2
+                     (Some (if (flag : bool) then "true" else "false")));
               (match __melhole_changed_3 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put __melhole_block 3
-                     (Melhole.View.HAttr (Some (string_of_int (tab : int)))));
+                   Melhole.View.put_attr __melhole_block 3
+                     (Some (string_of_int (tab : int))));
               (match __melhole_changed_4 with
                | Melhole.View.Unchanged -> ()
-               | _ ->
-                   Melhole.View.put __melhole_block 4
-                     (Melhole.View.HProp (text : string)));
+               | _ -> Melhole.View.put_prop __melhole_block 4 (text : string));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
-               | _ ->
-                   Melhole.View.put __melhole_block 5
-                     (Melhole.View.HProp (flag : bool)));
+               | _ -> Melhole.View.put_prop __melhole_block 5 (flag : bool));
               (match __melhole_changed_2 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put __melhole_block 6
-                     (Melhole.View.HStyle (ReactDOM.Style.declarations style)));
-              Melhole.View.put __melhole_block 7
-                (Melhole.View.HRef (ReactDOM.Ref.attach ref));
+                   Melhole.View.put_style __melhole_block 6
+                     (ReactDOM.Style.declarations style));
+              Melhole.View.put_ref __melhole_block 7 (ReactDOM.Ref.attach ref);
               (match __melhole_changed_1 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put __melhole_block 8
-                     (Melhole.View.HAttr (maybe : string option)));
-              Melhole.View.put __melhole_block 9
-                (Melhole.View.HHandler
-                   (fun __melhole_event ->
-                      onInput (ReactEvent.Form.Native __melhole_event)));
-              Melhole.View.put __melhole_block 10
-                (Melhole.View.HHandler
-                   (fun __melhole_event ->
-                      Option.iter
-                        (fun handle ->
-                           handle (ReactEvent.Keyboard.Native __melhole_event))
-                        None));
+                   Melhole.View.put_attr __melhole_block 8
+                     (maybe : string option));
+              Melhole.View.put_handler __melhole_block 9
+                (fun __melhole_event ->
+                   onInput (ReactEvent.Form.Native __melhole_event));
+              Melhole.View.put_handler __melhole_block 10
+                (fun __melhole_event ->
+                   Option.iter
+                     (fun handle ->
+                        handle (ReactEvent.Keyboard.Native __melhole_event))
+                     None);
               ()))),
       (React.Element
          (Melhole.View.guarded __melhole_template_2 1
@@ -162,9 +149,7 @@ Every kind of prop, static and dynamic, required and optional:
                  Melhole.View.check __melhole_block 0 html in
                (match __melhole_changed_0 with
                 | Melhole.View.Unchanged -> ()
-                | _ ->
-                    Melhole.View.put __melhole_block 0
-                      (Melhole.View.HProp (html ## __html)));
+                | _ -> Melhole.View.put_prop __melhole_block 0 (html ## __html));
                ()))))
 
 A component with optional, defaulted and children props, and its signature:
@@ -202,15 +187,14 @@ A component with optional, defaulted and children props, and its signature:
                       (match __melhole_changed_1 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put __melhole_block 0
-                             (Melhole.View.HText (title : string)));
+                           Melhole.View.put_text __melhole_block 0
+                             (title : string));
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put __melhole_block 1
-                             (Melhole.View.HChild
-                                (let React.Element __melhole_child = children in
-                                 __melhole_child)));
+                           Melhole.View.put_child __melhole_block 1
+                             (let React.Element __melhole_child = children in
+                              __melhole_child));
                       ())) in
             __melhole_child))
   let __melhole_component_3 = Melhole.Component.make ~name:"Card.nothing"
@@ -259,13 +243,12 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put __melhole_block 0
-                             (Melhole.View.HAttr (Some (label : string))));
-                      Melhole.View.put __melhole_block 1
-                        (Melhole.View.HRef
-                           (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach
-                              (Option.map ReactDOM.Ref.domRef
-                                 (Js.Nullable.toOption ref))));
+                           Melhole.View.put_attr __melhole_block 0
+                             (Some (label : string)));
+                      Melhole.View.put_ref __melhole_block 1
+                        (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach
+                           (Option.map ReactDOM.Ref.domRef
+                              (Js.Nullable.toOption ref)));
                       ())) in
             __melhole_child))
 
@@ -307,8 +290,8 @@ Calls with children, keys and fragments:
                             (match __melhole_changed_0 with
                              | Melhole.View.Unchanged -> ()
                              | _ ->
-                                 Melhole.View.put __melhole_block 0
-                                   (Melhole.View.HText (item : string)));
+                                 Melhole.View.put_text __melhole_block 0
+                                   (item : string));
                             ())) in
                   __melhole_child))) items)
   let both =
@@ -368,8 +351,8 @@ Reason input:
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put __melhole_block 0
-                             (Melhole.View.HText ("Hello, " ^ name : string)));
+                           Melhole.View.put_text __melhole_block 0
+                             ("Hello, " ^ name : string));
                       ())) in
             __melhole_child))
 
@@ -399,8 +382,8 @@ mlx input:
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put __melhole_block 0
-                             (Melhole.View.HText ("Hello, " ^ name : string)));
+                           Melhole.View.put_text __melhole_block 0
+                             ("Hello, " ^ name : string));
                       ())) in
             __melhole_child))
 

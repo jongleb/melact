@@ -183,26 +183,26 @@ let mapper =
             in
             match requirement with
             | `Required ->
-                [%expr Melhole.View.HHandler (fun __melhole_event -> [%e value] [%e native])]
+                [%expr (fun __melhole_event -> [%e value] [%e native])]
             | `Optional ->
                 [%expr
-                  Melhole.View.HHandler
+                  
                     (fun __melhole_event -> Option.iter (fun handle -> handle [%e native]) [%e value])]);
         style =
           (fun loc requirement value ->
             match requirement with
-            | `Required -> [%expr Melhole.View.HStyle (ReactDOM.Style.declarations [%e value])]
+            | `Required -> [%expr (ReactDOM.Style.declarations [%e value])]
             | `Optional ->
                 [%expr
-                  Melhole.View.HStyle
+                  
                     (Option.fold ~none:[] ~some:ReactDOM.Style.declarations [%e value])]);
         reference =
           (fun loc requirement value ->
             match requirement with
-            | `Required -> [%expr Melhole.View.HRef (ReactDOM.Ref.attach [%e value])]
+            | `Required -> [%expr (ReactDOM.Ref.attach [%e value])]
             | `Optional ->
                 [%expr
-                  Melhole.View.HRef
+                  
                     (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
         classify = react_text;
         extra = (fun _ -> None);

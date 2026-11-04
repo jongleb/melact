@@ -256,29 +256,25 @@ def pipeline(p):
 
 
 def patch(p):
-    columns = [(16, "hole"), (190, "render 41"), (340, "render 42"), (500, "compared"), (630, "DOM work")]
+    columns = [(16, "local the view reads"), (220, "render 41 → 42"), (400, "check"), (500, "holes that read it"), (690, "DOM work")]
     body = "".join(text(x, 22, c, size=12, cls="muted", weight=600) for x, c in columns)
     rows = [
-        ("HHandler", "onClick", "fun#1", "fun#2", "never", "muted", "property swapped, 0 DOM calls", "blue", None),
-        ("HAttr", "class", "\"warm\"", "\"warm\"", "=== ✓", "green", "skipped", "green", None),
-        ("HText", "count", "\"41\"", "\"42\"", "!==", "orange", "text.data = \"42\"", "orange", "pulse"),
-        ("HChild", "list", "rows #7", "rows #7", "=== ✓", "green", "whole subtree skipped", "green", None),
+        ("count", "41 → 42", "changed", "orange", "text, disabled", "node.data = \"42\"", "orange", True),
+        ("tone", "\"\" → \"\"", "same", "green", "class", "class not even evaluated", "green", False),
+        ("initial", "0 → 0", "same", "green", "disabled (with count)", "evaluated, still false: no write", "green", False),
+        ("—", "handlers", "never", "blue", "3 × onClick", "swapped, no DOM call", "blue", False),
     ]
-    for i, (kind, what, old, new, compared, ccls, work, wcls, anim) in enumerate(rows):
+    for i, (name, change, verdict, vcls, holes, work, wcls, hot) in enumerate(rows):
         y = 36 + i * 54
-        changed = ccls == "orange"
-        body += box(0, y, 880, 44, p["orange_soft"] if changed else p["card"], p["orange"] if changed else p["line"], rx=10)
-        body += text(16, y + 27, kind, size=13, cls="mono", weight=600)
-        body += text(96, y + 27, what, size=12, cls="muted")
-        for x, value in ((190, old), (340, new)):
-            body += box(x, y + 10, 118, 24, "none", p["line"], rx=6)
-            body += text(x + 59, y + 27, value, size=12, cls="mono", anchor="middle")
-        body += arrow(p, 312, y + 22, 334, y + 22, "muted", width=1.2)
-        body += text(500, y + 27, compared, size=13, cls=f"mono {ccls}", weight=600)
-        body += text(630, y + 27, work, size=12.5, cls=f"{wcls}{' pulse' if anim else ''}", weight=600 if changed else None)
-    body += text(0, 268, "One patch: a template identity check, then one === per hole. Static markup is not in the array, so it is never compared.", size=12, cls="muted")
-    return svg(p, 880, 276, "Patching compares hole values with ===: the handler is swapped without DOM calls, the unchanged class and the unchanged child list are skipped, only the changed text is written", body)
-
+        body += box(0, y, 880, 44, p["orange_soft"] if hot else p["card"], p["orange"] if hot else p["line"], rx=10, lift=hot)
+        body += text(16, y + 27, name, size=13, cls="mono", weight=700)
+        body += box(220, y + 10, 140, 24, "none", p["line"], rx=6)
+        body += text(290, y + 27, change, size=12, cls="mono", anchor="middle")
+        body += text(400, y + 27, verdict, size=13, cls=f"mono {vcls}", weight=700)
+        body += text(500, y + 27, holes, size=12, cls="muted")
+        body += text(690, y + 27, work, size=12, cls=wcls, weight=600 if hot else None)
+    body += text(0, 268, "One click in counter-react: three === on locals, then only the holes that read the changed one run. No tree, no list of values to diff.", size=12, cls="muted")
+    return svg(p, 880, 276, "The compiled refresh of counter-react on a click from 41 to 42: count changed, so the text and disabled holes run and the text node gets 42; tone and initial are the same, so the class hole is not even evaluated; handlers are swapped on the element without DOM calls", body)
 
 def reconcile(p):
     old = ["a", "b", "c", "d", "e", "f"]
@@ -608,20 +604,20 @@ def loop(p):
         (0, "click", "a DOM event", "orange"),
         (150, "Increment", "the message", "accent"),
         (300, "update", "pure: model → model", "accent"),
-        (450, "view", "pure: model → holes", "accent"),
-        (600, "\"42\" != \"41\"", "=== per hole", "blue"),
-        (750, "text \"42\"", "one DOM write", "green"),
+        (450, "refresh", "compiled, per template", "accent"),
+        (600, "count 41 → 42", "one === on a local", "blue"),
+        (750, "node.data", "written straight in", "green"),
     ]
-    body = text(0, 18, "the Meltea loop: everything between the event and the write is a pure function", size=12.5, cls="muted", weight=600)
+    body = text(0, 18, "the Meltea loop: no tree is built and none is diffed; the compiled refresh checks the locals and writes the nodes", size=12.5, cls="muted", weight=600)
     for i, (x, title, note, color) in enumerate(stops):
         body += box(x, 40, 130, 64, p[color + "_soft"], p[color], rx=12, width=1.5, lift=True)
-        body += text(x + 65, 68, title, size=13, weight=700, cls="mono" if i in (1, 4, 5) else "", anchor="middle")
+        body += text(x + 65, 68, title, size=13, weight=700, cls="mono" if i in (1, 3, 4, 5) else "", anchor="middle")
         body += text(x + 65, 90, note, size=11, cls="muted", anchor="middle")
         if i < len(stops) - 1:
             body += arrow(p, x + 132, 72, x + 146, 72, "accent", flow=True)
     body += curve(p, "M815,106 C815,170 65,170 65,108", "muted", flow=True)
     body += text(440, 178, "the next event", size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 186, "The Meltea loop: a DOM event becomes a message, the pure update returns the next model, the pure view gives the hole values, each is compared with === and only the changed one is written to the DOM; the next event starts the loop again", body)
+    return svg(p, 880, 186, "The Meltea loop: a DOM event becomes a message, the pure update returns the next model, and the refresh the compiler generated for the view checks the local it reads with one === and writes the changed text straight into its node; no tree is built or diffed; the next event starts the loop again", body)
 
 def roadmap(p):
     stages = [

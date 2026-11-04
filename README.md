@@ -141,30 +141,25 @@ same signatures. Pure-OCaml reason-react code is the compatibility target.
   the holes that read a changed one. Holes that read nothing that changed are not even computed,
   so a nested tree or a `List.map` over rows behind an unchanged local costs nothing.
 
-### A patch is one `===` per hole
+### A render is one `===` per local
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/patch-dark.svg">
-  <img src="assets/patch.svg" alt="Patching compares hole values with ===: the handler is swapped without DOM calls, the unchanged class and the unchanged child list are skipped, only the changed text is written" width="100%">
+  <img src="assets/patch.svg" alt="The compiled refresh of counter-react on a click from 41 to 42: count changed, so the text and disabled holes run and the text node gets 42; tone and initial are the same, so the class hole is not even evaluated; handlers are swapped on the element without DOM calls" width="100%">
 </picture>
 
-| hole | when it differs |
+Nothing is built to be compared afterwards. The refresh the compiler generated checks each local
+the view reads, then runs only the holes that read a changed one, each writing its own node:
+
+| hole | written with |
 |---|---|
-| `HText s` | `text.data = s` |
-| `HAttr (Some v)` / `HAttr None` | `setAttribute` / `removeAttribute` |
-| `HProp v` | `el[name] = v` (`value`, `checked`, `innerHTML`) |
-| `HStyle`, `HClass` | the old properties or classes are cleared and the new ones set |
-| `HHandler f` | never compared: the stored closure is replaced |
-| `HRef f` | the new callback is called with the element |
-| `HChild c` | patched recursively; skipped if `c` is the same reference |
-
-Other kinds of content, with what each patch does:
-
-- **Text against text:** the existing node's `data` is written.
-- **Another template:** the old content is unmounted and the new one mounted in its place.
-- **`lazy1 f a` / `lazy2 f a b`:** skipped entirely when `f` and the arguments are `==`.
-- **A positional list:** the common part is patched and the tail is mounted or removed.
-- **A keyed list:** reconciled as below.
+| text | `node.data = s` |
+| attribute | `setAttribute` / `removeAttribute` (`None` removes) |
+| property | `el[name] = v` (`value`, `checked`, `innerHTML`) |
+| style | the old properties cleared, the new ones set |
+| handler | never compared: the closure on the element is replaced |
+| ref | the new callback is called with the element |
+| child | patched recursively: a template, a list, a component |
 
 ### Keyed lists move as little as possible
 
