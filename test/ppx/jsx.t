@@ -4,13 +4,12 @@ A static tree becomes one template and one hoisted element:
   > let header = ((header ~className:"top" ~children:[ ((h1 ~children:[ React.string "Hi & <bye>" ] ()) [@JSX]) ] ()) [@JSX])
   > EOF
   $ ./pp.exe -impl static.ml
-  let __melhole_template_1 =
-    Melhole.Template.html
-      "<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>"
-      (fun _ -> [||])
-  let __melhole_element_2 =
-    React.Element (Melhole.View.static __melhole_template_1)
-  let header = __melhole_element_2
+  let __melhole_element_1 =
+    React.Element
+      (Melhole.View.static
+         (Melhole.Template.html
+            "<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>"))
+  let header = __melhole_element_1
 
 Holes at every depth; markers only between neighbours that would merge:
 
@@ -21,61 +20,65 @@ Holes at every depth; markers only between neighbours that would merge:
   > EOF
   $ ./pp.exe -impl holes.ml
   let __melhole_template_1 =
-    Melhole.Template.html "<p>a<!---->b<!----><b></b></p>"
-      (fun __melhole_node ->
+    Melhole.View.template
+      (Melhole.Template.html "<p>a<!---->b<!----><b></b></p>")
+      (fun __melhole_scope __melhole_node ->
          let __melhole_node_0 = Melhole.Template.first __melhole_node in
          let __melhole_node_1 = Melhole.Template.next __melhole_node_0 in
          let __melhole_node_2 = Melhole.Template.next __melhole_node_1 in
          let __melhole_node_3 = Melhole.Template.next __melhole_node_2 in
          let __melhole_node_4 = Melhole.Template.next __melhole_node_3 in
-         [|(Melhole.Template.Text
+         ((Melhole.View.text_hole
+             {
+               Melhole.Template.parent = __melhole_node;
+               before = (Melhole.Template.next_or_end __melhole_node_0)
+             }),
+           (Melhole.View.content_hole __melhole_scope
               {
                 Melhole.Template.parent = __melhole_node;
-                before = (Melhole.Template.next_or_end __melhole_node_0)
-              });(Melhole.Template.Child
-                    {
-                      Melhole.Template.parent = __melhole_node;
-                      before = (Melhole.Template.next_or_end __melhole_node_2)
-                    });(Melhole.Template.Child
-                          {
-                            Melhole.Template.parent = __melhole_node;
-                            before =
-                              (Melhole.Template.next_or_end __melhole_node_3)
-                          });(Melhole.Template.Text
-                                {
-                                  Melhole.Template.parent = __melhole_node_4;
-                                  before =
-                                    (Melhole.Template.first_or_end
-                                       __melhole_node_4)
-                                })|])
+                before = (Melhole.Template.next_or_end __melhole_node_2)
+              }),
+           (Melhole.View.content_hole __melhole_scope
+              {
+                Melhole.Template.parent = __melhole_node;
+                before = (Melhole.Template.next_or_end __melhole_node_3)
+              }),
+           (Melhole.View.text_hole
+              {
+                Melhole.Template.parent = __melhole_node_4;
+                before = (Melhole.Template.first_or_end __melhole_node_4)
+              })))
   let row ~name ~count ~extra =
     React.Element
-      (Melhole.View.guarded __melhole_template_1 3
-         (fun __melhole_block ->
+      (Melhole.View.compiled __melhole_template_1 3
+         (fun __melhole_scope
+            (__melhole_hole_0, __melhole_hole_1, __melhole_hole_2,
+             __melhole_hole_3)
+            ->
             let __melhole_changed_0 =
-              Melhole.View.check __melhole_block 0 count in
+              Melhole.View.check __melhole_scope 0 count in
             let __melhole_changed_1 =
-              Melhole.View.check __melhole_block 1 extra in
-            let __melhole_changed_2 = Melhole.View.check __melhole_block 2 name in
+              Melhole.View.check __melhole_scope 1 extra in
+            let __melhole_changed_2 = Melhole.View.check __melhole_scope 2 name in
             (match __melhole_changed_2 with
              | Melhole.View.Unchanged -> ()
-             | _ -> Melhole.View.put_text __melhole_block 0 (name : string));
+             | _ -> Melhole.View.set_text __melhole_hole_0 (name : string));
             (match __melhole_changed_1 with
              | Melhole.View.Unchanged -> ()
              | _ ->
-                 Melhole.View.put_child __melhole_block 1
+                 Melhole.View.set_content __melhole_hole_1
                    (let React.Element __melhole_child = extra in
                     __melhole_child));
             (match __melhole_changed_1 with
              | Melhole.View.Unchanged -> ()
              | _ ->
-                 Melhole.View.put_child __melhole_block 2
+                 Melhole.View.set_content __melhole_hole_2
                    (let React.Element __melhole_child = extra in
                     __melhole_child));
             (match __melhole_changed_0 with
              | Melhole.View.Unchanged -> ()
              | _ ->
-                 Melhole.View.put_text __melhole_block 3
+                 Melhole.View.set_text __melhole_hole_3
                    (string_of_int (count : int)));
             ()))
 
@@ -90,91 +93,97 @@ Every kind of prop, static and dynamic, required and optional:
   > EOF
   $ ./pp.exe -impl props.ml
   let __melhole_template_1 =
-    Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">"
-      (fun __melhole_node ->
-         [|(Melhole.Template.Attr
-              ((Melhole.Template.element __melhole_node), "class"));(Melhole.Template.Attr
-                                                                      ((Melhole.Template.element
-                                                                      __melhole_node),
-                                                                      "disabled"));(
-           Melhole.Template.Attr
-             ((Melhole.Template.element __melhole_node), "aria-hidden"));(
-           Melhole.Template.Attr
-             ((Melhole.Template.element __melhole_node), "tabIndex"));(
-           Melhole.Template.Prop
-             ((Melhole.Template.element __melhole_node), "value"));(Melhole.Template.Prop
-                                                                      ((Melhole.Template.element
-                                                                      __melhole_node),
-                                                                      "checked"));(
-           Melhole.Template.Style (Melhole.Template.element __melhole_node));(
-           Melhole.Template.Ref (Melhole.Template.element __melhole_node));(
-           Melhole.Template.Attr
-             ((Melhole.Template.element __melhole_node), "title"));(Melhole.Template.Handler
-                                                                      ((Melhole.Template.element
-                                                                      __melhole_node),
-                                                                      "input"));(
-           Melhole.Template.Handler
-             ((Melhole.Template.element __melhole_node), "keydown"))|])
+    Melhole.View.template
+      (Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">")
+      (fun __melhole_scope __melhole_node ->
+         ((Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+             "class"),
+           (Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+              "disabled"),
+           (Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+              "aria-hidden"),
+           (Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+              "tabIndex"),
+           (Melhole.View.prop_hole (Melhole.Template.element __melhole_node)
+              "value"),
+           (Melhole.View.prop_hole (Melhole.Template.element __melhole_node)
+              "checked"),
+           (Melhole.View.style_hole (Melhole.Template.element __melhole_node)),
+           (Melhole.View.reference_hole __melhole_scope
+              (Melhole.Template.element __melhole_node)),
+           (Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+              "title"),
+           (Melhole.View.handler_hole __melhole_scope
+              (Melhole.Template.element __melhole_node) "input"),
+           (Melhole.View.handler_hole __melhole_scope
+              (Melhole.Template.element __melhole_node) "keydown")))
   let __melhole_template_2 =
-    Melhole.Template.html "<div stroke-width=\"2\" for=\"x\"></div>"
-      (fun __melhole_node ->
-         [|(Melhole.Template.Prop
-              ((Melhole.Template.element __melhole_node), "innerHTML"))|])
+    Melhole.View.template
+      (Melhole.Template.html "<div stroke-width=\"2\" for=\"x\"></div>")
+      (fun __melhole_scope __melhole_node ->
+         Melhole.View.prop_hole (Melhole.Template.element __melhole_node)
+           "innerHTML")
   let form ~text ~flag ~tab ~opacity ~style ~ref ~maybe ~html ~onInput =
     ((React.Element
-        (Melhole.View.guarded __melhole_template_1 5
-           (fun __melhole_block ->
+        (Melhole.View.compiled __melhole_template_1 5
+           (fun __melhole_scope
+              (__melhole_hole_0, __melhole_hole_1, __melhole_hole_2,
+               __melhole_hole_3, __melhole_hole_4, __melhole_hole_5,
+               __melhole_hole_6, __melhole_hole_7, __melhole_hole_8,
+               __melhole_hole_9, __melhole_hole_10)
+              ->
               let __melhole_changed_0 =
-                Melhole.View.check __melhole_block 0 flag in
+                Melhole.View.check __melhole_scope 0 flag in
               let __melhole_changed_1 =
-                Melhole.View.check __melhole_block 1 maybe in
+                Melhole.View.check __melhole_scope 1 maybe in
               let __melhole_changed_2 =
-                Melhole.View.check __melhole_block 2 style in
+                Melhole.View.check __melhole_scope 2 style in
               let __melhole_changed_3 =
-                Melhole.View.check __melhole_block 3 tab in
+                Melhole.View.check __melhole_scope 3 tab in
               let __melhole_changed_4 =
-                Melhole.View.check __melhole_block 4 text in
+                Melhole.View.check __melhole_scope 4 text in
               (match __melhole_changed_4 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put_attr __melhole_block 0
+                   Melhole.View.set_attr __melhole_hole_0
                      (Some (text : string)));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put_attr __melhole_block 1
+                   Melhole.View.set_attr __melhole_hole_1
                      (if (flag : bool) then Some "" else None));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put_attr __melhole_block 2
+                   Melhole.View.set_attr __melhole_hole_2
                      (Some (if (flag : bool) then "true" else "false")));
               (match __melhole_changed_3 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put_attr __melhole_block 3
+                   Melhole.View.set_attr __melhole_hole_3
                      (Some (string_of_int (tab : int))));
               (match __melhole_changed_4 with
                | Melhole.View.Unchanged -> ()
-               | _ -> Melhole.View.put_prop __melhole_block 4 (text : string));
+               | _ -> Melhole.View.set_prop __melhole_hole_4 (text : string));
               (match __melhole_changed_0 with
                | Melhole.View.Unchanged -> ()
-               | _ -> Melhole.View.put_prop __melhole_block 5 (flag : bool));
+               | _ -> Melhole.View.set_prop __melhole_hole_5 (flag : bool));
               (match __melhole_changed_2 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put_style __melhole_block 6
+                   Melhole.View.set_style __melhole_hole_6
                      (ReactDOM.Style.declarations style));
-              Melhole.View.put_ref __melhole_block 7 (ReactDOM.Ref.attach ref);
+              Melhole.View.set_reference __melhole_hole_7
+                (ReactDOM.Ref.attach ref);
               (match __melhole_changed_1 with
                | Melhole.View.Unchanged -> ()
                | _ ->
-                   Melhole.View.put_attr __melhole_block 8
+                   Melhole.View.set_attr __melhole_hole_8
                      (maybe : string option));
-              Melhole.View.put_handler __melhole_block 9
+              Melhole.View.set_handler __melhole_hole_9
                 (fun __melhole_event ->
                    onInput (ReactEvent.Form.Native __melhole_event));
-              Melhole.View.put_handler __melhole_block 10
+              Melhole.View.set_handler __melhole_hole_10
                 (fun __melhole_event ->
                    Option.iter
                      (fun handle ->
@@ -182,13 +191,13 @@ Every kind of prop, static and dynamic, required and optional:
                      None);
               ()))),
       (React.Element
-         (Melhole.View.guarded __melhole_template_2 1
-            (fun __melhole_block ->
+         (Melhole.View.compiled __melhole_template_2 1
+            (fun __melhole_scope __melhole_hole_0 ->
                let __melhole_changed_0 =
-                 Melhole.View.check __melhole_block 0 html in
+                 Melhole.View.check __melhole_scope 0 html in
                (match __melhole_changed_0 with
                 | Melhole.View.Unchanged -> ()
-                | _ -> Melhole.View.put_prop __melhole_block 0 (html ## __html));
+                | _ -> Melhole.View.set_prop __melhole_hole_0 (html ## __html));
                ()))))
 
 A component with optional, defaulted and children props, and its signature:
@@ -202,18 +211,19 @@ A component with optional, defaulted and children props, and its signature:
   $ ./pp.exe -impl card.ml
   let __melhole_component_1 = Melhole.Component.make ~name:"Card.make"
   let __melhole_template_2 =
-    Melhole.Template.html "<section><!----></section>"
-      (fun __melhole_node ->
+    Melhole.View.template (Melhole.Template.html "<section><!----></section>")
+      (fun __melhole_scope __melhole_node ->
          let __melhole_node_0 = Melhole.Template.first __melhole_node in
-         [|(Melhole.Template.Text
+         ((Melhole.View.text_hole
+             {
+               Melhole.Template.parent = __melhole_node;
+               before = (Melhole.Template.first_or_end __melhole_node)
+             }),
+           (Melhole.View.content_hole __melhole_scope
               {
                 Melhole.Template.parent = __melhole_node;
-                before = (Melhole.Template.first_or_end __melhole_node)
-              });(Melhole.Template.Child
-                    {
-                      Melhole.Template.parent = __melhole_node;
-                      before = (Melhole.Template.next_or_end __melhole_node_0)
-                    })|])
+                before = (Melhole.Template.next_or_end __melhole_node_0)
+              })))
   let make ~title:(title as __melhole_prop_0)
     ?size:((size as __melhole_prop_1)= 1)
     ?subtitle:(subtitle as __melhole_prop_2)
@@ -227,21 +237,21 @@ A component with optional, defaulted and children props, and its signature:
          (fun () ->
             let React.Element __melhole_child =
               React.Element
-                (Melhole.View.guarded __melhole_template_2 2
-                   (fun __melhole_block ->
+                (Melhole.View.compiled __melhole_template_2 2
+                   (fun __melhole_scope (__melhole_hole_0, __melhole_hole_1) ->
                       let __melhole_changed_0 =
-                        Melhole.View.check __melhole_block 0 children in
+                        Melhole.View.check __melhole_scope 0 children in
                       let __melhole_changed_1 =
-                        Melhole.View.check __melhole_block 1 title in
+                        Melhole.View.check __melhole_scope 1 title in
                       (match __melhole_changed_1 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put_text __melhole_block 0
+                           Melhole.View.set_text __melhole_hole_0
                              (title : string));
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put_child __melhole_block 1
+                           Melhole.View.set_content __melhole_hole_1
                              (let React.Element __melhole_child = children in
                               __melhole_child));
                       ())) in
@@ -272,11 +282,12 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   $ ./pp.exe -impl fancy.ml
   let __melhole_component_1 = Melhole.Component.make ~name:"Fancy.make"
   let __melhole_template_2 =
-    Melhole.Template.html "<input>"
-      (fun __melhole_node ->
-         [|(Melhole.Template.Attr
-              ((Melhole.Template.element __melhole_node), "placeholder"));(
-           Melhole.Template.Ref (Melhole.Template.element __melhole_node))|])
+    Melhole.View.template (Melhole.Template.html "<input>")
+      (fun __melhole_scope __melhole_node ->
+         ((Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+             "placeholder"),
+           (Melhole.View.reference_hole __melhole_scope
+              (Melhole.Template.element __melhole_node))))
   let make ~label:(label as __melhole_prop_0)
     ?ref:(__melhole_forwarded_ref as __melhole_prop_1) () =
     React.Element
@@ -287,16 +298,16 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
             let React.Element __melhole_child =
               let ref = ReactDOM.Ref.forwarded __melhole_forwarded_ref in
               React.Element
-                (Melhole.View.guarded __melhole_template_2 1
-                   (fun __melhole_block ->
+                (Melhole.View.compiled __melhole_template_2 1
+                   (fun __melhole_scope (__melhole_hole_0, __melhole_hole_1) ->
                       let __melhole_changed_0 =
-                        Melhole.View.check __melhole_block 0 label in
+                        Melhole.View.check __melhole_scope 0 label in
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put_attr __melhole_block 0
+                           Melhole.View.set_attr __melhole_hole_0
                              (Some (label : string)));
-                      Melhole.View.put_ref __melhole_block 1
+                      Melhole.View.set_reference __melhole_hole_1
                         (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach
                            (Option.map ReactDOM.Ref.domRef
                               (Js.Nullable.toOption ref)));
@@ -324,13 +335,13 @@ Calls with children, keys and fragments:
           __melhole_child))
   let none = Card.make ~title:"a" ()
   let __melhole_template_1 =
-    Melhole.Template.html "<li></li>"
-      (fun __melhole_node ->
-         [|(Melhole.Template.Text
-              {
-                Melhole.Template.parent = __melhole_node;
-                before = (Melhole.Template.first_or_end __melhole_node)
-              })|])
+    Melhole.View.template (Melhole.Template.html "<li></li>")
+      (fun __melhole_scope __melhole_node ->
+         Melhole.View.text_hole
+           {
+             Melhole.Template.parent = __melhole_node;
+             before = (Melhole.Template.first_or_end __melhole_node)
+           })
   let rows items =
     React.array
       (Array.map
@@ -339,14 +350,14 @@ Calls with children, keys and fragments:
               (Melhole.View.with_key (item : string)
                  (let React.Element __melhole_child =
                     React.Element
-                      (Melhole.View.guarded __melhole_template_1 1
-                         (fun __melhole_block ->
+                      (Melhole.View.compiled __melhole_template_1 1
+                         (fun __melhole_scope __melhole_hole_0 ->
                             let __melhole_changed_0 =
-                              Melhole.View.check __melhole_block 0 item in
+                              Melhole.View.check __melhole_scope 0 item in
                             (match __melhole_changed_0 with
                              | Melhole.View.Unchanged -> ()
                              | _ ->
-                                 Melhole.View.put_text __melhole_block 0
+                                 Melhole.View.set_text __melhole_hole_0
                                    (item : string));
                             ())) in
                   __melhole_child))) items)
@@ -391,13 +402,14 @@ Reason input:
   $ ./pp.exe -impl greeting.ml
   let __melhole_component_1 = Melhole.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
-    Melhole.Template.html "<span class=\"greeting\"></span>"
-      (fun __melhole_node ->
-         [|(Melhole.Template.Text
-              {
-                Melhole.Template.parent = __melhole_node;
-                before = (Melhole.Template.first_or_end __melhole_node)
-              })|])
+    Melhole.View.template
+      (Melhole.Template.html "<span class=\"greeting\"></span>")
+      (fun __melhole_scope __melhole_node ->
+         Melhole.View.text_hole
+           {
+             Melhole.Template.parent = __melhole_node;
+             before = (Melhole.Template.first_or_end __melhole_node)
+           })
   let make ~name:(name as __melhole_prop_0) () =
     React.Element
       (Melhole.View.component __melhole_component_1
@@ -405,14 +417,14 @@ Reason input:
          (fun () ->
             let React.Element __melhole_child =
               React.Element
-                (Melhole.View.guarded __melhole_template_2 1
-                   (fun __melhole_block ->
+                (Melhole.View.compiled __melhole_template_2 1
+                   (fun __melhole_scope __melhole_hole_0 ->
                       let __melhole_changed_0 =
-                        Melhole.View.check __melhole_block 0 name in
+                        Melhole.View.check __melhole_scope 0 name in
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put_text __melhole_block 0
+                           Melhole.View.set_text __melhole_hole_0
                              ("Hello, " ^ name : string));
                       ())) in
             __melhole_child))
@@ -427,13 +439,14 @@ mlx input:
   $ ./pp.exe -impl greeting.ast
   let __melhole_component_1 = Melhole.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
-    Melhole.Template.html "<span class=\"greeting\"></span>"
-      (fun __melhole_node ->
-         [|(Melhole.Template.Text
-              {
-                Melhole.Template.parent = __melhole_node;
-                before = (Melhole.Template.first_or_end __melhole_node)
-              })|])
+    Melhole.View.template
+      (Melhole.Template.html "<span class=\"greeting\"></span>")
+      (fun __melhole_scope __melhole_node ->
+         Melhole.View.text_hole
+           {
+             Melhole.Template.parent = __melhole_node;
+             before = (Melhole.Template.first_or_end __melhole_node)
+           })
   let make ~name:(name as __melhole_prop_0) () =
     React.Element
       (Melhole.View.component __melhole_component_1
@@ -441,14 +454,14 @@ mlx input:
          (fun () ->
             let React.Element __melhole_child =
               React.Element
-                (Melhole.View.guarded __melhole_template_2 1
-                   (fun __melhole_block ->
+                (Melhole.View.compiled __melhole_template_2 1
+                   (fun __melhole_scope __melhole_hole_0 ->
                       let __melhole_changed_0 =
-                        Melhole.View.check __melhole_block 0 name in
+                        Melhole.View.check __melhole_scope 0 name in
                       (match __melhole_changed_0 with
                        | Melhole.View.Unchanged -> ()
                        | _ ->
-                           Melhole.View.put_text __melhole_block 0
+                           Melhole.View.set_text __melhole_hole_0
                              ("Hello, " ^ name : string));
                       ())) in
             __melhole_child))

@@ -12,8 +12,9 @@ from Elm.
 ## Status
 
 Guards are implemented in the shared compiler (`melhole/compiler/free.ml`, `scope.ml`, `element.ml`)
-and used by both front ends. The runtime is split so that a bundle carries only what the compiled
-code calls. Next: compiled patchers.
+and used by both front ends. The compiler writes out the walk to every hole, and the refresh
+writes the holes directly. The runtime is split so that a bundle carries only what the compiled
+code calls.
 
 ## Guards at the JSX site
 
@@ -23,19 +24,19 @@ its free variables, scope-aware, from the AST. Module-qualified names (`String.l
 are constants. The ppx then emits, per template site, a refresh function:
 
 ```ocaml
-View.guarded template 2 (fun block ->
-  let count_changed = View.check block 0 count in          (* one === against the last count *)
-  let rows_changed = View.check block 1 rows in
-  View.put_handler block 0 dec;                            (* handlers: swapped, never guarded *)
+View.compiled template 2 (fun scope (click, label, rows_hole) ->
+  let count_changed = View.check scope 0 count in          (* one === against the last count *)
+  let rows_changed = View.check scope 1 rows in
+  View.set_handler click dec;                              (* handlers: swapped, never guarded *)
   (match count_changed with
    | Unchanged -> ()
-   | Changed -> View.put_text block 1 (string_of_int count));   (* evaluated only now *)
+   | Changed -> View.set_text label (string_of_int count));     (* evaluated only now *)
   match rows_changed with
   | Unchanged -> ()
-  | Changed -> View.put_child block 2 (React.array (Array.map row rows)))
+  | Changed -> View.set_content rows_hole (React.array (Array.map row rows)))
 ```
 
-`View.check block k value` compares `value` with the `k`-th remembered dependency and stores
+`View.check scope k value` compares `value` with the `k`-th remembered dependency and stores
 it. On mount nothing is remembered yet, so every hole is evaluated once. A hole whose free
 variables are all physically unchanged is neither evaluated nor compared, and a nested JSX tree
 inside it is not built at all: `lazy` everywhere, without writing it.
@@ -51,8 +52,8 @@ inside it is not built at all: `lazy` everywhere, without writing it.
 
 Nothing at run time interprets a description of the whole view. Every kind of child (text, list,
 keyed list, template block, memo, portal, component, context provider) is a value that carries
-its own code to mount itself and to patch a mounted child of its kind, and every hole is written
-by its own typed `put_*`. Component instances, hook slots and the update scheduler are installed
+its own code to mount itself and to patch a mounted child of its kind, and every hole is a typed
+value written by its own `set_*`. Component instances, hook slots and the update scheduler are installed
 by the first component that mounts. A bundle therefore contains only the parts its compiled code
 names: Meltea's counter has no components, so it has no scheduler, no hooks and no portals.
 
@@ -62,21 +63,26 @@ The compiler knows the shape of every template, so it writes out how to reach ea
 fresh clone, sharing every step:
 
 ```ocaml
-Template.html "<p>a<!---->b<!----><b></b></p>" (fun p ->
+View.template (Template.html "<p>a<!---->b<!----><b></b></p>") (fun scope p ->
   let n0 = Template.first p in
   let n1 = Template.next n0 in
   ...
-  [| Text { parent = p; before = Template.next_or_end n0 }; ... |])
+  (View.text_hole { parent = p; before = Template.next_or_end n0 }, ...))
 ```
 
 It also decides at compile time whether the root is an SVG element. The runtime keeps no paths
 and no tag tables. A law checks the walk: interpreted over the parsed HTML, every step starts
 from a node reached before it and lands on the node the hole names.
 
-## Compiled patchers
+## Direct writes
 
-Later, the same refresh writes to the DOM directly instead of through `put`: the ppx knows each
-hole's kind and type from the DOM prop table.
+The walk makes the holes once per clone: a text node, an attribute, a property, a handler, a
+place for child content. The refresh gets them as a typed tuple and writes each one directly,
+`set_text label (string_of_int count)`, with no index, no table of bindings and no "not bound
+yet" case. Mounting is the same refresh on fresh holes, where every check reports a change, so
+each hole expression appears once in the generated code. A later render of the same JSX site
+finds the mounted holes through its template: the mounted clone lends them to the template, and
+the refresh that belongs to that template takes them back, typed, without `Obj` or a type witness.
 
 ## Laws
 
