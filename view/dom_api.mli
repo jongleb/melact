@@ -93,5 +93,11 @@ external target : Dom.event -> Dom.node option = "target"
 
 external cancel_bubble : Dom.event -> bool = "cancelBubble" [@@mel.get]
 
+external queue_microtask : (unit -> unit) -> unit = "queueMicrotask"
+
+external request_animation_frame : (float -> unit) -> unit
+  = "requestAnimationFrame"
+
+external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
 external same : 'a -> 'b -> bool = "%eq"
 (** Physical identity of two values of any types: [===] in JS. *)

@@ -1,0 +1,170 @@
+open Melact_view
+
+type element = Element of View.child [@@unboxed]
+type 'value ref = { mutable current : 'value }
+
+module Context = struct
+  type 'value t = Context of 'value Melact_view.Context.t [@@unboxed]
+
+  let provider (Context context) ~value ~children:(Element children) () =
+    Element (View.provide context value children)
+end
+
+type ('state, 'action) state = {
+  mutable value : 'state;
+  mutable reduce : 'state -> 'action -> 'state;
+  dispatch : 'action -> unit;
+}
+
+type 'deps effect_cell = { mutable deps : 'deps; mutable cleanup : (unit -> unit) option }
+type ('deps, 'value) memo = { mutable inputs : 'deps; mutable result : 'value }
+
+let null = Element View.empty
+let string text = Element (View.text text)
+let int number = Element (View.text (string_of_int number))
+let float number = Element (View.text (Js.Float.toString number))
+let list elements = Element (View.list (List.map (fun (Element child) -> child) elements))
+let array elements = list (Array.to_list elements)
+let createContext default = Context.Context (Melact_view.Context.make default)
+let useContext (Context.Context context) = View.consume (View.current ()) context
+
+let reducer key reduce initial =
+  let instance = View.current () in
+  let cell =
+    View.slot instance key (fun () ->
+        let initial = initial () in
+        let rec cell =
+          {
+            value = initial;
+            reduce;
+            dispatch =
+              (fun action ->
+                let next = cell.reduce cell.value action in
+                if not (next == cell.value) then (
+                  View.invalidate instance;
+                  cell.value <- next));
+          }
+        in
+        cell)
+  in
+  cell.reduce <- reduce;
+  (cell.value, cell.dispatch)
+
+let useState key init = reducer key (fun state update -> update state) init
+let useReducer key reduce initial = reducer key reduce (fun () -> initial)
+
+let useReducerWithMapState key reduce initial map =
+  reducer key reduce (fun () -> map initial)
+
+let use_effect timing unchanged key run deps =
+  let instance = View.current () in
+  let schedule cell =
+    View.after_commit instance timing (fun () ->
+        Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
+        cell.cleanup <- run ())
+  in
+  let cell =
+    View.slot instance key (fun () ->
+        let cell = { deps; cleanup = None } in
+        View.on_unmount instance (fun () ->
+            Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
+            cell.cleanup <- None);
+        schedule cell;
+        cell)
+  in
+  if not (unchanged cell.deps deps) then (
+    cell.deps <- deps;
+    schedule cell)
+
+let memoize unchanged key compute deps =
+  let cell =
+    View.slot (View.current ()) key (fun () -> { inputs = deps; result = compute () })
+  in
+  if not (unchanged cell.inputs deps) then (
+    cell.inputs <- deps;
+    cell.result <- compute ());
+  cell.result
+
+let never () () = false
+let always () () = true
+
+let same_array a b =
+  Array.length a = Array.length b && Array.for_all2 (fun x y -> x == y) a b
+
+let same2 (a, b) (a', b') = a == a' && b == b'
+let same3 (a, b, c) (a', b', c') = a == a' && b == b' && c == c'
+let same4 (a, b, c, d) (a', b', c', d') = a == a' && b == b' && c == c' && d == d'
+
+let same5 (a, b, c, d, e) (a', b', c', d', e') =
+  a == a' && b == b' && c == c' && d == d' && e == e'
+
+let same6 (a, b, c, d, e, f) (a', b', c', d', e', f') =
+  a == a' && b == b' && c == c' && d == d' && e == e' && f == f'
+
+let same7 (a, b, c, d, e, f, g) (a', b', c', d', e', f', g') =
+  a == a' && b == b' && c == c' && d == d' && e == e' && f == f' && g == g'
+
+let useEffect key run = use_effect Passive never key run ()
+let useEffect0 key run = use_effect Passive always key run ()
+let useEffect1 key run deps = use_effect Passive same_array key run deps
+let useEffect2 key run deps = use_effect Passive same2 key run deps
+let useEffect3 key run deps = use_effect Passive same3 key run deps
+let useEffect4 key run deps = use_effect Passive same4 key run deps
+let useEffect5 key run deps = use_effect Passive same5 key run deps
+let useEffect6 key run deps = use_effect Passive same6 key run deps
+let useEffect7 key run deps = use_effect Passive same7 key run deps
+let useLayoutEffect key run = use_effect Layout never key run ()
+let useLayoutEffect0 key run = use_effect Layout always key run ()
+let useLayoutEffect1 key run deps = use_effect Layout same_array key run deps
+let useLayoutEffect2 key run deps = use_effect Layout same2 key run deps
+let useLayoutEffect3 key run deps = use_effect Layout same3 key run deps
+let useLayoutEffect4 key run deps = use_effect Layout same4 key run deps
+let useLayoutEffect5 key run deps = use_effect Layout same5 key run deps
+let useLayoutEffect6 key run deps = use_effect Layout same6 key run deps
+let useLayoutEffect7 key run deps = use_effect Layout same7 key run deps
+let useMemo key compute = memoize never key compute ()
+let useMemo0 key compute = memoize always key compute ()
+let useMemo1 key compute deps = memoize same_array key compute deps
+let useMemo2 key compute deps = memoize same2 key compute deps
+let useMemo3 key compute deps = memoize same3 key compute deps
+let useMemo4 key compute deps = memoize same4 key compute deps
+let useMemo5 key compute deps = memoize same5 key compute deps
+let useMemo6 key compute deps = memoize same6 key compute deps
+let useMemo7 key compute deps = memoize same7 key compute deps
+let useCallback key fn = memoize never key (fun () -> fn) ()
+let useCallback0 key fn = memoize always key (fun () -> fn) ()
+let useCallback1 key fn deps = memoize same_array key (fun () -> fn) deps
+let useCallback2 key fn deps = memoize same2 key (fun () -> fn) deps
+let useCallback3 key fn deps = memoize same3 key (fun () -> fn) deps
+let useCallback4 key fn deps = memoize same4 key (fun () -> fn) deps
+let useCallback5 key fn deps = memoize same5 key (fun () -> fn) deps
+let useCallback6 key fn deps = memoize same6 key (fun () -> fn) deps
+let useCallback7 key fn deps = memoize same7 key (fun () -> fn) deps
+let useRef key initial = View.slot (View.current ()) key (fun () -> { current = initial })
+
+let imperative unchanged key target make deps =
+  use_effect Layout unchanged key
+    (fun () ->
+      Option.iter (fun target -> target.current <- make ()) (Js.Nullable.toOption target);
+      None)
+    deps
+
+let useImperativeHandle0 key target make = imperative always key target make ()
+let useImperativeHandle1 key target make deps = imperative same_array key target make deps
+let useImperativeHandle2 key target make deps = imperative same2 key target make deps
+let useImperativeHandle3 key target make deps = imperative same3 key target make deps
+let useImperativeHandle4 key target make deps = imperative same4 key target make deps
+let useImperativeHandle5 key target make deps = imperative same5 key target make deps
+let useImperativeHandle6 key target make deps = imperative same6 key target make deps
+let useImperativeHandle7 key target make deps = imperative same7 key target make deps
+let ids = ref 0
+
+let useId key () =
+  View.slot (View.current ()) key (fun () ->
+      incr ids;
+      ":m" ^ string_of_int !ids ^ ":")
+
+let startTransition run = run ()
+let useTransition () = (false, startTransition)
+let memo component props = component props
+let memoCustomCompareProps component _ props = component props

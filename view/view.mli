@@ -1,5 +1,5 @@
-(** Descriptions of DOM content, and the patcher that turns the mounted
-    description into the next one by writing only the holes that changed.
+(** Descriptions of DOM content and components, and the patcher that turns
+    the mounted description into the next one by writing only what changed.
     Values are compared physically: mutating data in place is invisible. *)
 
 type child
@@ -19,9 +19,12 @@ val text : string -> child
 val empty : child
 val list : child list -> child
 val keyed : (string * child) list -> child
+val with_key : string -> child -> child
 val tpl_instance : Template.t -> hole array -> child
 val lazy1 : ('a -> child) -> 'a -> child
 val lazy2 : ('a -> 'b -> child) -> 'a -> 'b -> child
+val component : 'props Component.t -> 'props -> ('props -> child) -> child
+val provide : 'value Context.t -> 'value -> child -> child
 
 type mounted
 
@@ -30,3 +33,19 @@ val mount :
 
 val patch : mounted -> child -> unit
 val unmount : mounted -> unit
+
+(** A mounted component, as seen by the hooks it calls. *)
+type instance
+
+(** When an effect runs after its instance is patched. *)
+type timing =
+  | Layout  (** Synchronously, before the browser paints. *)
+  | Passive  (** After the whole flush, once the browser has painted. *)
+
+val current : unit -> instance
+val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
+val invalidate : instance -> unit
+val after_commit : instance -> timing -> (unit -> unit) -> unit
+val on_unmount : instance -> (unit -> unit) -> unit
+val consume : instance -> 'value Context.t -> 'value
+val flush : unit -> unit

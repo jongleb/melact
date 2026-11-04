@@ -3,8 +3,11 @@ type child =
   | Empty
   | List of child list
   | Keyed of (string * child) list
-  | Instance of Template.t * hole array
+  | Key of string * child
+  | Element of Template.t * hole array
   | Lazy of thunk
+  | Component : 'props Component.t * 'props * ('props -> child) -> child
+  | Provide : 'value Context.t * 'value * child -> child
 
 and hole =
   | HText of string
@@ -24,18 +27,24 @@ and thunk =
 (** A JS property value of any type. *)
 type any = Any : 'a -> any [@@unboxed]
 
+(** When an effect runs after its instance is patched. *)
+type timing =
+  | Layout  (** Synchronously, before the browser paints. *)
+  | Passive  (** After the whole flush, once the browser has painted. *)
+
 (** What a mounted description owns in the DOM. *)
 type live =
   | Text_live of Dom.text * string
   | Empty_live
   | List_live of live array
   | Keyed_live of string array * live array
-  | Instance_live of {
+  | Element_live of {
       template : Template.t;
       root : Dom.element;
       bindings : binding array;
     }
   | Lazy_live of thunk * live
+  | Component_live of instance
 
 (** A template hole bound to its DOM site, with the value last written. *)
 and binding =
@@ -59,19 +68,92 @@ and binding =
     }
   | Class_site of { element : Dom.element; mutable value : string list }
 
+(** A mounted component: its hook slots, its output and its effects. *)
+and instance = {
+  parent : instance option;  (** The nearest enclosing instance. *)
+  depth : int;
+  slots : Hook.slots;
+  kind : kind;
+  mutable status : status;
+  mutable output : live;
+  mutable region : region;
+  mutable pending : (timing * (unit -> unit)) list;  (** Effects of the last render, newest first. *)
+  mutable teardown : (unit -> unit) list;  (** Run on unmount, newest first. *)
+}
+
+and kind =
+  | Renders : {
+      component : 'props Component.t;
+      mutable props : 'props;
+      mutable render : 'props -> child;
+    }
+      -> kind
+  | Provides : {
+      context : 'value Context.t;
+      mutable value : 'value;
+      mutable children : child;
+      mutable consumers : instance list;
+    }
+      -> kind
+
+and status = Clean | Dirty | Unmounted
+
+(** Where an instance sits in the DOM when its output has no nodes. *)
+and region =
+  | Nodes  (** The output's own nodes locate it. *)
+  | Marker of Dom.text  (** An empty text node holds its place. *)
+
 type mounted = {
   position : Template.position;
   mutable source : child;
   mutable live : live;
 }
 
+(** Whether a flush is already queued. *)
+type schedule = Idle | Queued
+
+let rendering = ref None
+let owner = ref None
+let dirty = ref []
+let layout_jobs = ref []
+let passive_jobs = ref []
+let render_schedule = ref Idle
+let passive_schedule = ref Idle
 let text value = Text value
 let empty = Empty
-let list children = List children
 let keyed entries = Keyed entries
-let tpl_instance template holes = Instance (template, holes)
+let with_key key child = Key (key, child)
+let tpl_instance template holes = Element (template, holes)
 let lazy1 render a = Lazy (Lazy1 (render, a))
 let lazy2 render a b = Lazy (Lazy2 (render, a, b))
+let component definition props render = Component (definition, props, render)
+let provide context value children = Provide (context, value, children)
+
+let list children =
+  let rec entries collected children =
+    match children with
+    | [] -> Some (List.rev collected)
+    | Key (key, child) :: rest -> entries ((key, child) :: collected) rest
+    | ( Text _ | Empty | List _ | Keyed _ | Element _ | Lazy _ | Component _
+      | Provide _ )
+      :: _ ->
+        None
+  in
+  match children with
+  | [] -> List []
+  | _ :: _ ->
+      Option.fold ~none:(List children) ~some:keyed (entries [] children)
+
+let within cell value run =
+  let saved = !cell in
+  cell := value;
+  match run () with
+  | result ->
+      cell := saved;
+      result
+  | exception error ->
+      cell := saved;
+      raise error
 
 let force thunk =
   match thunk with Lazy1 (render, a) -> render a | Lazy2 (render, a, b) -> render a b
@@ -89,20 +171,73 @@ let reclass element old next =
   List.iter (Dom_api.remove_class classes) old;
   List.iter (Dom_api.add_class classes) next
 
+let mark_dirty instance =
+  match instance.status with
+  | Clean ->
+      instance.status <- Dirty;
+      dirty := instance :: !dirty
+  | Dirty | Unmounted -> ()
+
+let run_jobs jobs =
+  List.iter
+    (fun (instance, job) ->
+      match instance.status with Unmounted -> () | Clean | Dirty -> job ())
+    (List.rev jobs)
+
+let run_layout () =
+  let jobs = !layout_jobs in
+  layout_jobs := [];
+  run_jobs jobs
+
+let commit instance =
+  List.iter
+    (fun (timing, job) ->
+      match timing with
+      | Layout -> layout_jobs := (instance, job) :: !layout_jobs
+      | Passive -> passive_jobs := (instance, job) :: !passive_jobs)
+    (List.rev instance.pending);
+  instance.pending <- []
+
+let run instance =
+  instance.status <- Clean;
+  match instance.kind with
+  | Renders definition ->
+      Hook.rewind instance.slots;
+      within rendering (Some instance) (fun () -> definition.render definition.props)
+  | Provides provision -> provision.children
+
 let rec each_node visit live =
   match live with
   | Text_live (node, _) -> visit (Dom_api.to_node node)
   | Empty_live -> ()
   | List_live items | Keyed_live (_, items) -> Array.iter (each_node visit) items
-  | Instance_live instance -> visit (Dom_api.to_node instance.root)
+  | Element_live element -> visit (Dom_api.to_node element.root)
   | Lazy_live (_, inner) -> each_node visit inner
+  | Component_live instance -> (
+      each_node visit instance.output;
+      match instance.region with
+      | Marker node -> visit (Dom_api.to_node node)
+      | Nodes -> ())
+
+let rec front live after =
+  match live with
+  | Text_live (node, _) -> Some (Dom_api.to_node node)
+  | Empty_live -> after
+  | List_live items | Keyed_live (_, items) -> Array.fold_right front items after
+  | Element_live element -> Some (Dom_api.to_node element.root)
+  | Lazy_live (_, inner) -> front inner after
+  | Component_live instance ->
+      front instance.output
+        (match instance.region with
+        | Marker node -> Some (Dom_api.to_node node)
+        | Nodes -> after)
 
 let remove (position : Template.position) live =
   let rec release live =
     match live with
     | Text_live _ | Empty_live -> ()
     | List_live items | Keyed_live (_, items) -> Array.iter release items
-    | Instance_live instance ->
+    | Element_live element ->
         Array.iter
           (fun binding ->
             match binding with
@@ -111,22 +246,17 @@ let remove (position : Template.position) live =
             | Attr_site _ | Prop_site _ | Text_site _ | Ref_site _
             | Style_site _ | Class_site _ ->
                 ())
-          instance.bindings
+          element.bindings
     | Lazy_live (_, inner) -> release inner
+    | Component_live instance ->
+        release instance.output;
+        instance.status <- Unmounted;
+        List.iter (fun cleanup -> cleanup ()) (List.rev instance.teardown)
   in
   each_node (Dom_api.remove_child position.parent) live;
   release live
 
 let backwards count (position : Template.position) make =
-  let rec front live after =
-    match live with
-    | Text_live (node, _) -> Some (Dom_api.to_node node)
-    | Empty_live -> after
-    | List_live items | Keyed_live (_, items) ->
-        Array.fold_right front items after
-    | Instance_live instance -> Some (Dom_api.to_node instance.root)
-    | Lazy_live (_, inner) -> front inner after
-  in
   let result = Array.make count Empty_live in
   let rec fill i before =
     if i >= 0 then (
@@ -136,6 +266,17 @@ let backwards count (position : Template.position) make =
   in
   fill (count - 1) position.before;
   result
+
+let mark_region (position : Template.position) instance =
+  match (front instance.output None, instance.region) with
+  | Some _, Nodes | None, Marker _ -> ()
+  | Some _, Marker node ->
+      Dom_api.remove_child position.parent node;
+      instance.region <- Nodes
+  | None, Nodes ->
+      let node = Dom_api.create_text_node Dom_api.document "" in
+      insert position node;
+      instance.region <- Marker node
 
 let rec build position child =
   match child with
@@ -150,7 +291,8 @@ let rec build position child =
         ( Array.of_list (List.map fst entries),
           Array.of_list (List.map (fun (_, child) -> build position child) entries)
         )
-  | Instance (template, holes) ->
+  | Key (_, child) -> build position child
+  | Element (template, holes) ->
       let root, sites = Template.clone template in
       if Array.length sites <> Array.length holes then
         Js.Exn.raiseError
@@ -166,8 +308,43 @@ let rec build position child =
           | Handler_site _ | Style_site _ | Class_site _ ->
               ())
         bindings;
-      Instance_live { template; root; bindings }
+      Element_live { template; root; bindings }
   | Lazy thunk -> Lazy_live (thunk, build position (force thunk))
+  | Component (component, props, render) ->
+      mount_instance position (Renders { component; props; render })
+  | Provide (context, value, children) ->
+      mount_instance position (Provides { context; value; children; consumers = [] })
+
+and mount_instance position kind =
+  let instance =
+    {
+      parent = !owner;
+      depth = Option.fold ~none:0 ~some:(fun parent -> parent.depth + 1) !owner;
+      slots = Hook.slots ();
+      kind;
+      status = Clean;
+      output = Empty_live;
+      region = Nodes;
+      pending = [];
+      teardown = [];
+    }
+  in
+  let child = run instance in
+  instance.output <- within owner (Some instance) (fun () -> build position child);
+  mark_region position instance;
+  commit instance;
+  Component_live instance
+
+and refresh (position : Template.position) instance =
+  let child = run instance in
+  let at =
+    match instance.region with
+    | Marker node -> { position with before = Some (Dom_api.to_node node) }
+    | Nodes -> position
+  in
+  instance.output <- within owner (Some instance) (fun () -> update at instance.output child);
+  mark_region position instance;
+  commit instance
 
 and bind site hole =
   match (site, hole) with
@@ -197,8 +374,14 @@ and bind site hole =
       _ ) ->
       Js.Exn.raiseError "Melact hole value does not match its template hole"
 
+and replace position live child =
+  let replacement = build position child in
+  remove position live;
+  replacement
+
 and update position live child =
   match (live, child) with
+  | _, Key (_, child) -> update position live child
   | Text_live (node, value), Text next ->
       if Dom_api.same value next then live
       else (
@@ -230,9 +413,9 @@ and update position live child =
                   let live = update at items.(i) children.(j) in
                   each_node (insert at) live;
                   live) )
-  | Instance_live instance, Instance (template, holes)
-    when Dom_api.same instance.template template ->
-      Array.iter2 rewrite instance.bindings holes;
+  | Element_live element, Element (template, holes)
+    when Dom_api.same element.template template ->
+      Array.iter2 rewrite element.bindings holes;
       live
   | Lazy_live (old, inner), Lazy next -> (
       match (old, next) with
@@ -241,11 +424,42 @@ and update position live child =
         when Dom_api.same f g && Dom_api.same a c && Dom_api.same b d ->
           live
       | (Lazy1 _ | Lazy2 _), _ -> Lazy_live (next, update position inner (force next)))
-  | (Text_live _ | Empty_live | List_live _ | Keyed_live _ | Instance_live _
-    | Lazy_live _), _ ->
-      let replacement = build position child in
-      remove position live;
-      replacement
+  | Component_live instance, Component (component, props, render) -> (
+      match instance.kind with
+      | Renders definition -> (
+          match
+            Type.Id.provably_equal definition.component.witness component.witness
+          with
+          | Some Equal ->
+              (match
+                 (instance.status, definition.component.unchanged definition.props props)
+               with
+              | Clean, true -> ()
+              | (Clean | Dirty | Unmounted), _ ->
+                  definition.props <- props;
+                  definition.render <- render;
+                  refresh position instance);
+              live
+          | None -> replace position live child)
+      | Provides _ -> replace position live child)
+  | Component_live instance, Provide (context, value, children) -> (
+      match instance.kind with
+      | Provides provision -> (
+          match Type.Id.provably_equal provision.context.witness context.witness with
+          | Some Equal ->
+              if not (Dom_api.same provision.value value) then (
+                provision.value <- value;
+                List.iter mark_dirty provision.consumers;
+                provision.consumers <- []);
+              provision.children <- children;
+              refresh position instance;
+              live
+          | None -> replace position live child)
+      | Renders _ -> replace position live child)
+  | ( ( Text_live _ | Empty_live | List_live _ | Keyed_live _ | Element_live _
+      | Lazy_live _ | Component_live _ ),
+      _ ) ->
+      replace position live child
 
 and rewrite binding hole =
   match (binding, hole) with
@@ -292,18 +506,119 @@ and rewrite binding hole =
       _ ) ->
       Js.Exn.raiseError "Melact hole value does not match its template hole"
 
+let run_passive () =
+  passive_schedule := Idle;
+  let jobs = !passive_jobs in
+  passive_jobs := [];
+  run_jobs jobs
+
+let settle () =
+  let position_of instance =
+    let rec back live before =
+      match live with
+      | Text_live (node, _) -> Some (Dom_api.to_node node)
+      | Empty_live -> before
+      | List_live items | Keyed_live (_, items) ->
+          Array.fold_left (fun found item -> back item found) before items
+      | Element_live element -> Some (Dom_api.to_node element.root)
+      | Lazy_live (_, inner) -> back inner before
+      | Component_live inner -> (
+          match inner.region with
+          | Marker node -> Some (Dom_api.to_node node)
+          | Nodes -> back inner.output before)
+    in
+    match
+      Option.bind (front (Component_live instance) None) Dom_api.parent_node,
+      back (Component_live instance) None
+    with
+    | Some parent, Some last -> { Template.parent; before = Dom_api.next_sibling last }
+    | None, _ | _, None -> Js.Exn.raiseError "Melact: a mounted component is not in the DOM"
+  in
+  run_layout ();
+  let rec drain () =
+    match !dirty with
+    | [] -> ()
+    | pending ->
+        dirty := [];
+        List.iter
+          (fun instance ->
+            match instance.status with
+            | Dirty ->
+                refresh (position_of instance) instance;
+                run_layout ()
+            | Clean | Unmounted -> ())
+          (List.stable_sort (fun a b -> Int.compare a.depth b.depth) pending);
+        drain ()
+  in
+  drain ();
+  match (!passive_jobs, !passive_schedule) with
+  | [], _ | _, Queued -> ()
+  | _ :: _, Idle ->
+      passive_schedule := Queued;
+      Dom_api.request_animation_frame (fun _ -> Dom_api.set_timeout run_passive 0)
+
 let mount child ~parent ~before =
   let position =
     { Template.parent = Dom_api.to_node parent; before = Option.map Dom_api.to_node before }
   in
-  { position; source = child; live = build position child }
+  let mounted = { position; source = child; live = build position child } in
+  settle ();
+  mounted
 
 let patch mounted child =
   if not (Dom_api.same mounted.source child) then (
     mounted.live <- update mounted.position mounted.live child;
-    mounted.source <- child)
+    mounted.source <- child;
+    settle ())
 
 let unmount mounted =
   remove mounted.position mounted.live;
   mounted.live <- Empty_live;
   mounted.source <- Empty
+
+let current () =
+  match !rendering with
+  | Some instance -> instance
+  | None -> Js.Exn.raiseError "Melact: hooks can only be called while a component renders"
+
+let slot instance key init = Hook.take instance.slots key init
+
+let invalidate instance =
+  match !rendering with
+  | Some _ ->
+      Js.Exn.raiseError "Melact: a state setter was called while a component was rendering"
+  | None -> (
+      mark_dirty instance;
+      match !render_schedule with
+      | Queued -> ()
+      | Idle ->
+          render_schedule := Queued;
+          Dom_api.queue_microtask (fun () ->
+              render_schedule := Idle;
+              settle ()))
+
+let after_commit instance timing job = instance.pending <- (timing, job) :: instance.pending
+let on_unmount instance cleanup = instance.teardown <- cleanup :: instance.teardown
+
+let consume : type value. instance -> value Context.t -> value =
+ fun instance context ->
+  let rec find ancestor =
+    match ancestor with
+    | None -> context.default
+    | Some above -> (
+        match above.kind with
+        | Provides provision -> (
+            match Type.Id.provably_equal provision.context.witness context.witness with
+            | Some Equal ->
+                if not (List.memq instance provision.consumers) then
+                  provision.consumers <- instance :: provision.consumers;
+                provision.value
+            | None -> find above.parent)
+        | Renders _ -> find above.parent)
+  in
+  find instance.parent
+
+let flush () =
+  render_schedule := Idle;
+  settle ();
+  run_passive ()
