@@ -601,25 +601,33 @@ def family(p):
 
 def compiled(p):
     char = 7.83
+    cx = 655
 
     def code(x, y, parts, size=13):
         line = "".join(span(t, c) if c else escape(t) for t, c in parts)
         return text(x, y, line, size=size, cls="mono", raw=True)
 
-    def hole(x, y, w):
-        return box(x, y, w, 26, p["green_soft"], p["green"], rx=6, dash="4 3", width=1.3)
+    def hole(x, y, w, h=26):
+        return box(x, y, w, h, p["green_soft"], p["green"], rx=6, dash="4 3", width=1.3)
 
     def counter(y, value, changed):
-        out = box(570, y, 240, 60, p["card"], p["line"], rx=12, lift=True)
-        for bx, sign in ((582, "−"), (754, "+")):
+        out = box(cx - 120, y, 240, 60, p["card"], p["line"], rx=12, lift=True)
+        for bx, sign in ((cx - 108, "−"), (cx + 64, "+")):
             out += box(bx, y + 12, 44, 36, p["card"], p["line"], rx=8)
             out += text(bx + 22, y + 37, sign, size=18, anchor="middle", weight=600)
         if changed:
-            out += hole(660, y + 15, 60)
-        out += text(690, y + 39, value, size=22, cls="mono green" if changed else "mono", weight=700, anchor="middle")
+            out += hole(cx - 30, y + 15, 60)
+        out += text(cx, y + 39, value, size=22, cls="mono green" if changed else "mono", weight=700, anchor="middle")
         return out
 
-    body = box(0, 0, 380, 340, p["card"], p["accent"], rx=14, width=1.6, lift=True)
+    def node(x, y, label, w):
+        return (box(x - w / 2, y - 13, w, 26, p["card"], p["line"], rx=13)
+                + text(x, y + 4.5, label, size=12, cls="mono muted", anchor="middle"))
+
+    def edge(x1, y1, x2, y2):
+        return f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{p["line"]}" stroke-width="1.5"/>'
+
+    body = box(0, 0, 380, 410, p["card"], p["accent"], rx=14, width=1.6, lift=True)
     body += text(20, 32, "you write the counter", size=13.5, weight=700, cls="accent")
     lines = [
         [("let view count =", "")],
@@ -635,26 +643,36 @@ def compiled(p):
     ]
     for i, parts in enumerate(lines):
         if i == 5:
-            body += hole(20 + 6 * char - 5, 72 + i * 25 - 18, 16 * char + 10)
-        body += code(20, 72 + i * 25, parts)
+            body += hole(20 + 6 * char - 5, 76 + i * 32 - 18, 16 * char + 10)
+        body += code(20, 76 + i * 32, parts)
 
-    right = text(690, 14, "in the page: click +", size=12.5, weight=700, anchor="middle")
-    right += counter(24, "41", False)
-    right += f'<path d="M786,52 l0,17 l4.5,-4 l3,7 l3,-1.4 l-3,-7 l6,0 z" fill="{p["text"]}" stroke="{p["card"]}" stroke-width="1"/>'
-    right += arrow(p, 690, 88, 690, 116, "accent", flow=True)
-    right += text(700, 106, "".join([span("Increment", "accent"), escape(" → update: count = 42")]), size=11.5, cls="muted", raw=True)
-    right += box(530, 122, 320, 84, p["green_soft"], p["green"], rx=12, width=1.5)
-    right += text(546, 144, "Meltea runs only this", size=11.5, cls="green", weight=700)
-    right += code(546, 168, [("if (", ""), ("count", "green"), (" !== last)", "")])
-    right += code(546, 192, [("  text.data = \"42\"", "")])
-    right += arrow(p, 690, 210, 690, 238, "green", flow=True)
-    right += counter(244, "42", True)
-    right += text(690, 330, "one text node written; the rest of the DOM is untouched", size=11.5, cls="muted", anchor="middle")
+    body += text(cx, 14, "in the page: click +", size=12.5, weight=700, anchor="middle")
+    body += counter(24, "41", False)
+    body += f'<path d="M{cx + 96},52 l0,17 l4.5,-4 l3,7 l3,-1.4 l-3,-7 l6,0 z" fill="{p["text"]}" stroke="{p["card"]}" stroke-width="1"/>'
+    body += arrow(p, cx, 90, cx, 118, "accent", flow=True)
+    body += text(cx + 10, 108, "".join([span("Increment", "accent"), escape(" → update: count = 42")]),
+                 size=11.5, cls="muted", raw=True)
 
-    body += f'<g transform="translate(-30,0)">{right}</g>'
-    body += text(440, 372, "no virtual DOM: Meltea compiles the view at build time into code like Svelte's",
+    body += box(440, 124, 430, 196, p["card"], p["line"], rx=14)
+    body += text(458, 146, "the template Meltea compiled: no DOM writes to the grey nodes", size=11.5, cls="faint")
+    top, middle, bottom = 172, 220, 268
+    body += edge(cx, top + 13, cx - 140, middle - 13) + edge(cx, top + 13, cx, middle - 13)
+    body += edge(cx, top + 13, cx + 140, middle - 13)
+    body += edge(cx - 140, middle + 13, cx - 140, bottom - 13) + edge(cx, middle + 13, cx, bottom - 13)
+    body += edge(cx + 140, middle + 13, cx + 140, bottom - 13)
+    body += node(cx, top, "div", 56)
+    body += node(cx - 140, middle, "button", 76) + node(cx, middle, "output", 76) + node(cx + 140, middle, "button", 76)
+    body += node(cx - 140, bottom, "\"−\"", 46) + node(cx + 140, bottom, "\"+\"", 46)
+    body += hole(cx - 52, bottom - 13, 104)
+    body += text(cx, bottom + 4.5, "text 41→42", size=12, cls="mono green", weight=700, anchor="middle")
+    body += code(cx - 132, 306, [("if (", ""), ("count", "green"), (" !== last) ", ""), ("text.data = \"42\"", "green")], size=12.5)
+
+    body += arrow(p, cx, 326, cx, 344, "green", flow=True)
+    body += counter(350, "42", True)
+
+    body += text(440, 446, "no virtual DOM: Meltea compiles the view at build time into code like Svelte's",
                  size=13, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 384, "The counter in Meltea: you write the view in mlx; when + is clicked the update makes count 42, and the code Meltea compiled from the view compares count with its last value and writes 42 into the one text node; the buttons and the rest of the DOM are untouched; there is no virtual DOM", body)
+    return svg(p, 880, 456, "The counter in Meltea: you write the view in mlx; Meltea compiles it into a template tree of div, two buttons and an output whose text is the only hole; when + is clicked the update makes count 42, the compiled code compares count with its last value and writes 42 into that one text node; the grey static nodes get no DOM writes; there is no virtual DOM", body)
 
 
 def roadmap(p):
