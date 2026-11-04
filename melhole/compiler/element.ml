@@ -293,8 +293,9 @@ let lowercase frontend ~loc tag arguments =
     List.map
       (fun (hole : expression Markup.hole) ->
         match hole with
-        | On_element (_, (Handler _ | Ref), _) -> Free.Volatile
-        | On_element (_, (Attr _ | Prop _ | Control _ | Style), value) | At_position (_, _, _, value) ->
+        | On_element (_, Ref, _) -> Free.Volatile
+        | On_element (_, (Attr _ | Prop _ | Control _ | Style | Handler _), value)
+        | At_position (_, _, _, value) ->
             match Free.of_expression value with
             | Free.Reads names ->
                 Free.Reads (List.filter (fun name -> List.mem name frontend.locals) names)
