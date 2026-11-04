@@ -37,6 +37,10 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 ## The idea
 
+> Melact has a sibling, **Meltea**: the Elm architecture in OCaml, pure functions everywhere,
+> views in mlx. Both share one Svelte-like compiler and a runtime that tends to zero. See
+> [`docs/vision.md`](docs/vision.md).
+
 Take a reason-react + Melange app, change two lines in its `dune` files:
 
 ```diff
