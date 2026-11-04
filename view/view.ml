@@ -6,8 +6,9 @@ type child =
   | Key of string * child
   | Element of Template.t * hole array
   | Lazy of thunk
-  | Component : 'props Component.t * 'props * ('props -> child) -> child
+  | Component of Component.t * input array * (unit -> child)
   | Provide : 'value Context.t * 'value * child -> child
+  | Portal of Dom.element * child
 
 and hole =
   | HText of string
@@ -19,13 +20,13 @@ and hole =
   | HRef of (Dom.element -> unit)
   | HChild of child
 
+(** A value of any type, compared physically. *)
+and input = Input : 'a -> input [@@unboxed]
+
 (** A render function with the arguments it is skipped for. *)
 and thunk =
   | Lazy1 : ('a -> child) * 'a -> thunk
   | Lazy2 : ('a -> 'b -> child) * 'a * 'b -> thunk
-
-(** A JS property value of any type. *)
-type any = Any : 'a -> any [@@unboxed]
 
 (** When an effect runs after its instance is patched. *)
 type timing =
@@ -45,6 +46,7 @@ type live =
     }
   | Lazy_live of thunk * live
   | Component_live of instance
+  | Portal_live of Dom.element * live
 
 (** A template hole bound to its DOM site, with the value last written. *)
 and binding =
@@ -53,7 +55,7 @@ and binding =
       name : string;
       mutable value : string option;
     }
-  | Prop_site of { element : Dom.element; name : string; mutable value : any }
+  | Prop_site of { element : Dom.element; name : string; mutable value : input }
   | Text_site of { node : Dom.text; mutable value : string }
   | Child_site of {
       position : Template.position;
@@ -82,12 +84,11 @@ and instance = {
 }
 
 and kind =
-  | Renders : {
-      component : 'props Component.t;
-      mutable props : 'props;
-      mutable render : 'props -> child;
+  | Renders of {
+      component : Component.t;
+      mutable inputs : input array;
+      mutable render : unit -> child;
     }
-      -> kind
   | Provides : {
       context : 'value Context.t;
       mutable value : 'value;
@@ -126,8 +127,9 @@ let with_key key child = Key (key, child)
 let tpl_instance template holes = Element (template, holes)
 let lazy1 render a = Lazy (Lazy1 (render, a))
 let lazy2 render a b = Lazy (Lazy2 (render, a, b))
-let component definition props render = Component (definition, props, render)
+let component definition inputs render = Component (definition, inputs, render)
 let provide context value children = Provide (context, value, children)
+let portal container child = Portal (container, child)
 
 let list children =
   let rec entries collected children =
@@ -135,7 +137,7 @@ let list children =
     | [] -> Some (List.rev collected)
     | Key (key, child) :: rest -> entries ((key, child) :: collected) rest
     | ( Text _ | Empty | List _ | Keyed _ | Element _ | Lazy _ | Component _
-      | Provide _ )
+      | Provide _ | Portal _ )
       :: _ ->
         None
   in
@@ -157,6 +159,14 @@ let within cell value run =
 
 let force thunk =
   match thunk with Lazy1 (render, a) -> render a | Lazy2 (render, a, b) -> render a b
+
+let rec items child =
+  match child with
+  | Empty -> []
+  | List children -> List.concat_map items children
+  | Keyed entries -> List.map (fun (key, child) -> Key (key, child)) entries
+  | Lazy thunk -> items (force thunk)
+  | Text _ | Key _ | Element _ | Component _ | Provide _ | Portal _ -> [ child ]
 
 let insert (position : Template.position) node =
   Dom_api.insert_before position.parent node (Js.Null.fromOption position.before)
@@ -203,7 +213,7 @@ let run instance =
   match instance.kind with
   | Renders definition ->
       Hook.rewind instance.slots;
-      within rendering (Some instance) (fun () -> definition.render definition.props)
+      within rendering (Some instance) definition.render
   | Provides provision -> provision.children
 
 let rec each_node visit live =
@@ -218,6 +228,7 @@ let rec each_node visit live =
       match instance.region with
       | Marker node -> visit (Dom_api.to_node node)
       | Nodes -> ())
+  | Portal_live _ -> ()
 
 let rec front live after =
   match live with
@@ -231,6 +242,7 @@ let rec front live after =
         (match instance.region with
         | Marker node -> Some (Dom_api.to_node node)
         | Nodes -> after)
+  | Portal_live _ -> after
 
 let remove (position : Template.position) live =
   let rec release live =
@@ -252,6 +264,9 @@ let remove (position : Template.position) live =
         release instance.output;
         instance.status <- Unmounted;
         List.iter (fun cleanup -> cleanup ()) (List.rev instance.teardown)
+    | Portal_live (container, inner) ->
+        each_node (Dom_api.remove_child (Dom_api.to_node container)) inner;
+        release inner
   in
   each_node (Dom_api.remove_child position.parent) live;
   release live
@@ -310,10 +325,14 @@ let rec build position child =
         bindings;
       Element_live { template; root; bindings }
   | Lazy thunk -> Lazy_live (thunk, build position (force thunk))
-  | Component (component, props, render) ->
-      mount_instance position (Renders { component; props; render })
+  | Component (component, inputs, render) ->
+      mount_instance position (Renders { component; inputs; render })
   | Provide (context, value, children) ->
       mount_instance position (Provides { context; value; children; consumers = [] })
+  | Portal (container, child) ->
+      Portal_live
+        ( container,
+          build { Template.parent = Dom_api.to_node container; before = None } child )
 
 and mount_instance position kind =
   let instance =
@@ -353,7 +372,7 @@ and bind site hole =
       Attr_site { element; name; value }
   | Prop (element, name), HProp value ->
       Dom_api.set_property element name value;
-      Prop_site { element; name; value = Any value }
+      Prop_site { element; name; value = Input value }
   | Text position, HText value ->
       let node = Dom_api.create_text_node Dom_api.document value in
       insert position node;
@@ -424,24 +443,23 @@ and update position live child =
         when Dom_api.same f g && Dom_api.same a c && Dom_api.same b d ->
           live
       | (Lazy1 _ | Lazy2 _), _ -> Lazy_live (next, update position inner (force next)))
-  | Component_live instance, Component (component, props, render) -> (
+  | Component_live instance, Component (component, inputs, render) -> (
       match instance.kind with
-      | Renders definition -> (
-          match
-            Type.Id.provably_equal definition.component.witness component.witness
-          with
-          | Some Equal ->
-              (match
-                 (instance.status, definition.component.unchanged definition.props props)
-               with
-              | Clean, true -> ()
-              | (Clean | Dirty | Unmounted), _ ->
-                  definition.props <- props;
-                  definition.render <- render;
-                  refresh position instance);
-              live
-          | None -> replace position live child)
-      | Provides _ -> replace position live child)
+      | Renders definition when definition.component == component ->
+          (match
+             ( instance.status,
+               Array.length definition.inputs = Array.length inputs
+               && Array.for_all2
+                    (fun (Input old) (Input next) -> Dom_api.same old next)
+                    definition.inputs inputs )
+           with
+          | Clean, true -> ()
+          | (Clean | Dirty | Unmounted), _ ->
+              definition.inputs <- inputs;
+              definition.render <- render;
+              refresh position instance);
+          live
+      | Renders _ | Provides _ -> replace position live child)
   | Component_live instance, Provide (context, value, children) -> (
       match instance.kind with
       | Provides provision -> (
@@ -456,8 +474,12 @@ and update position live child =
               live
           | None -> replace position live child)
       | Renders _ -> replace position live child)
+  | Portal_live (container, inner), Portal (target, child) when Dom_api.same container target ->
+      Portal_live
+        ( container,
+          update { Template.parent = Dom_api.to_node container; before = None } inner child )
   | ( ( Text_live _ | Empty_live | List_live _ | Keyed_live _ | Element_live _
-      | Lazy_live _ | Component_live _ ),
+      | Lazy_live _ | Component_live _ | Portal_live _ ),
       _ ) ->
       replace position live child
 
@@ -470,10 +492,10 @@ and rewrite binding hole =
         | None -> Dom_api.remove_attribute site.element site.name);
         site.value <- value)
   | Prop_site site, HProp value ->
-      let (Any old) = site.value in
+      let (Input old) = site.value in
       if not (Dom_api.same old value) then (
         Dom_api.set_property site.element site.name value;
-        site.value <- Any value)
+        site.value <- Input value)
   | Text_site site, HText value ->
       if not (Dom_api.same site.value value) then (
         Dom_api.set_data site.node value;
@@ -526,6 +548,7 @@ let settle () =
           match inner.region with
           | Marker node -> Some (Dom_api.to_node node)
           | Nodes -> back inner.output before)
+      | Portal_live _ -> before
     in
     match
       Option.bind (front (Component_live instance) None) Dom_api.parent_node,

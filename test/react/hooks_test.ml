@@ -21,34 +21,34 @@ let fresh child =
 let button =
   Template.make ~html:"<button></button>" ~holes:[| Handler ([], "click"); Text ([], 0) |]
 
-let counter_def = Component.make ~name:"Counter" ~unchanged:( == )
+let counter_def = Component.make ~name:"Counter"
 let count_key = Hook.key ()
 
 let counter label =
-  View.component counter_def label (fun label ->
+  View.component counter_def [| View.Input label |] (fun () ->
       log ("render " ^ label);
       let count, set = React.useState count_key (fun () -> 0) in
       View.tpl_instance button
         [| HHandler (fun _ -> set (fun n -> n + 1)); HText (label ^ string_of_int count) |])
 
-let pair_def = Component.make ~name:"Pair" ~unchanged:( == )
+let pair_def = Component.make ~name:"Pair"
 let pair_key = Hook.key ()
 let set_pair = ref (fun (_ : int -> int) -> ())
 
 let pair () =
-  View.component pair_def () (fun () ->
+  View.component pair_def [||] (fun () ->
       log "render pair";
       let n, set = React.useState pair_key (fun () -> 0) in
       set_pair := set;
       View.list [ counter "fixed"; counter (if n > 0 then "moved" else "fixed ") ])
 
-let effects_def = Component.make ~name:"Effects" ~unchanged:( == )
+let effects_def = Component.make ~name:"Effects"
 let layout_key = Hook.key ()
 let passive_key = Hook.key ()
 let deps_key = Hook.key ()
 
 let effects name deps =
-  View.component effects_def (name, deps) (fun (name, deps) ->
+  View.component effects_def [| View.Input name; View.Input deps |] (fun () ->
       React.useLayoutEffect0 layout_key (fun () ->
           log ("layout " ^ name);
           Some (fun () -> log ("layout cleanup " ^ name)));
@@ -62,24 +62,24 @@ let effects name deps =
         deps;
       View.empty)
 
-let parent_def = Component.make ~name:"Parent" ~unchanged:( == )
+let parent_def = Component.make ~name:"Parent"
 let parent_key = Hook.key ()
 let set_parent = ref (fun (_ : string -> string) -> ())
 
 let parent () =
-  View.component parent_def () (fun () ->
+  View.component parent_def [||] (fun () ->
       let dep, set = React.useState parent_key (fun () -> "a") in
       set_parent := set;
       View.list [ effects "child" [| "x" |]; effects "parent" [| dep |] ])
 
-let memo_def = Component.make ~name:"Memo" ~unchanged:( == )
+let memo_def = Component.make ~name:"Memo"
 let memo_key = Hook.key ()
 let ref_key = Hook.key ()
 let reducer_key = Hook.key ()
 let dispatch = ref (fun (_ : [ `Add of int | `Same ]) -> ())
 
 let memo () =
-  View.component memo_def () (fun () ->
+  View.component memo_def [||] (fun () ->
       let total, send =
         React.useReducer reducer_key
           (fun total action -> match action with `Add n -> total + n | `Same -> total)
@@ -98,58 +98,58 @@ let memo () =
       View.text (Printf.sprintf "%d %s %d" total parity renders.current))
 
 let theme = React.createContext "light"
-let leaf_def = Component.make ~name:"Leaf" ~unchanged:( == )
-let middle_def = Component.make ~name:"Middle" ~unchanged:( == )
-let themed_def = Component.make ~name:"Themed" ~unchanged:( == )
+let leaf_def = Component.make ~name:"Leaf"
+let middle_def = Component.make ~name:"Middle"
+let themed_def = Component.make ~name:"Themed"
 let theme_key = Hook.key ()
 let set_theme = ref (fun (_ : string -> string) -> ())
 
 let leaf () =
-  View.component leaf_def () (fun () ->
+  View.component leaf_def [||] (fun () ->
       log "render leaf";
       View.text (React.useContext theme))
 
 let middle () =
-  View.component middle_def () (fun () ->
+  View.component middle_def [||] (fun () ->
       log "render middle";
       leaf ())
 
 let themed () =
-  View.component themed_def () (fun () ->
+  View.component themed_def [||] (fun () ->
       log "render themed";
       let value, set = React.useState theme_key (fun () -> "dark") in
       set_theme := set;
       child_of (React.Context.provider theme ~value ~children:(React.Element (middle ())) ()))
 
-let toggle_def = Component.make ~name:"Toggle" ~unchanged:( == )
+let toggle_def = Component.make ~name:"Toggle"
 let toggle_key = Hook.key ()
 let set_toggle = ref (fun (_ : bool -> bool) -> ())
 
 let toggle () =
-  View.component toggle_def () (fun () ->
+  View.component toggle_def [||] (fun () ->
       let shown, set = React.useState toggle_key (fun () -> false) in
       set_toggle := set;
       if shown then View.list [ View.text "A"; View.text "B" ] else View.empty)
 
-let order_def = Component.make ~name:"Order" ~unchanged:( == )
+let order_def = Component.make ~name:"Order"
 let first_key = Hook.key ()
 let second_key = Hook.key ()
 let other_key = Hook.key ()
 let flip = ref (fun (_ : bool -> bool) -> ())
 
 let order () =
-  View.component order_def () (fun () ->
+  View.component order_def [||] (fun () ->
       let flipped, set = React.useState first_key (fun () -> false) in
       flip := set;
       if flipped then ignore (React.useRef other_key 0)
       else ignore (React.useState second_key (fun () -> 0));
       View.empty)
 
-let eager_def = Component.make ~name:"Eager" ~unchanged:( == )
+let eager_def = Component.make ~name:"Eager"
 let eager_key = Hook.key ()
 
 let eager () =
-  View.component eager_def () (fun () ->
+  View.component eager_def [||] (fun () ->
       let _, set = React.useState eager_key (fun () -> 0) in
       set (fun n -> n + 1);
       View.empty)

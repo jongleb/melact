@@ -13,11 +13,14 @@ let hoisted = ref []
 let keyed_hooks =
   [
     "useState"; "useReducer"; "useReducerWithMapState"; "useRef"; "useId"; "useEffect";
-    "useLayoutEffect"; "useMemo"; "useCallback";
+    "useLayoutEffect"; "useMemo"; "useCallback"; "useInsertionEffect"; "useSyncExternalStore";
   ]
   @ List.concat_map
       (fun base -> List.init 8 (fun arity -> base ^ string_of_int arity))
-      [ "useEffect"; "useLayoutEffect"; "useMemo"; "useCallback"; "useImperativeHandle" ]
+      [
+        "useEffect"; "useLayoutEffect"; "useInsertionEffect"; "useMemo"; "useCallback";
+        "useImperativeHandle";
+      ]
 
 let hoist ~loc prefix expression =
   incr counter;
@@ -236,15 +239,16 @@ let component ~loc ~name expression =
           "melact: only the last argument of a [@react.component] may be unlabelled"
     | _ :: rest -> trailing rest
   in
-  let patterns =
-    List.filter_map
-      (fun param ->
-        match param.pparam_desc with
-        | Pparam_val ((Labelled _ | Optional _), _, pattern) -> Some pattern
-        | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
-      params
+  let names =
+    List.mapi
+      (fun index _ -> Printf.sprintf "__melact_prop_%d" index)
+      (List.filter
+         (fun param ->
+           match param.pparam_desc with
+           | Pparam_val ((Labelled _ | Optional _), _, _) -> true
+           | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> false)
+         params)
   in
-  let names = List.mapi (fun index _ -> Printf.sprintf "__melact_prop_%d" index) patterns in
   let next = ref names in
   let aliased =
     List.map
@@ -270,48 +274,19 @@ let component ~loc ~name expression =
     | `Missing ->
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
-  let props, pattern, unchanged =
-    match (names, patterns) with
-    | [], _ | _, [] -> ([%expr ()], [%pat? ()], [%expr fun () () -> true])
-    | [ name ], [ pattern ] -> (evar ~loc name, pattern, [%expr ( == )])
-    | _, _ ->
-        let olds = List.map (fun name -> name ^ "_old") names in
-        let news = List.map (fun name -> name ^ "_new") names in
-        let same =
-          List.map2
-            (fun old_name new_name -> [%expr [%e evar ~loc old_name] == [%e evar ~loc new_name]])
-            olds news
-          |> List.rev
-          |> function
-          | [] -> [%expr true]
-          | last :: earlier ->
-              List.fold_left (fun rest test -> [%expr [%e test] && [%e rest]]) last earlier
-        in
-        ( pexp_tuple ~loc (List.map (evar ~loc) names),
-          ppat_tuple ~loc patterns,
-          [%expr
-            fun [%p ppat_tuple ~loc (List.map (pvar ~loc) olds)]
-                [%p ppat_tuple ~loc (List.map (pvar ~loc) news)] -> [%e same]] )
-  in
   let definition =
-    hoist ~loc "component"
-      [%expr
-        Melact_view.Component.make ~name:[%e estring ~loc name] ~unchanged:[%e unchanged]]
+    hoist ~loc "component" [%expr Melact_view.Component.make ~name:[%e estring ~loc name]]
   in
-  let render =
-    [%expr
-      React.Element
-        (Melact_view.View.component [%e definition] [%e props] (fun [%p pattern] ->
-             [%e unwrap ~loc body]))]
+  let inputs =
+    pexp_array ~loc
+      (List.map (fun name -> [%expr Melact_view.View.Input [%e evar ~loc name]]) names)
   in
-  {
-    (pexp_function ~loc complete None (Pfunction_body render)) with
-    pexp_attributes =
-      [
-        attribute ~loc ~name:{ loc; txt = "ocaml.warning" }
-          ~payload:(PStr [ pstr_eval ~loc (estring ~loc "-26-27") [] ]);
-      ];
-  }
+  pexp_function ~loc complete None
+    (Pfunction_body
+       [%expr
+         React.Element
+           (Melact_view.View.component [%e definition] [%e inputs] (fun () ->
+                [%e unwrap ~loc body]))])
 
 let rec with_unit typ =
   match typ.ptyp_desc with

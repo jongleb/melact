@@ -370,6 +370,7 @@ module Client : sig
   type root
 
   val createRoot : Dom.element -> root
+  val hydrateRoot : Dom.element -> React.element -> root
   val render : root -> React.element -> unit
   val unmount : root -> unit -> unit
 end
@@ -377,4 +378,11 @@ end
 val render : React.element -> Dom.element -> unit
 [@@deprecated "Use ReactDOM.Client.createRoot and ReactDOM.Client.render instead."]
 
+val hydrate : React.element -> Dom.element -> unit
+[@@deprecated "Use ReactDOM.Client.hydrateRoot instead."]
+
+val querySelector : string -> Dom.element option
+val createPortal : React.element -> Dom.element -> React.element
+val unmountComponentAtNode : Dom.element -> unit
+val domElementToObj : Dom.element -> < .. > Js.t
 val flushSync : (unit -> unit) -> unit

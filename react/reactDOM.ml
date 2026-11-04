@@ -371,6 +371,13 @@ module Ref = struct
   let callbackDomRef apply = Dom_ref (fun element -> apply (Js.Nullable.return element))
 end
 
+external set_text_content : Dom.element -> string -> unit = "textContent" [@@mel.set]
+external querySelector : string -> Dom.element option = "querySelector"
+[@@mel.scope "document"] [@@mel.return nullable]
+external domElementToObj : Dom.element -> < .. > Js.t = "%identity"
+
+let clear container = set_text_content container ""
+
 module Client = struct
   (** What a root shows. *)
   type content = Nothing | Showing of View.mounted
@@ -384,6 +391,12 @@ module Client = struct
     | Showing mounted -> View.patch mounted child
     | Nothing ->
         root.content <- Showing (View.mount child ~parent:root.container ~before:None)
+
+  let hydrateRoot container element =
+    clear container;
+    let root = createRoot container in
+    render root element;
+    root
 
   let unmount root () =
     match root.content with
@@ -405,6 +418,19 @@ let render element container =
         root
   in
   Client.render root element
+
+let hydrate element container =
+  clear container;
+  render element container
+
+let createPortal (React.Element child) container = React.Element (View.portal container child)
+
+let unmountComponentAtNode container =
+  Option.iter
+    (fun (_, root) ->
+      Client.unmount root ();
+      roots := List.filter (fun (known, _) -> not (known == container)) !roots)
+    (List.find_opt (fun (known, _) -> known == container) !roots)
 
 let flushSync run =
   run ();

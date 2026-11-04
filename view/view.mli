@@ -4,6 +4,9 @@
 
 type child
 
+(** A prop value of any type, compared physically to decide whether a component re-renders. *)
+type input = Input : 'a -> input [@@unboxed]
+
 (** The value of one template hole. *)
 type hole =
   | HText of string
@@ -23,8 +26,10 @@ val with_key : string -> child -> child
 val tpl_instance : Template.t -> hole array -> child
 val lazy1 : ('a -> child) -> 'a -> child
 val lazy2 : ('a -> 'b -> child) -> 'a -> 'b -> child
-val component : 'props Component.t -> 'props -> ('props -> child) -> child
+val component : Component.t -> input array -> (unit -> child) -> child
 val provide : 'value Context.t -> 'value -> child -> child
+val portal : Dom.element -> child -> child
+val items : child -> child list
 
 type mounted
 

@@ -22,6 +22,38 @@ module Context : sig
   val provider : 'value t -> value:'value -> children:element -> unit -> element
 end
 
+module Fragment : sig
+  val make : children:element -> unit -> element
+end
+
+module StrictMode : sig
+  val make : children:element -> unit -> element
+end
+
+module Suspense : sig
+  val make : ?fallback:element -> children:element -> unit -> element
+end
+
+module Children : sig
+  val map : element -> (element -> element) -> element
+  val mapWithIndex : element -> (element -> int -> element) -> element
+  val forEach : element -> (element -> unit) -> unit
+  val forEachWithIndex : element -> (element -> int -> unit) -> unit
+  val count : element -> int
+  val only : element -> element
+  val toArray : element -> element array
+end
+
+module Ref : sig
+  val current : 'value ref -> 'value
+  val setCurrent : 'value ref -> 'value -> unit
+end
+
+val createRef : unit -> 'value Js.nullable ref
+val isValidElement : element -> bool
+val cloneElement : element -> 'props -> element
+val setDisplayName : ('props -> element) -> string -> unit
+val displayName : ('props -> element) -> string option
 val createContext : 'value -> 'value Context.t
 val useContext : 'value Context.t -> 'value
 
@@ -217,6 +249,41 @@ val useCallback7 :
   'fn
 
 val useRef : 'value ref Melact_view.Hook.key -> 'value -> 'value ref
+
+val useInsertionEffect :
+  unit effect_cell Melact_view.Hook.key -> (unit -> (unit -> unit) option) -> unit
+
+val useInsertionEffect0 :
+  unit effect_cell Melact_view.Hook.key -> (unit -> (unit -> unit) option) -> unit
+
+val useInsertionEffect1 :
+  'a array effect_cell Melact_view.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a array ->
+  unit
+
+val useInsertionEffect2 :
+  ('a * 'b) effect_cell Melact_view.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a * 'b ->
+  unit
+
+val useInsertionEffect3 :
+  ('a * 'b * 'c) effect_cell Melact_view.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a * 'b * 'c ->
+  unit
+
+(** The slot of a [useSyncExternalStore] call. *)
+type 'snapshot store
+
+val useSyncExternalStore :
+  'snapshot store Melact_view.Hook.key ->
+  subscribe:((unit -> unit) -> unit -> unit) ->
+  getSnapshot:(unit -> 'snapshot) ->
+  'snapshot
+
+val useDebugValue : 'value -> ?format:('value -> string) -> unit -> unit
 
 val useImperativeHandle0 :
   unit effect_cell Melact_view.Hook.key ->

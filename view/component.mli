@@ -1,9 +1,5 @@
-(** The identity of one [@react.component], made once per definition. *)
+(** The identity of one [@react.component], made once per definition and compared physically. *)
 
-type 'props t = private {
-  name : string;  (** For error messages and devtools. *)
-  witness : 'props Type.Id.t;
-  unchanged : 'props -> 'props -> bool;  (** Every prop physically equal. *)
-}
+type t = private { name : string  (** For error messages and devtools. *) }
 
-val make : name:string -> unchanged:('props -> 'props -> bool) -> 'props t
+val make : name:string -> t

@@ -19,12 +19,60 @@ type ('state, 'action) state = {
 type 'deps effect_cell = { mutable deps : 'deps; mutable cleanup : (unit -> unit) option }
 type ('deps, 'value) memo = { mutable inputs : 'deps; mutable result : 'value }
 
+type 'snapshot store = {
+  mutable read : unit -> 'snapshot;
+  mutable snapshot : 'snapshot;
+  mutable subscribe : (unit -> unit) -> unit -> unit;
+  mutable unsubscribe : unit -> unit;
+}
+
 let null = Element View.empty
 let string text = Element (View.text text)
 let int number = Element (View.text (string_of_int number))
 let float number = Element (View.text (Js.Float.toString number))
 let list elements = Element (View.list (List.map (fun (Element child) -> child) elements))
 let array elements = list (Array.to_list elements)
+module Fragment = struct
+  let make ~children () = children
+end
+
+module StrictMode = struct
+  let make ~children () = children
+end
+
+module Suspense = struct
+  let make ?fallback:_ ~children () = children
+end
+
+module Children = struct
+  let elements (Element child) = List.map (fun item -> Element item) (View.items child)
+  let map element apply = list (List.map apply (elements element))
+  let mapWithIndex element apply = list (List.mapi (fun index item -> apply item index) (elements element))
+  let forEach element visit = List.iter visit (elements element)
+  let forEachWithIndex element visit = List.iteri (fun index item -> visit item index) (elements element)
+  let count element = List.length (elements element)
+
+  let only element =
+    match elements element with
+    | [ single ] -> single
+    | [] | _ :: _ :: _ -> Js.Exn.raiseError "React.Children.only expected to receive a single element"
+
+  let toArray element = Array.of_list (elements element)
+end
+
+module Ref = struct
+  let current reference = reference.current
+  let setCurrent reference value = reference.current <- value
+end
+
+let createRef () = { current = Js.Nullable.null }
+let isValidElement _ = true
+
+let cloneElement _ _ =
+  Js.Exn.raiseError "melact: React.cloneElement is not supported; pass props to the component instead"
+
+let setDisplayName _ _ = ()
+let displayName _ = None
 let createContext default = Context.Context (Melact_view.Context.make default)
 let useContext (Context.Context context) = View.consume (View.current ()) context
 
@@ -140,6 +188,41 @@ let useCallback4 key fn deps = memoize same4 key (fun () -> fn) deps
 let useCallback5 key fn deps = memoize same5 key (fun () -> fn) deps
 let useCallback6 key fn deps = memoize same6 key (fun () -> fn) deps
 let useCallback7 key fn deps = memoize same7 key (fun () -> fn) deps
+let useInsertionEffect key run = use_effect Layout never key run ()
+let useInsertionEffect0 key run = use_effect Layout always key run ()
+let useInsertionEffect1 key run deps = use_effect Layout same_array key run deps
+let useInsertionEffect2 key run deps = use_effect Layout same2 key run deps
+let useInsertionEffect3 key run deps = use_effect Layout same3 key run deps
+
+let useSyncExternalStore key ~subscribe ~getSnapshot =
+  let instance = View.current () in
+  let resubscribe cell =
+    View.after_commit instance Passive (fun () ->
+        cell.unsubscribe ();
+        cell.unsubscribe <-
+          cell.subscribe (fun () ->
+              let next = cell.read () in
+              if not (next == cell.snapshot) then (
+                cell.snapshot <- next;
+                View.invalidate instance)))
+  in
+  let cell =
+    View.slot instance key (fun () ->
+        let cell =
+          { read = getSnapshot; snapshot = getSnapshot (); subscribe; unsubscribe = ignore }
+        in
+        View.on_unmount instance (fun () -> cell.unsubscribe ());
+        resubscribe cell;
+        cell)
+  in
+  cell.read <- getSnapshot;
+  cell.snapshot <- getSnapshot ();
+  if not (cell.subscribe == subscribe) then (
+    cell.subscribe <- subscribe;
+    resubscribe cell);
+  cell.snapshot
+
+let useDebugValue _ ?format:_ () = ()
 let useRef key initial = View.slot (View.current ()) key (fun () -> { current = initial })
 
 let imperative unchanged key target make deps =

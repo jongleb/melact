@@ -110,53 +110,37 @@ A component with optional, defaulted and children props, and its signature:
   > let nothing = fun () -> React.null [@@react.component]
   > EOF
   $ ./pp.exe -impl card.ml
-  let __melact_component_1 =
-    Melact_view.Component.make ~name:"Card.make"
-      ~unchanged:(fun
-                    (__melact_prop_0_old, __melact_prop_1_old,
-                     __melact_prop_2_old, __melact_prop_3_old)
-                    (__melact_prop_0_new, __melact_prop_1_new,
-                     __melact_prop_2_new, __melact_prop_3_new)
-                    ->
-                    (__melact_prop_0_old == __melact_prop_0_new) &&
-                      ((__melact_prop_1_old == __melact_prop_1_new) &&
-                         ((__melact_prop_2_old == __melact_prop_2_new) &&
-                            (__melact_prop_3_old == __melact_prop_3_new))))
+  let __melact_component_1 = Melact_view.Component.make ~name:"Card.make"
   let __melact_template_2 =
     Melact_view.Template.make ~html:"<section><!----></section>"
       ~holes:[|(Melact_view.Template.Text ([], 0));(Melact_view.Template.Child
                                                       ([], 1))|]
-  let make =
-    ((fun ~title:(title as __melact_prop_0) ?size:((size as __melact_prop_1)=
-        1) ?subtitle:(subtitle as __melact_prop_2)
-        ~children:(children as __melact_prop_3) () ->
-        React.Element
-          (Melact_view.View.component __melact_component_1
-             (__melact_prop_0, __melact_prop_1, __melact_prop_2,
-               __melact_prop_3)
-             (fun (title, size, subtitle, children) ->
-                let React.Element __melact_child =
-                  React.Element
-                    (Melact_view.View.tpl_instance __melact_template_2
-                       [|(Melact_view.View.HText (title : string));(Melact_view.View.HChild
-                                                                      ((
-                                                                      let React.Element
+  let make ~title:(title as __melact_prop_0) ?size:((size as __melact_prop_1)=
+    1) ?subtitle:(subtitle as __melact_prop_2)
+    ~children:(children as __melact_prop_3) () =
+    React.Element
+      (Melact_view.View.component __melact_component_1
+         [|(Melact_view.View.Input __melact_prop_0);(Melact_view.View.Input
+                                                       __melact_prop_1);(
+           Melact_view.View.Input __melact_prop_2);(Melact_view.View.Input
+                                                      __melact_prop_3)|]
+         (fun () ->
+            let React.Element __melact_child =
+              React.Element
+                (Melact_view.View.tpl_instance __melact_template_2
+                   [|(Melact_view.View.HText (title : string));(Melact_view.View.HChild
+                                                                  ((let React.Element
                                                                       __melact_child
                                                                       =
                                                                       children in
-                                                                      __melact_child)))|]) in
-                __melact_child)))
-    [@ocaml.warning "-26-27"])
-  let __melact_component_3 =
-    Melact_view.Component.make ~name:"Card.nothing"
-      ~unchanged:(fun () () -> true)
-  let nothing =
-    ((fun () ->
-        React.Element
-          (Melact_view.View.component __melact_component_3 ()
-             (fun () ->
-                let React.Element __melact_child = React.null in __melact_child)))
-    [@ocaml.warning "-26-27"])
+                                                                    __melact_child)))|]) in
+            __melact_child))
+  let __melact_component_3 = Melact_view.Component.make ~name:"Card.nothing"
+  let nothing () =
+    React.Element
+      (Melact_view.View.component __melact_component_3 [||]
+         (fun () ->
+            let React.Element __melact_child = React.null in __melact_child))
   $ cat > card.mli <<'EOF'
   > val make : title:string -> ?size:int -> ?subtitle:string -> children:React.element -> React.element
   > [@@react.component]
@@ -220,21 +204,17 @@ Hooks get one key per call site, also inside custom hooks:
   $ ./pp.exe -impl hooks.ml
   let __melact_hook_1 = Melact_view.Hook.key ()
   let useToggle () = (React.useState __melact_hook_1) (fun () -> false)
-  let __melact_component_2 =
-    Melact_view.Component.make ~name:"Hooks.make"
-      ~unchanged:(fun () () -> true)
+  let __melact_component_2 = Melact_view.Component.make ~name:"Hooks.make"
   let __melact_hook_3 = Melact_view.Hook.key ()
-  let make =
-    ((fun () ->
-        React.Element
-          (Melact_view.View.component __melact_component_2 ()
-             (fun () ->
-                let React.Element __melact_child =
-                  let (shown, _) = useToggle () in
-                  (React.useEffect1 __melact_hook_3) (fun () -> None) [|shown|];
-                  React.string (React.useContext Theme.context) in
-                __melact_child)))
-    [@ocaml.warning "-26-27"])
+  let make () =
+    React.Element
+      (Melact_view.View.component __melact_component_2 [||]
+         (fun () ->
+            let React.Element __melact_child =
+              let (shown, _) = useToggle () in
+              (React.useEffect1 __melact_hook_3) (fun () -> None) [|shown|];
+              React.string (React.useContext Theme.context) in
+            __melact_child))
 
 Reason input:
 
@@ -244,22 +224,20 @@ Reason input:
   > EOF
   $ refmt --print ml greeting.re > greeting.ml
   $ ./pp.exe -impl greeting.ml
-  let __melact_component_1 =
-    Melact_view.Component.make ~name:"Greeting.make" ~unchanged:(==)
+  let __melact_component_1 = Melact_view.Component.make ~name:"Greeting.make"
   let __melact_template_2 =
     Melact_view.Template.make ~html:"<span class=\"greeting\"></span>"
       ~holes:[|(Melact_view.Template.Text ([], 0))|]
-  let make =
-    ((fun ~name:(name as __melact_prop_0) () ->
-        React.Element
-          (Melact_view.View.component __melact_component_1 __melact_prop_0
-             (fun name ->
-                let React.Element __melact_child =
-                  React.Element
-                    (Melact_view.View.tpl_instance __melact_template_2
-                       [|(Melact_view.View.HText ("Hello, " ^ name : string))|]) in
-                __melact_child)))
-    [@ocaml.warning "-26-27"])
+  let make ~name:(name as __melact_prop_0) () =
+    React.Element
+      (Melact_view.View.component __melact_component_1
+         [|(Melact_view.View.Input __melact_prop_0)|]
+         (fun () ->
+            let React.Element __melact_child =
+              React.Element
+                (Melact_view.View.tpl_instance __melact_template_2
+                   [|(Melact_view.View.HText ("Hello, " ^ name : string))|]) in
+            __melact_child))
 
 mlx input:
 
@@ -269,22 +247,20 @@ mlx input:
   > EOF
   $ mlx-pp greeting.mlx > greeting.ast
   $ ./pp.exe -impl greeting.ast
-  let __melact_component_1 =
-    Melact_view.Component.make ~name:"Greeting.make" ~unchanged:(==)
+  let __melact_component_1 = Melact_view.Component.make ~name:"Greeting.make"
   let __melact_template_2 =
     Melact_view.Template.make ~html:"<span class=\"greeting\"></span>"
       ~holes:[|(Melact_view.Template.Text ([], 0))|]
-  let make =
-    ((fun ~name:(name as __melact_prop_0) () ->
-        React.Element
-          (Melact_view.View.component __melact_component_1 __melact_prop_0
-             (fun name ->
-                let React.Element __melact_child =
-                  React.Element
-                    (Melact_view.View.tpl_instance __melact_template_2
-                       [|(Melact_view.View.HText ("Hello, " ^ name : string))|]) in
-                __melact_child)))
-    [@ocaml.warning "-26-27"])
+  let make ~name:(name as __melact_prop_0) () =
+    React.Element
+      (Melact_view.View.component __melact_component_1
+         [|(Melact_view.View.Input __melact_prop_0)|]
+         (fun () ->
+            let React.Element __melact_child =
+              React.Element
+                (Melact_view.View.tpl_instance __melact_template_2
+                   [|(Melact_view.View.HText ("Hello, " ^ name : string))|]) in
+            __melact_child))
 
 Errors point at the source:
 
