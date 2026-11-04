@@ -30,7 +30,8 @@ Underneath it is compiled the way Meltea is, and it aims at the same small runti
 Both are compiled like Svelte: the compiler sees the shape of every view at build time.
 
 - The static part of a view becomes a DOM template, parsed once and cloned.
-- Every dynamic part becomes a hole with a direct path to its DOM node.
+- Every dynamic part becomes a hole, reached by a `firstChild`/`nextSibling` walk the compiler
+  writes out.
 - For every template the compiler emits the update code itself: each hole is guarded by the
   values it reads (one `===` each, as in dartea), evaluated only when one of them changed, and
   written straight to its node.

@@ -56,11 +56,27 @@ by its own typed `put_*`. Component instances, hook slots and the update schedul
 by the first component that mounts. A bundle therefore contains only the parts its compiled code
 names: Meltea's counter has no components, so it has no scheduler, no hooks and no portals.
 
+## Compiled walks
+
+The compiler knows the shape of every template, so it writes out how to reach each hole on a
+fresh clone, sharing every step:
+
+```ocaml
+Template.html "<p>a<!---->b<!----><b></b></p>" (fun p ->
+  let n0 = Template.first p in
+  let n1 = Template.next n0 in
+  ...
+  [| Text { parent = p; before = Template.next_or_end n0 }; ... |])
+```
+
+It also decides at compile time whether the root is an SVG element. The runtime keeps no paths
+and no tag tables. A law checks the walk: interpreted over the parsed HTML, every step starts
+from a node reached before it and lands on the node the hole names.
+
 ## Compiled patchers
 
 Later, the same refresh writes to the DOM directly instead of through `put`: the ppx knows each
-hole's kind and type from the DOM prop table, and walks to the nodes with `firstChild` /
-`nextSibling` paths, as dartea's `find` functions do.
+hole's kind and type from the DOM prop table.
 
 ## Laws
 

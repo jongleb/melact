@@ -127,15 +127,15 @@ same signatures. Pure-OCaml reason-react code is the compatibility target.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/pipeline-dark.svg">
-  <img src="assets/pipeline.svg" alt="mlx JSX is compiled by melact-ppx into a template hoisted to module level, with three holes; each render builds only an array of three hole values; the template is cloned once per mount and the hole array patches the clone" width="100%">
+  <img src="assets/pipeline.svg" alt="mlx JSX is compiled into a template hoisted to module level and a walk to its three holes: b is the first child of the div, o the next sibling of b, and the text goes at the end of o; the template is cloned once per mount; every render runs the compiled refresh, which checks count and tone and writes only the holes that read a changed one" width="100%">
 </picture>
 
 - **Template.** The largest static subtree of every JSX site (lowercase tags, literal attributes,
   literal text) becomes one HTML string, parsed once into a `<template>` and cloned with
   `cloneNode(true)` per mount.
-- **Holes.** Each dynamic attribute, handler, text or child is a hole with a path into the clone:
-  child indices for an element, a parent path and the index it goes before for inserted content.
-  All paths are resolved before anything is inserted, so they never shift.
+- **Holes.** Each dynamic attribute, handler, text or child is a hole: an element, or a parent and
+  the node to insert before. The compiler emits the walk to them, `firstChild` and `nextSibling`
+  only, as Svelte does; it runs on the fresh clone before anything is inserted, so nothing shifts.
 - **Refresh.** For every template the compiler also emits a refresh function, as Svelte and
   dartea do. It checks each local the view reads with one `===`, and evaluates and writes only
   the holes that read a changed one. Holes that read nothing that changed are not even computed,
@@ -281,8 +281,8 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 | | |
 |---|---|
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
-| **Size** | the whole counter app, runtime and the Melange stdlib it uses included: 5.7 kB gzip with Meltea, 7.5 kB with Melact; React 18.3 and react-dom alone are 45 kB |
-| **Tests** | 74 vitest + jsdom tests and 15 native QCheck laws: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Size** | the whole counter app, runtime and the Melange stdlib it uses included: 4.2 kB gzip with Meltea, 5.9 kB with Melact; React 18.3 and react-dom alone are 45 kB |
+| **Tests** | 74 vitest + jsdom tests and 16 native QCheck laws: the View layer, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx), Meltea |
 | **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, real hydration, benchmarks, SSR |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |

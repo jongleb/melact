@@ -187,7 +187,7 @@ def overview(p):
 
 def pipeline(p):
     body = ""
-    heads = [(0, "1 · You write JSX in mlx"), (290, "2 · melact-ppx hoists a template"), (650, "3 · The DOM")]
+    heads = [(0, "1 · You write JSX in mlx"), (290, "2 · Melact compiles a template"), (650, "3 · The DOM")]
     for x, title in heads:
         body += text(x + 2, 22, title, size=14, weight=600)
 
@@ -218,8 +218,8 @@ def pipeline(p):
     for i, parts in enumerate(html):
         line = "".join(span(t, c) if c else escape(t) for t, c in parts)
         body += text(306, 84 + i * 18, line, size=12, cls="mono", raw=True)
-    body += text(486, 84, "holes", size=11.5, cls="muted")
-    for i, hole in enumerate(["Handler [0]", "Attr [1] class", "Text [1] @0"]):
+    body += text(486, 84, "the walk", size=11.5, cls="muted")
+    for i, hole in enumerate(["b = first div", "o = next b", "text: end of o"]):
         body += text(486, 102 + i * 16, hole, size=10.5, cls="mono accent")
 
     body += box(290, 172, 300, 104, p["card"], p["line"])
@@ -243,16 +243,16 @@ def pipeline(p):
             body += box(774, y - 14, 96, 20, p["accent_soft"], p["accent"], rx=10)
             body += text(822, y, hole, size=10.5, cls="accent", anchor="middle")
     body += f'<path d="M670,82 V166 M670,106 H676 M670,166 H676 M686,112 V130 M686,130 H692 M686,172 V196 M686,196 H692" fill="none" stroke="{p["line"]}" stroke-width="1.4"/>'
-    body += text(664, 236, "3 holes bound by path,", size=11.5, cls="muted")
-    body += text(664, 254, "the rest is never touched", size=11.5, cls="muted")
+    body += text(664, 236, "3 holes reached by the walk,", size=11.5, cls="muted")
+    body += text(664, 254, "the rest gets no DOM writes", size=11.5, cls="muted")
 
     body += arrow(p, 234, 140, 284, 140, "accent", flow=True)
-    body += text(259, 124, "ppx", size=11, cls="muted", anchor="middle")
+    body += text(259, 124, "build", size=11, cls="muted", anchor="middle")
     body += arrow(p, 594, 98, 644, 98, "accent", flow=True)
     body += text(619, 84, "clone", size=11, cls="muted", anchor="middle")
     body += arrow(p, 594, 224, 644, 224, "blue", flow=True)
     body += text(619, 210, "patch", size=11, cls="muted", anchor="middle")
-    return svg(p, 880, 280, "mlx JSX is compiled by melact-ppx into a template hoisted to module level, with three holes; each render builds only an array of three hole values; the template is cloned once per mount and the hole array patches the clone", body)
+    return svg(p, 880, 280, "mlx JSX is compiled into a template hoisted to module level and a walk to its three holes: b is the first child of the div, o the next sibling of b, and the text goes at the end of o; the template is cloned once per mount; every render runs the compiled refresh, which checks count and tone and writes only the holes that read a changed one", body)
 
 
 def patch(p):

@@ -5,9 +5,9 @@ A static tree becomes one template and one hoisted element:
   > EOF
   $ ./pp.exe -impl static.ml
   let __melhole_template_1 =
-    Melhole.Template.make
-      ~html:"<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>"
-      ~holes:[||]
+    Melhole.Template.html
+      "<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>"
+      (fun _ -> [||])
   let __melhole_element_2 =
     React.Element (Melhole.View.static __melhole_template_1)
   let header = __melhole_element_2
@@ -21,9 +21,33 @@ Holes at every depth; markers only between neighbours that would merge:
   > EOF
   $ ./pp.exe -impl holes.ml
   let __melhole_template_1 =
-    Melhole.Template.make ~html:"<p>a<!---->b<!----><b></b></p>"
-      ~holes:[|(Melhole.Template.Text ([], 1));(Melhole.Template.Child ([], 3));(
-               Melhole.Template.Child ([], 4));(Melhole.Template.Text ([4], 0))|]
+    Melhole.Template.html "<p>a<!---->b<!----><b></b></p>"
+      (fun __melhole_node ->
+         let __melhole_node_0 = Melhole.Template.first __melhole_node in
+         let __melhole_node_1 = Melhole.Template.next __melhole_node_0 in
+         let __melhole_node_2 = Melhole.Template.next __melhole_node_1 in
+         let __melhole_node_3 = Melhole.Template.next __melhole_node_2 in
+         let __melhole_node_4 = Melhole.Template.next __melhole_node_3 in
+         [|(Melhole.Template.Text
+              {
+                Melhole.Template.parent = __melhole_node;
+                before = (Melhole.Template.next_or_end __melhole_node_0)
+              });(Melhole.Template.Child
+                    {
+                      Melhole.Template.parent = __melhole_node;
+                      before = (Melhole.Template.next_or_end __melhole_node_2)
+                    });(Melhole.Template.Child
+                          {
+                            Melhole.Template.parent = __melhole_node;
+                            before =
+                              (Melhole.Template.next_or_end __melhole_node_3)
+                          });(Melhole.Template.Text
+                                {
+                                  Melhole.Template.parent = __melhole_node_4;
+                                  before =
+                                    (Melhole.Template.first_or_end
+                                       __melhole_node_4)
+                                })|])
   let row ~name ~count ~extra =
     React.Element
       (Melhole.View.guarded __melhole_template_1 3
@@ -66,21 +90,36 @@ Every kind of prop, static and dynamic, required and optional:
   > EOF
   $ ./pp.exe -impl props.ml
   let __melhole_template_1 =
-    Melhole.Template.make ~html:"<input id=\"name\" required maxLength=\"3\">"
-      ~holes:[|(Melhole.Template.Attr ([], "class"));(Melhole.Template.Attr
-                                                        ([], "disabled"));(
-               Melhole.Template.Attr ([], "aria-hidden"));(Melhole.Template.Attr
-                                                             ([], "tabIndex"));(
-               Melhole.Template.Prop ([], "value"));(Melhole.Template.Prop
-                                                       ([], "checked"));(
-               Melhole.Template.Style []);(Melhole.Template.Ref []);(Melhole.Template.Attr
-                                                                      ([],
-                                                                      "title"));(
-               Melhole.Template.Handler ([], "input"));(Melhole.Template.Handler
-                                                          ([], "keydown"))|]
+    Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">"
+      (fun __melhole_node ->
+         [|(Melhole.Template.Attr
+              ((Melhole.Template.element __melhole_node), "class"));(Melhole.Template.Attr
+                                                                      ((Melhole.Template.element
+                                                                      __melhole_node),
+                                                                      "disabled"));(
+           Melhole.Template.Attr
+             ((Melhole.Template.element __melhole_node), "aria-hidden"));(
+           Melhole.Template.Attr
+             ((Melhole.Template.element __melhole_node), "tabIndex"));(
+           Melhole.Template.Prop
+             ((Melhole.Template.element __melhole_node), "value"));(Melhole.Template.Prop
+                                                                      ((Melhole.Template.element
+                                                                      __melhole_node),
+                                                                      "checked"));(
+           Melhole.Template.Style (Melhole.Template.element __melhole_node));(
+           Melhole.Template.Ref (Melhole.Template.element __melhole_node));(
+           Melhole.Template.Attr
+             ((Melhole.Template.element __melhole_node), "title"));(Melhole.Template.Handler
+                                                                      ((Melhole.Template.element
+                                                                      __melhole_node),
+                                                                      "input"));(
+           Melhole.Template.Handler
+             ((Melhole.Template.element __melhole_node), "keydown"))|])
   let __melhole_template_2 =
-    Melhole.Template.make ~html:"<div stroke-width=\"2\" for=\"x\"></div>"
-      ~holes:[|(Melhole.Template.Prop ([], "innerHTML"))|]
+    Melhole.Template.html "<div stroke-width=\"2\" for=\"x\"></div>"
+      (fun __melhole_node ->
+         [|(Melhole.Template.Prop
+              ((Melhole.Template.element __melhole_node), "innerHTML"))|])
   let form ~text ~flag ~tab ~opacity ~style ~ref ~maybe ~html ~onInput =
     ((React.Element
         (Melhole.View.guarded __melhole_template_1 5
@@ -163,8 +202,18 @@ A component with optional, defaulted and children props, and its signature:
   $ ./pp.exe -impl card.ml
   let __melhole_component_1 = Melhole.Component.make ~name:"Card.make"
   let __melhole_template_2 =
-    Melhole.Template.make ~html:"<section><!----></section>"
-      ~holes:[|(Melhole.Template.Text ([], 0));(Melhole.Template.Child ([], 1))|]
+    Melhole.Template.html "<section><!----></section>"
+      (fun __melhole_node ->
+         let __melhole_node_0 = Melhole.Template.first __melhole_node in
+         [|(Melhole.Template.Text
+              {
+                Melhole.Template.parent = __melhole_node;
+                before = (Melhole.Template.first_or_end __melhole_node)
+              });(Melhole.Template.Child
+                    {
+                      Melhole.Template.parent = __melhole_node;
+                      before = (Melhole.Template.next_or_end __melhole_node_0)
+                    })|])
   let make ~title:(title as __melhole_prop_0)
     ?size:((size as __melhole_prop_1)= 1)
     ?subtitle:(subtitle as __melhole_prop_2)
@@ -223,9 +272,11 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   $ ./pp.exe -impl fancy.ml
   let __melhole_component_1 = Melhole.Component.make ~name:"Fancy.make"
   let __melhole_template_2 =
-    Melhole.Template.make ~html:"<input>"
-      ~holes:[|(Melhole.Template.Attr ([], "placeholder"));(Melhole.Template.Ref
-                                                              [])|]
+    Melhole.Template.html "<input>"
+      (fun __melhole_node ->
+         [|(Melhole.Template.Attr
+              ((Melhole.Template.element __melhole_node), "placeholder"));(
+           Melhole.Template.Ref (Melhole.Template.element __melhole_node))|])
   let make ~label:(label as __melhole_prop_0)
     ?ref:(__melhole_forwarded_ref as __melhole_prop_1) () =
     React.Element
@@ -273,8 +324,13 @@ Calls with children, keys and fragments:
           __melhole_child))
   let none = Card.make ~title:"a" ()
   let __melhole_template_1 =
-    Melhole.Template.make ~html:"<li></li>"
-      ~holes:[|(Melhole.Template.Text ([], 0))|]
+    Melhole.Template.html "<li></li>"
+      (fun __melhole_node ->
+         [|(Melhole.Template.Text
+              {
+                Melhole.Template.parent = __melhole_node;
+                before = (Melhole.Template.first_or_end __melhole_node)
+              })|])
   let rows items =
     React.array
       (Array.map
@@ -335,8 +391,13 @@ Reason input:
   $ ./pp.exe -impl greeting.ml
   let __melhole_component_1 = Melhole.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
-    Melhole.Template.make ~html:"<span class=\"greeting\"></span>"
-      ~holes:[|(Melhole.Template.Text ([], 0))|]
+    Melhole.Template.html "<span class=\"greeting\"></span>"
+      (fun __melhole_node ->
+         [|(Melhole.Template.Text
+              {
+                Melhole.Template.parent = __melhole_node;
+                before = (Melhole.Template.first_or_end __melhole_node)
+              })|])
   let make ~name:(name as __melhole_prop_0) () =
     React.Element
       (Melhole.View.component __melhole_component_1
@@ -366,8 +427,13 @@ mlx input:
   $ ./pp.exe -impl greeting.ast
   let __melhole_component_1 = Melhole.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
-    Melhole.Template.make ~html:"<span class=\"greeting\"></span>"
-      ~holes:[|(Melhole.Template.Text ([], 0))|]
+    Melhole.Template.html "<span class=\"greeting\"></span>"
+      (fun __melhole_node ->
+         [|(Melhole.Template.Text
+              {
+                Melhole.Template.parent = __melhole_node;
+                before = (Melhole.Template.first_or_end __melhole_node)
+              })|])
   let make ~name:(name as __melhole_prop_0) () =
     React.Element
       (Melhole.View.component __melhole_component_1
