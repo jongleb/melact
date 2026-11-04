@@ -16,7 +16,7 @@ if (entries.length === 1) {
   }
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
-  globalThis.navigator = dom.window.navigator;
+  Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, configurable: true });
   console.log = () => {};
   console.error = () => {};
   const settle = () => new Promise((resolve) => setTimeout(resolve, 60));

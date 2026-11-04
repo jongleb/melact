@@ -521,6 +521,37 @@ def dual(p):
     return svg(p, 880, 232, "One test file in reason-react style is built twice: with reason-react-ppx, reason-react and React 18.3, and with melact-ppx and melact; the same 9 assertions pass in both", body)
 
 
+
+def compat(p):
+    body = box(0, 30, 262, 230, p["card"], p["line"], lift=True)
+    body += text(18, 58, "reason-react/demo/main.re", size=13, cls="mono", weight=700)
+    body += text(18, 78, "the demo in reason-react's own repo", size=11.5, cls="muted")
+    used = ["useState, useReducer", "useReducerWithMapState", "useEffect1, useLayoutEffect1",
+            "useRef + useEffect0", "React.Fragment with keys, <>…</>", "?ref, ->React.int, unused props"]
+    for i, item in enumerate(used):
+        y = 104 + i * 18
+        body += f'<circle cx="24" cy="{y - 4}" r="2.5" fill="{p["accent"]}"/>'
+        body += text(34, y, item, size=11.5)
+    body += f'<line x1="18" y1="{214}" x2="244" y2="{214}" stroke="{p["line"]}"/>'
+    body += text(18, 234, "- (pps reason-react-ppx)", size=11, cls="mono orange")
+    body += text(18, 250, "+ (pps melact-ppx)", size=11, cls="mono green")
+    preview = "<main><section><h3>Stateful</h3>…"
+    lanes = [(40, "blue", "blue_soft", "React 18.3"), (150, "accent", "accent_soft", "melact")]
+    for y, color, soft, name in lanes:
+        body += curve(p, f"M264,145 C290,145 290,{y + 34} 312,{y + 34}", color, flow=True, width=1.8)
+        body += box(316, y, 300, 68, p[soft], p[color], rx=12, width=1.4, lift=True)
+        body += text(334, y + 26, name, size=14, weight=700, cls=color)
+        body += text(334, y + 48, preview, size=10.5, cls="mono muted")
+        body += arrow(p, 618, y + 34, 652, y + 34, color, width=1.6)
+    body += text(466, 136, "every button clicked 4 times, DOM read after each click", size=11.5, cls="muted", anchor="middle")
+    body += box(656, 40, 220, 178, p["green_soft"], p["green"], rx=14, width=1.8, lift=True)
+    body += text(766, 102, "33 / 33", size=40, cls="green", weight=800, anchor="middle")
+    body += text(766, 130, "steps with identical DOM", size=13.5, weight=600, anchor="middle")
+    body += text(766, 156, "1,311 characters at mount,", size=11.5, cls="muted", anchor="middle")
+    body += text(766, 174, "the same after every click", size=11.5, cls="muted", anchor="middle")
+    body += text(766, 204, "compat/run.sh", size=11.5, cls="mono green", anchor="middle")
+    return svg(p, 880, 264, "reason-react's own demo, switched to melact with two dune lines, rendered by React 18.3 and by melact in jsdom: after mounting and after each of 32 clicks, 33 of 33 steps have identical DOM", body)
+
 def roadmap(p):
     stages = [
         ("View", "templates, holes,", "reconcile, events"),
@@ -554,7 +585,7 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, hooks=hooks, dual=dual, pipeline=pipeline, patch=patch, reconcile=reconcile,
+FIGURES = dict(logo=logo, overview=overview, hooks=hooks, dual=dual, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
                runtime=runtime, events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":

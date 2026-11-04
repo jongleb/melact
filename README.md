@@ -236,6 +236,15 @@ builds new values, so this rarely matters, but it is a rule rather than an optim
 
 *The compatibility check that matters: the same reason-react code, built against React and against melact, passes the same assertions.*
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/compat-dark.svg">
+  <img src="assets/compat.svg" alt="reason-react's own demo, switched to melact with two dune lines, rendered by React 18.3 and by melact in jsdom: after mounting and after each of 32 clicks, 33 of 33 steps have identical DOM" width="100%">
+</picture>
+
+*[`compat/run.sh`](compat/run.sh) clones reason-react and melange-opam-template, changes two lines in their `dune` files and
+builds them against melact. Then it renders reason-react's demo with React and with melact and compares the DOM after
+every click. One demo component binds React's npm `useReducer` directly, which is a non-goal, so the script removes it.*
+
 | | |
 |---|---|
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
