@@ -107,9 +107,10 @@ let useReducerWithMapState key reduce initial map =
 let use_effect timing unchanged key run deps =
   let instance = View.current () in
   let schedule cell =
-    View.after_commit instance timing (fun () ->
+    View.after_commit instance timing Cleanup (fun () ->
         Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
-        cell.cleanup <- run ())
+        cell.cleanup <- None);
+    View.after_commit instance timing Run (fun () -> cell.cleanup <- run ())
   in
   let cell =
     View.slot instance key (fun () ->
@@ -197,7 +198,7 @@ let useInsertionEffect3 key run deps = use_effect Layout same3 key run deps
 let useSyncExternalStore key ~subscribe ~getSnapshot =
   let instance = View.current () in
   let resubscribe cell =
-    View.after_commit instance Passive (fun () ->
+    View.after_commit instance Passive Run (fun () ->
         cell.unsubscribe ();
         cell.unsubscribe <-
           cell.subscribe (fun () ->

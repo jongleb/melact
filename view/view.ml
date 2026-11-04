@@ -33,6 +33,9 @@ type timing =
   | Layout  (** Synchronously, before the browser paints. *)
   | Passive  (** After the whole flush, once the browser has painted. *)
 
+(** Within one commit every cleanup runs before any effect, as in React. *)
+type phase = Cleanup | Run
+
 (** What a mounted description owns in the DOM. *)
 type live =
   | Text_live of Dom.text * string
@@ -79,7 +82,7 @@ and instance = {
   mutable status : status;
   mutable output : live;
   mutable region : region;
-  mutable pending : (timing * (unit -> unit)) list;  (** Effects of the last render, newest first. *)
+  mutable pending : (timing * phase * (unit -> unit)) list;  (** Effects of the last render, newest first. *)
   mutable teardown : (unit -> unit) list;  (** Run on unmount, newest first. *)
 }
 
@@ -116,8 +119,10 @@ type schedule = Idle | Queued
 let rendering = ref None
 let owner = ref None
 let dirty = ref []
-let layout_jobs = ref []
-let passive_jobs = ref []
+let layout_cleanups = ref []
+let layout_runs = ref []
+let passive_cleanups = ref []
+let passive_runs = ref []
 let render_schedule = ref Idle
 let passive_schedule = ref Idle
 let text value = Text value
@@ -196,17 +201,23 @@ let run_jobs jobs =
       match instance.status with Unmounted -> () | Clean | Dirty -> job ())
     (List.rev jobs)
 
-let run_layout () =
-  let jobs = !layout_jobs in
-  layout_jobs := [];
-  run_jobs jobs
+let run_phases cleanups runs =
+  let pending_cleanups = !cleanups and pending_runs = !runs in
+  cleanups := [];
+  runs := [];
+  run_jobs pending_cleanups;
+  run_jobs pending_runs
+
+let run_layout () = run_phases layout_cleanups layout_runs
 
 let commit instance =
   List.iter
-    (fun (timing, job) ->
-      match timing with
-      | Layout -> layout_jobs := (instance, job) :: !layout_jobs
-      | Passive -> passive_jobs := (instance, job) :: !passive_jobs)
+    (fun (timing, phase, job) ->
+      match (timing, phase) with
+      | Layout, Cleanup -> layout_cleanups := (instance, job) :: !layout_cleanups
+      | Layout, Run -> layout_runs := (instance, job) :: !layout_runs
+      | Passive, Cleanup -> passive_cleanups := (instance, job) :: !passive_cleanups
+      | Passive, Run -> passive_runs := (instance, job) :: !passive_runs)
     (List.rev instance.pending);
   instance.pending <- []
 
@@ -532,9 +543,7 @@ and rewrite binding hole =
 
 let run_passive () =
   passive_schedule := Idle;
-  let jobs = !passive_jobs in
-  passive_jobs := [];
-  run_jobs jobs
+  run_phases passive_cleanups passive_runs
 
 let settle () =
   let position_of instance =
@@ -568,17 +577,22 @@ let settle () =
         List.iter
           (fun instance ->
             match instance.status with
-            | Dirty ->
-                refresh (position_of instance) instance;
-                run_layout ()
+            | Dirty -> refresh (position_of instance) instance
             | Clean | Unmounted -> ())
-          (List.stable_sort (fun a b -> Int.compare a.depth b.depth) pending);
+          (List.stable_sort
+             (fun a b ->
+               match (front (Component_live a) None, front (Component_live b) None) with
+               | Some first, Some second when not (Dom_api.same first second) ->
+                   if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
+               | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
+             pending);
+        run_layout ();
         drain ()
   in
   drain ();
-  match (!passive_jobs, !passive_schedule) with
-  | [], _ | _, Queued -> ()
-  | _ :: _, Idle ->
+  match (!passive_cleanups, !passive_runs, !passive_schedule) with
+  | [], [], _ | _, _, Queued -> ()
+  | _ :: _, _, Idle | _, _ :: _, Idle ->
       passive_schedule := Queued;
       Dom_api.request_animation_frame (fun _ -> Dom_api.set_timeout run_passive 0)
 
@@ -622,7 +636,8 @@ let invalidate instance =
               render_schedule := Idle;
               settle ()))
 
-let after_commit instance timing job = instance.pending <- (timing, job) :: instance.pending
+let after_commit instance timing phase job =
+  instance.pending <- (timing, phase, job) :: instance.pending
 let on_unmount instance cleanup = instance.teardown <- cleanup :: instance.teardown
 
 let consume : type value. instance -> value Context.t -> value =

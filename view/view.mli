@@ -50,7 +50,10 @@ type timing =
 val current : unit -> instance
 val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
 val invalidate : instance -> unit
-val after_commit : instance -> timing -> (unit -> unit) -> unit
+(** Within one commit every cleanup runs before any effect, as in React. *)
+type phase = Cleanup | Run
+
+val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
 val on_unmount : instance -> (unit -> unit) -> unit
 val consume : instance -> 'value Context.t -> 'value
 val flush : unit -> unit

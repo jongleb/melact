@@ -103,5 +103,8 @@ external request_animation_frame : (float -> unit) -> unit
   = "requestAnimationFrame"
 
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
+external compare_document_position : Dom.node -> Dom.node -> int = "compareDocumentPosition"
+[@@mel.send]
+
 external same : 'a -> 'b -> bool = "%eq"
 (** Physical identity of two values of any types: [===] in JS. *)

@@ -156,7 +156,129 @@ module Toggle = struct
     </p>
 end
 
+let setters : (string, (int -> int) -> unit) Hashtbl.t = Hashtbl.create 16
+let set_labels = ref (fun (_ : string array -> string array) -> ())
+let fresh_labels = ref 0
+
+module Tally = struct
+  let[@react.component] make = React.memo (fun ~label ->
+    let count, setCount = React.useState (fun () -> 0) in
+    Hashtbl.replace setters label setCount;
+    log ("render " ^ label);
+    let doubled =
+      React.useMemo1 (fun () -> log ("memo " ^ label); count * 2) [| count |]
+    in
+    React.useEffect1
+      (fun () ->
+        log ("effect " ^ label);
+        Some (fun () -> log ("cleanup " ^ label)))
+      [| count |];
+    <li>(React.string (label ^ ":" ^ string_of_int count ^ "/" ^ string_of_int doubled))</li>)
+end
+
+module Tallies = struct
+  let[@react.component] make () =
+    let labels, setLabels = React.useState (fun () -> [||]) in
+    set_labels := setLabels;
+    <ul>(React.array (Array.map (fun label -> <Tally key=label label />) labels))</ul>
+end
+
+(** What a step of the state machine may log. *)
+type logged =
+  | Exactly of string list
+  | At_most_one_call of string  (** React may call a bailed-out component once, without committing. *)
+
+let machine values =
+  let tape = tape values in
+  let root = attached () in
+  let client = ReactDOM.Client.createRoot root in
+  let model = ref [||] in
+  let shown () =
+    Array.to_list
+      (Array.map
+         (fun (label, count) -> label ^ ":" ^ string_of_int count ^ "/" ^ string_of_int (count * 2))
+         !model)
+  in
+  let click label = Hashtbl.find setters label (fun count -> count + 1) in
+  let increment label =
+    model := Array.map (fun (other, count) -> if String.equal other label then (other, count + 1) else (other, count)) !model
+  in
+  let rec step remaining =
+    if remaining = 0 then act (fun () -> ReactDOM.Client.unmount client ())
+    else begin
+      let labels = Array.map fst !model in
+      let size = Array.length labels in
+      let action, expected =
+        match (draw tape 6, size) with
+        | 0, _ | _, 0 ->
+            incr fresh_labels;
+            let label = "t" ^ string_of_int !fresh_labels in
+            let at = draw tape (size + 1) in
+            model := Array.concat [ Array.sub !model 0 at; [| (label, 0) |]; Array.sub !model at (size - at) ];
+            let next = Array.map fst !model in
+            ( (fun () -> !set_labels (fun _ -> next)),
+              Exactly [ "render " ^ label; "memo " ^ label; "effect " ^ label ] )
+        | 1, _ ->
+            let at = draw tape size in
+            let label = labels.(at) in
+            model := Array.of_list (List.filteri (fun index _ -> index <> at) (Array.to_list !model));
+            let next = Array.map fst !model in
+            ((fun () -> !set_labels (fun _ -> next)), Exactly [ "cleanup " ^ label ])
+        | 2, _ ->
+            let ranked = Array.map (fun entry -> (draw tape 1000, entry)) !model in
+            Array.stable_sort compare ranked;
+            model := Array.map snd ranked;
+            let next = Array.map fst !model in
+            ((fun () -> !set_labels (fun _ -> next)), Exactly [])
+        | 3, _ ->
+            let label = labels.(draw tape size) in
+            increment label;
+            ( (fun () -> click label),
+              Exactly [ "render " ^ label; "memo " ^ label; "cleanup " ^ label; "effect " ^ label ] )
+        | 4, _ ->
+            let label = labels.(draw tape size) in
+            ((fun () -> Hashtbl.find setters label (fun count -> count)), At_most_one_call label)
+        | _, 1 ->
+            let label = labels.(0) in
+            increment label;
+            increment label;
+            ( (fun () -> click label; click label),
+              Exactly [ "render " ^ label; "memo " ^ label; "cleanup " ^ label; "effect " ^ label ] )
+        | _, _ ->
+            let first = draw tape size in
+            let second = (first + 1 + draw tape (size - 1)) mod size in
+            let a = labels.(min first second) and b = labels.(max first second) in
+            increment a;
+            increment b;
+            ( (fun () -> click b; click a),
+              Exactly
+                [
+                  "render " ^ a; "memo " ^ a; "render " ^ b; "memo " ^ b; "cleanup " ^ a; "cleanup " ^ b;
+                  "effect " ^ a; "effect " ^ b;
+                ] )
+      in
+      ignore (take ());
+      let* () = act action in
+      let items = Array.to_list (Array.map (fun node -> text_content node) (nodes (child_nodes (select root "ul")))) in
+      let logged = take () in
+      expect items |. to_equal (shown ());
+      (match expected with
+      | Exactly events -> expect logged |. to_equal events
+      | At_most_one_call label ->
+          expect (List.mem logged [ []; [ "render " ^ label ] ]) |. to_be true);
+      step (remaining - 1)
+    end
+  in
+  let* () = act (fun () -> ReactDOM.Client.render client <Tallies />) in
+  ignore (take ());
+  step 12
+
 let () =
+  describe "state machine" (fun () ->
+    test_async "every operation sequence matches the model: DOM, renders, memos and effects" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:30 ~longest:90) machine)
+        [%mel.obj { numRuns = 120 }]));
   describe "state" (fun () ->
     test_async "batches updates and re-renders the component" (fun () ->
       let* root, _ = mount <Counter label="n" /> in
