@@ -110,12 +110,12 @@ let () =
             fresh (instance "a" [ ("color", "red") ] [ "x"; "y" ] first)
           in
           let element = select root "input" in
-          expect (property element "value") |. to_be "a";
+          expect (dom_property element "value") |. to_be "a";
           expect (style_property (style element) "color") |. to_be "red";
           expect (inner_html root)
           |. to_be "<input style=\"color: red;\" class=\"x y\">";
           View.patch mounted (instance "b" [ ("width", "1px") ] [ "y" ] first);
-          expect (property element "value") |. to_be "b";
+          expect (dom_property element "value") |. to_be "b";
           expect (inner_html root)
           |. to_be "<input style=\"width: 1px;\" class=\"y\">";
           View.patch mounted (instance "b" [ ("width", "1px") ] [ "y" ] second);

@@ -6,6 +6,7 @@ module Prop : sig
 
   val of_string : string -> t option
   val to_string : t -> string
+  val all : t list
 end
 
 (** The OCaml type of a prop and how it becomes an attribute value. *)

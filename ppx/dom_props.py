@@ -75,7 +75,7 @@ print("module Prop = struct")
 print("  type t =")
 for name in cases:
     print(f'    | {constructor(name)} [@as "{name}"]')
-print("  [@@deriving of_string, to_string]")
+print("  [@@deriving of_string, to_string, enumerate]")
 print("end")
 print()
 print("type value = Text | Flag | Booleanish | Integer | Decimal")

@@ -174,12 +174,14 @@ let insert (position : Template.position) node =
 let restyle element old next =
   let style = Dom_api.style element in
   List.iter (fun (name, _) -> Dom_api.set_style style name "") old;
-  List.iter (fun (name, value) -> Dom_api.set_style style name value) next
+  List.iter (fun (name, value) -> Dom_api.set_style style name value) next;
+  match next with [] -> Dom_api.remove_attribute element "style" | _ :: _ -> ()
 
 let reclass element old next =
   let classes = Dom_api.class_list element in
   List.iter (Dom_api.remove_class classes) old;
-  List.iter (Dom_api.add_class classes) next
+  List.iter (Dom_api.add_class classes) next;
+  match next with [] -> Dom_api.remove_attribute element "class" | _ :: _ -> ()
 
 let mark_dirty instance =
   match instance.status with

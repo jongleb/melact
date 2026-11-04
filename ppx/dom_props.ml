@@ -501,7 +501,7 @@ module Prop = struct
     | DangerouslySetInnerHTML [@as "dangerouslySetInnerHTML"]
     | SuppressContentEditableWarning [@as "suppressContentEditableWarning"]
     | SuppressHydrationWarning [@as "suppressHydrationWarning"]
-  [@@deriving of_string, to_string]
+  [@@deriving of_string, to_string, enumerate]
 end
 
 type value = Text | Flag | Booleanish | Integer | Decimal

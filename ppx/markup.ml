@@ -89,7 +89,11 @@ let render root =
           settle pending index;
           walk rest (index + 1) Other (Some (slot, value))
     in
-    walk tree.children 0 Nothing None;
+    walk
+      (List.concat_map
+         (fun node -> match node with Text "" -> [] | Element _ | Text _ | Slot _ -> [ node ])
+         tree.children)
+      0 Nothing None;
     match void tree.tag with
     | `Void -> ()
     | `Container -> Buffer.add_string html ("</" ^ tree.tag ^ ">")

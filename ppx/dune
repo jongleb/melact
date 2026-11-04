@@ -4,4 +4,4 @@
  (kind ppx_rewriter)
  (libraries ppxlib)
  (preprocess
-  (pps ppxlib.metaquot ppx_deriving_variant_string)))
+  (pps ppxlib.metaquot ppx_deriving_variant_string ppx_enumerate)))

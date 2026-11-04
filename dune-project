@@ -33,7 +33,8 @@
   (reason-react :with-test)
   (reason-react-ppx :with-test)
   (reason :with-test)
-  (mlx :with-test)))
+  (mlx :with-test)
+  (qcheck-core :with-test)))
 
 (package
  (name melact-ppx)
@@ -45,4 +46,6 @@
    (>= 3.16))
   (ppxlib
    (>= 0.34))
-  ppx_deriving_variant_string))
+  ppx_deriving_variant_string
+  ppx_enumerate
+  (qcheck-core :with-test)))
