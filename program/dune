@@ -1,0 +1,8 @@
+(library
+ (name program)
+ (public_name melact.program)
+ (wrapped false)
+ (modes melange)
+ (libraries melact.view melange.dom)
+ (preprocess
+  (pps melange.ppx)))
