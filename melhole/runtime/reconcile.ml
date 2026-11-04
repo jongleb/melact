@@ -4,24 +4,31 @@ type t = { steps : step array; dropped : int list }
 let plan ~old ~next =
   let old_length = Array.length old and next_length = Array.length next in
   let steps = Array.make next_length Create in
-  let rec prefix i =
-    if i < old_length && i < next_length && String.equal (Array.unsafe_get old i) (Array.unsafe_get next i) then (
-      Array.unsafe_set steps i (Keep i);
-      prefix (i + 1))
-    else i
+  let same i j = String.equal (Array.unsafe_get old i) (Array.unsafe_get next j) in
+  let rec narrow old_start old_stop next_start next_stop =
+    match (old_start < old_stop && next_start < next_stop) with
+    | false -> (old_start, old_stop, next_start, next_stop)
+    | true ->
+        if same old_start next_start then (
+          Array.unsafe_set steps next_start (Keep old_start);
+          narrow (old_start + 1) old_stop (next_start + 1) next_stop)
+        else if same (old_stop - 1) (next_stop - 1) then (
+          Array.unsafe_set steps (next_stop - 1) (Keep (old_stop - 1));
+          narrow old_start (old_stop - 1) next_start (next_stop - 1))
+        else if
+          old_stop - old_start >= 3
+          && next_stop - next_start >= 3
+          && same old_start (next_stop - 1)
+          && same (old_stop - 1) next_start
+          && same (old_start + 1) (next_start + 1)
+        then (
+          Array.unsafe_set steps next_start (Move (old_stop - 1));
+          Array.unsafe_set steps (next_stop - 1) (Move old_start);
+          narrow (old_start + 1) (old_stop - 1) (next_start + 1) (next_stop - 1))
+        else (old_start, old_stop, next_start, next_stop)
   in
-  let start = prefix 0 in
-  let rec suffix old_last next_last =
-    if
-      old_last >= start && next_last >= start
-      && String.equal (Array.unsafe_get old old_last) (Array.unsafe_get next next_last)
-    then (
-      Array.unsafe_set steps next_last (Keep old_last);
-      suffix (old_last - 1) (next_last - 1))
-    else (old_last + 1, next_last + 1)
-  in
-  let old_stop, next_stop = suffix (old_length - 1) (next_length - 1) in
-  let unclaimed = Array.init (max 0 (old_stop - start)) (fun x -> start + x) in
+  let old_start, old_stop, next_start, next_stop = narrow 0 old_length 0 next_length in
+  let unclaimed = Array.init (max 0 (old_stop - old_start)) (fun x -> old_start + x) in
   Array.stable_sort (fun x y -> String.compare (Array.unsafe_get old x) (Array.unsafe_get old y)) unclaimed;
   let claims = Array.make (Array.length unclaimed) `Unclaimed in
   let rec first key low high =
@@ -41,7 +48,7 @@ let plan ~old ~next =
     else None
   in
   let reused = ref [] in
-  for j = next_stop - 1 downto start do
+  for j = next_stop - 1 downto next_start do
     Option.iter
       (fun i ->
         Array.unsafe_set steps j (Move i);

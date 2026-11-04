@@ -31,7 +31,7 @@ let () =
                [ "keep 0"; "move 4"; "keep 2"; "keep 3"; "move 1"; "keep 5" ]);
       test "reverses with one fewer move than entries" (fun () ->
           let plan = Reconcile.plan ~old:[| "a"; "b"; "c" |] ~next:[| "c"; "b"; "a" |] in
-          expect (describe_steps plan) |. to_equal [ "move 2"; "move 1"; "keep 0" ]);
+          expect (describe_steps plan) |. to_equal [ "move 2"; "keep 1"; "move 0" ]);
       test "never reuses an old entry twice for duplicate keys" (fun () ->
           let plan = Reconcile.plan ~old:[| "a"; "b" |] ~next:[| "b"; "b"; "b" |] in
           expect (describe_steps plan, plan.dropped)

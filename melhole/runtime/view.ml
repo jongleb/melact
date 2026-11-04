@@ -134,13 +134,30 @@ let remove (position : Template.position) live =
   live.each (fun [@u] node -> Dom_api.remove_child position.parent node) [@u];
   live.release () [@u]
 
+(** Whether a live child's nodes are all the children of its parent. *)
+type extent = Whole | Part
+
+let extent (position : Template.position) live =
+  match
+    ( Dom_api.same position.before Js.null,
+      Dom_api.same (live.front Js.null [@u]) (Template.first_or_end position.parent) )
+  with
+  | true, true -> Whole
+  | true, false | false, _ -> Part
+
 let update position live child =
   match child.patch position live [@u] with
   | Some next -> next
-  | None ->
-      let next = child.build position [@u] in
-      remove position live;
-      next
+  | None -> (
+      match extent position live with
+      | Whole ->
+          Dom_api.set_text_content position.parent "";
+          live.release () [@u];
+          child.build position [@u]
+      | Part ->
+          let next = child.build position [@u] in
+          remove position live;
+          next)
 
 let compare_inputs old next =
   match
@@ -239,7 +256,11 @@ let keyed entries =
         match live.state with
         | Keyed_state (old_keys, items) ->
             let plan = Reconcile.plan ~old:old_keys ~next:keys in
-            List.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped;
+            (match (List.compare_length_with plan.dropped (Array.length items), extent position live) with
+            | 0, Whole ->
+                Dom_api.set_text_content position.parent "";
+                live.release () [@u]
+            | _, (Whole | Part) -> List.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped);
             let items =
               backwards (Array.length children) position (fun [@u] j at ->
                   match Array.unsafe_get plan.steps j with
