@@ -148,7 +148,7 @@ def overview(p):
 
     body += box(305, 172, 270, 128, p["blue_soft"], p["blue"], lift=True)
     body += text(321, 194, "refresh · all a render runs", size=12, cls="blue", weight=700)
-    for i, (label, value) in enumerate([("check n", "=== once"), ("set text", "if n changed")]):
+    for i, (label, value) in enumerate([("check n", "n !== last n"), ("set text", "if n changed")]):
         y = 208 + i * 34
         body += box(321, y, 238, 26, p["card"], p["line"], rx=8)
         body += text(333, y + 18, label, size=12, cls="mono blue", weight=600)
@@ -157,7 +157,7 @@ def overview(p):
 
     body += box(610, 40, 270, 260, p["card"], p["line"], lift=True)
     flow = [("setState", "orange"), ("only this component renders", "line"),
-            ("n: === once", "accent"), ("text.data = \"1\"", "green")]
+            ("n !== last n ?", "accent"), ("text.data = \"1\"", "green")]
     for i, (label, tone) in enumerate(flow):
         y = 56 + i * 61
         fill = {"orange": p["orange_soft"], "line": p["card"], "accent": p["accent_soft"], "green": p["green_soft"]}[tone]
@@ -167,7 +167,7 @@ def overview(p):
                      cls="mono green" if tone == "green" else ("mono accent" if tone == "accent" else ""))
         if i < len(flow) - 1:
             body += arrow(p, 745, y + 42, 745, y + 57, "accent", width=1.4)
-    body += text(745, 296, "the handler is swapped, not diffed", size=11, cls="faint", anchor="middle")
+    body += text(745, 296, "one === per variable, not per node", size=11, cls="faint", anchor="middle")
 
     body += arrow(p, 273, 170, 301, 170, "accent", flow=True)
     body += arrow(p, 578, 170, 606, 170, "accent", flow=True)
