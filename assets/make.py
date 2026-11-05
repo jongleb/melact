@@ -591,17 +591,17 @@ def family(p):
     body += box(200, 304, 480, 62, p["card"], p["text"], rx=14, width=1.6, lift=True)
     body += f'<rect x="200" y="304" width="480" height="5" rx="2.5" fill="url(#glow)"/>'
     body += text(440, 330, "the shared compiler", size=14.5, weight=800, anchor="middle")
-    body += text(440, 352, "static markup → template · dynamic parts → holes with paths · DOM props table",
+    body += text(440, 352, "static markup → template · a walk to every hole · keyed loops with selectors",
                  size=11.5, cls="muted", anchor="middle")
     body += arrow(p, 440, 368, 440, 392, "muted", flow=True)
     body += box(110, 396, 520, 50, p["card"], p["line"], rx=14, lift=True)
-    body += text(370, 418, "shared runtime", size=13.5, weight=700, anchor="middle")
+    body += text(370, 418, "melhole · no components, views are functions", size=13.5, weight=700, anchor="middle")
     body += text(370, 436, "clone a template · write changed holes · keyed moves · delegated events",
                  size=11, cls="muted", anchor="middle")
     body += box(642, 396, 238, 50, p["blue_soft"], p["blue"], rx=14)
-    body += text(761, 418, "Melact only", size=13, weight=700, cls="blue", anchor="middle")
-    body += text(761, 436, "hook slots · update scheduler", size=11, cls="muted", anchor="middle")
-    return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates and dynamic parts into holes, and the shared runtime that clones templates, writes changed holes, moves keyed rows and delegates events; Melact alone adds hook slots and an update scheduler", body)
+    body += text(761, 418, "melact.runtime", size=13, weight=700, cls="blue mono", anchor="middle")
+    body += text(761, 436, "components · hooks · scheduler", size=11, cls="muted", anchor="middle")
+    return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates, walks to every hole and compiles lists into keyed loops with selectors, and the shared runtime melhole, which knows no components: it clones templates, writes changed holes, moves keyed rows and delegates events; Melact adds its own runtime library with components, hooks and the scheduler", body)
 
 
 def compiled(p):

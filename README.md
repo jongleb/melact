@@ -245,7 +245,7 @@ builds new values, so this rarely matters, but it is a rule rather than an optim
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/family-dark.svg">
-  <img src="assets/family.svg" alt="Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler and the shared runtime; Melact alone adds hook slots and an update scheduler" width="100%">
+  <img src="assets/family.svg" alt="Two front ends, one compiler, one runtime: Meltea views in mlx go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler, which makes templates, walks to every hole and compiles lists into keyed loops with selectors, and the shared runtime melhole, which knows no components; Melact adds its own runtime library, melact.runtime, with components, hooks and the scheduler" width="100%">
 </picture>
 
 Meltea is the Elm architecture in OCaml: a model, messages, a pure `update` and a pure `view`
