@@ -166,7 +166,7 @@ the view reads, then runs only the holes that read a changed one, each writing i
 | attribute | `setAttribute` / `removeAttribute` (`None` removes) |
 | property | `el[name] = v` (`value`, `checked`, `innerHTML`) |
 | style | the old properties cleared, the new ones set |
-| handler | guarded by the locals it reads, like any hole; then the closure on the element is replaced |
+| handler | guarded by the locals it reads, like any hole; Melact replaces the closure on the element, Meltea writes only the data the message needs and shares one handler per site |
 | ref | the new callback is called with the element |
 | child | patched recursively: a template, a list, a component |
 
@@ -197,6 +197,15 @@ keyed loop. As in Vue Vapor's selectors, the compiler splits a row into its item
 the smallest pieces without JSX that read outer variables, and emits a projection that evaluates
 only those. A row whose item is the same object and whose projection did not change is kept
 without calling the row function: selecting one row of 1,000 renders two.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/row-dark.svg">
+  <img src="assets/row.svg" alt="What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: the row parts with a refresh closure, dropped after mount, one Mounted_row record with the root, the scope and the holes, the scope's deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template and one handler per site are shared. Creating 1,000 rows allocates 481 kB instead of 939, and 1,000 rows take 1.25 MB instead of 1.68" width="100%">
+</picture>
+
+A row that is one element with a `key` compiles further, to `View.rows`: one record per row, holes
+that are the bare nodes, the last written values kept next to the guarded locals, and in Meltea
+one handler per site that reads the row's data from the element it was clicked on.
 
 ### Events are delegated
 

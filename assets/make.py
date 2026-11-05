@@ -975,9 +975,53 @@ def transition(p):
     return svg(p, 880, 392, "Transitions, as Vue's Transition and TransitionGroup, with name fade. Enter: in the patch the new row b gets fade-enter-from and fade-enter-active, two frames later fade-enter-to replaces fade-enter-from while CSS animates, and when the duration is up no classes are left. Leave: the removed row b is put back where it was with fade-leave-from and fade-leave-active, two frames later fade-leave-to, and when the duration is up it leaves the DOM. Move, in a group: row c went first, so after the patch the DOM is c a b but a transform shows every moved row where it was; two frames later the rows get fade-move and the transforms are cleared, so they slide to their new places; at the end no classes are left", body)
 
 
+def row(p):
+    def column(x, title, subtitle, items, color):
+        out = text(x, 18, title, size=14, weight=700, cls=color) + text(x, 37, subtitle, size=11.5, cls="muted")
+        y = 52
+        for label, note, tone in items:
+            fill = {"plain": p["card"], "accent": p["accent_soft"], "orange": p["orange_soft"], "green": p["green_soft"]}[tone]
+            stroke = {"plain": p["line"], "accent": p["accent"], "orange": p["orange"], "green": p["green"]}[tone]
+            out += box(x, y, 400, 26, fill, stroke, rx=7, width=1.2)
+            out += text(x + 12, y + 17.5, label, size=11.5, cls="mono", weight=600)
+            out += text(x + 388, y + 17.5, note, size=11, cls="muted", anchor="end")
+            y += 31
+        return out
+
+    before = [
+        ("child { build; patch; shape }", "+2 closures", "orange"),
+        ("with_key + Entry", "2 blocks", "orange"),
+        ("refresh closure", "per row", "orange"),
+        ("live { each; front; release }", "+3 closures", "orange"),
+        ("Compiled_state + lend", "+1 closure", "orange"),
+        ("scope + deps", "", "plain"),
+        ("holes array + 5 hole records", "6 blocks", "orange"),
+        ("2 handler closures", "per row", "orange"),
+        ("projection array", "", "plain"),
+    ]
+    after = [
+        ("parts { template; refresh; key }", "dropped after mount", "plain"),
+        ("Mounted_row { root; scope; holes }", "1 block", "green"),
+        ("scope + deps", "+ the last written values", "green"),
+        ("holes: the bare nodes", "no hole records", "green"),
+        ("element.$$melhole:data1 = id", "no closure", "green"),
+        ("projection array", "", "plain"),
+    ]
+    body = column(0, "a row before", "View.each over generic children", before, "orange")
+    body += column(480, "a row now", "View.rows, flat holes, linked handlers", after, "green")
+    body += box(480, 248, 400, 76, p["accent_soft"], p["accent"], rx=12, width=1.3)
+    body += text(498, 272, "shared, not per row", size=12.5, cls="accent", weight=700)
+    body += text(498, 292, "the template per site, the patch code of the list,", size=11.5, cls="muted")
+    body += text(498, 309, "one handler per site (View.link) per dispatch", size=11.5, cls="muted")
+    body += arrow(p, 420, 160, 466, 160, "green", flow=True, width=1.8)
+    body += text(440, 350, "Creating 1,000 rows of the benchmark allocates 481 kB instead of 939; 1,000 rows take 1.25 MB instead of 1.68.",
+                 size=12, cls="muted", anchor="middle", weight=600)
+    return svg(p, 880, 358, "What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: the row parts with a refresh closure, dropped after mount, one Mounted_row record with the root, the scope and the holes, the scope's deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template and one handler per site are shared. Creating 1,000 rows allocates 481 kB instead of 939, and 1,000 rows take 1.25 MB instead of 1.68", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, roadmap=roadmap)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap)
 
 if __name__ == "__main__":
     out = Path(__file__).parent
