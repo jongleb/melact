@@ -467,4 +467,9 @@ let structure items =
   let loc = Location.none in
   [%stri [@@@alert "-hook"]] :: mapper#structure items
 let signature items = mapper#signature items
+let () =
+  Driver.add_arg "-hydratable"
+    (Arg.Unit (fun () -> Element.output := Element.Hydratable))
+    ~doc:" compile templates that can take over server-rendered HTML"
+
 let () = Driver.register_transformation "melact" ~impl:structure ~intf:signature

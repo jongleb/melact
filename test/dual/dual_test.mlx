@@ -188,6 +188,74 @@ module Guarded = struct
     </div>
 end
 
+(** A random page, rendered both by the build under test and by React itself. *)
+type shape =
+  | Pair of string * string
+  | Mixed of string * int * shape
+  | Listed of string list
+  | Maybe of shape option
+  | Shown of int
+  | Twin of shape * shape
+
+module Shown = struct
+  let[@react.component] make ~count = <i>(React.int count)</i>
+end
+
+let rec page shape =
+  match shape with
+  | Pair (first, second) -> <p>(React.string first)(React.string second)</p>
+  | Mixed (label, count, inner) ->
+      <div className=label>
+        (React.string "static ")(React.string "too ")(React.string label)<b>(React.int count)</b>(page inner)
+      </div>
+  | Listed labels -> <ul>(React.array (Array.of_list (List.map (fun label -> <li key=label>(React.string label)</li>) labels)))</ul>
+  | Maybe inner -> <section>(Option.fold ~none:React.null ~some:page inner)</section>
+  | Shown count -> <Shown count />
+  | Twin (first, second) -> <div>(page first)(page second)</div>
+
+(** An element of npm React, built without JSX. *)
+type real
+
+external h : string -> 'props Js.Nullable.t -> real array -> real = "createElement" [@@mel.module "react"] [@@mel.variadic]
+external real_text : string -> real = "%identity"
+external real_null : real = "null"
+external render_real : real -> string = "renderToString" [@@mel.module "react-dom/server"]
+
+let rec real shape =
+  match shape with
+  | Pair (first, second) -> h "p" Js.Nullable.null [| real_text first; real_text second |]
+  | Mixed (label, count, inner) ->
+      h "div"
+        (Js.Nullable.return [%mel.obj { className = label }])
+        [| real_text "static "; real_text "too "; real_text label; h "b" Js.Nullable.null [| real_text (string_of_int count) |]; real inner |]
+  | Listed labels ->
+      h "ul" Js.Nullable.null
+        (Array.of_list (List.map (fun label -> h "li" (Js.Nullable.return [%mel.obj { key = label }]) [| real_text label |]) labels))
+  | Maybe inner -> h "section" Js.Nullable.null [| Option.fold ~none:real_null ~some:real inner |]
+  | Shown count -> h "i" Js.Nullable.null [| real_text (string_of_int count) |]
+  | Twin (first, second) -> h "div" Js.Nullable.null [| real first; real second |]
+
+let words = [| ""; "a"; "b"; "ab" |]
+
+let rec shaped tape depth =
+  match draw tape (match depth with 0 -> 2 | _ -> 6) with
+  | 0 -> Pair (words.(draw tape 4), words.(draw tape 4))
+  | 1 -> Shown (draw tape 10)
+  | 2 -> Mixed (words.(draw tape 4), draw tape 10, shaped tape (depth - 1))
+  | 3 -> Listed (List.sort_uniq String.compare (List.init (draw tape 4) (fun _ -> words.(1 + draw tape 3))))
+  | 4 -> Maybe (match draw tape 2 with 0 -> None | _ -> Some (shaped tape (depth - 1)))
+  | _ -> Twin (shaped tape (depth - 1), shaped tape (depth - 1))
+
+let rec alter tape shape =
+  match (draw tape 2, shape) with
+  | 0, _ -> shaped tape 2
+  | _, Pair _ -> Pair (words.(draw tape 4), words.(draw tape 4))
+  | _, Shown _ -> Shown (draw tape 10)
+  | _, Mixed (_, _, inner) -> Mixed (words.(draw tape 4), draw tape 10, alter tape inner)
+  | _, Listed _ -> Listed (List.sort_uniq String.compare (List.init (draw tape 4) (fun _ -> words.(1 + draw tape 3))))
+  | _, Maybe inner -> Maybe (match draw tape 3 with 0 -> None | _ -> Option.map (alter tape) inner)
+  | _, Twin (first, second) -> Twin (alter tape first, alter tape second)
+
 module Toggle = struct
   let[@react.component] make () =
     let shown, setShown = React.useState (fun () -> false) in
@@ -628,6 +696,45 @@ let () =
              |. to_equal (0, served start, List.init clicks (fun index -> served (start + index + 1)));
              finish ()))
         [%mel.obj { numRuns = 40 }]));
+  describe "React's server HTML" (fun () ->
+    test_async "React's renderToString of a page hydrates into that page with the server's own elements, and then patches"
+      (fun () ->
+        check_async
+          (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+               let tape = tape values in
+               let first = shaped tape 3 in
+               let pages = List.rev (snd (List.fold_left (fun (shape, made) _ -> let next = alter tape shape in (next, next :: made)) (first, []) [ 1; 2; 3 ])) in
+               let root = attached () and fresh = attached () in
+               set_inner_html root (render_real (real first));
+               let sent = nodes (select_all root "*") in
+               let client = ref None in
+               let* () = act (fun () -> client := Some (ReactDOM.Client.hydrateRoot root (page first))) in
+               let present = nodes (select_all root "*") in
+               let foreign =
+                 Array.length (Js.Array.filter ~f:(fun node -> not (Array.exists (fun other -> same node other) sent)) present)
+                 + Array.length (Js.Array.filter ~f:(fun node -> not (Array.exists (fun other -> same node other) present)) sent)
+               in
+               let* fresh_client = act (fun () -> ()) |> Js.Promise.then_ (fun () -> Js.Promise.resolve (ReactDOM.Client.createRoot fresh)) in
+               let* () = act (fun () -> ReactDOM.Client.render fresh_client (page first)) in
+               let hydrated = (shapes (as_node root), shapes (as_node fresh)) in
+               let rec patch remaining seen =
+                 match remaining with
+                 | [] -> Js.Promise.resolve (List.rev seen)
+                 | next :: rest ->
+                     let* () = act (fun () -> Option.iter (fun client -> ReactDOM.Client.render client (page next)) !client) in
+                     let* () = act (fun () -> ReactDOM.Client.render fresh_client (page next)) in
+                     patch rest ((shapes (as_node root), shapes (as_node fresh)) :: seen)
+               in
+               let* patched = patch pages [] in
+               let* () =
+                 act (fun () ->
+                     Option.iter (fun client -> ReactDOM.Client.unmount client ()) !client;
+                     ReactDOM.Client.unmount fresh_client ())
+               in
+               ignore (take ());
+               expect (foreign, fst hydrated, List.map fst patched) |. to_equal (0, snd hydrated, List.map snd patched);
+               finish ()))
+          [%mel.obj { numRuns = 300 }]));
   describe "forms" (fun () ->
     test_async "a controlled input and checkbox show the state after any input, kept or rejected, in the value attribute too"
       (fun () ->

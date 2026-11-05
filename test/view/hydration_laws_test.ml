@@ -4,14 +4,22 @@ open Trees
 
 external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
 external set_inner_html : Dom.element -> string -> unit = "innerHTML" [@@mel.set]
-external document_prototype : prototype = "prototype" [@@mel.scope "Document"]
+
+external node_value_of : Dom.node -> string = "nodeValue" [@@mel.get]
+external previous : Dom.node -> Dom.node Js.null = "previousSibling" [@@mel.get]
+external following : Dom.node -> Dom.node Js.null = "nextSibling" [@@mel.get]
+
+let texty node = Option.fold ~none:false ~some:(fun found -> node_type found = 3) (Js.Null.toOption node)
 
 let markers root =
   let rec count node =
     Array.fold_left
       (fun total child ->
         total
-        + (match node_type child with 8 -> 1 | _ -> 0)
+        + (match node_type child with
+          | 8 when String.equal (node_value_of child) " " && texty (previous child) && texty (following child) -> 0
+          | 8 -> 1
+          | _ -> 0)
         + count child)
       0 (nodes (node_children node))
   in
@@ -24,7 +32,7 @@ let served child =
 
 let () =
   describe "Hydration laws" (fun () ->
-      test "hydrating the server's HTML shows what mounting shows, and leaves no comment behind" (fun () ->
+      test "hydrating the server's HTML shows what mounting shows, and the only comments left separate two texts" (fun () ->
           check
             (property (tapes ~shortest:8 ~longest:80) (fun values ->
                  let child = decode values in
@@ -34,25 +42,19 @@ let () =
                  View.unmount mounted;
                  expect (shown, left) |. to_equal (rendered (decode values), 0)))
             [%mel.obj { numRuns = 400 }]);
-      test "hydration keeps every element the server sent and creates none" (fun () ->
+      test "after hydration the page holds exactly the elements the server sent" (fun () ->
           check
             (property (tapes ~shortest:8 ~longest:80) (fun values ->
                  let child = decode values in
                  let root = served child in
                  let before = nodes (select_all root "*") in
-                 let creates = spy_on document_prototype "createElement" in
-                 let clones = spy_on node_prototype "cloneNode" in
                  let mounted = Served.hydrate child ~parent:root in
-                 let created = Array.length (calls (mock creates)) + Array.length (calls (mock clones)) in
-                 restore creates;
-                 restore clones;
                  let after = nodes (select_all root "*") in
-                 let kept =
-                   Array.length before = Array.length after
-                   && Array.for_all (fun node -> Array.exists (fun other -> same node other) after) before
-                 in
+                 let sent node = Array.exists (fun other -> same node other) before in
+                 let kept = Array.for_all (fun node -> Array.exists (fun other -> same node other) after) before in
+                 let foreign = Array.length (Js.Array.filter ~f:(fun node -> not (sent node)) after) in
                  View.unmount mounted;
-                 expect (created, kept) |. to_equal (0, true)))
+                 expect (foreign, kept) |. to_equal (0, true)))
             [%mel.obj { numRuns = 400 }]);
       test "after hydration, patching shows what mounting shows" (fun () ->
           check

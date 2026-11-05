@@ -507,25 +507,25 @@ def hydration(p):
     html = [
         [("<div class=\"counter\">", "")],
         [("  <button>-</button>", "")],
-        [("  <output class=\"\">", "")],
-        [("    ", ""), ("<!--[-->", "orange"), ("41", "green"), ("<!--]-->", "orange")],
-        [("  </output>", "")],
+        [("  <output class=\"\">", ""), ("41", "green"), ("</output>", "")],
         [("  <button>+</button>", "")],
         [("  <button>reset</button>", "")],
         [("</div>", "")],
+        [("", "")],
+        [("<p>count: ", ""), ("<!-- -->", "orange"), ("41", "green"), ("</p>", "")],
     ]
     for i, parts in enumerate(html):
         line = "".join(span(t, c) if c else escape(t) for t, c in parts)
         body += text(18, 80 + i * 20, line, size=11.5, cls="mono", raw=True)
-    body += text(18, 258, "a marker pair around every dynamic part;", size=11.5, cls="muted")
-    body += text(18, 276, "an empty text is sent as <!---->", size=11.5, cls="muted")
+    body += text(18, 258, "React's format: no markers at all,", size=11.5, cls="muted")
+    body += text(18, 276, "<!-- --> only between two texts", size=11.5, cls="muted")
     body += arrow(p, 294, 150, 326, 150, "accent", flow=True, width=1.8)
 
-    body += card(330, 290, "2 · in the browser: hydrate", "the compiled walk, over the server's nodes", "accent")
+    body += card(330, 290, "2 · in the browser: hydrate", "compiled adopt code, in document order", "accent")
     steps = [
+        ("off-page clone", "", "the template's own refresh reads the values"),
         ("div.counter", "", "same tag: taken over, not cloned"),
-        ("firstChild / nextSibling", "", "steps over marked ranges, as on a clone"),
-        ("41", "green", "taken over; both markers removed"),
+        ("41", "green", "taken over; a list takes its own rows"),
         ("3 × button", "", "handlers set; nothing else is written"),
     ]
     for i, (label, tone, note) in enumerate(steps):
@@ -542,15 +542,15 @@ def hydration(p):
         body += box(bx, 54, 30, 32, p["card"], p["line"], rx=7)
         body += text(bx + 15, 76, sign, size=15, anchor="middle", weight=600)
     body += text(770, 77, "41", size=18, cls="mono green", weight=700, anchor="middle")
-    body += text(770, 122, "0 createElement, 0 cloneNode", size=12, weight=600, anchor="middle")
-    body += text(770, 144, "every node stays the server's;", size=11.5, cls="muted", anchor="middle")
-    body += text(770, 162, "a list is taken over", size=11.5, cls="muted", anchor="middle")
-    body += text(770, 180, "from its last row back", size=11.5, cls="muted", anchor="middle")
+    body += text(770, 122, "no element added to the page", size=12, weight=600, anchor="middle")
+    body += text(770, 144, "every element is the server's;", size=11.5, cls="muted", anchor="middle")
+    body += text(770, 162, "React's and server-reason-react's", size=11.5, cls="muted", anchor="middle")
+    body += text(770, 180, "HTML hydrate the same way", size=11.5, cls="muted", anchor="middle")
     body += box(660, 212, 220, 88, p["orange_soft"], p["orange"], rx=14, width=1.3)
     body += text(678, 240, "HTML that does not match", size=13, cls="orange", weight=700)
     body += text(678, 262, "the view: the root is cleared", size=11.5, cls="muted")
     body += text(678, 280, "and mounted from scratch", size=11.5, cls="muted")
-    return svg(p, 880, 300, "Server rendering and hydration: on the server Program.render or renderToString writes the HTML with a marker pair around every dynamic part, here the text 41 of the counter, and sends empty texts as empty comments; in the browser hydrate runs the compiled walk over the server's nodes: the root with the same tag is taken over instead of cloned, the walk steps over marked ranges, the text is taken over and its markers removed, and the buttons get their handlers; no element is created and lists are taken over from the last row back; HTML that does not match the view is cleared and mounted from scratch", body)
+    return svg(p, 880, 300, "Server rendering and hydration in React's format: on the server Program.render, renderToString or server-reason-react write plain HTML with no markers, and a comment only between two adjacent texts; in the browser, code the compiler generated for each template walks the server's nodes in document order, after an off-page clone has let the template's own refresh compute the values: the root with the same tag is taken over, texts and lists take exactly their nodes, and the buttons get their handlers; no element is added to the page, and HTML that does not match the view is cleared and mounted from scratch", body)
 
 
 def selectors(p):

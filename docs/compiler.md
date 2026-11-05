@@ -137,25 +137,33 @@ shape, or components such as Melact's `<Row>`, keep `View.each`.
 ## Server rendering and hydration
 
 `Served.render` renders a view into HTML in any JavaScript environment with a DOM (a server with
-linkedom or jsdom, a build step). Every dynamic part, a text or a content hole's children, is
-written between two comments, `<!--[-->` and `<!--]-->`, so that the browser's HTML parser cannot
-merge a dynamic text with its neighbours, and the anchors between neighbouring parts are written
-as `<!---->`.
+linkedom or jsdom, a build step), in the format of React's `renderToString`: no markers around
+dynamic parts, a `<!-- -->` comment only between two adjacent texts, and nothing for an empty text.
+server-reason-react writes the same format natively, so a Melact app can render on an OCaml
+server with it and hydrate in the browser with Melact.
 
-`Served.hydrate` takes such HTML over instead of building it again. Every block takes the element
-right before its anchor; lists are built from the last item back, so each item takes the nodes
-just before the next one. The compiled `firstChild`/`nextSibling` walk skips the marked ranges, so
-it reaches the same nodes it reaches in a fresh clone. Texts take the text node between their
-markers; the markers are removed and the anchors become the empty texts a browser render has. If
-the HTML does not match the view, hydration falls back to a plain render, as React does.
+`Served.hydrate` takes such HTML over in document order. Without markers, a dynamic part's extent
+is known only once its value is known, so the compiler generates, for every template, an `adopt`
+function next to the walk and the refresh: it goes through the template's static structure and
+the server's nodes together, checks every static element and text, takes a text hole's node, puts
+back the anchors the template keeps between neighbours, and hands each content hole's child a
+cursor; the child takes exactly its own nodes (a text one, a template one element, a list as many
+rows as it has) and the cursor moves on. The values come first, from the template's own refresh
+run on an off-page clone whose content holes only remember their children; then `adopt` runs on
+the server's element, and the refresh runs once more on the adopted holes to set handlers. If the
+HTML does not match, hydration falls back to a plain render, as React does, and the error says what
+it expected and what it found. Hand-written templates (`Template.make`) are taken over by an
+interpreter that follows their hole paths.
 
-The browser path does not carry this code: every child reaches the DOM through a small record,
-`View.medium`, whose browser value only clones and inserts; the server and hydration values live in
-`Served`. Meltea's counter grows by 65 bytes. `ReactDOM.Client` lives in its own module, `ReactDOMClient`, so that a Melact app that never hydrates does not carry hydration either: Melange compiles a submodule into one object, which bundlers cannot shake. Laws: on random trees of every kind of child,
-hydration shows what mounting shows and leaves no comment behind, creates no element and keeps
-every element the server sent, and patching afterwards matches mounting; TodoMVC hydrates a random
-model and then behaves like a mounted one under random user actions; and one dual law hydrates
-`ReactDOMServer.renderToString` with `ReactDOM.Client.hydrateRoot` under React 18 and Melact.
+`adopt` costs about a fifth of a small app's bundle, so it is generated only with the ppx's
+`-hydratable` flag, as Svelte's `hydratable` option: `(pps melact-ppx -hydratable)`. Without it the
+server's HTML shows until the app mounts over it. Laws: on random trees of every kind of child,
+hydration shows what mounting shows, the only comments left separate two texts, the page holds
+exactly the elements the server sent, and patching afterwards matches mounting; TodoMVC hydrates a
+random model and then behaves like a mounted one; and a dual law hydrates the output of React's own
+`renderToString` for random pages (adjacent texts, static text next to dynamic text, keyed lists,
+conditional blocks, components, neighbouring dynamic parts), then patches it through a series of
+changes, under React 18 and under Melact.
 
 ## Types, where dune can give them
 

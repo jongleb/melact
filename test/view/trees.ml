@@ -5,22 +5,32 @@ let words = [| ""; "a"; "b"; "ab"; "<&>" |]
 let labelled = Template.make ~html:"<div class=\"a\"><i></i></div>" ~holes:[| Attr ([], "title"); Text ([], 0); Child ([], 1) |]
 let styled = Template.make ~html:"<span><b>x</b></span>" ~holes:[| Class_list []; Style []; Child ([], 0) |]
 let scrolling = Template.make ~html:"<section></section>" ~holes:[| Handler ([], "scroll"); Child ([], 0) |]
+let twin = Template.make ~html:"<section><!----></section>" ~holes:[| Child ([], 0); Child ([], 1) |]
 let mixed = Template.make ~html:"<em>a<!---->b</em>" ~holes:[| Text ([], 1) |]
 let row = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "data-key"); Text ([], 0) |]
 let word_line =
-  View.template (Template.html "<b></b>")
-    (fun [@u] _ node -> View.text_hole { parent = node; before = Template.first_or_end node })
+  View.hydratable (Template.html "<b></b>")
+    (fun [@u] _ node -> View.text_at { parent = node; before = Template.first_or_end node })
+    (fun [@u] _ node collected ->
+      let cursor = View.inside node in
+      let text = View.adopt_text cursor (View.collected_text collected) in
+      View.adopt_finish cursor;
+      text)
 
 let lazy_text n = View.text ("lazy" ^ string_of_int n)
 let ignore_event (_ : Dom.event) = ()
 let identities = [| ref 0; ref 1 |]
 
 let rec description tape depth =
-  match draw tape (if depth = 0 then 3 else 11) with
+  match draw tape (if depth = 0 then 3 else 12) with
   | 0 -> View.text words.(draw tape 5)
   | 1 -> View.empty
   | 2 when depth = 0 -> View.tpl_instance mixed [| HText words.(draw tape 5) |]
   | 10 -> View.tpl_instance mixed [| HText words.(draw tape 5) |]
+  | 11 ->
+      let first = description tape (depth - 1) in
+      let second = description tape (depth - 1) in
+      View.tpl_instance twin [| HChild first; HChild second |]
   | 2 ->
       let count = draw tape 4 in
       View.list (List.init count (fun _ -> description tape (depth - 1)))
@@ -52,7 +62,7 @@ let rec description tape depth =
   | 7 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
       View.rows items
-        (fun [@u] item -> View.row word_line 0 (fun [@u] _ text -> View.set_text text item) item)
+        (fun [@u] item -> View.row word_line 1 (fun [@u] scope text -> View.put_text scope 0 text item) item)
         (fun [@u] _ -> [||])
         [||]
   | 9 ->

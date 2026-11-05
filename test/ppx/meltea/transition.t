@@ -158,3 +158,57 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                  Melhole.View.Input chosen)|])));
                   ())
            })
+
+With -hydratable, every template also gets the code that takes over a server's nodes in document order:
+
+  $ cat > counter.ml <<'EOF_'
+  > let view count = ((p ~children:[ Html.text "count: "; Html.int count; ((b ~children:[ Html.text "!" ] ()) [@JSX]) ] ()) [@JSX])
+  > EOF_
+  $ ./pp.exe -hydratable -impl counter.ml
+  let __melhole_template_1 =
+    Melhole.View.hydratable (Melhole.Template.html "<p>count: <b>!</b></p>")
+      {
+        Js.Fn.I2 =
+          (fun __melhole_scope __melhole_node ->
+             let __melhole_node_0 = Melhole.Template.first __melhole_node in
+             Melhole.View.text_at
+               {
+                 Melhole.Template.parent = __melhole_node;
+                 before = (Melhole.Template.next_or_end __melhole_node_0)
+               })
+      }
+      {
+        Js.Fn.I3 =
+          (fun __melhole_scope __melhole_node __melhole_collected ->
+             ((let __melhole_from__melhole_hole_0 = __melhole_collected in
+               let __melhole_cursor = Melhole.View.inside __melhole_node in
+               Melhole.View.adopt_static __melhole_cursor "count: ";
+               (let __melhole_hole_0 =
+                  Melhole.View.adopt_text __melhole_cursor
+                    (Melhole.View.collected_text __melhole_from__melhole_hole_0) in
+                let __melhole_node_1 =
+                  Melhole.View.adopt_element __melhole_cursor "b" in
+                let __melhole_cursor_1 = Melhole.View.inside __melhole_node_1 in
+                Melhole.View.adopt_static __melhole_cursor_1 "!";
+                Melhole.View.adopt_finish __melhole_cursor_1;
+                Melhole.View.adopt_finish __melhole_cursor;
+                __melhole_hole_0))
+             [@ocaml.warning "-26-27"]))
+      }
+  let view count =
+    Html.node
+      (fun __melhole_dispatch ->
+         Melhole.View.compiled __melhole_template_1 2
+           {
+             Js.Fn.I2 =
+               (fun __melhole_scope __melhole_hole_0 ->
+                  let __melhole_changed_0 =
+                    Melhole.View.check __melhole_scope 0 count in
+                  (match __melhole_changed_0 with
+                   | Melhole.View.Unchanged -> ()
+                   | _ ->
+                       Melhole.View.put_text __melhole_scope 1 __melhole_hole_0
+                         (string_of_int (count : int)));
+                  ())
+           })
+  let __melhole_reads_view = Program.Reads { analysed = view; fields = (-1) }

@@ -238,11 +238,13 @@ field and checkbox under React 18 and under Melact and compares the page.
   <img src="assets/hydration.svg" alt="Server rendering and hydration: on the server Program.render or renderToString writes the HTML with a marker pair around every dynamic part, here the text 41 of the counter, and sends empty texts as empty comments; in the browser hydrate runs the compiled walk over the server's nodes: the root with the same tag is taken over instead of cloned, the walk steps over marked ranges, the text is taken over and its markers removed, and the buttons get their handlers; no element is created and lists are taken over from the last row back; HTML that does not match the view is cleared and mounted from scratch" width="100%">
 </picture>
 
-`ReactDOMServer.renderToString` (Meltea: `Program.render`) mounts the view into a detached element
-and writes a marker pair around every dynamic part. `ReactDOM.Client.hydrateRoot`
-(`~start:Program.hydrate`) runs the compiled walk over the server's nodes instead of a fresh
-clone: it takes the nodes over, removes the markers and sets handlers, without creating an element.
-HTML that does not match the view is replaced by a normal mount.
+`ReactDOMServer.renderToString` (Meltea: `Program.render`) writes HTML in the format of React's own
+`renderToString`, with no markers, so a Melact app can also render on a native OCaml server with
+[server-reason-react](https://github.com/ml-in-barcelona/server-reason-react).
+`ReactDOM.Client.hydrateRoot` (`~start:Program.hydrate`) takes that HTML over in document order
+with code the compiler generates for each template under its `-hydratable` flag: it keeps the
+server's elements and sets handlers. HTML that does not match the view is replaced by a normal
+mount.
 
 ### Components re-render where state changed
 
@@ -386,7 +388,7 @@ demo component binds React's npm `useReducer` directly, which is a non-goal, so 
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.16 for Meltea, 1.17 for Melact and 1.64 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
 | **Tests** | 114 vitest + jsdom tests and 24 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
-| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. Hydration takes the server's nodes over instead of building them again |
+| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable` |
 | **Not yet** | `React.createElementVariadic`, code typed against `React.component('props)`, SSR on native OCaml |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 
