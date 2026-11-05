@@ -164,6 +164,40 @@ let component ~loc ~name expression =
     in
     finder#expression body `Pure
   in
+  let checked =
+    let watched expression =
+      {
+        expression with
+        pexp_attributes =
+          attribute ~loc:expression.pexp_loc ~name:{ txt = "alert"; loc = expression.pexp_loc }
+            ~payload:(PStr [ pstr_eval ~loc (estring ~loc "+hook") [] ])
+          :: expression.pexp_attributes;
+      }
+    in
+    let marker =
+      object
+        inherit Ast_traverse.map as super
+
+        method! expression expression =
+          let expression = super#expression expression in
+          match expression.pexp_desc with
+          | Pexp_ifthenelse (test, yes, no) ->
+              { expression with pexp_desc = Pexp_ifthenelse (test, watched yes, Option.map watched no) }
+          | Pexp_match (target, cases) ->
+              {
+                expression with
+                pexp_desc =
+                  Pexp_match (target, List.map (fun case -> { case with pc_rhs = watched case.pc_rhs }) cases);
+              }
+          | Pexp_function _ -> watched expression
+          | Pexp_while (test, body) -> { expression with pexp_desc = Pexp_while (test, watched body) }
+          | Pexp_for (pattern, low, high, direction, body) ->
+              { expression with pexp_desc = Pexp_for (pattern, low, high, direction, watched body) }
+          | _ -> expression
+      end
+    in
+    marker#expression body
+  in
   pexp_function ~loc complete None
     (Pfunction_body
        (match kind with
@@ -171,7 +205,7 @@ let component ~loc ~name expression =
            [%expr
              React.of_child
                (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () ->
-                    [%e unwrap ~loc body]))]
+                    [%e unwrap ~loc checked]))]
        | `Pure ->
            [%expr
              React.of_child
@@ -384,6 +418,8 @@ let mapper =
         key
   end
 
-let structure items = mapper#structure items
+let structure items =
+  let loc = Location.none in
+  [%stri [@@@alert "-hook"]] :: mapper#structure items
 let signature items = mapper#signature items
 let () = Driver.register_transformation "melact" ~impl:structure ~intf:signature

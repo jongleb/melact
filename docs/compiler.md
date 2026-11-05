@@ -108,6 +108,14 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+## The Rules of Hooks, checked by the type checker
+
+Every hook in `React` carries an alert, `[@@alert hook]`. `melact-ppx` turns the alert off for the
+whole file and back on in the branches, loops and callbacks of a component body. A hook called
+there is then reported by the OCaml type checker itself, which resolves it through any alias
+(`module R = React`, `open React`). It is a warning, not an error, so reason-react code that bends
+the rule still compiles.
+
 ## Fields an update changes
 
 `meltea-ppx` reads `update` the way Svelte 4 reads assignments. For every message it finds which

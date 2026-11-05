@@ -1,3 +1,5 @@
+[@@@alert "-hook"]
+
 open Melhole
 open Melact_runtime
 open Testing

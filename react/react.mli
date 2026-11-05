@@ -59,6 +59,7 @@ val setDisplayName : ('props -> element) -> string -> unit
 val displayName : ('props -> element) -> string option
 val createContext : 'value -> 'value Context.t
 val useContext : 'value Context.t -> 'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 (** The slot of a [useState] or [useReducer] call. *)
 type ('state, 'action) state
@@ -73,12 +74,14 @@ val useState :
   ('state, 'state -> 'state) state Melact_runtime.Hook.key ->
   (unit -> 'state) ->
   'state * (('state -> 'state) -> unit)
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useReducer :
   ('state, 'action) state Melact_runtime.Hook.key ->
   ('state -> 'action -> 'state) ->
   'state ->
   'state * ('action -> unit)
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useReducerWithMapState :
   ('state, 'action) state Melact_runtime.Hook.key ->
@@ -86,196 +89,239 @@ val useReducerWithMapState :
   'initial ->
   ('initial -> 'state) ->
   'state * ('action -> unit)
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect :
   unit effect_cell Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect0 :
   unit effect_cell Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect1 :
   'a array effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a array ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect2 :
   ('a * 'b) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect3 :
   ('a * 'b * 'c) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect4 :
   ('a * 'b * 'c * 'd) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect5 :
   ('a * 'b * 'c * 'd * 'e) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd * 'e ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect6 :
   ('a * 'b * 'c * 'd * 'e * 'f) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd * 'e * 'f ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useEffect7 :
   ('a * 'b * 'c * 'd * 'e * 'f * 'g) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd * 'e * 'f * 'g ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect :
   unit effect_cell Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect0 :
   unit effect_cell Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect1 :
   'a array effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a array ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect2 :
   ('a * 'b) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect3 :
   ('a * 'b * 'c) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect4 :
   ('a * 'b * 'c * 'd) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect5 :
   ('a * 'b * 'c * 'd * 'e) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd * 'e ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect6 :
   ('a * 'b * 'c * 'd * 'e * 'f) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd * 'e * 'f ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useLayoutEffect7 :
   ('a * 'b * 'c * 'd * 'e * 'f * 'g) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c * 'd * 'e * 'f * 'g ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo : (unit, 'value) memo Melact_runtime.Hook.key -> (unit -> 'value) -> 'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val useMemo0 : (unit, 'value) memo Melact_runtime.Hook.key -> (unit -> 'value) -> 'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo1 :
   ('a array, 'value) memo Melact_runtime.Hook.key -> (unit -> 'value) -> 'a array -> 'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo2 :
   ('a * 'b, 'value) memo Melact_runtime.Hook.key -> (unit -> 'value) -> 'a * 'b -> 'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo3 :
   ('a * 'b * 'c, 'value) memo Melact_runtime.Hook.key ->
   (unit -> 'value) ->
   'a * 'b * 'c ->
   'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo4 :
   ('a * 'b * 'c * 'd, 'value) memo Melact_runtime.Hook.key ->
   (unit -> 'value) ->
   'a * 'b * 'c * 'd ->
   'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo5 :
   ('a * 'b * 'c * 'd * 'e, 'value) memo Melact_runtime.Hook.key ->
   (unit -> 'value) ->
   'a * 'b * 'c * 'd * 'e ->
   'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo6 :
   ('a * 'b * 'c * 'd * 'e * 'f, 'value) memo Melact_runtime.Hook.key ->
   (unit -> 'value) ->
   'a * 'b * 'c * 'd * 'e * 'f ->
   'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useMemo7 :
   ('a * 'b * 'c * 'd * 'e * 'f * 'g, 'value) memo Melact_runtime.Hook.key ->
   (unit -> 'value) ->
   'a * 'b * 'c * 'd * 'e * 'f * 'g ->
   'value
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useCallback : (unit, 'fn) memo Melact_runtime.Hook.key -> 'fn -> 'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val useCallback0 : (unit, 'fn) memo Melact_runtime.Hook.key -> 'fn -> 'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val useCallback1 : ('a array, 'fn) memo Melact_runtime.Hook.key -> 'fn -> 'a array -> 'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val useCallback2 : ('a * 'b, 'fn) memo Melact_runtime.Hook.key -> 'fn -> 'a * 'b -> 'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useCallback3 :
   ('a * 'b * 'c, 'fn) memo Melact_runtime.Hook.key -> 'fn -> 'a * 'b * 'c -> 'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useCallback4 :
   ('a * 'b * 'c * 'd, 'fn) memo Melact_runtime.Hook.key -> 'fn -> 'a * 'b * 'c * 'd -> 'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useCallback5 :
   ('a * 'b * 'c * 'd * 'e, 'fn) memo Melact_runtime.Hook.key ->
   'fn ->
   'a * 'b * 'c * 'd * 'e ->
   'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useCallback6 :
   ('a * 'b * 'c * 'd * 'e * 'f, 'fn) memo Melact_runtime.Hook.key ->
   'fn ->
   'a * 'b * 'c * 'd * 'e * 'f ->
   'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useCallback7 :
   ('a * 'b * 'c * 'd * 'e * 'f * 'g, 'fn) memo Melact_runtime.Hook.key ->
   'fn ->
   'a * 'b * 'c * 'd * 'e * 'f * 'g ->
   'fn
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useRef : 'value ref Melact_runtime.Hook.key -> 'value -> 'value ref
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useInsertionEffect :
   unit effect_cell Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useInsertionEffect0 :
   unit effect_cell Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useInsertionEffect1 :
   'a array effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a array ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useInsertionEffect2 :
   ('a * 'b) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useInsertionEffect3 :
   ('a * 'b * 'c) effect_cell Melact_runtime.Hook.key ->
   (unit -> (unit -> unit) option) ->
   'a * 'b * 'c ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 (** The slot of a [useSyncExternalStore] call. *)
 type 'snapshot store
@@ -285,14 +331,17 @@ val useSyncExternalStore :
   subscribe:((unit -> unit) -> unit -> unit) ->
   getSnapshot:(unit -> 'snapshot) ->
   'snapshot
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useDebugValue : 'value -> ?format:('value -> string) -> unit -> unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle0 :
   unit effect_cell Melact_runtime.Hook.key ->
   'value ref Js.Nullable.t ->
   (unit -> 'value) ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle1 :
   'a array effect_cell Melact_runtime.Hook.key ->
@@ -300,6 +349,7 @@ val useImperativeHandle1 :
   (unit -> 'value) ->
   'a array ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle2 :
   ('a * 'b) effect_cell Melact_runtime.Hook.key ->
@@ -307,6 +357,7 @@ val useImperativeHandle2 :
   (unit -> 'value) ->
   'a * 'b ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle3 :
   ('a * 'b * 'c) effect_cell Melact_runtime.Hook.key ->
@@ -314,6 +365,7 @@ val useImperativeHandle3 :
   (unit -> 'value) ->
   'a * 'b * 'c ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle4 :
   ('a * 'b * 'c * 'd) effect_cell Melact_runtime.Hook.key ->
@@ -321,6 +373,7 @@ val useImperativeHandle4 :
   (unit -> 'value) ->
   'a * 'b * 'c * 'd ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle5 :
   ('a * 'b * 'c * 'd * 'e) effect_cell Melact_runtime.Hook.key ->
@@ -328,6 +381,7 @@ val useImperativeHandle5 :
   (unit -> 'value) ->
   'a * 'b * 'c * 'd * 'e ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle6 :
   ('a * 'b * 'c * 'd * 'e * 'f) effect_cell Melact_runtime.Hook.key ->
@@ -335,6 +389,7 @@ val useImperativeHandle6 :
   (unit -> 'value) ->
   'a * 'b * 'c * 'd * 'e * 'f ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useImperativeHandle7 :
   ('a * 'b * 'c * 'd * 'e * 'f * 'g) effect_cell Melact_runtime.Hook.key ->
@@ -342,9 +397,12 @@ val useImperativeHandle7 :
   (unit -> 'value) ->
   'a * 'b * 'c * 'd * 'e * 'f * 'g ->
   unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useId : string Melact_runtime.Hook.key -> unit -> string
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val useTransition : unit -> bool * ((unit -> unit) -> unit)
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val startTransition : (unit -> unit) -> unit
 val act : (unit -> unit) -> unit Js.Promise.t
 val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t

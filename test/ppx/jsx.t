@@ -4,6 +4,7 @@ A static tree becomes one template and one hoisted element:
   > let header = ((header ~className:"top" ~children:[ ((h1 ~children:[ React.string "Hi & <bye>" ] ()) [@JSX]) ] ()) [@JSX])
   > EOF
   $ ./pp.exe -impl static.ml
+  [@@@alert "-hook"]
   let __melhole_element_1 =
     React.of_child
       (Melhole.View.static
@@ -19,6 +20,7 @@ Holes at every depth; markers only between neighbours that would merge:
   >                   ((b ~children:[ React.int count ] ()) [@JSX]) ] ()) [@JSX])
   > EOF
   $ ./pp.exe -impl holes.ml
+  [@@@alert "-hook"]
   let __melhole_template_1 =
     Melhole.View.template
       (Melhole.Template.html "<p>a<!---->b<!----><b></b></p>")
@@ -97,6 +99,7 @@ Every kind of prop, static and dynamic, required and optional:
   >   ((div ~dangerouslySetInnerHTML:html ~strokeWidth:"2" ~htmlFor:"x" ()) [@JSX])
   > EOF
   $ ./pp.exe -impl props.ml
+  [@@@alert "-hook"]
   let __melhole_template_1 =
     Melhole.View.template
       (Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">")
@@ -240,6 +243,7 @@ A component with optional, defaulted and children props, and its signature:
   > let nothing = fun () -> React.null [@@react.component]
   > EOF
   $ ./pp.exe -impl card.ml
+  [@@@alert "-hook"]
   let __melhole_component_1 = Melact_runtime.Component.make ~name:"Card.make"
   let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<section><!----></section>")
@@ -316,6 +320,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   > [@@react.component]
   > EOF
   $ ./pp.exe -impl fancy.ml
+  [@@@alert "-hook"]
   let __melhole_component_1 = Melact_runtime.Component.make ~name:"Fancy.make"
   let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<input>")
@@ -367,6 +372,7 @@ Calls with children, keys and fragments:
   > let both = (([ one; many ]) [@JSX])
   > EOF
   $ ./pp.exe -impl calls.ml
+  [@@@alert "-hook"]
   let one = Card.make ~title:"a" ~children:(React.string "x") ()
   let many =
     React.of_child
@@ -423,6 +429,7 @@ Hooks get one key per call site, also inside custom hooks:
   > [@@react.component]
   > EOF
   $ ./pp.exe -impl hooks.ml
+  [@@@alert "-hook"]
   let __melhole_hook_1 = Melact_runtime.Hook.key ()
   let useToggle () = (React.useState __melhole_hook_1) (fun () -> false)
   let __melhole_component_2 = Melact_runtime.Component.make ~name:"Hooks.make"
@@ -433,7 +440,8 @@ Hooks get one key per call site, also inside custom hooks:
          (fun () ->
             React.to_child
               (let (shown, _) = useToggle () in
-               (React.useEffect1 __melhole_hook_3) (fun () -> None) [|shown|];
+               (React.useEffect1 __melhole_hook_3) ((fun () -> None)
+                 [@alert "+hook"]) [|shown|];
                React.string (React.useContext Theme.context))))
 
 Reason input:
@@ -444,6 +452,7 @@ Reason input:
   > EOF
   $ refmt --print ml greeting.re > greeting.ml
   $ ./pp.exe -impl greeting.ml
+  [@@@alert "-hook"]
   let __melhole_component_1 =
     Melact_runtime.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
@@ -487,6 +496,7 @@ mlx input:
   > EOF
   $ mlx-pp greeting.mlx > greeting.ast
   $ ./pp.exe -impl greeting.ast
+  [@@@alert "-hook"]
   let __melhole_component_1 =
     Melact_runtime.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
@@ -533,3 +543,19 @@ Errors point at the source:
                             ^^^^^
   Error: melact: <div> has no prop colour
   [1]
+
+Hooks keep their order: the hook alert is off in the file and back on in branches, loops and
+callbacks of a component, so a hook called there is reported by the type checker, through any alias:
+
+  $ cat > rules.ml <<'EOF'
+  > let make ~flag =
+  >   let count, setCount = React.useState (fun () -> 0) in
+  >   let extra = if flag then 1 else 0 in
+  >   ((button ~onClick:(fun _ -> setCount (fun n -> n + extra)) ~children:[ React.int count ] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl rules.ml | grep -n "alert"
+  1:[@@@alert "-hook"]
+  25:                 [@alert "+hook"]) in
+  27:               if flag then ((1)[@alert "+hook"]) else ((0)[@alert "+hook"]) in
+  49:                                         [@alert "+hook"]))[@alert "+hook"])
