@@ -26,7 +26,7 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/overview-dark.svg">
-  <img src="assets/overview.svg" alt="Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, React.Event. Starting fresh? Write Meltea" width="100%">
+  <img src="assets/overview.svg" alt="Melact in one picture. 1: you keep a reason-react component unchanged; the whole migration is two dune lines. 2: Melact compiles it once, at build time, into a template with two holes, the click handler and the text n, the only places that can change, and a generated render: if n !== last then text.data = n, one compare per value and at most one write per change. 3: a click runs your set as before, only this component runs, n goes from 0 to 1 so one === fails, and text.data = 1 is the only DOM write. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, React.Event. Starting fresh? Write Meltea" width="100%">
 </picture>
 
 <picture>
