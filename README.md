@@ -235,7 +235,7 @@ field and checkbox under React 18 and under Melact and compares the page.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/hydration-dark.svg">
-  <img src="assets/hydration.svg" alt="Server rendering and hydration: on the server Program.render or renderToString writes the HTML with a marker pair around every dynamic part, here the text 41 of the counter, and sends empty texts as empty comments; in the browser hydrate runs the compiled walk over the server's nodes: the root with the same tag is taken over instead of cloned, the walk steps over marked ranges, the text is taken over and its markers removed, and the buttons get their handlers; no element is created and lists are taken over from the last row back; HTML that does not match the view is cleared and mounted from scratch" width="100%">
+  <img src="assets/hydration.svg" alt="Server rendering and hydration in React's format: on the server Program.render, renderToString or server-reason-react write plain HTML with no markers, and a comment only between two adjacent texts; in the browser, code the compiler generated for each template walks the server's nodes in document order, after an off-page clone has let the template's own refresh compute the values: the root with the same tag is taken over, texts and lists take exactly their nodes, and the buttons get their handlers; no element is added to the page, and HTML that does not match the view is cleared and mounted from scratch. Before the code arrives, the capture script in the page's head records clicks, typing and key presses with each target's value, and hydration delivers them in order" width="100%">
 </picture>
 
 `ReactDOMServer.renderToString` (Meltea: `Program.render`) writes HTML in the format of React's own
@@ -244,7 +244,20 @@ field and checkbox under React 18 and under Melact and compares the page.
 `ReactDOM.Client.hydrateRoot` (`~start:Program.hydrate`) takes that HTML over in document order
 with code the compiler generates for each template under its `-hydratable` flag: it keeps the
 server's elements and sets handlers. HTML that does not match the view is replaced by a normal
-mount.
+mount. `Melhole_server.capture`, a script for the page's head, records what the user does before
+the code arrives, with each field's value at that moment, and hydration delivers it in order.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/served-dark.svg">
+  <img src="assets/served.svg" alt="One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it" width="100%">
+</picture>
+
+A server does not need a DOM either. Under `meltea-ppx -server` the same view compiles to code
+that writes its HTML through `melhole.server`, plain OCaml that runs natively and in Node:
+static markup joined into a few strings at compile time and one call per dynamic part.
+`meltea.server` has Meltea's `Html`, `Cmd`, `Sub` and `Program`, so one module with the model,
+`update` and `view` builds for both sides; [`examples/served`](examples/served) is a native
+server and the client that hydrates its page.
 
 ### Components re-render where state changed
 
@@ -386,10 +399,10 @@ demo component binds React's npm `useReducer` directly, which is a non-goal, so 
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, every `React.Event` family over native events (handlers see the `currentTarget` they were set on, as in React), `React.createElement` with `makeProps`, `ReasonReactRouter`; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
 | **Size** | whole apps, runtime and the Melange stdlib they use included: the counter is 3.0 kB gzip with Meltea and 5.6 kB with Melact, TodoMVC in Meltea is 14.7 kB, most of it jsonkit's `Printf` for error messages; React 18.3 and react-dom alone are 45 kB |
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.16 for Meltea, 1.17 for Melact and 1.64 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
-| **Tests** | 114 vitest + jsdom tests and 24 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Tests** | 136 vitest + jsdom tests and 24 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
-| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable`. `Served.capture`, a script for the page's head, keeps clicks and typing made before the code arrives and hydration delivers them |
-| **Not yet** | `React.createElementVariadic`, code typed against `React.component('props)`, SSR on native OCaml |
+| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable`. `meltea-ppx -server` compiles a view to code that writes its HTML with no DOM, natively or in Node ([`examples/served`](examples/served)); a Melact app renders natively with server-reason-react. `Melhole_server.capture`, a script for the page's head, keeps clicks and typing made before the code arrives and hydration delivers them |
+| **Not yet** | `React.createElementVariadic`, code typed against `React.component('props)`, Suspense on the server |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 
 A whole tree compiles to one template. This mlx counter is one `<template>` with six holes,
@@ -461,12 +474,14 @@ The full plan is in [`SPEC.md`](SPEC.md).
 
 ```
 melhole/runtime     melhole           shared runtime: templates, guards, keyed moves, events
+melhole/server      melhole.server    HTML without a DOM, natively or under Melange
 react/runtime       melact.runtime    React's components: instances, hook slots, context, scheduler
 melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
 react/             melact           React (with React.Event), ReactDOM, ReasonReactRouter
 meltea/            meltea           the Elm architecture: Program, Cmd, Sub, Html
+meltea/server      meltea.server    the same modules on a server: views write HTML
 test/                               laws: QCheck, fast-check in jsdom, React vs Melact
 examples/                           counter (Meltea), counter-react (Melact)
 compat/                             real reason-react apps built against Melact

@@ -358,8 +358,19 @@ module Controlled = struct
     </div>
 end
 
+module Box = struct
+  let[@react.component] make ~initial =
+    let on, setOn = React.useState (fun () -> initial) in
+    <input type_="checkbox" checked=on onChange=(fun _ -> setOn (fun on -> not on)) />
+end
+
+module Boxed = struct
+  let[@react.component] make ~generation ~initial = <p><Box key=(string_of_int generation) initial /></p>
+end
+
 external bubbling : string -> < bubbles : bool > Js.t -> Dom.event = "Event" [@@mel.new]
 external checked : Dom.element -> bool = "checked" [@@mel.get]
+external has_attribute : Dom.element -> string -> bool = "hasAttribute" [@@mel.send]
 external value_of : Dom.element -> string = "value" [@@mel.get]
 
 let type_into : Dom.element -> string -> unit =
@@ -776,6 +787,37 @@ let () =
                let* shown = step actions [] in
                expect shown |. to_equal wanted;
                finish ()))
+          [%mel.obj { numRuns = 60 }]));
+  describe "checkboxes" (fun () ->
+    test_async "a controlled checkbox has the checked attribute exactly when it was checked at mount" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:20) (fun values ->
+             let tape = tape values in
+             let first = draw tape 2 = 1 in
+             let steps = List.init (1 + draw tape 8) (fun _ -> draw tape 3) in
+             let* root, client = mount <Boxed generation=0 initial=first /> in
+             let rec run remaining generation on mounted seen =
+               match remaining with
+               | [] -> Js.Promise.resolve (List.rev seen)
+               | step :: rest ->
+                   let generation, on, mounted =
+                     match step with
+                     | 0 -> (generation + 1, on, on)
+                     | _ -> (generation, not on, mounted)
+                   in
+                   let* () =
+                     act (fun () ->
+                         match step with
+                         | 0 -> ReactDOM.Client.render client <Boxed generation initial=on />
+                         | _ -> click (select root "input"))
+                   in
+                   let box = select root "input" in
+                   run rest generation on mounted (((checked box, has_attribute box "checked"), (on, mounted)) :: seen)
+             in
+             let* seen = run steps 0 first first [] in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             expect (List.map fst seen) |. to_equal (List.map snd seen);
+             finish ()))
           [%mel.obj { numRuns = 60 }]));
   describe "disabled" (fun () ->
     test_async "a disabled button's own mouse handlers do not run, its parents' do" (fun () ->

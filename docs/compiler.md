@@ -168,7 +168,7 @@ changes, under React 18 and under Melact.
 ### Events before the code arrives
 
 Between the server's HTML appearing and the code hydrating it, a page looks alive and is not:
-clicks and typing go nowhere. `Served.capture` is a script of a few hundred bytes for the page's
+clicks and typing go nowhere. `Melhole_server.capture` is a script of a few hundred bytes for the page's
 `<head>`, after Angular's event contract: it listens on `document` in the capture phase for
 `click`, `dblclick`, `input`, `change`, `keydown`, `keyup` and `submit`, and keeps each event with
 the `value` and `checked` its target had at that moment. The first hydration stops it and, once
@@ -177,9 +177,49 @@ same path as a live event, any other type to the handlers from the target up to 
 each event the target gets back the value it had then, so an `onInput` that reads the field sees
 what was typed by that keystroke, not the field's final text; afterwards the final values return,
 and a controlled field is put back from the state as after any input. A native server writes the
-same script; its text is the value of `Served.capture`. A law types, presses Enter and clicks on
+script; it is a string in `melhole.server`, which builds natively and under Melange. A law types, presses Enter and clicks on
 TodoMVC's server page before hydration, and the page must then match a mounted page that got the
 same actions, and keep matching through later ones.
+
+### Without a DOM: the server renderer
+
+`Served.render` needs a DOM, so on a server it needs jsdom or linkedom, and it cannot run in native
+OCaml. Under the ppx flag `-server` (meltea-ppx) a view compiles to code that writes its HTML
+instead: the static markup of each JSX tree is joined at compile time into as few strings as
+possible, and every dynamic part becomes one call into `melhole.server`, a library of plain OCaml
+that builds natively and under Melange. For the counter:
+
+```ocaml
+Melhole_server.markup w "<div class=\"counter\"><button>-</button><output";
+Melhole_server.attribute w "class" (Some (if count < 0 then "negative" else ""));
+Melhole_server.markup w ">";
+Melhole_server.dynamic_text w (string_of_int count);
+Melhole_server.markup w "</output><button>+</button><button";
+Melhole_server.attribute w "disabled" (if count = 0 then Some "" else None);
+Melhole_server.markup w ">reset</button></div>"
+```
+
+The format is React's `renderToString`: `<!-- -->` only between two texts, nothing for an empty
+text, `checked=""`, a textarea's value as its text, a style as `name:value` pairs with hyphenated
+names, void tags closed with `/>`, and `&<>"'` escaped. Where the node before a static text is
+known at compile time (a tag, or another static text), the separator is decided there; after a
+dynamic part the writer decides it from the last node it wrote. Floats are written as JavaScript's
+`String` writes them, shortest digits that read back to the same float with ties to even, so a
+native server and the browser agree. Handlers and refs are dropped, but still typed, so the module
+must type-check the same way on both targets.
+
+`meltea.server` has the same `Html`, `Cmd`, `Sub` and `Program` modules as `meltea`, so one module
+with the model, `update` and `view` builds twice: against `meltea` for the browser and against
+`meltea.server` with `meltea-ppx -server` for the server, natively or in Node. Commands and
+subscriptions are inert there. [`examples/served`](../examples/served) is a native server that
+writes a page with the capture script and the counter, and a client that hydrates it.
+
+Laws, on a view with every kind of part (texts next to texts, empty texts, attributes of every
+type, a style, a checkbox, a textarea, rows, a keyed list, `Html.map`, `Html.memo`, a
+transition, void tags): the server's HTML parses into the same nodes, separators and attributes as
+the DOM renderer writes; the browser hydrates it with none of its own elements and then patches
+like a mounted page; a native corpus of 300 pages is byte for byte what the Melange build writes;
+and floats are written as `String` writes them, for random doubles under Melange and natively.
 
 ## Types, where dune can give them
 

@@ -5,12 +5,12 @@ A static tree becomes one template and one hoisted element:
   > EOF
   $ ./pp.exe -impl static.ml
   [@@@alert "-hook"]
-  let __melhole_element_1 =
-    React.of_child
-      (Melhole.View.static
-         (Melhole.Template.html
-            "<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>"))
-  let header = __melhole_element_1
+  let __melhole_static_1 =
+    Melhole.View.static
+      (Melhole.Template.html
+         "<header class=\"top\"><h1>Hi &amp; &lt;bye&gt;</h1></header>")
+  let __melhole_element_2 = React.of_child __melhole_static_1
+  let header = __melhole_element_2
 
 Holes at every depth; markers only between neighbours that would merge:
 

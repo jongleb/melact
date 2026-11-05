@@ -25,9 +25,11 @@ copy meltea
 copy ppx/meltea
 copy examples/counter
 copy examples/todomvc
+copy examples/served
 copy test/support
 copy test/meltea
 copy test/todomvc
+copy test/served
 copy test/laws
 copy vite.config.js
 copy test/setup.js
@@ -36,7 +38,8 @@ rm meltea/README.md
 mkdir -p assets
 cp "$root"/assets/compiled.svg "$root"/assets/compiled-dark.svg "$root"/assets/meltea.svg "$root"/assets/meltea-dark.svg \
   "$root"/assets/fields.svg "$root"/assets/fields-dark.svg "$root"/assets/selectors.svg "$root"/assets/selectors-dark.svg \
-  "$root"/assets/transition.svg "$root"/assets/transition-dark.svg assets/
+  "$root"/assets/transition.svg "$root"/assets/transition-dark.svg \
+  "$root"/assets/served.svg "$root"/assets/served-dark.svg assets/
 
 cat > dune-project <<'EOF'
 (lang dune 3.16)

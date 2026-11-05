@@ -1038,9 +1038,71 @@ def row(p):
     return svg(p, 880, 358, "What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: the row parts with a refresh closure, dropped after mount, one Mounted_row record with the root, the scope and the holes, the scope's deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template and one handler per site are shared. Creating 1,000 rows allocates 481 kB instead of 939, and 1,000 rows take 1.25 MB instead of 1.68", body)
 
 
+def served(p):
+    def mono(x, y, parts, size=11.5):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        return text(x, y, line, size=size, cls="mono", raw=True)
+
+    body = box(0, 0, 250, 300, p["card"], p["line"], rx=14, width=1.4, lift=True)
+    body += text(18, 28, "page.mlx", size=14, weight=700)
+    body += text(18, 47, "one module, built twice", size=11.5, cls="muted")
+    source = [
+        [("let view count =", "")],
+        [("  <div className=\"counter\">", "")],
+        [("    <button onClick=Decrement>", "")],
+        [("      (Html.text \"-\")", "")],
+        [("    </button>", "")],
+        [("    <output className=", ""), ("tone", "orange"), (">", "")],
+        [("      (Html.int ", ""), ("count", "orange"), (")", "")],
+        [("    </output>", "")],
+        [("    …", "faint")],
+        [("  </div>", "")],
+    ]
+    for i, parts in enumerate(source):
+        body += mono(18, 80 + i * 19, parts)
+    body += text(18, 284, "model, update, view: plain OCaml", size=11.5, cls="muted")
+
+    body += curve(p, "M254,110 C280,110 280,70 306,70", "accent", flow=True, width=1.8)
+    body += curve(p, "M254,190 C280,190 280,236 306,236", "green", flow=True, width=1.8)
+
+    body += box(310, 0, 570, 140, p["accent_soft"], p["accent"], rx=14, width=1.4, lift=True)
+    body += text(328, 28, "meltea-ppx · in the browser", size=13.5, cls="accent", weight=700)
+    body += text(862, 28, "meltea", size=11.5, cls="mono muted", anchor="end")
+    browser = [
+        [("Template.html \"<div class=\\\"counter\\\"><button>-</button><output></output>…\"", "")],
+        [("walk: div.firstChild.nextSibling → output", "")],
+        [("refresh: if ", ""), ("count", "orange"), (" !== last then output.data = String(count)", "")],
+    ]
+    for i, parts in enumerate(browser):
+        body += mono(328, 60 + i * 22, parts)
+    body += text(328, 128, "cloned once, then only the holes whose locals changed are written", size=11.5, cls="muted")
+
+    body += box(310, 160, 570, 140, p["green_soft"], p["green"], rx=14, width=1.4, lift=True)
+    body += text(328, 188, "meltea-ppx -server · natively or in Node, no DOM", size=13.5, cls="green", weight=700)
+    body += text(862, 188, "meltea.server", size=11.5, cls="mono muted", anchor="end")
+    server = [
+        [("markup w \"<div class=\\\"counter\\\"><button>-</button><output\"", "")],
+        [("attribute w \"class\" (Some ", ""), ("tone", "orange"), (")", "")],
+        [("markup w \">\"; dynamic_text w (string_of_int ", ""), ("count", "orange"), (")", "")],
+        [("markup w \"</output><button>+</button>…\"", "")],
+    ]
+    for i, parts in enumerate(server):
+        body += mono(328, 216 + i * 19, parts)
+    body += text(328, 291, "static markup joined at compile time, one call per dynamic part", size=11.5, cls="muted")
+
+    body += box(0, 330, 880, 84, p["card"], p["line"], rx=14, width=1.2)
+    body += text(18, 356, "the HTML, in React's format", size=13, weight=700)
+    body += mono(18, 380, [("<div class=\"counter\"><button>-</button><output class=\"\">", ""), ("41", "green"), ("</output><button>+</button>…</div>", "")], size=12)
+    body += text(18, 402, "the same bytes natively and under Melange; floats as JavaScript writes them", size=11.5, cls="muted")
+    body += arrow(p, 595, 304, 595, 326, "green", width=1.6)
+    body += curve(p, "M884,372 C912,372 912,70 884,70", "accent", flow=True, width=1.6)
+    body += text(862, 356, "hydrate: the browser build takes these nodes over", size=11.5, cls="accent", anchor="end", weight=600)
+    return svg(p, 920, 414, "One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served)
 
 if __name__ == "__main__":
     out = Path(__file__).parent
