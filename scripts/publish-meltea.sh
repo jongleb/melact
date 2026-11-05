@@ -39,7 +39,8 @@ mkdir -p assets
 cp "$root"/assets/compiled.svg "$root"/assets/compiled-dark.svg "$root"/assets/meltea.svg "$root"/assets/meltea-dark.svg \
   "$root"/assets/fields.svg "$root"/assets/fields-dark.svg "$root"/assets/selectors.svg "$root"/assets/selectors-dark.svg \
   "$root"/assets/transition.svg "$root"/assets/transition-dark.svg \
-  "$root"/assets/served.svg "$root"/assets/served-dark.svg assets/
+  "$root"/assets/served.svg "$root"/assets/served-dark.svg \
+  "$root"/assets/fanout.svg "$root"/assets/fanout-dark.svg assets/
 
 cat > dune-project <<'EOF'
 (lang dune 3.16)
@@ -71,7 +72,7 @@ cat > dune-project <<'EOF'
  (name melhole)
  (synopsis "Templates with holes for Melange: the runtime and the compiler shared by Meltea and Melact")
  (depends
-  (ocaml (>= 5.3))
+  (ocaml (>= 5.4))
   (dune (>= 3.16))
   (melange (>= 5.1))
   (ppxlib (>= 0.34))
@@ -83,7 +84,7 @@ cat > dune-project <<'EOF'
  (name meltea)
  (synopsis "The Elm architecture for Melange: pure functions, mlx views, compiled templates")
  (depends
-  (ocaml (>= 5.3))
+  (ocaml (>= 5.4))
   (dune (>= 3.16))
   (melange (>= 5.1))
   melhole
@@ -94,7 +95,7 @@ cat > dune-project <<'EOF'
  (name meltea-ppx)
  (synopsis "Meltea's mlx views with messages, compiled to templates")
  (depends
-  (ocaml (>= 5.3))
+  (ocaml (>= 5.4))
   (dune (>= 3.16))
   (ppxlib (>= 0.34))
   melhole))

@@ -268,6 +268,33 @@ redefined `update` or a different function gets no masks. A wrapper such as
 `Todomvc.update` changes, and is recognised as such. `update` may start with helper `let`s before
 its `match`.
 
+### Fanout: frequent events that reach a list
+
+The same reading gives the compiler the whole path of an event, with no annotations: a handler
+sends a message, the message's branch of `update` writes fields, and a list in `view` reads some of
+them, through record patterns, `model.field` and the `let`s before it. When a frequent event
+(`onInput`, key and pointer moves, scroll, drag) sends a message whose fields a list reads, every
+such event makes the list check all its rows, and `meltea-ppx` says so at the handler, as an alert
+named `fanout`:
+
+```
+File "todomvc.mlx", line 142, characters 19-44:
+142 |            onInput=(fun text -> Retype text)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^
+Alert fanout: each input event here sends Retype, which changes editing;
+the list at line 187 reads editing, so every input event checks all of its rows
+```
+
+Branches of a key handler matched on a literal key (`"Enter" -> Add`) are single actions, not
+every key press, and do not count; an `update` or a list the analysis cannot read (a whole model
+passed to a function) gives no alert rather than a guess. The alert is a compiler warning, not an
+error, and `(handler [@alert "-fanout"])` keeps it quiet where the cost is accepted: TodoMVC's edit
+field does that, since its rows show the text being edited. The alert costs no code: it is a local
+module whose one value carries the message, and Melange drops it. A native law generates modules
+whose branches write random fields, whose views read them through chains of `let`s into lists, and
+whose handlers send random messages on input, on keys (with literal branches) and on clicks, and
+checks that alerts stand at exactly the handlers an independent model of the path predicts.
+
 ## Components without hooks
 
 By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body

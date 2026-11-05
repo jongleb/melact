@@ -13,7 +13,7 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 ![status](https://img.shields.io/badge/status-milestone%204%20of%207-8250df)
 ![Melange](https://img.shields.io/badge/Melange-%E2%89%A5%205.1-ec6813?logo=ocaml&logoColor=white)
-![OCaml](https://img.shields.io/badge/OCaml-%E2%89%A5%205.3-ec6813?logo=ocaml&logoColor=white)
+![OCaml](https://img.shields.io/badge/OCaml-%E2%89%A5%205.4-ec6813?logo=ocaml&logoColor=white)
 ![syntax](https://img.shields.io/badge/JSX-mlx%20%C2%B7%20Reason%20%C2%B7%20OCaml-1f6feb)
 ![runtime deps](https://img.shields.io/badge/npm%20runtime%20deps-0-1a7f37)
 
@@ -360,6 +360,16 @@ values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries mel
 `meltea-ppx` also reads `update` and `view` for the model fields each message can change and the
 view reads. A message that changes nothing the view reads does not call the view at all.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/fanout-dark.svg">
+  <img src="assets/fanout.svg" alt="Fanout in Meltea's TodoMVC: meltea-ppx follows a frequent event to the lists it reaches. The edit field's onInput sends Retype, whose branch of update writes editing, and the list in view reads todos, filter and editing, so every keystroke makes the list check all its rows; the compiler raises the alert fanout at the handler. The new-todo field's onInput sends Type, which writes field, which no list reads, so typing writes one hole and there is no alert. A key handler's literal branch such as Enter sends Add once and does not count" width="100%">
+</picture>
+
+The same reading follows every frequent event (typing, keys, pointer moves, scroll) through the
+message it sends and the fields that message writes to the lists that read them. Where typing
+would make a list check all its rows on every keystroke, the compiler says so at the handler with
+an alert, `fanout`, and the user writes nothing to get it.
+
 ### Transitions
 
 <picture>
@@ -424,7 +434,7 @@ let[@react.component] make ~initial () =
 
 ## Try it
 
-You need OCaml ≥ 5.3, Melange ≥ 5.1, dune ≥ 3.16 and Node for the tests.
+You need OCaml ≥ 5.4, Melange ≥ 5.1, dune ≥ 3.16 and Node for the tests.
 
 ```console
 $ dune build                          # libraries and examples

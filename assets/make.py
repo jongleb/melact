@@ -1100,9 +1100,55 @@ def served(p):
     return svg(p, 920, 414, "One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it", body)
 
 
+def fanout(p):
+    def chip(x, y, label, color, soft):
+        w = len(label) * 6.9 + 16
+        return box(x, y, w, 22, p[soft], p[color], rx=11, width=1.2) + text(x + w / 2, y + 15, label, size=11, cls=f"mono {color}", weight=700, anchor="middle"), w
+
+    def station(x, w, y, title, code, color):
+        return (box(x, y, w, 96, p["card"], p[color], rx=12, width=1.3, lift=True)
+                + text(x + 14, y + 22, title, size=11.5, cls="muted", weight=600)
+                + text(x + 14, y + 46, code, size=11.5, cls="mono"))
+
+    titles = ["the handler, frequent", "sends", "update writes", "view: a list reads"]
+    xs = [(0, 250), (276, 130), (432, 200), (658, 222)]
+
+    def path(y, color, handler, message, branch, written, loop, reads, shared):
+        body = ""
+        for (x, w), title, code in zip(xs, titles, [handler, message, branch, loop]):
+            body += station(x, w, y, title, code, color if title != "sends" else "line")
+        for index, ((x, w), (nx, _)) in enumerate(zip(xs, xs[1:])):
+            reached = index < 2 or shared
+            body += arrow(p, x + w + 2, y + 48, nx - 4, y + 48, color if reached else "muted", flow=bool(reached), width=1.6)
+        piece, _ = chip(446, y + 62, written, color, color + "_soft")
+        body += piece
+        cx = 672
+        for label in reads:
+            tone, soft = ("orange", "orange_soft") if label in shared else ("blue", "blue_soft")
+            piece, w = chip(cx, y + 62, label, tone, soft)
+            body += piece
+            cx += w + 6
+        return body
+
+    body = path(0, "orange", "onInput=(fun t -> Retype t)", "Retype", "{ model with editing }", "editing",
+                "List.map (row editing) …", ["todos", "filter", "editing"], ["editing"])
+    body += path(124, "green", "onInput=(fun t -> Type t)", "Type", "{ model with field }", "field",
+                 "List.map (row editing) …", ["todos", "filter", "editing"], [])
+    body += text(0, 244, "the edit field: every keystroke reaches the list", size=12, cls="orange", weight=700)
+    body += text(880, 244, "the new-todo field: no list reads field, one hole is written", size=12, cls="green", weight=700, anchor="end")
+
+    body += box(0, 262, 880, 92, p["orange_soft"], p["orange"], rx=14, width=1.3)
+    body += text(18, 288, "Alert fanout", size=13, cls="orange", weight=700)
+    body += text(118, 288, "at the handler, from meltea-ppx, with no annotations", size=11.5, cls="muted")
+    body += text(18, 312, "each input event here sends Retype, which changes editing; the list at line 187 reads editing,", size=11.5, cls="mono")
+    body += text(18, 330, "so every input event checks all of its rows", size=11.5, cls="mono")
+    body += text(862, 346, "\"Enter\" -> Add is one action, not every key: it does not count", size=11, cls="muted", anchor="end")
+    return svg(p, 880, 354, "Fanout in Meltea's TodoMVC: meltea-ppx follows a frequent event to the lists it reaches. The edit field's onInput sends Retype, whose branch of update writes editing, and the list in view reads todos, filter and editing, so every keystroke makes the list check all its rows; the compiler raises the alert fanout at the handler. The new-todo field's onInput sends Type, which writes field, which no list reads, so typing writes one hole and there is no alert. A key handler's literal branch such as Enter sends Add once and does not count", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout)
 
 if __name__ == "__main__":
     out = Path(__file__).parent

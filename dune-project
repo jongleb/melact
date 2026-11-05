@@ -28,7 +28,7 @@
  (synopsis "Templates with holes for Melange: the runtime and the compiler shared by Melact and Meltea")
  (depends
   (ocaml
-   (>= 5.3))
+   (>= 5.4))
   (dune
    (>= 3.16))
   (melange
@@ -44,7 +44,7 @@
  (synopsis "The reason-react API for Melange, compiled to templates, without React or a virtual DOM")
  (depends
   (ocaml
-   (>= 5.3))
+   (>= 5.4))
   (dune
    (>= 3.16))
   (melange
@@ -60,7 +60,7 @@
  (synopsis "The JSX and [@react.component] of reason-react, compiled to templates, for Melact")
  (depends
   (ocaml
-   (>= 5.3))
+   (>= 5.4))
   (dune
    (>= 3.16))
   (ppxlib
@@ -72,7 +72,7 @@
  (synopsis "The Elm architecture for Melange: pure functions, mlx views, compiled templates")
  (depends
   (ocaml
-   (>= 5.3))
+   (>= 5.4))
   (dune
    (>= 3.16))
   (melange
@@ -86,7 +86,7 @@
  (synopsis "Meltea's mlx views with messages, compiled to templates")
  (depends
   (ocaml
-   (>= 5.3))
+   (>= 5.4))
   (dune
    (>= 3.16))
   (ppxlib
