@@ -240,7 +240,7 @@ A component with optional, defaulted and children props, and its signature:
   > let nothing = fun () -> React.null [@@react.component]
   > EOF
   $ ./pp.exe -impl card.ml
-  let __melhole_component_1 = Melhole.Component.make ~name:"Card.make"
+  let __melhole_component_1 = Melact_runtime.Component.make ~name:"Card.make"
   let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<section><!----></section>")
       {
@@ -263,7 +263,7 @@ A component with optional, defaulted and children props, and its signature:
     ?subtitle:(subtitle as __melhole_prop_2)
     ~children:(children as __melhole_prop_3) () =
     React.of_child
-      (Melhole.View.component __melhole_component_1
+      (Melhole.View.pure __melhole_component_1
          [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
                                                     __melhole_prop_1);(
            Melhole.View.Input __melhole_prop_2);(Melhole.View.Input
@@ -292,10 +292,11 @@ A component with optional, defaulted and children props, and its signature:
                                   (React.to_child children));
                            ())
                     }))))
-  let __melhole_component_3 = Melhole.Component.make ~name:"Card.nothing"
+  let __melhole_component_3 =
+    Melact_runtime.Component.make ~name:"Card.nothing"
   let nothing () =
     React.of_child
-      (Melhole.View.component __melhole_component_3 [||]
+      (Melhole.View.pure __melhole_component_3 [||]
          (fun () -> React.to_child React.null))
   $ cat > card.mli <<'EOF'
   > val make : title:string -> ?size:int -> ?subtitle:string -> children:React.element -> React.element
@@ -315,7 +316,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   > [@@react.component]
   > EOF
   $ ./pp.exe -impl fancy.ml
-  let __melhole_component_1 = Melhole.Component.make ~name:"Fancy.make"
+  let __melhole_component_1 = Melact_runtime.Component.make ~name:"Fancy.make"
   let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<input>")
       {
@@ -329,7 +330,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   let make ~label:(label as __melhole_prop_0)
     ?ref:(__melhole_forwarded_ref as __melhole_prop_1) () =
     React.of_child
-      (Melhole.View.component __melhole_component_1
+      (Melhole.View.pure __melhole_component_1
          [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
                                                     __melhole_prop_1)|]
          (fun () ->
@@ -422,13 +423,13 @@ Hooks get one key per call site, also inside custom hooks:
   > [@@react.component]
   > EOF
   $ ./pp.exe -impl hooks.ml
-  let __melhole_hook_1 = Melhole.Hook.key ()
+  let __melhole_hook_1 = Melact_runtime.Hook.key ()
   let useToggle () = (React.useState __melhole_hook_1) (fun () -> false)
-  let __melhole_component_2 = Melhole.Component.make ~name:"Hooks.make"
-  let __melhole_hook_3 = Melhole.Hook.key ()
+  let __melhole_component_2 = Melact_runtime.Component.make ~name:"Hooks.make"
+  let __melhole_hook_3 = Melact_runtime.Hook.key ()
   let make () =
     React.of_child
-      (Melhole.View.component __melhole_component_2 [||]
+      (Melact_runtime.Instance.component __melhole_component_2 [||]
          (fun () ->
             React.to_child
               (let (shown, _) = useToggle () in
@@ -443,7 +444,8 @@ Reason input:
   > EOF
   $ refmt --print ml greeting.re > greeting.ml
   $ ./pp.exe -impl greeting.ml
-  let __melhole_component_1 = Melhole.Component.make ~name:"Greeting.make"
+  let __melhole_component_1 =
+    Melact_runtime.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
     Melhole.View.template
       (Melhole.Template.html "<span class=\"greeting\"></span>")
@@ -458,7 +460,7 @@ Reason input:
       }
   let make ~name:(name as __melhole_prop_0) () =
     React.of_child
-      (Melhole.View.component __melhole_component_1
+      (Melhole.View.pure __melhole_component_1
          [|(Melhole.View.Input __melhole_prop_0)|]
          (fun () ->
             React.to_child
@@ -485,7 +487,8 @@ mlx input:
   > EOF
   $ mlx-pp greeting.mlx > greeting.ast
   $ ./pp.exe -impl greeting.ast
-  let __melhole_component_1 = Melhole.Component.make ~name:"Greeting.make"
+  let __melhole_component_1 =
+    Melact_runtime.Component.make ~name:"Greeting.make"
   let __melhole_template_2 =
     Melhole.View.template
       (Melhole.Template.html "<span class=\"greeting\"></span>")
@@ -500,7 +503,7 @@ mlx input:
       }
   let make ~name:(name as __melhole_prop_0) () =
     React.of_child
-      (Melhole.View.component __melhole_component_1
+      (Melhole.View.pure __melhole_component_1
          [|(Melhole.View.Input __melhole_prop_0)|]
          (fun () ->
             React.to_child

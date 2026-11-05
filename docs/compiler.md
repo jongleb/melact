@@ -108,6 +108,18 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+## Fields an update changes
+
+`meltea-ppx` reads `update` the way Svelte 4 reads assignments. For every message it finds which
+model fields the branch can change: `{ model with draft }` changes `draft`, `model` changes
+nothing, anything it does not recognise changes everything. It reads `view` the same way: the
+fields a record pattern names, or the fields read through `model.field`. Both become bit masks over
+field names, and `Program` keeps the fields changed since the last draw. If none of them is one the
+view reads, the view is not called at all. No signals and nothing in the user's code: the masks are
+generated next to `update` and `view` and passed to `Program` by the compiler. When `update` or
+`view` is not a top-level function of the same module, nothing is generated and every message
+draws, as before. Inside the view, `===` stays the exact check for what to write.
+
 ## Components without hooks
 
 By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body
