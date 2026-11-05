@@ -19,19 +19,20 @@ DARK = dict(
     shadow="#000000", shadow_opacity="0.55",
 )
 
+PAD = 8
 SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
 MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 
 
-def svg(p, width, height, label, body):
+def svg(p, width, height, label, body, pad=PAD):
     markers = "".join(
         f'<marker id="arrow-{name}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
         f'markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{p[name]}"/></marker>'
         for name in ("muted", "accent", "green", "orange", "blue")
     )
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
-        f'height="{height}" role="img" aria-label="{escape(label)}"><style>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="-{pad} -{pad} {width + 2 * pad} {height + 2 * pad}" '
+        f'width="{width + 2 * pad}" height="{height + 2 * pad}" role="img" aria-label="{escape(label)}"><style>'
         f"text {{ font-family: {SANS}; fill: {p['text']}; }}"
         f".mono {{ font-family: {MONO}; white-space: pre; }}"
         f".muted {{ fill: {p['muted']}; }} .faint {{ fill: {p['faint']}; }}"
@@ -91,7 +92,7 @@ def logo(p):
         + box(42, 44, 36, 32, "none", p["muted"], rx=9, dash="5 4", width=2.2)
         + f'<rect x="48" y="50" width="24" height="20" rx="6" fill="{p["accent"]}" class="pulse"/>'
     )
-    return svg(p, 120, 120, "Melact: a template with a hole in it", body)
+    return svg(p, 120, 120, "Melact: a template with a hole in it", body, pad=0)
 
 
 def overview(p):
@@ -267,7 +268,7 @@ def patch(p):
         ("count", "41 → 42", "changed", "orange", "text, disabled", "node.data = \"42\"", "orange", True),
         ("tone", "\"\" → \"\"", "same", "green", "class", "class not even evaluated", "green", False),
         ("initial", "0 → 0", "same", "green", "disabled (with count)", "evaluated, still false: no write", "green", False),
-        ("—", "handlers", "never", "blue", "3 × onClick", "swapped, no DOM call", "blue", False),
+        ("setCount", "stable", "same", "green", "3 × onClick", "handlers kept, none rebuilt", "green", False),
     ]
     for i, (name, change, verdict, vcls, holes, work, wcls, hot) in enumerate(rows):
         y = 36 + i * 54
@@ -278,14 +279,15 @@ def patch(p):
         body += text(400, y + 27, verdict, size=13, cls=f"mono {vcls}", weight=700)
         body += text(500, y + 27, holes, size=12, cls="muted")
         body += text(690, y + 27, work, size=12, cls=wcls, weight=600 if hot else None)
-    body += text(0, 268, "One click in counter-react: three === on locals, then only the holes that read the changed one run. No tree, no list of values to diff.", size=12, cls="muted")
-    return svg(p, 880, 276, "The compiled refresh of counter-react on a click from 41 to 42: count changed, so the text and disabled holes run and the text node gets 42; tone and initial are the same, so the class hole is not even evaluated; handlers are swapped on the element without DOM calls", body)
+    body += text(0, 268, "One click in counter-react: four === on locals, then only the holes that read the changed one run, handlers included.", size=12, cls="muted")
+    return svg(p, 880, 276, "The compiled refresh of counter-react on a click from 41 to 42: count changed, so the text and disabled holes run and the text node gets 42; tone, initial and the setter are the same, so the class hole is not even evaluated and the three click handlers, which read only the setter and initial, are kept", body)
+
 
 def reconcile(p):
     old = ["a", "b", "c", "d", "e", "f"]
     new = ["a", "e", "c", "d", "b", "f"]
     kind = {"a": "muted", "f": "muted", "c": "green", "d": "green", "b": "accent", "e": "accent"}
-    x0, step, top, bottom = 70, 80, 52, 196
+    x0, step, top, bottom = 72, 78, 40, 184
 
     def chip(x, y, key):
         color = kind[key]
@@ -293,7 +295,7 @@ def reconcile(p):
         stroke = {"muted": p["line"], "green": p["green"], "accent": p["accent"]}[color]
         return box(x - 26, y, 52, 34, fill, stroke, rx=8, width=1.4) + text(x, y + 22, key, size=14, cls="mono", weight=600, anchor="middle")
 
-    body = text(0, 74, "old", size=12, cls="muted", weight=600) + text(0, 218, "new", size=12, cls="muted", weight=600)
+    body = text(0, 62, "old", size=12, cls="muted", weight=600) + text(0, 206, "new", size=12, cls="muted", weight=600)
     for i, key in enumerate(old):
         j = new.index(key)
         x1, x2 = x0 + i * step, x0 + j * step
@@ -313,27 +315,32 @@ def reconcile(p):
         ("accent", "everything else: one insertBefore each"),
     ]
     for i, (color, label) in enumerate(legend):
-        y = 258 + i * 20
+        y = 252 + i * 22
         body += f'<rect x="0" y="{y - 10}" width="14" height="10" rx="3" fill="{p[color]}"/>'
         body += text(22, y, label, size=12, cls="muted")
 
-    body += box(540, 24, 340, 300, p["card"], p["line"], rx=14)
-    body += text(560, 52, "Measured in test/view (jsdom), 1,000 rows", size=12.5, cls="muted", weight=600)
-    numbers = [
-        ("swap rows 1 and 998", "2 moves"),
-        ("reverse all", "999 moves"),
-        ("remove one row", "999 rows kept"),
-        ("append 1,000", "1,000 kept"),
-        ("update every 10th", "every node kept"),
-        ("replace all keys", "1,000 new"),
+    body += box(520, 0, 360, 340, p["card"], p["line"], rx=14, lift=True)
+    body += text(540, 30, "Reconcile.plan, cheapest case first", size=14, weight=700)
+    steps = [
+        ("Trim the ends", ["skip the common prefix and suffix; a swapped",
+                           "first and last row costs two moves, no sort"]),
+        ("One side empty", ["append every row, or clear the list with one",
+                            "textContent = \"\" when it fills its parent"]),
+        ("Same keys, same order", ["the loop patches rows in place: no plan,",
+                                   "no moves, and kept rows are not even called"]),
+        ("Anything else", ["old keys go into a small hash table, so each new",
+                           "key finds its old position; the longest increasing",
+                           "run of positions stays, the rest move"]),
     ]
-    for i, (op, result) in enumerate(numbers):
-        y = 92 + i * 38
-        body += text(560, y, op, size=13)
-        body += text(860, y, result, size=13, cls="accent", weight=700, anchor="end")
-        if i < len(numbers) - 1:
-            body += f'<line x1="560" y1="{y + 15}" x2="860" y2="{y + 15}" stroke="{p["line"]}"/>'
-    return svg(p, 880, 326, "Keyed reconcile: the common prefix a and suffix f stay, c and d form the longest increasing run of old positions and stay, b and e are moved with one insertBefore each. Measured on 1,000 rows: swap 2 moves, reverse 999 moves, remove one keeps 999 rows", body)
+    y = 64
+    for n, (head, lines) in enumerate(steps, 1):
+        body += f'<circle cx="551" cy="{y - 5}" r="11" fill="{p["accent"]}"/>'
+        body += text(551, y, str(n), size=11.5, weight=700, anchor="middle", fill="#ffffff")
+        body += text(572, y, head, size=13, weight=600)
+        for k, line in enumerate(lines):
+            body += text(572, y + 19 + k * 17, line, size=11.5, cls="muted")
+        y += 24 + len(lines) * 17 + 10
+    return svg(p, 880, 340, "Keyed reconcile: the common prefix a and suffix f stay, c and d form the longest increasing run of old positions and stay, b and e move with one insertBefore each. Reconcile.plan tries the cheapest case first: trim the common ends, where a swapped first and last row costs two moves; an empty side is one append or one clear; keys in the same order are patched in place without a plan; anything else looks old keys up in a hash table, keeps the longest increasing run and moves the rest", body)
 
 
 def events(p):
@@ -345,7 +352,7 @@ def events(p):
         body += box(150, y - 22, 120, 32, p["accent_soft"] if handler else p["card"], p["accent"] if handler else p["line"], rx=8, width=1.4)
         body += text(210, y - 1, name, size=13, cls="mono", weight=600, anchor="middle")
         if note:
-            body += text(370, y - 1, note, size=11.5, cls="mono accent" if handler else "muted")
+            body += text(300, y - 1, note, size=11.5, cls="mono accent" if handler else "muted")
     body += curve(p, "M146,236 C96,200 96,80 146,48", "muted", flow=True)
     body += text(18, 146, "native", size=11.5, cls="muted")
     body += text(18, 162, "bubbling", size=11.5, cls="muted")
@@ -353,19 +360,22 @@ def events(p):
     body += text(326, 172, "walk", size=11.5, cls="accent", weight=600)
     body += f'<circle cx="152" cy="246" r="6" fill="{p["orange"]}" class="pulse"/>'
     body += text(118, 276, "click", size=11.5, cls="orange", weight=600)
-    body += text(150, 26, "Melact walks from the target up, calling each $$melhole:click; stopPropagation ends the walk", size=12, cls="muted")
+    body += text(0, 336, "From the target up, Melact calls each element's $$melhole:click; stopPropagation ends the walk.", size=12, cls="muted")
+    body += text(0, 354, "22 bubbling types are delegated; scroll, focus, load … get one listener on their element.", size=12, cls="muted")
 
-    body += box(560, 40, 320, 236, p["card"], p["line"], rx=14)
-    body += text(580, 68, "Replacing a handler", size=14, weight=600)
-    body += text(580, 92, "el[\"$$melhole:click\"] = next", size=12, cls="mono accent")
-    body += text(580, 114, "0 addEventListener, 0 setAttribute", size=12, cls="muted")
-    body += text(580, 150, "Non-bubbling events", size=14, weight=600)
-    body += text(580, 174, "scroll, focus, load …", size=12, cls="muted")
-    body += text(580, 196, "one listener on the element,", size=12, cls="muted")
-    body += text(580, 214, "removed on unmount", size=12, cls="muted")
-    body += text(580, 250, "Delegated: click, input, keydown,", size=12, cls="muted")
-    body += text(580, 268, "pointer*, mouse*, touch* … 22 types", size=12, cls="muted")
-    return svg(p, 880, 296, "One listener per event type on the document; on a click melact walks from the target up through parent nodes and calls the handler stored on each element; replacing a handler is one property write", body)
+    body += box(540, 0, 340, 300, p["card"], p["line"], rx=14, lift=True)
+    blocks = [
+        ("While a handler runs", "e.currentTarget  ⟶  its element", "set for the call, as React does; removed after"),
+        ("React.Event is the native event", "Mouse.clientX e  =  e.clientX", "ofNative is the identity: no synthetic copy"),
+        ("Replacing a handler", "el[\"$$melhole:click\"] = next", "only when a value it reads changed; no listener"),
+    ]
+    for i, (head, code, note) in enumerate(blocks):
+        y = 34 + i * 92
+        body += text(560, y, head, size=14, weight=600)
+        body += box(560, y + 12, 300, 28, p["accent_soft"], p["accent"], rx=7, width=1.2)
+        body += text(572, y + 31, code, size=12, cls="mono accent", weight=600)
+        body += text(560, y + 60, note, size=11.5, cls="muted")
+    return svg(p, 880, 360, "One listener per event type on the document; on a click Melact walks from the target up through parent nodes and calls the handler stored on each element, with event.currentTarget set to that element as React does; React.Event reads the native event directly, since ofNative is the identity; a handler is replaced with one property write, and only when a value it reads changed", body)
 
 
 def updates(p):
@@ -385,15 +395,15 @@ def updates(p):
         body += text(x, y + 5, name, size=13, cls="faint" if tone == "faint" else "", weight=600, anchor="middle")
     body += f'<circle cx="400" cy="132" r="9" fill="{p["orange"]}" class="pulse"/>'
     body += text(414, 124, "setState", size=11.5, cls="orange", weight=600)
-    body += text(230, 288, "every prop === → skipped", size=11, cls="green", anchor="middle")
-    body += text(470, 288, "every prop === → skipped", size=11, cls="green", anchor="middle")
-    body += text(350, 288, "props changed", size=11, cls="accent", anchor="middle")
+    body += text(230, 288, "inputs === → kept", size=11, cls="green", anchor="middle")
+    body += text(470, 288, "inputs === → kept", size=11, cls="green", anchor="middle")
+    body += text(350, 288, "an input changed", size=11, cls="accent", anchor="middle")
 
     steps = [
         ("1", "The setter marks TodoList dirty", "nothing renders yet"),
         ("2", "One microtask flushes", "dirty instances, parents first"),
         ("3", "TodoList renders again", "App and Header are not visited"),
-        ("4", "Each Row's props are compared", "one by one with === → equal ones are skipped"),
+        ("4", "A Row without hooks is a pure view", "no instance; its inputs, one === each, keep it"),
     ]
     for i, (n, head, note) in enumerate(steps):
         y = 54 + i * 60
@@ -401,7 +411,7 @@ def updates(p):
         body += text(594, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
         body += text(616, y, head, size=13.5, weight=600)
         body += text(616, y + 18, note, size=12, cls="muted")
-    return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows whose props are physically equal are skipped", body)
+    return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows without hooks are pure views with no instance, kept while each of their inputs is physically equal", body)
 
 
 def hooks(p):
@@ -457,42 +467,178 @@ def hooks(p):
     body += text(18, 308, "Some Equal → the value comes back typed. No Obj.magic,", size=12, cls="muted")
     body += text(18, 325, "and one key used at two types does not compile.", size=12, cls="muted")
     body += box(448, 262, 432, 72, p["orange_soft"], p["orange"], rx=12)
-    body += text(466, 288, "A hook behind an if: slot 1 holds k2, the call brings k3", size=12.5, cls="orange", weight=700)
-    body += text(466, 308, "None → \"hooks were called in a different order\"", size=12, cls="muted")
-    body += text(466, 325, "instead of a value of the wrong type.", size=12, cls="muted")
-    return svg(p, 880, 338, "melact-ppx gives every hook call site its own Type.Id key, hoisted to module level; the instance stores each slot with the key that made it; reading a slot checks provably_equal, so values come back typed, and a hook called out of order raises an error instead of returning a wrong value", body)
+    body += text(466, 288, "A hook behind an if is caught twice", size=12.5, cls="orange", weight=700)
+    body += text(466, 308, "build: Alert hook, which melact-ppx turns on in branches,", size=12, cls="muted")
+    body += text(466, 325, "loops and callbacks · run: slot k2 ≠ call k3 → an error", size=12, cls="muted")
+    return svg(p, 880, 338, "melact-ppx gives every hook call site its own Type.Id key, hoisted to module level; the instance stores each slot with the key that made it; reading a slot checks provably_equal, so values come back typed; a hook behind an if, in a loop or in a callback raises the hook alert at build time, and a hook called out of order raises an error at run time instead of returning a wrong value", body)
 
 
-def compat(p):
-    body = box(0, 30, 262, 230, p["card"], p["line"], lift=True)
-    body += text(18, 58, "reason-react/demo/main.re", size=13, cls="mono", weight=700)
-    body += text(18, 78, "the demo in reason-react's own repo", size=11.5, cls="muted")
-    used = ["useState, useReducer", "useReducerWithMapState", "useEffect1, useLayoutEffect1",
-            "useRef + useEffect0", "React.Fragment with keys, <>…</>", "?ref, ->React.int, unused props"]
-    for i, item in enumerate(used):
-        y = 104 + i * 18
-        body += f'<circle cx="24" cy="{y - 4}" r="2.5" fill="{p["accent"]}"/>'
-        body += text(34, y, item, size=11.5)
-    body += f'<line x1="18" y1="{214}" x2="244" y2="{214}" stroke="{p["line"]}"/>'
-    body += text(18, 234, "- (pps reason-react-ppx)", size=11, cls="mono orange")
-    body += text(18, 250, "+ (pps melact-ppx)", size=11, cls="mono green")
-    preview = "<main><section><h3>Stateful</h3>…"
-    lanes = [(40, "blue", "blue_soft", "React 18.3"), (150, "accent", "accent_soft", "Melact")]
-    for y, color, soft, name in lanes:
-        body += curve(p, f"M264,145 C290,145 290,{y + 34} 312,{y + 34}", color, flow=True, width=1.8)
-        body += box(316, y, 300, 68, p[soft], p[color], rx=12, width=1.4, lift=True)
-        body += text(334, y + 26, name, size=14, weight=700, cls=color)
-        body += text(334, y + 48, preview, size=10.5, cls="mono muted")
-        body += arrow(p, 618, y + 34, 652, y + 34, color, width=1.6)
-    body += text(466, 136, "every button clicked 4 times, DOM read after each click", size=11.5, cls="muted", anchor="middle")
-    body += box(656, 40, 220, 178, p["green_soft"], p["green"], rx=14, width=1.8, lift=True)
-    body += text(766, 102, "33 / 33", size=40, cls="green", weight=800, anchor="middle")
-    body += text(766, 130, "steps with identical DOM", size=13.5, weight=600, anchor="middle")
-    body += text(766, 156, "1,311 characters at mount,", size=11.5, cls="muted", anchor="middle")
-    body += text(766, 174, "the same after every click", size=11.5, cls="muted", anchor="middle")
-    body += text(766, 204, "compat/run.sh", size=11.5, cls="mono green", anchor="middle")
-    return svg(p, 880, 264, "reason-react's own demo, switched to melact with two dune lines, rendered by React 18.3 and by melact in jsdom: after mounting and after each of 32 clicks, 33 of 33 steps have identical DOM", body)
+def surface(p):
+    rows = [
+        ("<Counter label=\"a\" />", "Counter.make ~label:\"a\" ()", "a direct call: no props object, no element"),
+        ("React.createElement C.make (C.makeProps ~label ())", "C.make ~label ()", "makeProps is that call, with an optional key"),
+        ("onClick=(fun e -> React.Event.Mouse.clientX e)", "e.clientX, on the native event", "ofNative is the identity; delegated to document"),
+        ("React.useState (fun () -> 0)", "React.useState k1 (fun () -> 0)", "a typed slot key per call site; Alert hook in an if"),
+        ("a component that calls no use…", "Melhole.View.pure", "no instance: kept while its inputs are ==="),
+        ("ReactDOM.Client.render (createRoot el) <App />", "App's templates cloned into el", "no React, no react-dom, no fiber underneath"),
+        ("ReactDOMServer.renderToString / hydrateRoot", "Served.render / Served.hydrate", "HTML with markers; the browser takes it over"),
+        ("ReasonReactRouter.useUrl ()", "the same url record", "read from location on popstate"),
+    ]
+    body = text(0, 16, "your reason-react code, unchanged", size=12.5, cls="blue", weight=700)
+    body += text(466, 16, "what melact-ppx and Melact make of it", size=12.5, cls="accent", weight=700)
+    for i, (code, made, note) in enumerate(rows):
+        y = 30 + i * 48
+        body += box(0, y, 420, 40, p["card"], p["line"], rx=9)
+        body += text(14, y + 25, code, size=11.5, cls="mono")
+        body += arrow(p, 424, y + 20, 460, y + 20, "accent", flow=True)
+        body += box(466, y, 414, 40, p["accent_soft"], p["accent"], rx=9, width=1.2)
+        body += text(480, y + 17, made, size=11.5, cls="mono accent", weight=600)
+        body += text(480, y + 33, note, size=11, cls="muted")
+    return svg(p, 880, 414, "What melact-ppx and the Melact library make of unchanged reason-react code: a JSX component is a direct call to make; React.createElement with makeProps is the same call with a key; React.Event accessors read the native event, delegated to document; each hook call gets a typed slot key; a component without hooks is a pure view with no instance; ReactDOM.Client clones templates into the element; renderToString and hydrateRoot are Served.render and Served.hydrate; ReasonReactRouter.useUrl reads the location on popstate", body)
 
+
+def hydration(p):
+    def card(x, w, title, subtitle, stroke):
+        return (box(x, 0, w, 300, p["card"], p[stroke], rx=14, width=1.4, lift=True)
+                + text(x + 18, 28, title, size=14, weight=700)
+                + text(x + 18, 47, subtitle, size=11.5, cls="muted"))
+
+    body = card(0, 290, "1 · on the server", "Program.render · renderToString", "line")
+    html = [
+        [("<div class=\"counter\">", "")],
+        [("  <button>-</button>", "")],
+        [("  <output class=\"\">", "")],
+        [("    ", ""), ("<!--[-->", "orange"), ("41", "green"), ("<!--]-->", "orange")],
+        [("  </output>", "")],
+        [("  <button>+</button>", "")],
+        [("  <button>reset</button>", "")],
+        [("</div>", "")],
+    ]
+    for i, parts in enumerate(html):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(18, 80 + i * 20, line, size=11.5, cls="mono", raw=True)
+    body += text(18, 258, "a marker pair around every dynamic part;", size=11.5, cls="muted")
+    body += text(18, 276, "an empty text is sent as <!---->", size=11.5, cls="muted")
+    body += arrow(p, 294, 150, 326, 150, "accent", flow=True, width=1.8)
+
+    body += card(330, 290, "2 · in the browser: hydrate", "the compiled walk, over the server's nodes", "accent")
+    steps = [
+        ("div.counter", "", "same tag: taken over, not cloned"),
+        ("firstChild / nextSibling", "", "steps over marked ranges, as on a clone"),
+        ("41", "green", "taken over; both markers removed"),
+        ("3 × button", "", "handlers set; nothing else is written"),
+    ]
+    for i, (label, tone, note) in enumerate(steps):
+        y = 78 + i * 52
+        body += f'<circle cx="352" cy="{y - 4}" r="4" fill="{p["accent"]}"/>'
+        body += text(364, y, label, size=12, cls=f"mono {tone}".strip(), weight=700)
+        body += text(364, y + 18, note, size=11.5, cls="muted")
+    body += arrow(p, 624, 110, 656, 110, "green", flow=True, width=1.8)
+
+    body += box(660, 0, 220, 196, p["green_soft"], p["green"], rx=14, width=1.5, lift=True)
+    body += text(770, 30, "3 · the same page, live", size=13.5, cls="green", weight=700, anchor="middle")
+    body += box(690, 48, 160, 44, p["card"], p["line"], rx=10)
+    for bx, sign in ((698, "−"), (812, "+")):
+        body += box(bx, 54, 30, 32, p["card"], p["line"], rx=7)
+        body += text(bx + 15, 76, sign, size=15, anchor="middle", weight=600)
+    body += text(770, 77, "41", size=18, cls="mono green", weight=700, anchor="middle")
+    body += text(770, 122, "0 createElement, 0 cloneNode", size=12, weight=600, anchor="middle")
+    body += text(770, 144, "every node stays the server's;", size=11.5, cls="muted", anchor="middle")
+    body += text(770, 162, "a list is taken over", size=11.5, cls="muted", anchor="middle")
+    body += text(770, 180, "from its last row back", size=11.5, cls="muted", anchor="middle")
+    body += box(660, 212, 220, 88, p["orange_soft"], p["orange"], rx=14, width=1.3)
+    body += text(678, 240, "HTML that does not match", size=13, cls="orange", weight=700)
+    body += text(678, 262, "the view: the root is cleared", size=11.5, cls="muted")
+    body += text(678, 280, "and mounted from scratch", size=11.5, cls="muted")
+    return svg(p, 880, 300, "Server rendering and hydration: on the server Program.render or renderToString writes the HTML with a marker pair around every dynamic part, here the text 41 of the counter, and sends empty texts as empty comments; in the browser hydrate runs the compiled walk over the server's nodes: the root with the same tag is taken over instead of cloned, the walk steps over marked ranges, the text is taken over and its markers removed, and the buttons get their handlers; no element is created and lists are taken over from the last row back; HTML that does not match the view is cleared and mounted from scratch", body)
+
+
+def selectors(p):
+    body = box(0, 0, 404, 310, p["card"], p["line"], rx=14, lift=True)
+    body += text(18, 28, "a row reads its item and one outer value", size=13.5, weight=700)
+    lines = [
+        [("Html.list (List.map (fun row ->", "")],
+        [("  <tr className=", ""), ("(if Some row.id = selected", "green")],
+        [("                 ", ""), ("then \"danger\" else \"\")", "green"), (">", "")],
+        [("    <td>(Html.text row.label)</td>", "")],
+        [("  </tr>) rows)", "")],
+    ]
+    body += box(18 + 16 * 7.23 - 1.5, 70, 26 * 7.23 + 6, 46, p["green_soft"], p["green"], rx=7, dash="4 3", width=1.3)
+    for i, parts in enumerate(lines):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        body += text(18, 66 + i * 24, line, size=12, cls="mono", raw=True)
+    body += text(18, 204, "The leaf has no JSX and reads the outer", size=11.5, cls="muted")
+    body += text(18, 222, "selected. The compiler emits a projection:", size=11.5, cls="muted")
+    body += text(18, 248, "fun row -> [| leaf row |]", size=12.5, cls="mono green", weight=700)
+    body += text(18, 278, "A row renders only if its item is another", size=11.5, cls="muted")
+    body += text(18, 296, "object or its projection changed.", size=11.5, cls="muted")
+
+    body += text(430, 24, "selected: Some 2 → Some 5", size=13.5, weight=700)
+    body += text(868, 24, "6 items, same objects", size=11.5, cls="muted", anchor="end")
+    heads = [(446, "row"), (500, "item"), (580, "projection"), (866, "row is")]
+    for x, head in heads:
+        body += text(x, 50, head, size=11.5, cls="muted", weight=600, anchor="end" if head == "row is" else "start")
+    rows = [
+        (1, "\"\" → \"\"", "kept"), (2, "\"danger\" → \"\"", "rendered"), (3, "\"\" → \"\"", "kept"),
+        (4, "\"\" → \"\"", "kept"), (5, "\"\" → \"danger\"", "rendered"), (6, "\"\" → \"\"", "kept"),
+    ]
+    for i, (n, change, verdict) in enumerate(rows):
+        y = 62 + i * 36
+        hot = verdict == "rendered"
+        body += box(430, y, 450, 30, p["accent_soft"] if hot else p["card"], p["accent"] if hot else p["line"], rx=8, width=1.3 if hot else 1, lift=hot)
+        body += text(446, y + 20, str(n), size=12.5, cls="mono", weight=700)
+        body += text(500, y + 20, "===", size=12, cls="mono green")
+        body += text(580, y + 20, change, size=12, cls="mono accent" if hot else "mono muted", weight=600 if hot else None)
+        body += text(866, y + 20, verdict, size=12, cls="accent" if hot else "green", weight=700, anchor="end")
+    body += text(430, 296, "keys in the same order: the two rows are patched in place", size=11.5, cls="muted")
+    return svg(p, 880, 310, "Compiled selectors, after Vue Vapor: a row of Html.list (List.map …) reads its item and the outer value selected through one leaf without JSX; the compiler emits a projection that evaluates only that leaf for each row. When selected goes from Some 2 to Some 5 and the six items are the same objects, only rows 2 and 5 have a changed projection, so only they render, in place; the other four are kept without calling the row function", body)
+
+
+def fields(p):
+    def chip(x, y, label, color, soft, anchor_end=False):
+        w = len(label) * 6.9 + 16
+        left = x - w if anchor_end else x
+        return box(left, y, w, 22, p[soft], p[color], rx=11, width=1.2) + text(left + w / 2, y + 15, label, size=11, cls=f"mono {color}", weight=700, anchor="middle"), w
+
+    body = box(0, 0, 490, 300, p["card"], p["line"], rx=14, lift=True)
+    body += text(18, 28, "meltea-ppx reads update: what each message changes", size=13.5, weight=700)
+    branches = [
+        ("| Type field -> { model with field }", ["field"], "accent"),
+        ("| Route filter -> { model with filter }", ["filter"], "accent"),
+        ("| Add -> { model with todos; field; next }", ["todos", "field", "next"], "accent"),
+        ("| Ignore -> model", ["nothing"], "green"),
+        ("| Edit id -> Option.fold …", ["all"], "orange"),
+    ]
+    for i, (code, changed, color) in enumerate(branches):
+        y = 62 + i * 44
+        body += text(18, y + 15, code, size=11.5, cls="mono")
+        x = 474
+        for label in reversed(changed):
+            piece, w = chip(x, y, label, color, color + "_soft", anchor_end=True)
+            body += piece
+            x -= w + 6
+    body += text(18, 288, "a branch it does not recognise changes all fields: slower, never wrong", size=11.5, cls="muted")
+
+    body += box(520, 0, 360, 96, p["card"], p["line"], rx=14, lift=True)
+    body += text(538, 28, "and view: the fields it reads", size=13.5, weight=700)
+    x = 538
+    for label in ["todos", "field", "editing", "filter"]:
+        piece, w = chip(x, 44, label, "blue", "blue_soft")
+        body += piece
+        x += w + 8
+    body += text(538, 84, "next is never read", size=11.5, cls="muted")
+
+    decisions = [
+        (112, "green", "Ignore", "{ }", "the view is not called at all"),
+        (210, "accent", "Type \"milk\"", "{ field }", "the view runs; one === per local picks the holes"),
+    ]
+    for y, color, message, changed, outcome in decisions:
+        body += box(520, y, 360, 88, p[color + "_soft"], p[color], rx=14, width=1.4)
+        body += text(538, y + 28, message, size=13, cls=f"mono {color}", weight=700)
+        body += text(538, y + 52, f"changes {changed} ∩ reads = {'∅' if changed == '{ }' else changed}", size=12, cls="mono")
+        body += text(538, y + 74, outcome, size=11.5, cls="muted")
+    body += text(440, 330, "The masks are generated next to update and view; Program keeps the fields changed since the last draw.", size=12, cls="muted", anchor="middle", weight=600)
+    return svg(p, 880, 338, "Fields an update changes, in Meltea's TodoMVC: meltea-ppx reads update and finds what each message can change: Type changes field, Route changes filter, Add changes todos, field and next, Ignore changes nothing, and Edit, which it does not recognise, changes all fields. It reads view the same way: todos, field, editing and filter, never next. After Ignore nothing the view reads changed, so the view is not called; after Type the view runs and one === per local picks the holes to write", body)
 
 
 def vdom(p):
@@ -537,24 +683,24 @@ def vdom(p):
 
     body += text(460, 212, "render 2 runs the compiled refresh: one === per local it reads", size=11.5, cls="accent", weight=600)
     cells = [("count", "1 → 2", "orange", "changed"), ("initial", "0 = 0", "green", "same"),
-             ("tone", "\"\" = \"\"", "green", "same")]
+             ("tone", "\"\" = \"\"", "green", "same"), ("setCount", "stable", "green", "same")]
     for i, (name, value, color, verdict) in enumerate(cells):
-        x = 460 + i * 142
+        x = 460 + i * 106
         soft = {"green": "green_soft", "orange": "orange_soft"}[color]
-        body += box(x, 222, 134, 30, p[soft], p[color], rx=7, width=1.4, lift=color == "orange")
-        body += text(x + 10, 242, name, size=12, cls="mono", weight=700)
-        body += text(x + 124, 242, value, size=11.5, cls="mono muted", anchor="end")
-        body += text(x + 67, 268, verdict, size=10.5, cls=color, anchor="middle", weight=600)
+        body += box(x, 222, 100, 42, p[soft], p[color], rx=7, width=1.4, lift=color == "orange")
+        body += text(x + 50, 239, name, size=12, cls="mono", weight=700, anchor="middle")
+        body += text(x + 50, 256, value, size=11, cls="mono muted", anchor="middle")
+        body += text(x + 50, 280, verdict, size=10.5, cls=color, anchor="middle", weight=600)
     steps = [
         ("accent", "accent_soft", "class reads tone: not even evaluated"),
-        ("accent", "accent_soft", "text and disabled read count: evaluated; handlers swapped"),
+        ("accent", "accent_soft", "text, disabled read count: evaluated · handlers: kept"),
         ("green", "green_soft", "1 DOM write: the text \"2\""),
     ]
     for i, (color, soft, label) in enumerate(steps):
-        y = 260 + 24 + i * 36
+        y = 292 + i * 34
         body += box(460, y, 420, 28, p[soft], p[color], rx=14, width=1.2)
         body += text(476, y + 19, label, size=12.5, cls=color, weight=600)
-    return svg(p, 880, 396, "One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once and runs the refresh the compiler generated for it: one === on each of the three locals the view reads, only the holes that read the changed one are evaluated, and it writes the same one text", body)
+    return svg(p, 880, 396, "One click in the counter, from 1 to 2. React builds a new tree of 5 elements and 5 props objects, walks it against the previous tree and writes one text. Melact keeps the markup as a template parsed once and runs the refresh the compiler generated for it: one === on each of the four locals the view reads (count, initial, tone and the setter), only the holes that read the changed one are evaluated, the click handlers, which read only unchanged locals, are kept, and it writes the same one text", body)
 
 
 def family(p):
@@ -580,8 +726,8 @@ def family(p):
         [("  <button onClick=(fun _ -> set …)>", "")],
         [("    (React.int n)</button>", "")],
     ])
-    for x, color, label, note in [(0, "accent", "meltea-ppx", "messages, no hooks, no components"),
-                                  (470, "blue", "melact-ppx", "[@react.component], hook keys")]:
+    for x, color, label, note in [(0, "accent", "meltea-ppx", "messages · fields each update changes"),
+                                  (470, "blue", "melact-ppx", "hook keys and alerts · makeProps")]:
         body += arrow(p, x + 205, 182, x + 205, 202, color, flow=True)
         body += box(x + 105, 206, 200, 30, p[color + "_soft"], p[color], rx=15, width=1.4)
         body += text(x + 205, 226, label, size=12.5, cls=f"mono {color}", weight=700, anchor="middle")
@@ -596,12 +742,12 @@ def family(p):
     body += arrow(p, 440, 368, 440, 392, "muted", flow=True)
     body += box(110, 396, 520, 50, p["card"], p["line"], rx=14, lift=True)
     body += text(370, 418, "melhole · no components, views are functions", size=13.5, weight=700, anchor="middle")
-    body += text(370, 436, "clone a template · write changed holes · keyed moves · delegated events",
+    body += text(370, 436, "clone · write changed holes · keyed moves · delegated events · hydration",
                  size=11, cls="muted", anchor="middle")
     body += box(642, 396, 238, 50, p["blue_soft"], p["blue"], rx=14)
     body += text(761, 418, "melact.runtime", size=13, weight=700, cls="blue mono", anchor="middle")
     body += text(761, 436, "components · hooks · scheduler", size=11, cls="muted", anchor="middle")
-    return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates, walks to every hole and compiles lists into keyed loops with selectors, and the shared runtime melhole, which knows no components: it clones templates, writes changed holes, moves keyed rows and delegates events; Melact adds its own runtime library with components, hooks and the scheduler", body)
+    return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates, walks to every hole and compiles lists into keyed loops with selectors, and the shared runtime melhole, which knows no components: it clones templates, writes changed holes, moves keyed rows, delegates events and hydrates server HTML; meltea-ppx also finds the fields each update changes, melact-ppx gives hooks keys and alerts and writes makeProps; Melact adds its own runtime library with components, hooks and the scheduler", body)
 
 
 def compiled(p):
@@ -732,23 +878,24 @@ def controlled(p):
     body += mono(x2, 186, [("new \"\" is last \"\"", "muted")])
     body += mono(x2, 210, [("unchanged → ", "muted"), ("no write", "blue")])
 
-    body += box(20, 250, 410, 150, p["orange_soft"], p["orange"], rx=14, width=1.5)
+    body += box(20, 250, 410, 168, p["orange_soft"], p["orange"], rx=14, width=1.5)
     body += text(40, 278, "a guard alone", size=14, weight=700, cls="orange")
     body += field(40, 294, 320, "milk", p["orange"])
     body += badge(396, 311, "orange", "no")
     body += mono(40, 352, [("nothing writes the field again:", "muted")], size=11.5)
     body += mono(40, 376, [("DOM ", "muted"), ("\"milk\"", ""), ("  ≠  ", "orange"), ("model ", "muted"), ("\"\"", "")], size=15)
 
-    body += box(450, 250, 410, 150, p["green_soft"], p["green"], rx=14, width=1.5)
+    body += box(450, 250, 410, 168, p["green_soft"], p["green"], rx=14, width=1.5)
     body += text(470, 278, "value and checked: controlled holes", size=14, weight=700, cls="green")
     body += field(470, 294, 320, "What needs to be done?", p["green"], placeholder=True, dash="4 3")
     body += badge(826, 311, "green", "yes")
-    body += mono(470, 352, [("after input/change and the redraw:", "muted")], size=11.5)
-    body += mono(470, 376, [("if (el.value !== last) ", ""), ("el.value = last", "green")], size=13)
+    body += mono(470, 350, [("after input/change and the redraw:", "muted")], size=11.5)
+    body += mono(470, 373, [("if (el.value !== last) ", ""), ("el.value = last", "green")], size=13)
+    body += mono(470, 400, [("a write to value also sets ", "muted"), ("el.defaultValue", "green")], size=11.5)
 
-    body += text(440, 430, "the guard still skips unchanged values, and the field always shows the model, as React's controlled inputs",
+    body += text(440, 448, "the guard still skips unchanged values, and the field always shows the model, as React's controlled inputs",
                  size=12.5, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 442, "Controlled inputs: in one tick the user types milk and presses Enter; the model's field goes from empty to milk and back to empty while the DOM still shows milk, so the redraw's guard sees an unchanged value and writes nothing. A guard alone leaves milk in the field, out of step with the model. In Meltea and Melact value and checked are controlled holes: after an input or change event and the redraw it causes, the hole writes its last value back if the DOM differs, as React does", body)
+    return svg(p, 880, 456, "Controlled inputs: in one tick the user types milk and presses Enter; the model's field goes from empty to milk and back to empty while the DOM still shows milk, so the redraw's guard sees an unchanged value and writes nothing. A guard alone leaves milk in the field, out of step with the model. In Meltea and Melact value and checked are controlled holes: after an input or change event and the redraw it causes, the hole writes its last value back if the DOM differs, as React does; a write to value also sets defaultValue, so the value attribute stays in step, as in React", body)
 
 
 def roadmap(p):
@@ -779,11 +926,12 @@ def roadmap(p):
         body += text(x, 84, name, size=13.5, weight=600, anchor="middle")
         body += text(x, 104, a, size=11.5, cls="muted", anchor="middle")
         body += text(x, 120, b, size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 132, "Roadmap: View, hooks, melact-ppx, speed and server rendering with hydration done; compatibility in progress; publishing next", body)
+    return svg(p, 880, 132, "Roadmap: View, hooks, melact-ppx, compatibility, speed and server rendering with hydration done; publishing next", body)
 
 
-FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,
-               events=events, updates=updates, roadmap=roadmap)
+FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
+               surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
+               reconcile=reconcile, events=events, updates=updates, roadmap=roadmap)
 
 if __name__ == "__main__":
     out = Path(__file__).parent

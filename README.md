@@ -69,6 +69,13 @@ let[@react.component] make ~initial () =
 melact keeps reason-react's surface (`React.useState`, `useEffect`, `useContext`, `ReactDOM.Client`,
 `React.Event`, `ReasonReactRouter` …) and replaces what is underneath it.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/surface-dark.svg">
+  <img src="assets/surface.svg" alt="What melact-ppx and the Melact library make of unchanged reason-react code: a JSX component is a direct call to make; React.createElement with makeProps is the same call with a key; React.Event accessors read the native event, delegated to document; each hook call gets a typed slot key; a component without hooks is a pure view with no instance; ReactDOM.Client clones templates into the element; renderToString and hydrateRoot are Served.render and Served.hydrate; ReasonReactRouter.useUrl reads the location on popstate" width="100%">
+</picture>
+
+*Each line of reason-react code on the left compiles, unchanged, to what is on the right.*
+
 ## Why melact
 
 <table>
@@ -159,7 +166,7 @@ the view reads, then runs only the holes that read a changed one, each writing i
 | attribute | `setAttribute` / `removeAttribute` (`None` removes) |
 | property | `el[name] = v` (`value`, `checked`, `innerHTML`) |
 | style | the old properties cleared, the new ones set |
-| handler | never compared: the closure on the element is replaced |
+| handler | guarded by the locals it reads, like any hole; then the closure on the element is replaced |
 | ref | the new callback is called with the element |
 | child | patched recursively: a template, a list, a component |
 
@@ -171,9 +178,25 @@ the view reads, then runs only the holes that read a changed one, each writing i
 </picture>
 
 `Reconcile.plan` takes the old and new keys and returns a step per new entry: `Keep`, `Move` or
-`Create`, plus the old entries to drop. It touches no DOM, so it is tested on its own. `View` then
-walks the new entries right to left, inserting before the first node of the entry after. Duplicate
-keys never reuse one old entry twice.
+`Create`, plus the old entries to drop. It tries the cheap cases first: common ends (a swapped
+first and last row is two moves), an empty side, then a small hash table from old keys to
+positions and the longest increasing run. When the keys keep their order the loop skips the plan
+and patches rows in place. The plan touches no DOM, so it is tested on its own. `View` walks the
+new entries right to left, inserting before the first node of the entry after. Duplicate keys
+never reuse one old entry twice.
+
+### Rows re-render only when what they read changed
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/selectors-dark.svg">
+  <img src="assets/selectors.svg" alt="Compiled selectors, after Vue Vapor: a row of Html.list (List.map …) reads its item and the outer value selected through one leaf without JSX; the compiler emits a projection that evaluates only that leaf for each row. When selected goes from Some 2 to Some 5 and the six items are the same objects, only rows 2 and 5 have a changed projection, so only they render, in place; the other four are kept without calling the row function" width="100%">
+</picture>
+
+`React.array (Array.map row items)` and Meltea's `Html.list (List.map row items)` compile to a
+keyed loop. As in Vue Vapor's selectors, the compiler splits a row into its item and its leaves,
+the smallest pieces without JSX that read outer variables, and emits a projection that evaluates
+only those. A row whose item is the same object and whose projection did not change is kept
+without calling the row function: selecting one row of 1,000 renders two.
 
 ### Events are delegated
 
@@ -199,6 +222,19 @@ it causes, the hole writes its last value back if the DOM differs. A handler tha
 rejects input keeps the field in step with the state, as in React; one law types into such a
 field and checkbox under React 18 and under Melact and compares the page.
 
+### Server rendering and hydration
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hydration-dark.svg">
+  <img src="assets/hydration.svg" alt="Server rendering and hydration: on the server Program.render or renderToString writes the HTML with a marker pair around every dynamic part, here the text 41 of the counter, and sends empty texts as empty comments; in the browser hydrate runs the compiled walk over the server's nodes: the root with the same tag is taken over instead of cloned, the walk steps over marked ranges, the text is taken over and its markers removed, and the buttons get their handlers; no element is created and lists are taken over from the last row back; HTML that does not match the view is cleared and mounted from scratch" width="100%">
+</picture>
+
+`ReactDOMServer.renderToString` (Meltea: `Program.render`) mounts the view into a detached element
+and writes a marker pair around every dynamic part. `ReactDOM.Client.hydrateRoot`
+(`~start:Program.hydrate`) runs the compiled walk over the server's nodes instead of a fresh
+clone: it takes the nodes over, removes the markers and sets handlers, without creating an element.
+HTML that does not match the view is replaced by a normal mount.
+
 ### Components re-render where state changed
 
 <picture>
@@ -206,8 +242,9 @@ field and checkbox under React 18 and under Melact and compares the page.
   <img src="assets/updates.svg" alt="A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows whose props are physically equal are skipped" width="100%">
 </picture>
 
-Each `[@react.component]` gets a `Type.Id`-backed identity at module level. Its props travel
-as a tuple compared element-wise with `==`. A setter marks its instance dirty, and one microtask
+Each `[@react.component]` gets an identity at module level. Its props are compared one by one
+with `===`. A component that calls no hook compiles to a pure view with no instance, kept while
+its props are the same. A setter marks its instance dirty, and one microtask
 renders the dirty instances parents first. Layout effects run right after their instance's
 patch. Passive effects run after the whole flush, and cleanups go children before parents. A
 component that renders nothing keeps its place with an empty text node.
@@ -233,7 +270,8 @@ let count, setCount = (React.useState __melhole_hook_2) (fun () -> 0)
 ```
 
 A slot stores its value with the key that made it, so reading it back is a typed
-`Type.Id.provably_equal`, with no `Obj.magic`. Calling hooks conditionally raises
+`Type.Id.provably_equal`, with no `Obj.magic`. A hook inside an `if`, a `match`, a loop or a
+callback raises the `hook` alert at build time; at run time a hook called out of order raises
 *"hooks were called in a different order"* instead of handing back the wrong value. Using one
 key at two types is a compile error. Hooks inside custom hooks get keys the same way.
 
@@ -290,13 +328,16 @@ values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries mel
 [`examples/todomvc`](examples/todomvc/todomvc.mlx), the full TodoMVC with routing, editing and
 `localStorage`.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/fields-dark.svg">
+  <img src="assets/fields.svg" alt="Fields an update changes, in Meltea's TodoMVC: meltea-ppx reads update and finds what each message can change: Type changes field, Route changes filter, Add changes todos, field and next, Ignore changes nothing, and Edit, which it does not recognise, changes all fields. It reads view the same way: todos, field, editing and filter, never next. After Ignore nothing the view reads changed, so the view is not called; after Type the view runs and one === per local picks the holes to write" width="100%">
+</picture>
+
+`meltea-ppx` also reads `update` and `view` for the model fields each message can change and the
+view reads. A message that changes nothing the view reads does not call the view at all.
+
 ## Status
 
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/compat-dark.svg">
-  <img src="assets/compat.svg" alt="reason-react's own demo, switched to melact with two dune lines, rendered by React 18.3 and by melact in jsdom: after mounting and after each of 32 clicks, 33 of 33 steps have identical DOM" width="100%">
-</picture>
 
 *[`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
 in their `dune` files and builds them against Melact. Then it renders reason-react's demo with React and with Melact and
