@@ -1,2 +1,3 @@
 external useState : (unit -> 'state) -> 'state * (('state -> 'state) -> unit) = "useState" [@@mel.module "react"]
 external useEffect8 : (unit -> (unit -> unit) option) -> int array -> unit = "useEffect" [@@mel.module "react"]
+external useMemo8 : (unit -> 'v) -> 'a * 'b * 'c * 'd * 'e * 'f * 'g * 'h -> 'v = "useMemo" [@@mel.module "react"]

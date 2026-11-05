@@ -390,10 +390,12 @@ let catch =
               caught_boundaries := boundary :: !caught_boundaries;
               catching.failure <- Caught { error = caught; thrower = instance }
           | Caught { thrower; _ }, While_rendering -> (
-              match
-                ( Js.Null.toOption ((instance_live thrower).front Js.null [@u]),
-                  Js.Null.toOption ((instance_live instance).front Js.null [@u]) )
-              with
+              let front instance =
+                match instance.kind with
+                | Catches { start; _ } -> Some (Dom_api.to_node start)
+                | Renders _ | Provides _ -> Js.Null.toOption ((instance_live instance).front Js.null [@u])
+              in
+              match (front thrower, front instance) with
               | Some kept, Some thrown when Dom_api.compare_document_position kept thrown land 4 = 0 -> ()
               | Some _, Some _ | None, _ | _, None -> catching.failure <- Caught { error = caught; thrower = instance })
           | Healthy, In_effect ->

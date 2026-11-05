@@ -8,6 +8,10 @@ type slots = { mutable items : slot array; mutable count : int; mutable cursor :
 let key () = Key (Type.Id.make ())
 
 external unchecked : unit key -> 'a key = "%identity"
+
+type dependency
+
+external listed : 'tuple -> dependency array = "%identity"
 let slots () = { items = [||]; count = 0; cursor = 0 }
 let rewind slots = slots.cursor <- 0
 

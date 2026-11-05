@@ -52,6 +52,9 @@ module Npm_bound = struct
     let total, add = npmUseReducer (fun total by -> total + by) 0 in
     let other, bump = npmUseReducer (fun count () -> count + 1) 10 in
     let third, setThird = Npm_hooks.useState (fun () -> "") in
+    let shouted =
+      Npm_hooks.useMemo8 (fun () -> log ("memo " ^ third); String.uppercase_ascii third) (third, 1, 2, 3, 4, 5, 6, "seven")
+    in
     Npm.useEffect (fun () -> log ("effect " ^ string_of_int total); None) [| total |];
     npmUseEffect2 (fun () -> log ("pair " ^ string_of_int total ^ " " ^ string_of_int other); None) (total, other);
     Npm_hooks.useEffect8
@@ -60,7 +63,7 @@ module Npm_bound = struct
     <p>
       <button className="add" onClick=(fun _ -> add step)>(React.int total)</button>
       <button className="bump" onClick=(fun _ -> bump ())>(React.int other)</button>
-      <button className="third" onClick=(fun _ -> setThird (fun text -> text ^ "x"))>(React.string third)</button>
+      <button className="third" onClick=(fun _ -> setThird (fun text -> text ^ "x"))>(React.string shouted)</button>
     </p>
 end
 
@@ -1217,16 +1220,16 @@ let () =
                        ( (total + step, other, third),
                          ( string_of_int (total + step),
                            string_of_int other,
-                           third,
+                           String.uppercase_ascii third,
                            [ "effect " ^ string_of_int (total + step); pair (total + step) other ] ) )
                    | 1 ->
-                       ((total, other + 1, third), (string_of_int total, string_of_int (other + 1), third, [ pair total (other + 1) ]))
+                       ((total, other + 1, third), (string_of_int total, string_of_int (other + 1), String.uppercase_ascii third, [ pair total (other + 1) ]))
                    | _ ->
                        ( (total, other, third ^ "x"),
                          ( string_of_int total,
                            string_of_int other,
-                           third ^ "x",
-                           [ "eight " ^ string_of_int (String.length third + 1) ] ) ))
+                           String.uppercase_ascii (third ^ "x"),
+                           [ "memo " ^ third ^ "x"; "eight " ^ string_of_int (String.length third + 1) ] ) ))
                  (0, 10, "") clicks
              in
              expect seen |. to_equal expected;

@@ -4,6 +4,11 @@ open Ast_builder.Default
 (** Whether Melact's function for a binding is a hook, which takes its call site's key first. *)
 type keying = Keyed | Plain
 
+(** How a binding's arguments reach Melact's function. *)
+type passing =
+  | As_given
+  | Listed of int  (** This argument is a tuple longer than Melact's hooks take, passed as the array it is in JavaScript. *)
+
 
 let source attributes =
   List.find_map
@@ -25,12 +30,14 @@ let parameters type_ =
   collect type_
 
 let target package name type_ =
-  let react keying found = Some (Ldot (Lident "React", found), keying)
-  and dom found = Some (Ldot (Lident "ReactDOM", found), Plain) in
+  let react keying found = Some (Ldot (Lident "React", found), keying, As_given)
+  and dom found = Some (Ldot (Lident "ReactDOM", found), Plain, As_given) in
   let with_deps base deps =
     match List.nth_opt (parameters type_) deps with
     | None -> react Keyed base
-    | Some (_, { ptyp_desc = Ptyp_tuple items; _ }) -> react Keyed (base ^ string_of_int (List.length items))
+    | Some (_, { ptyp_desc = Ptyp_tuple items; _ }) when List.length items <= 7 ->
+        react Keyed (base ^ string_of_int (List.length items))
+    | Some (_, { ptyp_desc = Ptyp_tuple _; _ }) -> Some (Ldot (Lident "React", base ^ "1"), Keyed, Listed deps)
     | Some (_, { ptyp_desc = Ptyp_constr ({ txt = Lident "unit"; _ }, []); _ }) -> react Keyed (base ^ "0")
     | Some _ -> react Keyed (base ^ "1")
   in
@@ -69,12 +76,17 @@ let structure items =
                   Option.bind (List.nth_opt description.pval_prim 0) (fun name ->
                       target package name description.pval_type))
             with
-            | Some (found, keying) ->
+            | Some (found, keying, passing) ->
                 let loc = description.pval_loc and name = description.pval_name.txt in
                 let given = parameters description.pval_type in
                 let arguments = List.mapi (fun index (label, _) -> (label, Printf.sprintf "melact_argument_%d" index)) given in
                 let call =
-                  List.map (fun (label, argument) -> (label, evar ~loc argument)) arguments
+                  List.mapi
+                    (fun index (label, argument) ->
+                      match passing with
+                      | Listed at when at = index -> (label, [%expr Melact_runtime.Hook.listed [%e evar ~loc argument]])
+                      | Listed _ | As_given -> (label, evar ~loc argument))
+                    arguments
                   |> pexp_apply ~loc
                        (match keying with
                        | Plain -> pexp_ident ~loc { loc; txt = found }
@@ -94,9 +106,13 @@ let structure items =
                   | Keyed -> [ [%stri let[@warning "-32"] [%p pvar ~loc ("melact_key_" ^ name)] = Melact_runtime.Hook.key ()] ])
                   @ [ [%stri let[@warning "-32"] [%p pvar ~loc name] = [%e wrapper]] ]
                 in
-                let renamed = (Lident name, found) in
-                let later, exported = go (renamed :: renames) rest in
-                (defined @ later, renamed :: exported)
+                let renamed =
+                  match passing with
+                  | As_given -> [ (Lident name, found) ]
+                  | Listed _ -> []
+                in
+                let later, exported = go (renamed @ renames) rest in
+                (defined @ later, renamed @ exported)
             | None ->
                 let later, exported = go renames rest in
                 ((rewrite renames)#structure_item item :: later, exported))

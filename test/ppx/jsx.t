@@ -633,3 +633,19 @@ stays as a definition other files can call, with no limit on the number of depen
   let use a =
     (React.useEffect3 __melhole_hook_1) (fun () -> None) (a, "x", 1.0);
     (React.useEffect1 __melhole_hook_2) (fun () -> None) [|a;1;2;3;4;5;6;7|]
+
+A tuple longer than the numbered hooks take is passed as the array it is in JavaScript, and uses
+call the binding's definition:
+
+  $ cat > long.ml <<'EOF'
+  > external useMemo8 : (unit -> 'v) -> 'a * 'b * 'c * 'd * 'e * 'f * 'g * 'h -> 'v = "useMemo" [@@mel.module "react"]
+  > let use a = useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
+  > EOF
+  $ ./pp.exe -impl long.ml
+  [@@@alert "-hook"]
+  let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
+  let useMemo8 melact_argument_0 melact_argument_1 =
+    React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
+      melact_argument_0 (Melact_runtime.Hook.listed melact_argument_1)[@@warning
+                                                                      "-32"]
+  let use a = useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")

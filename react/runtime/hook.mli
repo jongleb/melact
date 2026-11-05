@@ -9,6 +9,13 @@ val key : unit -> 'a key
     with, so that the binding stays polymorphic. Its call sites are checked in order, not by type. *)
 external unchecked : unit key -> 'a key = "%identity"
 
+(** A dependency of an effect or memo, compared by [===] whatever its type. *)
+type dependency
+
+(** A tuple of dependencies as the JavaScript array it is, for more dependencies than the
+    numbered hooks take. *)
+external listed : 'tuple -> dependency array = "%identity"
+
 (** The slots of one instance and the position of the next hook call. *)
 type slots
 
