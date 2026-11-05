@@ -295,6 +295,16 @@ whose branches write random fields, whose views read them through chains of `let
 whose handlers send random messages on input, on keys (with literal branches) and on clicks, and
 checks that alerts stand at exactly the handlers an independent model of the path predicts.
 
+### Pacing
+
+A program draws at the next microtask after a message, so every click and keystroke is on screen
+before the browser paints. Pointer moves, scroll, wheel and drag fire many times a frame; their
+handlers run with `Events.pace` set to `Continuous`, and a message sent then waits for the next
+animation frame, as in the Elm runtime, so a burst of moves is one draw. A discrete message while
+a frame is pending moves the draw to the next microtask. A model-based law sends random moves and
+clicks between microtask and frame boundaries (with a stubbed `requestAnimationFrame`) and checks
+the number of view calls and the page after every boundary against a model of the schedule.
+
 ## Components without hooks
 
 By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body
