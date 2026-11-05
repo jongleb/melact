@@ -37,8 +37,6 @@ cp -R "$work/sources/melange-opam-template/src" "$work/apps/template"
 cp -R "$work/sources/reason-react/demo" "$work/apps/demo-react"
 cp -R "$work/sources/reason-react/demo" "$work/apps/demo-melact"
 
-# UseReducerNoProblemo binds React's own useReducer from npm: third-party React bindings are a non-goal.
-sed -i.bak '/<UseReducerNoProblemo/d' "$work/apps/demo-react/main.re" "$work/apps/demo-melact/main.re"
 # reason-seoul's TodoMVC is written for reason-react 0.9 on bs-platform. The same mechanical upgrade
 # to reason-react 0.17 on Melange is applied to both copies; Melact then changes only the dune file.
 for app in todomvc-react todomvc-melact; do

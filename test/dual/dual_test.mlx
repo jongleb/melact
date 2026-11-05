@@ -38,6 +38,24 @@ module Counter = struct
     </button>
 end
 
+external npmUseReducer : (('state -> 'action -> 'state)[@mel.uncurry]) -> 'state -> 'state * ('action -> unit) = "useReducer"
+[@@mel.module "react"]
+
+module Npm = struct
+  external useEffect : (unit -> (unit -> unit) option) -> 'deps array -> unit = "useEffect" [@@mel.module "react"]
+end
+
+module Npm_bound = struct
+  let[@react.component] make ~step =
+    let total, add = npmUseReducer (fun total by -> total + by) 0 in
+    let other, bump = npmUseReducer (fun count () -> count + 1) 10 in
+    Npm.useEffect (fun () -> log ("effect " ^ string_of_int total); None) [| total |];
+    <p>
+      <button className="add" onClick=(fun _ -> add step)>(React.int total)</button>
+      <button className="bump" onClick=(fun _ -> bump ())>(React.int other)</button>
+    </p>
+end
+
 module Plain_a = struct
   let[@react.component] make () = <section><Counter label="a" /></section>
 end
@@ -917,6 +935,34 @@ let () =
              |. to_equal (List.map (fun ((_, shown), _) -> "<p>" ^ shown ^ "</p>") steps, 0, parsed);
              finish ()))
         [%mel.obj { numRuns = 60 }]));
+  describe "bindings to npm react" (fun () ->
+    test_async "hooks bound from npm's react with external work, each call with its own state, as under React" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:20) (fun values ->
+             let tape = tape values in
+             let step = 1 + draw tape 5 in
+             let clicks = List.init (1 + draw tape 8) (fun _ -> draw tape 2) in
+             let* root, client = mount <Npm_bound step /> in
+             let rec run remaining seen =
+               match remaining with
+               | [] -> Js.Promise.resolve (List.rev seen)
+               | which :: rest ->
+                   let* () = act (fun () -> click (select root (match which with 0 -> ".add" | _ -> ".bump"))) in
+                   run rest ((text_content (select root ".add"), text_content (select root ".bump"), take ()) :: seen)
+             in
+             let* seen = run clicks [] in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             let _, expected =
+               List.fold_left_map
+                 (fun (total, other) which ->
+                   let next = match which with 0 -> (total + step, other) | _ -> (total, other + 1) in
+                   let effects = match which with 0 -> [ "effect " ^ string_of_int (fst next) ] | _ -> [] in
+                   (next, (string_of_int (fst next), string_of_int (snd next), effects)))
+                 (0, 10) clicks
+             in
+             expect seen |. to_equal expected;
+             finish ()))
+          [%mel.obj { numRuns = 60 }]));
   describe "events" (fun () ->
     test_async "React.Event reads what was sent, and prevent and stop act as in React" (fun () ->
       check_async

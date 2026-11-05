@@ -472,4 +472,5 @@ let () =
     (Arg.Unit (fun () -> Element.output := Element.Hydratable))
     ~doc:" compile templates that can take over server-rendered HTML"
 
-let () = Driver.register_transformation "melact" ~impl:structure ~intf:signature
+let () =
+  Driver.register_transformation "melact" ~preprocess_impl:Npm_react.structure ~impl:structure ~intf:signature
