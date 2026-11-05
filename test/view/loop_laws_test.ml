@@ -37,14 +37,12 @@ let line_template =
       (View.attr_hole (Template.element node) "class", View.text_hole { parent = node; before = Template.first_or_end node }))
 
 let lines items outer =
-  View.rows items
-    (fun [@u] item ->
+  View.rows items line_template 0
+    (fun [@u] _ (marking, text) item ->
       incr renders;
-      View.row line_template 0
-        (fun [@u] _ (marking, text) ->
-          View.set_attr marking (Some (marked outer item));
-          View.set_text text (item.label ^ outer.suffix))
-        item.key)
+      View.set_attr marking (Some (marked outer item));
+      View.set_text text (item.label ^ outer.suffix))
+    (fun [@u] item -> item.key)
     (fun [@u] item -> [| View.Input (marked outer item); View.Input (item.label ^ outer.suffix) |])
     [| View.Input outer |]
 

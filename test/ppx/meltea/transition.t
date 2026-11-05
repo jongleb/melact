@@ -93,53 +93,48 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                          (Melhole.Transition.group ~name:"row" ~duration:200
                             (let _ = row in
                              Melhole.View.rows (Array.of_list rows)
+                               __melhole_template_2 4
+                               {
+                                 Js.Fn.I3 =
+                                   (fun __melhole_scope
+                                      (__melhole_hole_0, __melhole_hole_1)
+                                      __melhole_item ->
+                                      ((let id = __melhole_item in
+                                        let __melhole_changed_0 =
+                                          Melhole.View.check __melhole_scope 0
+                                            chosen in
+                                        let __melhole_changed_1 =
+                                          Melhole.View.check __melhole_scope 1
+                                            id in
+                                        (match (__melhole_changed_0,
+                                                 __melhole_changed_1)
+                                         with
+                                         | (Melhole.View.Unchanged,
+                                            Melhole.View.Unchanged) -> ()
+                                         | _ ->
+                                             Melhole.View.put_attr
+                                               __melhole_scope 2
+                                               __melhole_hole_0 "class"
+                                               (Some
+                                                  (if id = chosen
+                                                   then "on"
+                                                   else "" : string)));
+                                        (match __melhole_changed_1 with
+                                         | Melhole.View.Unchanged -> ()
+                                         | _ ->
+                                             Melhole.View.put_sole_text
+                                               __melhole_scope 3
+                                               __melhole_hole_1
+                                               (string_of_int (id : int)));
+                                        ())
+                                      [@ocaml.warning "-26-27"]))
+                               }
                                {
                                  Js.Fn.I1 =
                                    (fun __melhole_item ->
-                                      (fun id ->
-                                         Melhole.View.row __melhole_template_2
-                                           4
-                                           {
-                                             Js.Fn.I2 =
-                                               (fun __melhole_scope
-                                                  (__melhole_hole_0,
-                                                   __melhole_hole_1)
-                                                  ->
-                                                  let __melhole_changed_0 =
-                                                    Melhole.View.check
-                                                      __melhole_scope 0 chosen in
-                                                  let __melhole_changed_1 =
-                                                    Melhole.View.check
-                                                      __melhole_scope 1 id in
-                                                  (match (__melhole_changed_0,
-                                                           __melhole_changed_1)
-                                                   with
-                                                   | (Melhole.View.Unchanged,
-                                                      Melhole.View.Unchanged)
-                                                       -> ()
-                                                   | _ ->
-                                                       Melhole.View.put_attr
-                                                         __melhole_scope 2
-                                                         __melhole_hole_0
-                                                         "class"
-                                                         (Some
-                                                            (if id = chosen
-                                                             then "on"
-                                                             else "" : 
-                                                            string)));
-                                                  (match __melhole_changed_1
-                                                   with
-                                                   | Melhole.View.Unchanged ->
-                                                       ()
-                                                   | _ ->
-                                                       Melhole.View.put_sole_text
-                                                         __melhole_scope 3
-                                                         __melhole_hole_1
-                                                         (string_of_int
-                                                            (id : int)));
-                                                  ())
-                                           } (string_of_int id : string))
-                                        __melhole_item)
+                                      ((let id = __melhole_item in
+                                        (string_of_int id : string))
+                                      [@ocaml.warning "-26-27"]))
                                }
                                {
                                  Js.Fn.I1 =
