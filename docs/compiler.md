@@ -108,6 +108,16 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+## Components without hooks
+
+By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body
+can call one. A component that calls none is a function of its props: it compiles to
+`View.pure`, a child that keeps the component's identity and props and nothing else. The same
+component with the same props is left as it is, new props re-render it, and another component in
+its place mounts afresh, as React does. Only components that call hooks get an instance with hook
+slots, effects and a place in the scheduler. A dual test checks the remount against React 18:
+replacing one hookless component by another with the same output resets the state below it.
+
 ## Controlled inputs
 
 `value` and `checked` are properties the user changes too. A guard compares a value with the one
