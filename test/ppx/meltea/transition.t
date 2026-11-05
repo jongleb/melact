@@ -12,11 +12,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
              ((Melhole.Template.element __melhole_node),
-               (Melhole.View.text_at
-                  {
-                    Melhole.Template.parent = __melhole_node;
-                    before = (Melhole.Template.first_or_end __melhole_node)
-                  })))
+               (Melhole.Template.element __melhole_node)))
       }
   let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<li></li>")
@@ -24,11 +20,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
              ((Melhole.Template.element __melhole_node),
-               (Melhole.View.text_at
-                  {
-                    Melhole.Template.parent = __melhole_node;
-                    before = (Melhole.Template.first_or_end __melhole_node)
-                  })))
+               (Melhole.Template.element __melhole_node)))
       }
   let __melhole_template_3 =
     Melhole.View.template (Melhole.Template.html "<ul></ul>")
@@ -72,8 +64,8 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                (match __melhole_changed_1 with
                                 | Melhole.View.Unchanged -> ()
                                 | _ ->
-                                    Melhole.View.put_text __melhole_scope 3
-                                      __melhole_hole_1
+                                    Melhole.View.put_sole_text __melhole_scope
+                                      3 __melhole_hole_1
                                       (string_of_int (id : int)));
                                ())
                         })) __melhole_dispatch)) in
@@ -140,7 +132,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                                    | Melhole.View.Unchanged ->
                                                        ()
                                                    | _ ->
-                                                       Melhole.View.put_text
+                                                       Melhole.View.put_sole_text
                                                          __melhole_scope 3
                                                          __melhole_hole_1
                                                          (string_of_int

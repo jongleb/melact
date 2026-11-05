@@ -126,7 +126,12 @@ writes them to a property named after the site); the shared handler reads them f
 `currentTarget`, which delegation sets to the element, and builds the message when the user
 clicks. With `Html.map` the dispatch changes and the site makes a new shared handler, once per
 render rather than per element. A benchmark row now allocates no closure: 1,000 rows take 1.23 MB,
-and creating them allocates half of what it did before compiled rows. Rows of another
+and creating them allocates half of what it did before compiled rows.
+
+A dynamic text that is the only child of its element (`<td>(Html.int id)</td>`) is not a slot at a
+position but a hole on the element: the first write sets `textContent`, later writes go to
+`firstChild.data`. The template keeps the element empty, the walk stops at the element, and server
+HTML needs no markers around such a text, because the element already bounds it. Rows of another
 shape, or components such as Melact's `<Row>`, keep `View.each`.
 
 ## Server rendering and hydration

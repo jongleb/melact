@@ -46,12 +46,7 @@ Holes at every depth; markers only between neighbours that would merge:
                   {
                     Melhole.Template.parent = __melhole_node;
                     before = (Melhole.Template.next_or_end __melhole_node_3)
-                  }),
-               (Melhole.View.text_at
-                  {
-                    Melhole.Template.parent = __melhole_node_4;
-                    before = (Melhole.Template.first_or_end __melhole_node_4)
-                  })))
+                  }), (Melhole.Template.element __melhole_node_4)))
       }
   let row ~name ~count ~extra =
     React.of_child
@@ -86,8 +81,8 @@ Holes at every depth; markers only between neighbours that would merge:
                 (match __melhole_changed_0 with
                  | Melhole.View.Unchanged -> ()
                  | _ ->
-                     Melhole.View.put_text __melhole_scope 4 __melhole_hole_3
-                       (string_of_int (count : int)));
+                     Melhole.View.put_sole_text __melhole_scope 4
+                       __melhole_hole_3 (string_of_int (count : int)));
                 ())
          })
 
@@ -429,11 +424,7 @@ Calls with children, keys and fragments:
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             Melhole.View.text_at
-               {
-                 Melhole.Template.parent = __melhole_node;
-                 before = (Melhole.Template.first_or_end __melhole_node)
-               })
+             Melhole.Template.element __melhole_node)
       }
   let rows items =
     React.array
@@ -452,8 +443,9 @@ Calls with children, keys and fragments:
                                  (match __melhole_changed_0 with
                                   | Melhole.View.Unchanged -> ()
                                   | _ ->
-                                      Melhole.View.put_text __melhole_scope 1
-                                        __melhole_hole_0 (item : string));
+                                      Melhole.View.put_sole_text
+                                        __melhole_scope 1 __melhole_hole_0
+                                        (item : string));
                                  ())
                           }))))) items)
   let both =
@@ -510,11 +502,7 @@ Reason input:
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             Melhole.View.text_at
-               {
-                 Melhole.Template.parent = __melhole_node;
-                 before = (Melhole.Template.first_or_end __melhole_node)
-               })
+             Melhole.Template.element __melhole_node)
       }
   let make ~name:(name as __melhole_prop_0) () =
     React.of_child
@@ -532,7 +520,7 @@ Reason input:
                            (match __melhole_changed_0 with
                             | Melhole.View.Unchanged -> ()
                             | _ ->
-                                Melhole.View.put_text __melhole_scope 1
+                                Melhole.View.put_sole_text __melhole_scope 1
                                   __melhole_hole_0 ("Hello, " ^ name : 
                                   string));
                            ())
@@ -562,11 +550,7 @@ mlx input:
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             Melhole.View.text_at
-               {
-                 Melhole.Template.parent = __melhole_node;
-                 before = (Melhole.Template.first_or_end __melhole_node)
-               })
+             Melhole.Template.element __melhole_node)
       }
   let make ~name:(name as __melhole_prop_0) () =
     React.of_child
@@ -584,7 +568,7 @@ mlx input:
                            (match __melhole_changed_0 with
                             | Melhole.View.Unchanged -> ()
                             | _ ->
-                                Melhole.View.put_text __melhole_scope 1
+                                Melhole.View.put_sole_text __melhole_scope 1
                                   __melhole_hole_0 ("Hello, " ^ name : 
                                   string));
                            ())
@@ -621,6 +605,6 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  26:                 [@alert "+hook"]) in
-  28:               if flag then ((1)[@alert "+hook"]) else ((0)[@alert "+hook"]) in
-  53:                                         [@alert "+hook"]))[@alert "+hook"])
+  22:                 [@alert "+hook"]) in
+  24:               if flag then ((1)[@alert "+hook"]) else ((0)[@alert "+hook"]) in
+  49:                                         [@alert "+hook"]))[@alert "+hook"])
