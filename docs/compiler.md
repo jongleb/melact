@@ -268,6 +268,19 @@ redefined `update` or a different function gets no masks. A wrapper such as
 `Todomvc.update` changes, and is recognised as such. `update` may start with helper `let`s before
 its `match`.
 
+### Remembered values in the view
+
+A `let` at the top of a view, `let shown = List.filter … model.items`, builds a new list on every
+call, and a new list fails the `===` of every hole that reads it, so typing in a field made the
+list check all its rows although no item changed. `meltea-ppx` knows what such a `let` reads: the
+model fields it reaches through `model.field`, the locals of the record pattern and the `let`s
+before it. It compiles the `let` to `View.remember memory [| model.filter; model.items |] (fun ()
+-> …)`, with one memory per site at module level: when every input is the one the value was
+computed from, the old value comes back, the same object, and the holes that read it are not
+evaluated. Only a `let` with a call in it that builds no view is remembered, and a view is pure, so
+the old value is the value. A law counts how often such a `let` is computed over random messages and
+checks it against the number of draws where its fields changed, and that the page is the view.
+
 ### Fanout: frequent events that reach a list
 
 The same reading gives the compiler the whole path of an event, with no annotations: a handler

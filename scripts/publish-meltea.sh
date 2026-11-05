@@ -40,7 +40,8 @@ cp "$root"/assets/compiled.svg "$root"/assets/compiled-dark.svg "$root"/assets/m
   "$root"/assets/fields.svg "$root"/assets/fields-dark.svg "$root"/assets/selectors.svg "$root"/assets/selectors-dark.svg \
   "$root"/assets/transition.svg "$root"/assets/transition-dark.svg \
   "$root"/assets/served.svg "$root"/assets/served-dark.svg \
-  "$root"/assets/fanout.svg "$root"/assets/fanout-dark.svg assets/
+  "$root"/assets/fanout.svg "$root"/assets/fanout-dark.svg \
+  "$root"/assets/remember.svg "$root"/assets/remember-dark.svg assets/
 
 cat > dune-project <<'EOF'
 (lang dune 3.16)

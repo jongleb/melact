@@ -1146,9 +1146,41 @@ def fanout(p):
     return svg(p, 880, 354, "Fanout in Meltea's TodoMVC: meltea-ppx follows a frequent event to the lists it reaches. The edit field's onInput sends Retype, whose branch of update writes editing, and the list in view reads todos, filter and editing, so every keystroke makes the list check all its rows; the compiler raises the alert fanout at the handler. The new-todo field's onInput sends Type, which writes field, which no list reads, so typing writes one hole and there is no alert. A key handler's literal branch such as Enter sends Add once and does not count", body)
 
 
+def remember(p):
+    def column(x, title, subtitle, color, lines, verdict):
+        body = box(x, 52, 420, 236, p["card"], p[color], rx=14, width=1.4, lift=True)
+        body += text(x + 18, 80, title, size=13.5, cls=color, weight=700)
+        body += text(x + 18, 99, subtitle, size=11.5, cls="muted")
+        for i, parts in enumerate(lines):
+            line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+            body += text(x + 18, 132 + i * 22, line, size=11.5, cls="mono", raw=True)
+        body += box(x + 18, 232, 384, 40, p[color + "_soft"], p[color], rx=10, width=1.1)
+        body += text(x + 32, 257, verdict, size=12, cls=color, weight=700)
+        return body
+
+    body = text(0, 20, "Type \"m\"", size=14, cls="mono accent", weight=700)
+    body += text(80, 20, "changes only draft; the view runs because it reads draft", size=12.5, cls="muted")
+    before = [
+        [("let shown = List.filter … model.items", "")],
+        [("  → a new list, every call", "orange")],
+        [("<ul>(Html.list (List.map row shown))</ul>", "")],
+        [("  shown !== last shown → the list runs", "orange")],
+    ]
+    after = [
+        [("let shown = View.remember m", "")],
+        [("  [| model.filter; model.items |] (fun () -> …)", "")],
+        [("  filter === · items === → the old list", "green")],
+        [("  shown === last shown → hole skipped", "green")],
+    ]
+    body += column(0, "without", "every let computed again", "orange", before, "1,000 rows checked for one keystroke")
+    body += column(460, "remembered by what it reads", "meltea-ppx knows the fields of each let", "green", after, "no row checked, one hole written: draft")
+    body += arrow(p, 424, 170, 456, 170, "green", flow=True, width=1.8)
+    return svg(p, 880, 290, "Remembered values in a Meltea view: Type m changes only the draft field. Without remembering, let shown = List.filter over model.items builds a new list on every call, so the list hole sees a different value and checks all 1,000 rows. meltea-ppx compiles the let to View.remember keyed by model.filter and model.items; both are the same objects, so the old list comes back, the hole is skipped, and only the draft hole is written", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember)
 
 if __name__ == "__main__":
     out = Path(__file__).parent
