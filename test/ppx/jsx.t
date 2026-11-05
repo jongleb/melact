@@ -608,3 +608,28 @@ callbacks of a component, so a hook called there is reported by the type checker
   22:                 [@alert "+hook"]) in
   24:               if flag then ((1)[@alert "+hook"]) else ((0)[@alert "+hook"]) in
   49:                                         [@alert "+hook"]))[@alert "+hook"])
+
+Bindings to npm's react: dependencies typed as an n-tuple pick the hook with n dependencies, an
+array the one with an array; uses below become Melact's hooks with their own keys, and the binding
+stays as a definition other files can call, with no limit on the number of dependencies:
+
+  $ cat > npm.ml <<'EOF'
+  > external useEffect3 : (unit -> (unit -> unit) option) -> 'a * 'b * 'c -> unit = "useEffect" [@@mel.module "react"]
+  > external useEffect8 : (unit -> (unit -> unit) option) -> int array -> unit = "useEffect" [@@mel.module "react"]
+  > let use a = useEffect3 (fun () -> None) (a, "x", 1.0); useEffect8 (fun () -> None) [| a; 1; 2; 3; 4; 5; 6; 7 |]
+  > EOF
+  $ ./pp.exe -impl npm.ml
+  [@@@alert "-hook"]
+  let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
+  let useEffect3 melact_argument_0 melact_argument_1 =
+    React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
+      melact_argument_0 melact_argument_1[@@warning "-32"]
+  let melact_key_useEffect8 = Melact_runtime.Hook.key ()[@@warning "-32"]
+  let useEffect8 melact_argument_0 melact_argument_1 =
+    React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
+      melact_argument_0 melact_argument_1[@@warning "-32"]
+  let __melhole_hook_1 = Melact_runtime.Hook.key ()
+  let __melhole_hook_2 = Melact_runtime.Hook.key ()
+  let use a =
+    (React.useEffect3 __melhole_hook_1) (fun () -> None) (a, "x", 1.0);
+    (React.useEffect1 __melhole_hook_2) (fun () -> None) [|a;1;2;3;4;5;6;7|]

@@ -5,6 +5,10 @@ type 'a key
 
 val key : unit -> 'a key
 
+(** One key for every type: what a binding to npm's [react] used from another file calls its hook
+    with, so that the binding stays polymorphic. Its call sites are checked in order, not by type. *)
+external unchecked : unit key -> 'a key = "%identity"
+
 (** The slots of one instance and the position of the next hook call. *)
 type slots
 

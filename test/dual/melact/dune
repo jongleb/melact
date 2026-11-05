@@ -1,5 +1,5 @@
 (copy_files
- (files ../dual_test.mlx))
+ (files ../*.mlx))
 
 (melange.emit
  (target output)

@@ -407,6 +407,13 @@ let mapper =
         when List.exists (String.equal name) keyed_hooks ->
           pexp_apply ~loc expression
             [ (Nolabel, Hoist.hoist ~loc "hook" [%expr Melact_runtime.Hook.key ()]) ]
+      | Pexp_apply (callee, arguments)
+        when List.exists (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed") expression.pexp_attributes ->
+          {
+            expression with
+            pexp_desc = Pexp_apply (callee, List.map (fun (label, argument) -> (label, self#expression argument)) arguments);
+            pexp_attributes = [];
+          }
       | Pexp_apply (callee, arguments) -> (
           match (Element.without_jsx expression.pexp_attributes, callee.pexp_desc) with
           | None, _ -> super#expression expression

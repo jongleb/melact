@@ -1,4 +1,8 @@
 open Ppxlib
+open Ast_builder.Default
+
+(** Whether Melact's function for a binding is a hook, which takes its call site's key first. *)
+type keying = Keyed | Plain
 
 
 let source attributes =
@@ -11,25 +15,32 @@ let source attributes =
       | _ -> None)
     attributes
 
-let arity type_ =
-  let rec count type_ =
+let parameters type_ =
+  let rec collect type_ =
     match type_.ptyp_desc with
-    | Ptyp_arrow (_, _, rest) -> 1 + count rest
-    | Ptyp_poly (_, inner) -> count inner
-    | _ -> 0
+    | Ptyp_arrow (label, argument, rest) -> (label, argument) :: collect rest
+    | Ptyp_poly (_, inner) -> collect inner
+    | _ -> []
   in
-  count type_
+  collect type_
 
 let target package name type_ =
-  let react found = Some (Ldot (Lident "React", found)) and dom found = Some (Ldot (Lident "ReactDOM", found)) in
-  let with_deps base = match arity type_ with 1 -> react base | _ -> react (base ^ "1") in
+  let react keying found = Some (Ldot (Lident "React", found), keying)
+  and dom found = Some (Ldot (Lident "ReactDOM", found), Plain) in
+  let with_deps base deps =
+    match List.nth_opt (parameters type_) deps with
+    | None -> react Keyed base
+    | Some (_, { ptyp_desc = Ptyp_tuple items; _ }) -> react Keyed (base ^ string_of_int (List.length items))
+    | Some (_, { ptyp_desc = Ptyp_constr ({ txt = Lident "unit"; _ }, []); _ }) -> react Keyed (base ^ "0")
+    | Some _ -> react Keyed (base ^ "1")
+  in
   match (package, name) with
-  | "react", ("useState" | "useReducer" | "useRef" | "useContext" | "useId" | "useTransition" | "startTransition"
-             | "useDebugValue" | "useSyncExternalStore" | "createContext" | "memo" | "forwardRef" | "isValidElement"
-             | "cloneElement" | "createRef") ->
-      react name
-  | "react", ("useEffect" | "useLayoutEffect" | "useMemo" | "useCallback" | "useInsertionEffect") -> with_deps name
-  | "react", "useImperativeHandle" when arity type_ >= 3 -> react "useImperativeHandle1"
+  | "react", ("useState" | "useReducer" | "useRef" | "useId" | "useSyncExternalStore") -> react Keyed name
+  | "react", ("useContext" | "useTransition" | "startTransition" | "useDebugValue" | "createContext" | "memo"
+             | "forwardRef" | "isValidElement" | "cloneElement" | "createRef") ->
+      react Plain name
+  | "react", ("useEffect" | "useLayoutEffect" | "useMemo" | "useCallback" | "useInsertionEffect") -> with_deps name 1
+  | "react", "useImperativeHandle" -> with_deps name 2
   | "react-dom", ("createPortal" | "flushSync") -> dom name
   | _ -> None
 
@@ -58,10 +69,34 @@ let structure items =
                   Option.bind (List.nth_opt description.pval_prim 0) (fun name ->
                       target package name description.pval_type))
             with
-            | Some found ->
-                let renamed = (Lident description.pval_name.txt, found) in
+            | Some (found, keying) ->
+                let loc = description.pval_loc and name = description.pval_name.txt in
+                let given = parameters description.pval_type in
+                let arguments = List.mapi (fun index (label, _) -> (label, Printf.sprintf "melact_argument_%d" index)) given in
+                let call =
+                  List.map (fun (label, argument) -> (label, evar ~loc argument)) arguments
+                  |> pexp_apply ~loc
+                       (match keying with
+                       | Plain -> pexp_ident ~loc { loc; txt = found }
+                       | Keyed ->
+                           pexp_apply ~loc (pexp_ident ~loc { loc; txt = found })
+                             [ (Nolabel, [%expr Melact_runtime.Hook.unchecked [%e evar ~loc ("melact_key_" ^ name)]]) ])
+                in
+                let wrapper =
+                  List.fold_right
+                    (fun (label, argument) body -> pexp_fun ~loc label None (pvar ~loc argument) body)
+                    arguments
+                    { call with pexp_attributes = [ attribute ~loc ~name:{ loc; txt = "melact.keyed" } ~payload:(PStr []) ] }
+                in
+                let defined =
+                  (match keying with
+                  | Plain -> []
+                  | Keyed -> [ [%stri let[@warning "-32"] [%p pvar ~loc ("melact_key_" ^ name)] = Melact_runtime.Hook.key ()] ])
+                  @ [ [%stri let[@warning "-32"] [%p pvar ~loc name] = [%e wrapper]] ]
+                in
+                let renamed = (Lident name, found) in
                 let later, exported = go (renamed :: renames) rest in
-                (later, renamed :: exported)
+                (defined @ later, renamed :: exported)
             | None ->
                 let later, exported = go renames rest in
                 ((rewrite renames)#structure_item item :: later, exported))

@@ -6,6 +6,8 @@ type slot = Slot : 'a key * 'a -> slot
 type slots = { mutable items : slot array; mutable count : int; mutable cursor : int }
 
 let key () = Key (Type.Id.make ())
+
+external unchecked : unit key -> 'a key = "%identity"
 let slots () = { items = [||]; count = 0; cursor = 0 }
 let rewind slots = slots.cursor <- 0
 

@@ -45,14 +45,22 @@ module Npm = struct
   external useEffect : (unit -> (unit -> unit) option) -> 'deps array -> unit = "useEffect" [@@mel.module "react"]
 end
 
+external npmUseEffect2 : (unit -> (unit -> unit) option) -> 'a * 'b -> unit = "useEffect" [@@mel.module "react"]
+
 module Npm_bound = struct
   let[@react.component] make ~step =
     let total, add = npmUseReducer (fun total by -> total + by) 0 in
     let other, bump = npmUseReducer (fun count () -> count + 1) 10 in
+    let third, setThird = Npm_hooks.useState (fun () -> "") in
     Npm.useEffect (fun () -> log ("effect " ^ string_of_int total); None) [| total |];
+    npmUseEffect2 (fun () -> log ("pair " ^ string_of_int total ^ " " ^ string_of_int other); None) (total, other);
+    Npm_hooks.useEffect8
+      (fun () -> log ("eight " ^ string_of_int (String.length third)); None)
+      [| String.length third; 1; 2; 3; 4; 5; 6; 7 |];
     <p>
       <button className="add" onClick=(fun _ -> add step)>(React.int total)</button>
       <button className="bump" onClick=(fun _ -> bump ())>(React.int other)</button>
+      <button className="third" onClick=(fun _ -> setThird (fun text -> text ^ "x"))>(React.string third)</button>
     </p>
 end
 
@@ -1182,24 +1190,44 @@ let () =
         (async_property (tapes ~shortest:2 ~longest:20) (fun values ->
              let tape = tape values in
              let step = 1 + draw tape 5 in
-             let clicks = List.init (1 + draw tape 8) (fun _ -> draw tape 2) in
+             let clicks = List.init (1 + draw tape 8) (fun _ -> draw tape 3) in
              let* root, client = mount <Npm_bound step /> in
              let rec run remaining seen =
                match remaining with
                | [] -> Js.Promise.resolve (List.rev seen)
                | which :: rest ->
-                   let* () = act (fun () -> click (select root (match which with 0 -> ".add" | _ -> ".bump"))) in
-                   run rest ((text_content (select root ".add"), text_content (select root ".bump"), take ()) :: seen)
+                   let* () =
+                     act (fun () -> click (select root (match which with 0 -> ".add" | 1 -> ".bump" | _ -> ".third")))
+                   in
+                   run rest
+                     (( text_content (select root ".add"),
+                        text_content (select root ".bump"),
+                        text_content (select root ".third"),
+                        take () )
+                     :: seen)
              in
              let* seen = run clicks [] in
              let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
              let _, expected =
                List.fold_left_map
-                 (fun (total, other) which ->
-                   let next = match which with 0 -> (total + step, other) | _ -> (total, other + 1) in
-                   let effects = match which with 0 -> [ "effect " ^ string_of_int (fst next) ] | _ -> [] in
-                   (next, (string_of_int (fst next), string_of_int (snd next), effects)))
-                 (0, 10) clicks
+                 (fun (total, other, third) which ->
+                   let pair total other = "pair " ^ string_of_int total ^ " " ^ string_of_int other in
+                   match which with
+                   | 0 ->
+                       ( (total + step, other, third),
+                         ( string_of_int (total + step),
+                           string_of_int other,
+                           third,
+                           [ "effect " ^ string_of_int (total + step); pair (total + step) other ] ) )
+                   | 1 ->
+                       ((total, other + 1, third), (string_of_int total, string_of_int (other + 1), third, [ pair total (other + 1) ]))
+                   | _ ->
+                       ( (total, other, third ^ "x"),
+                         ( string_of_int total,
+                           string_of_int other,
+                           third ^ "x",
+                           [ "eight " ^ string_of_int (String.length third + 1) ] ) ))
+                 (0, 10, "") clicks
              in
              expect seen |. to_equal expected;
              finish ()))
