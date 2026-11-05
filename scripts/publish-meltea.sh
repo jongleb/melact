@@ -92,7 +92,7 @@ cat > dune-project <<'EOF'
 
 (package
  (name meltea-ppx)
- (synopsis "mlx views with messages, compiled to templates, for Meltea")
+ (synopsis "Meltea's mlx views with messages, compiled to templates")
  (depends
   (ocaml (>= 5.3))
   (dune (>= 3.16))
@@ -119,6 +119,8 @@ cat > package.json <<'EOF'
 EOF
 
 printf '_build/\n_opam/\nnode_modules/\n*.install\n' > .gitignore
+mkdir -p .github/workflows
+cp "$root"/.github/workflows/ci.yml .github/workflows/ci.yml
 cp "$root"/melhole.opam "$root"/meltea.opam "$root"/meltea-ppx.opam .
 
 git add -A

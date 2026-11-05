@@ -20,6 +20,9 @@
 
 (maintainers "Gleb")
 
+(source
+ (github jongleb/melact))
+
 (package
  (name melhole)
  (synopsis "Templates with holes for Melange: the runtime and the compiler shared by Melact and Meltea")
@@ -38,7 +41,7 @@
 
 (package
  (name melact)
- (synopsis "reason-react for Melange without React and without a virtual DOM")
+ (synopsis "The reason-react API for Melange, compiled to templates, without React or a virtual DOM")
  (depends
   (ocaml
    (>= 5.3))
@@ -54,7 +57,7 @@
 
 (package
  (name melact-ppx)
- (synopsis "reason-react's JSX and [@react.component], compiled to templates, for Melact")
+ (synopsis "The JSX and [@react.component] of reason-react, compiled to templates, for Melact")
  (depends
   (ocaml
    (>= 5.3))
@@ -80,7 +83,7 @@
 
 (package
  (name meltea-ppx)
- (synopsis "mlx views with messages, compiled to templates, for Meltea")
+ (synopsis "Meltea's mlx views with messages, compiled to templates")
  (depends
   (ocaml
    (>= 5.3))
