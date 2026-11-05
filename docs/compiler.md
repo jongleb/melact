@@ -266,6 +266,11 @@ view reads, the view is not called at all. No signals and nothing in the user's 
 generated next to `update` and `view` and passed to `Program` by the compiler. Inside the view,
 `===` stays the exact check for what to write.
 
+`subscriptions` is read the same way. After a draw a program asks for the subscriptions again
+only when a field they read changed; TodoMVC's `fun _ -> Sub.hash …` reads none, so it is asked
+once, at the start. A law counts the calls against the draws after a message that writes the field
+they read.
+
 The masks travel between modules without types. Each companion is evidence: the masks and the
 function they were found in. At `Program.element ~update:Todomvc.update` the compiler looks the
 companion up with `open! Todomvc` over a fallback that says "not analysed", so a module the
@@ -338,6 +343,14 @@ the page shows the new view of the old state; examples/todomvc does this. A stop
 the messages that still reach it. A law runs a program, starts new code on its root with the same
 or another shape, and checks the page against a mount of the new view on the carried model or on
 `init`, and that the old program no longer draws.
+
+### View transitions on request
+
+`Cmd.view_transition`, returned by an update, makes the next draw run inside
+`document.startViewTransition`, so the browser animates the whole page from the old state to the
+new one, with no classes and no FLIP code; where the API is missing, the draw is as usual. A law
+stubs the API and checks that a transition starts exactly for the draws that follow an update that
+asked for one, and that the page is the view after the transitions finish.
 
 ## Components without hooks
 

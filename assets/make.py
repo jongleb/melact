@@ -658,7 +658,8 @@ def fields(p):
         body += text(538, y + 52, f"changes {changed} ∩ reads = {'∅' if changed == '{ }' else changed}", size=12, cls="mono")
         body += text(538, y + 74, outcome, size=11.5, cls="muted")
     body += text(440, 330, "The masks are generated next to update and view; Program keeps the fields changed since the last draw.", size=12, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 338, "Fields an update changes, in Meltea's TodoMVC: meltea-ppx reads update and finds what each message can change: Type changes field, Route changes filter, Add changes todos, field and next, Ignore changes nothing, and Edit, which it does not recognise, changes all fields. It reads view the same way: todos, field, editing and filter, never next. After Ignore nothing the view reads changed, so the view is not called; after Type the view runs and one === per local picks the holes to write", body)
+    body += text(440, 352, "Subscriptions are read the same way: TodoMVC's reads no field, so it is asked once, at the start.", size=12, cls="muted", anchor="middle")
+    return svg(p, 880, 360, "Fields an update changes, in Meltea's TodoMVC: meltea-ppx reads update and finds what each message can change: Type changes field, Route changes filter, Add changes todos, field and next, Ignore changes nothing, and Edit, which it does not recognise, changes all fields. It reads view the same way: todos, field, editing and filter, never next. After Ignore nothing the view reads changed, so the view is not called; after Type the view runs and one === per local picks the holes to write. subscriptions are read the same way, and are asked again only after a draw that changed a field they read", body)
 
 
 def vdom(p):
@@ -992,7 +993,11 @@ def transition(p):
             body += curve(p, f"M{400 + 20 + 25 + 132},{y + 12} C{400 + 170},{y - 10} {400 + 60},{y - 10} {400 + 45},{y + 12}", "green", flow=True)
     body += text(440, 384, "The wrapper stays mounted; only what it shows changes. The first render does not animate.",
                  size=12, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 392, "Transitions, as Vue's Transition and TransitionGroup, with name fade. Enter: in the patch the new row b gets fade-enter-from and fade-enter-active, two frames later fade-enter-to replaces fade-enter-from while CSS animates, and when the duration is up no classes are left. Leave: the removed row b is put back where it was with fade-leave-from and fade-leave-active, two frames later fade-leave-to, and when the duration is up it leaves the DOM. Move, in a group: row c went first, so after the patch the DOM is c a b but a transform shows every moved row where it was; two frames later the rows get fade-move and the transforms are cleared, so they slide to their new places; at the end no classes are left", body)
+    body += box(0, 404, 880, 64, p["accent_soft"], p["accent"], rx=12, width=1.2)
+    body += text(18, 430, "Cmd.view_transition", size=13, cls="mono accent", weight=700)
+    body += text(190, 430, "the update asks; the next draw runs inside document.startViewTransition,", size=12, cls="muted")
+    body += text(190, 450, "so the browser animates the whole page from old to new, with no classes and no FLIP code", size=12, cls="muted")
+    return svg(p, 880, 468, "Transitions, as Vue's Transition and TransitionGroup, with name fade. Enter: in the patch the new row b gets fade-enter-from and fade-enter-active, two frames later fade-enter-to replaces fade-enter-from while CSS animates, and when the duration is up no classes are left. Leave: the removed row b is put back where it was with fade-leave-from and fade-leave-active, two frames later fade-leave-to, and when the duration is up it leaves the DOM. Move, in a group: row c went first, so after the patch the DOM is c a b but a transform shows every moved row where it was; two frames later the rows get fade-move and the transforms are cleared, so they slide to their new places; at the end no classes are left. Cmd.view_transition makes the next draw run inside document.startViewTransition, so the browser animates the whole page", body)
 
 
 def row(p):
