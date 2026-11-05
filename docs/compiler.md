@@ -108,6 +108,18 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+## Types, where dune can give them
+
+`meltea-ppx` has an optional typed pass, `-typed`, for builds that run it as a staged rewriter:
+`(preprocess (staged_pps melange.ppx meltea-ppx -- -typed))`. Then the compiler runs the ppx with
+its load path, and after rewriting, the pass types the file with OCaml's compiler-libs. It only
+reads the types: if typing fails for any reason it does nothing, and a law compiles an app with and
+without it and compares the JavaScript byte for byte. Its first use needs types and nothing else
+gives it: a view that reads a model field which can change in place (an array, `bytes`, a
+`mutable` field, or a type that contains one) gets an alert, `mutable_model`, at that read, because
+Meltea redraws only when the model value changes. dune 3.24 does not run the mlx dialect under
+`staged_pps`, so for now the typed pass works on `.ml` files only.
+
 ## The Rules of Hooks, checked by the type checker
 
 Every hook in `React` carries an alert, `[@@alert hook]`. `melact-ppx` turns the alert off for the
