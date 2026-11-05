@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
-const mode = args[0]?.startsWith("--explore") ? args.shift() : "--press";
+const mode = args[0]?.startsWith("--") ? args.shift() : "--press";
 const seeds = [1, 2, 3, 4, 5];
 
 if (args.length === 1) {
@@ -68,8 +68,8 @@ if (args.length === 1) {
       steps.push({ step, html: root.innerHTML });
     }
   }
-  process.stdout.write(JSON.stringify(steps));
-  process.exit(0);
+  process.stdout.write(JSON.stringify(steps), () => process.exit(0));
+  await new Promise(() => {});
 }
 
 const run = (option, entry) =>

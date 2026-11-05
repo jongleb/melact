@@ -756,7 +756,7 @@ def roadmap(p):
         ("View", "templates, holes,", "reconcile, events", "done"),
         ("Hooks", "instances, useState,", "effects, context", "done"),
         ("melact-ppx", "JSX → templates", "Reason, OCaml, mlx", "done"),
-        ("Compat", "React.Event, makeProps,", "TodoMVC unmodified", "now"),
+        ("Compat", "React.Event, makeProps,", "TodoMVC unmodified", "done"),
         ("Speed", "keyed loops,", "1.2× vanilla", "done"),
         ("SSR", "render to HTML,", "hydration", "done"),
         ("Publish", "opam, CI,", "README numbers", "next"),

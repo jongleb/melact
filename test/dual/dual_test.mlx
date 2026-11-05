@@ -620,7 +620,7 @@ let () =
              finish ()))
         [%mel.obj { numRuns = 40 }]));
   describe "forms" (fun () ->
-    test_async "a controlled input and checkbox show the state after any input, kept or rejected"
+    test_async "a controlled input and checkbox show the state after any input, kept or rejected, in the value attribute too"
       (fun () ->
         check_async
           (async_property (tapes ~shortest:2 ~longest:16) (fun values ->
@@ -635,7 +635,7 @@ let () =
                  List.fold_left_map
                    (fun shown action ->
                      let shown = match action with `Type word -> digits word | `Click -> shown in
-                     (shown, (shown, false)))
+                     (shown, (shown, shown, false)))
                    "" actions
                in
                let* root, client = mount <Controlled /> in
@@ -655,7 +655,7 @@ let () =
                            | `Click -> click box)
                      in
                      let* () = later () in
-                     step rest ((value_of field, checked box) :: shown)
+                     step rest ((value_of field, get_attribute field "value", checked box) :: shown)
                in
                let* shown = step actions [] in
                expect shown |. to_equal wanted;

@@ -33,8 +33,9 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 > **Milestones 1–3 of 7 are done:** the `View` layer, components with hooks, and `melact-ppx`.
 > A reason-react component in mlx, Reason or OCaml compiles and runs, and one test suite passes
 > both against reason-react with React 18 and against Melact. Milestone 4, the rest of the
-> reason-react surface, is under way: the full `React.Event`, `React.createElement` with
-> `makeProps` and `ReasonReactRouter` are in; a community TodoMVC built unmodified is next.
+> reason-react surface, is done too: the full `React.Event`, `React.createElement` with
+> `makeProps`, `ReasonReactRouter`, and a community TodoMVC that runs on Melact with only its
+> `dune` file changed.
 
 ## The idea
 
@@ -244,6 +245,13 @@ builds new values, so this rarely matters, but it is a rule rather than an optim
 
 ## Meltea
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/meltea-dark.svg">
+    <img src="assets/meltea.svg" alt="Meltea: a tea glass with a hole in orbit around it" width="120">
+  </picture>
+</p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/family-dark.svg">
   <img src="assets/family.svg" alt="Two front ends, one compiler, one runtime: Meltea views in mlx go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler, which makes templates, walks to every hole and compiles lists into keyed loops with selectors, and the shared runtime melhole, which knows no components; Melact adds its own runtime library, melact.runtime, with components, hooks and the scheduler" width="100%">
@@ -290,9 +298,12 @@ values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries mel
   <img src="assets/compat.svg" alt="reason-react's own demo, switched to melact with two dune lines, rendered by React 18.3 and by melact in jsdom: after mounting and after each of 32 clicks, 33 of 33 steps have identical DOM" width="100%">
 </picture>
 
-*[`compat/run.sh`](compat/run.sh) clones reason-react and melange-opam-template, changes two lines in their `dune` files and
-builds them against melact. Then it renders reason-react's demo with React and with melact and compares the DOM after
-every click. One demo component binds React's npm `useReducer` directly, which is a non-goal, so the script removes it.*
+*[`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
+in their `dune` files and builds them against Melact. Then it renders reason-react's demo with React and with Melact and
+compares the DOM after every click, and walks the TodoMVC randomly (five walks, 605 steps of clicks, typing, submits and
+route changes) comparing the DOM after every step. The TodoMVC was written for reason-react 0.9, so both copies first get
+the same upgrade to reason-react 0.17 (`ReactEvent.` becomes `React.Event.`, and `Index.re` uses `ReactDOM.Client`). One
+demo component binds React's npm `useReducer` directly, which is a non-goal, so the script removes it.*
 
 | | |
 |---|---|
