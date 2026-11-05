@@ -179,9 +179,10 @@ type poke = Show | Hide | Keep
 let views = ref 0
 
 let split_update message model =
+  let bump count = count + 1 in
   match message with
-  | Show -> { model with shown = model.shown + 1 }
-  | Hide -> { model with hidden = model.hidden + 1 }
+  | Show -> { model with shown = bump model.shown }
+  | Hide -> { model with hidden = bump model.hidden }
   | Keep -> model
 
 let split_view { shown; _ } =
