@@ -26,7 +26,7 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/overview-dark.svg">
-  <img src="assets/overview.svg" alt="melact in one picture: a reason-react component in mlx switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser a setState re-renders only that component, its refresh compares n with === once and writes the text node directly. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml JSX, ReactDOM, ReactEvent" width="100%">
+  <img src="assets/overview.svg" alt="Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, ReactEvent. Starting fresh? Write Meltea" width="100%">
 </picture>
 
 > [!NOTE]

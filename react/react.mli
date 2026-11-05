@@ -3,7 +3,10 @@
     code calls [React.useState init] exactly as with reason-react. *)
 
 (** A piece of UI. *)
-type element = Element of Melhole.View.child [@@unboxed]
+type element
+
+external of_child : Melhole.View.child -> element = "%identity"
+external to_child : element -> Melhole.View.child = "%identity"
 
 val null : element
 val string : string -> element

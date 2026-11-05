@@ -396,7 +396,8 @@ module Client = struct
 
   let createRoot container = { container; content = Nothing }
 
-  let render root (React.Element child) =
+  let render root element =
+    let child = React.to_child element in
     match root.content with
     | Showing mounted -> View.patch mounted child
     | Nothing ->
@@ -433,7 +434,7 @@ let hydrate element container =
   clear container;
   render element container
 
-let createPortal (React.Element child) container = React.Element (View.portal container child)
+let createPortal element container = React.of_child (View.portal container (React.to_child element))
 
 let unmountComponentAtNode container =
   Option.iter

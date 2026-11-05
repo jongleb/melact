@@ -11,7 +11,6 @@ let take () =
   events := [];
   taken
 
-let child_of (React.Element child) = child
 
 let fresh child =
   events := [];
@@ -119,7 +118,7 @@ let themed () =
       log "render themed";
       let value, set = React.useState theme_key (fun () -> "dark") in
       set_theme := set;
-      child_of (React.Context.provider theme ~value ~children:(React.Element (middle ())) ()))
+      React.to_child (React.Context.provider theme ~value ~children:(React.of_child (middle ())) ()))
 
 let toggle_def = Component.make ~name:"Toggle"
 let toggle_key = Hook.key ()

@@ -116,7 +116,7 @@ def overview(p):
                 + text(x + 11, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
                 + text(x + 30, y, title, size=14.5, weight=600))
 
-    body = step(0, 24, "1", "Your reason-react app") + step(305, 24, "2", "Melact, at build time") + step(610, 24, "3", "In the browser")
+    body = step(0, 24, "1", "Code already on React") + step(305, 24, "2", "Melact, at build time") + step(610, 24, "3", "In the browser")
 
     body += box(0, 40, 270, 158, p["card"], p["line"], lift=True)
     code = [
@@ -156,7 +156,7 @@ def overview(p):
     body += text(321, 290, "generated per template, like Svelte", size=12, cls="muted")
 
     body += box(610, 40, 270, 260, p["card"], p["line"], lift=True)
-    flow = [("setState", "orange"), ("only this component renders", "line"),
+    flow = [("setState · kept for React code", "orange"), ("only this component renders", "line"),
             ("n !== last n ?", "accent"), ("text.data = \"1\"", "green")]
     for i, (label, tone) in enumerate(flow):
         y = 56 + i * 61
@@ -182,7 +182,12 @@ def overview(p):
     body += text(512, 352, "your code compiles unchanged", size=12.5, cls="muted")
     body += chips(468, 366, 400, ["your components", "hooks", "mlx · Reason · OCaml",
                                   "ReactDOM", "ReactEvent"], "stays")
-    return svg(p, 880, 452, "Melact in one picture: a reason-react component in mlx switches two dune lines; melact-ppx splits its JSX into a template parsed once and a hole array built per render; in the browser a setState re-renders only that component, compares each hole with === and writes only what changed. Gone: React, react-dom, the virtual DOM, the element tree per render, the tree diff, fiber. Stays: your components, hooks, JSX, ReactDOM.Client, ReactEvent", body)
+    body += box(0, 470, 880, 64, p["green_soft"], p["green"], rx=14, width=1.5)
+    body += text(20, 497, "Starting fresh? Write Meltea.", size=15, weight=700, cls="green")
+    body += text(20, 520, "No setState and no hooks: messages and a pure update, compiled by the same compiler into the same templates.",
+                 size=12.5, cls="muted")
+    body += text(860, 497, "Melact is the way out of React", size=12.5, cls="muted", anchor="end", weight=600)
+    return svg(p, 880, 540, "Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, ReactEvent. Starting fresh? Write Meltea: messages and a pure update instead of setState and hooks, with the same compiler", body)
 
 
 def pipeline(p):

@@ -1,13 +1,15 @@
 open Melhole
 
-type element = Element of View.child [@@unboxed]
+type element = View.child
+
+external of_child : View.child -> element = "%identity"
+external to_child : element -> View.child = "%identity"
 type 'value ref = { mutable current : 'value }
 
 module Context = struct
   type 'value t = Context of 'value Melhole.Context.t [@@unboxed]
 
-  let provider (Context context) ~value ~children:(Element children) () =
-    Element (View.provide context value children)
+  let provider (Context context) ~value ~children () = View.provide context value children
 end
 
 type ('state, 'action) state = {
@@ -26,11 +28,11 @@ type 'snapshot store = {
   mutable unsubscribe : unit -> unit;
 }
 
-let null = Element View.empty
-let string text = Element (View.text text)
-let int number = Element (View.text (string_of_int number))
-let float number = Element (View.text (Js.Float.toString number))
-let list elements = Element (View.list (List.map (fun (Element child) -> child) elements))
+let null = View.empty
+let string text = View.text text
+let int number = View.text (string_of_int number)
+let float number = View.text (Js.Float.toString number)
+let list elements = View.list elements
 let array elements = list (Array.to_list elements)
 module Fragment = struct
   let make ~children () = children
@@ -45,7 +47,7 @@ module Suspense = struct
 end
 
 module Children = struct
-  let elements (Element child) = List.map (fun item -> Element item) (View.items child)
+  let elements child = View.items child
   let map element apply = list (List.map apply (elements element))
   let mapWithIndex element apply = list (List.mapi (fun index item -> apply item index) (elements element))
   let forEach element visit = List.iter visit (elements element)

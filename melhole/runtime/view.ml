@@ -146,9 +146,11 @@ let remove (position : Template.position) live =
 type extent = Whole | Part
 
 let extent (position : Template.position) live =
+  let last = ref Js.null in
+  live.each (fun [@u] node -> last := Js.Null.return node) [@u];
   match
-    ( Dom_api.same position.before Js.null,
-      Dom_api.same (live.front Js.null [@u]) (Template.first_or_end position.parent) )
+    ( Dom_api.same (live.front Js.null [@u]) (Template.first_or_end position.parent),
+      Dom_api.same !last (Dom_api.last_child position.parent) )
   with
   | true, true -> Whole
   | true, false | false, _ -> Part

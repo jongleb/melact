@@ -25,8 +25,7 @@ let without_component attributes =
 
 let unwrap ~loc element =
   [%expr
-    let (React.Element __melhole_child) = [%e element] in
-    __melhole_child]
+    React.to_child [%e element]]
 
 let react_text expression =
   let text name =
@@ -150,7 +149,7 @@ let component ~loc ~name expression =
   pexp_function ~loc complete None
     (Pfunction_body
        [%expr
-         React.Element
+         React.of_child
            (Melhole.View.component [%e definition] [%e inputs] (fun () ->
                 [%e unwrap ~loc body]))])
 
@@ -172,7 +171,7 @@ let mapper =
         Element.name = "melact";
         locals = self#locals;
         map = self#expression;
-        wrap = (fun loc child -> [%expr React.Element [%e child]]);
+        wrap = (fun loc child -> [%expr React.of_child [%e child]]);
         unwrap = (fun loc element -> unwrap ~loc element);
         handler =
           (fun loc { family; requirement; value; _ } ->
@@ -318,7 +317,7 @@ let mapper =
       Option.fold ~none:call
         ~some:(fun key ->
           [%expr
-            React.Element
+            React.of_child
               (Melhole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
         key
   end

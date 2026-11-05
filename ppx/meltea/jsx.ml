@@ -23,12 +23,10 @@ let mapper =
         Element.name = "meltea";
         locals = "__melhole_dispatch" :: self#locals;
         map = self#expression;
-        wrap = (fun loc child -> [%expr Html.Node (fun __melhole_dispatch -> [%e child])]);
+        wrap = (fun loc child -> [%expr Html.node (fun __melhole_dispatch -> [%e child])]);
         unwrap =
           (fun loc element ->
-            [%expr
-              let (Html.Node __melhole_render) = [%e element] in
-              __melhole_render __melhole_dispatch]);
+            [%expr Html.render [%e element] __melhole_dispatch]);
         handler =
           (fun loc { label; requirement; value; _ } ->
             let send message =
@@ -93,8 +91,7 @@ let mapper =
                           ( { txt = Ldot (Ldot (Lident "Js", "Fn"), "I1"); loc },
                             [%expr
                               fun __melhole_item ->
-                                let (Html.Node __melhole_render) = [%e self#expression row] __melhole_item in
-                                __melhole_render __melhole_dispatch] );
+                                Html.render ([%e self#expression row] __melhole_item) __melhole_dispatch] );
                         ]
                         None
                     in

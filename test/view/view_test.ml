@@ -14,6 +14,15 @@ let fresh child =
   (root, View.mount child ~parent:root ~before:None)
 
 let () =
+  describe "keyed rows replaced by another kind" (fun () ->
+      test "keep the rows that are still to be moved" (fun () ->
+          let root, mounted =
+            fresh (View.keyed [ ("k0", View.text "a"); ("k0", View.text "b") ])
+          in
+          View.patch mounted
+            (View.keyed
+               [ ("k1", View.text "c"); ("k0", View.empty); ("k0", View.empty); ("k1", View.empty) ]);
+          expect (inner_html root) |. to_be "c"));
   describe "text" (fun () ->
       test "patches the same node" (fun () ->
           let root, mounted = fresh (View.text "a") in
