@@ -312,12 +312,13 @@ def reconcile(p):
     legend = [
         ("muted", "common prefix and suffix: patched in place"),
         ("green", "longest increasing run of old positions: stays"),
-        ("accent", "everything else: one insertBefore each"),
+        ("accent", "everything else: one moveBefore each, keeping focus,"),
     ]
     for i, (color, label) in enumerate(legend):
         y = 252 + i * 22
         body += f'<rect x="0" y="{y - 10}" width="14" height="10" rx="3" fill="{p[color]}"/>'
         body += text(22, y, label, size=12, cls="muted")
+    body += text(22, 318, "media and animations (insertBefore without it)", size=12, cls="muted")
 
     body += box(520, 0, 360, 340, p["card"], p["line"], rx=14, lift=True)
     body += text(540, 30, "Reconcile.plan, cheapest case first", size=14, weight=700)
@@ -340,7 +341,7 @@ def reconcile(p):
         for k, line in enumerate(lines):
             body += text(572, y + 19 + k * 17, line, size=11.5, cls="muted")
         y += 24 + len(lines) * 17 + 10
-    return svg(p, 880, 340, "Keyed reconcile: the common prefix a and suffix f stay, c and d form the longest increasing run of old positions and stay, b and e move with one insertBefore each. Reconcile.plan tries the cheapest case first: trim the common ends, where a swapped first and last row costs two moves; an empty side is one append or one clear; keys in the same order are patched in place without a plan; anything else looks old keys up in a hash table, keeps the longest increasing run and moves the rest", body)
+    return svg(p, 880, 340, "Keyed reconcile: the common prefix a and suffix f stay, c and d form the longest increasing run of old positions and stay, b and e move with one moveBefore each, which keeps focus, media and animations inside them, or insertBefore where the browser lacks it. Reconcile.plan tries the cheapest case first: trim the common ends, where a swapped first and last row costs two moves; an empty side is one append or one clear; keys in the same order are patched in place without a plan; anything else looks old keys up in a hash table, keeps the longest increasing run and moves the rest", body)
 
 
 def events(p):
