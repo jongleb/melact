@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-  <img src="assets/logo.svg" alt="Melact: a camel in front of a React atom whose electrons are holes" width="120">
+  <img src="assets/logo.svg" alt="Melact: frames turning into a funnel around one live hole" width="120">
 </picture>
 
 # melact

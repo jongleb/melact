@@ -3,6 +3,7 @@
 Run from the repository root: python3 assets/make.py
 """
 
+import math
 from html import escape
 from pathlib import Path
 
@@ -104,13 +105,23 @@ def curve(p, d, color="muted", flow=False, width=1.6):
             f'marker-end="url(#arrow-{color})"{cls}/>')
 
 
-CAMEL = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="melact: a camel in front of an atom whose electrons are flying"><style>.pulse{animation:pulse 2.2s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}@media (prefers-reduced-motion:reduce){.pulse{animation:none}}</style><defs><linearGradient id="sp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59a4a"/><stop offset="1" stop-color="#c2500a"/></linearGradient></defs><rect x="6" y="6" width="108" height="108" rx="26" fill="#f6f8fa" stroke="#1f2328" stroke-width="3"/><ellipse cx="60" cy="60" rx="44.5" ry="16" transform="rotate(0 60 60)" fill="none" stroke="#0e8fb8" stroke-width="4.2"/><ellipse cx="60" cy="60" rx="44.5" ry="16" transform="rotate(60 60 60)" fill="none" stroke="#0e8fb8" stroke-width="4.2"/><ellipse cx="60" cy="60" rx="44.5" ry="16" transform="rotate(120 60 60)" fill="none" stroke="#0e8fb8" stroke-width="4.2"/><rect x="97.05" y="52.55" width="14.90" height="14.90" rx="4.6" fill="#f6f8fa"/><rect x="98.75" y="54.25" width="11.5" height="11.5" rx="3.5" fill="#ec6813" class="pulse"/><rect x="30.30" y="14.01" width="14.90" height="14.90" rx="4.6" fill="#f6f8fa"/><rect x="32.00" y="15.71" width="11.5" height="11.5" rx="3.5" fill="#ec6813" class="pulse"/><rect x="30.30" y="91.09" width="14.90" height="14.90" rx="4.6" fill="#f6f8fa"/><rect x="32.00" y="92.79" width="11.5" height="11.5" rx="3.5" fill="#ec6813" class="pulse"/><g transform="translate(9.5 15) scale(.79)"><path d="M25,62 C26,53 30,50 35,49 C38,39 44,29 53,29 C61,29 65,40 68,49 C71,52 74,52 76,49 C79,43 80,36 80,29 C80,23 84,19 89,19 L90.5,15 L93.5,19.5 C97,20 101,22 103,25 C104.5,27.5 104,30 101,30.5 L92,31.5 C89,32 88,34 88,37 C88,47 87,57 83,65 C82,68 82,70 82,73 L82.5,85 L83.5,97 H77 L76,85 L75,75 C67,78 56,78 47,75 L46,85 L47,97 H40.5 L39.5,85 C36,81 31,76 29,70 L25.5,75 Z" fill="none" stroke="#f6f8fa" stroke-width="8" stroke-linejoin="round"/><path d="M71.5,74 L70.5,85 L71,94.5 H66.5 L66,85 L65.5,75 Z M57,75 L56,85 L56.5,94.5 H52 L51.5,85 L51,75 Z" fill="#9a440e" stroke="#1f2328" stroke-width="3.6" stroke-linejoin="round"/><path d="M25,62 C26,53 30,50 35,49 C38,39 44,29 53,29 C61,29 65,40 68,49 C71,52 74,52 76,49 C79,43 80,36 80,29 C80,23 84,19 89,19 L90.5,15 L93.5,19.5 C97,20 101,22 103,25 C104.5,27.5 104,30 101,30.5 L92,31.5 C89,32 88,34 88,37 C88,47 87,57 83,65 C82,68 82,70 82,73 L82.5,85 L83.5,97 H77 L76,85 L75,75 C67,78 56,78 47,75 L46,85 L47,97 H40.5 L39.5,85 C36,81 31,76 29,70 L25.5,75 Z" fill="url(#sp)" stroke="#1f2328" stroke-width="4.6" stroke-linejoin="round"/><circle cx="93.5" cy="24" r="1.8" fill="#1f2328"/></g></svg>"""
-
-
 def logo(p):
-    return (CAMEL.replace("#f6f8fa", "@card@").replace("#1f2328", "@text@")
-            .replace("@card@", p["card"]).replace("@text@", p["text"])
-            .replace("melact: a camel", "Melact: a camel"))
+    ink, card = p["text"], p["card"]
+    body = (
+        '<defs><radialGradient id="ember" cx="0.4" cy="0.35" r="0.75"><stop offset="0" stop-color="#ffc27a"/>'
+        '<stop offset="1" stop-color="#e2600c"/></radialGradient></defs>'
+        f'<rect x="6" y="6" width="108" height="108" rx="28" fill="{card}" stroke="{ink}" stroke-width="3"/>'
+    )
+    for i, size in enumerate((82, 64, 46)):
+        half, opacity, turn = size / 2, 0.32 + i * 0.26, 7 * (i + 1)
+        body += (f'<g transform="rotate({turn} 60 60)"><rect x="{60 - half:.1f}" y="{60 - half:.1f}" width="{size}" height="{size}" rx="{size / 3.6:.1f}" '
+                 f'fill="none" stroke="{ink}" stroke-width="2.8" stroke-opacity="{opacity:.2f}">'
+                 f'<animateTransform attributeName="transform" type="rotate" values="0 60 60; {4 + i * 2} 60 60; 0 60 60" dur="{3 + i * 0.6:.1f}s" repeatCount="indefinite"/>'
+                 f'<animate attributeName="stroke-opacity" values="{opacity:.2f};{min(1, opacity + 0.35):.2f};{opacity:.2f}" dur="2.4s" begin="{i * 0.3:.1f}s" repeatCount="indefinite"/>'
+                 '</rect></g>')
+    body += ('<g transform="rotate(28 60 60)"><rect x="48" y="48" width="24" height="24" rx="7.5" fill="url(#ember)" class="pulse"/>'
+             '<path d="M54,55 q3,-3 7,-3" fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="2.2" stroke-linecap="round"/></g>')
+    return svg(p, 120, 120, "Melact: frames turning into a funnel around one live hole", body, pad=0)
 
 
 def overview(p):
