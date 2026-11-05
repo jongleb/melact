@@ -24,7 +24,27 @@ SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-se
 MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 
 
+HEADER = {"current": None}
+HEADER_HEIGHT = 92
+
+
+def header(p, width, kicker, title, subtitle):
+    return (
+        f'<rect x="0" y="0" width="4" height="56" rx="2" fill="url(#glow)"/>'
+        + text(16, 13, kicker.upper(), size=11, cls="accent", weight=800)
+        .replace("<text ", '<text letter-spacing="1.4" ', 1)
+        + text(16, 39, title, size=21, weight=800)
+        + text(16, 61, subtitle, size=13, cls="muted")
+        + f'<line x1="0" y1="{HEADER_HEIGHT - 16}" x2="{width}" y2="{HEADER_HEIGHT - 16}" stroke="url(#glow)" stroke-width="1.2" opacity="0.35"/>'
+    )
+
+
 def svg(p, width, height, label, body, pad=PAD):
+    if HEADER["current"] is not None:
+        kicker, title, subtitle = HEADER["current"]
+        body = header(p, width, kicker, title, subtitle) + f'<g transform="translate(0 {HEADER_HEIGHT})">{body}</g>'
+        height += HEADER_HEIGHT
+        label = f"{title}. {subtitle} {label}"
     markers = "".join(
         f'<marker id="arrow-{name}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
         f'markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{p[name]}"/></marker>'
@@ -482,7 +502,7 @@ def surface(p):
         ("React.useState (fun () -> 0)", "React.useState k1 (fun () -> 0)", "a typed slot key per call site; Alert hook in an if"),
         ("a component that calls no use…", "Melhole.View.pure", "no instance: kept while its inputs are ==="),
         ("ReactDOM.Client.render (createRoot el) <App />", "App's templates cloned into el", "no React, no react-dom, no fiber underneath"),
-        ("ReactDOMServer.renderToString / hydrateRoot", "Served.render / Served.hydrate", "HTML with markers; the browser takes it over"),
+        ("ReactDOMServer.renderToString / hydrateRoot", "Served.render / Served.hydrate", "React's HTML format; the browser takes it over"),
         ("ReasonReactRouter.useUrl ()", "the same url record", "read from location on popstate"),
     ]
     body = text(0, 16, "your reason-react code, unchanged", size=12.5, cls="blue", weight=700)
@@ -554,7 +574,7 @@ def hydration(p):
 
     body += box(0, 322, 880, 112, p["blue_soft"], p["blue"], rx=14, width=1.3)
     body += text(18, 348, "between 1 and 2 · before the code arrives", size=13.5, cls="blue", weight=700)
-    body += text(326, 348, "Served.capture in <head> records them, each with its target's value then", size=11.5, cls="muted")
+    body += text(326, 348, "Melhole_server.capture in <head> records them, with each value then", size=11.5, cls="muted")
     early = [("click", "−"), ("input", "\"mi\""), ("input", "\"milk\""), ("keydown", "Enter")]
     for i, (kind, detail) in enumerate(early):
         x = 18 + i * 124
@@ -570,7 +590,7 @@ def hydration(p):
     body += text(576, 375, "delivered once the program runs", size=12.5, weight=700)
     body += text(576, 393, "through the live paths, each target", size=11.5, cls="muted")
     body += text(576, 409, "showing the value it had at that event", size=11.5, cls="muted")
-    return svg(p, 880, 434, "Server rendering and hydration in React's format: on the server Program.render, renderToString or server-reason-react write plain HTML with no markers, and a comment only between two adjacent texts; in the browser, code the compiler generated for each template walks the server's nodes in document order, after an off-page clone has let the template's own refresh compute the values: the root with the same tag is taken over, texts and lists take exactly their nodes, and the buttons get their handlers; no element is added to the page, and HTML that does not match the view is cleared and mounted from scratch. Before the code arrives, Served.capture in the page's head records clicks, typing and key presses on document with each target's value at that moment, and hydration delivers them in order through the live paths once the program runs", body)
+    return svg(p, 880, 434, "Server rendering and hydration in React's format: on the server Program.render, renderToString or server-reason-react write plain HTML with no markers, and a comment only between two adjacent texts; in the browser, code the compiler generated for each template walks the server's nodes in document order, after an off-page clone has let the template's own refresh compute the values: the root with the same tag is taken over, texts and lists take exactly their nodes, and the buttons get their handlers; no element is added to the page, and HTML that does not match the view is cleared and mounted from scratch. Before the code arrives, Melhole_server.capture in the page's head records clicks, typing and key presses on document with each target's value at that moment, and hydration delivers them in order through the live paths once the program runs", body)
 
 
 def selectors(p):
@@ -925,9 +945,9 @@ def roadmap(p):
         ("Hooks", "instances, useState,", "effects, context", "done"),
         ("melact-ppx", "JSX → templates", "Reason, OCaml, mlx", "done"),
         ("Compat", "React.Event, makeProps,", "TodoMVC unmodified", "done"),
-        ("Speed", "keyed loops,", "1.2× vanilla", "done"),
-        ("SSR", "render to HTML,", "hydration", "done"),
-        ("Publish", "opam, CI,", "README numbers", "next"),
+        ("Speed", "keyed loops,", "×1.15 vanilla", "done"),
+        ("SSR", "React's HTML, native,", "early events", "done"),
+        ("Publish", "CI done,", "opam release", "now"),
     ]
     step = 124
     body = f'<line x1="66" y1="44" x2="{66 + step * 6}" y2="44" stroke="{p["line"]}" stroke-width="3"/>'
@@ -947,7 +967,7 @@ def roadmap(p):
         body += text(x, 84, name, size=13.5, weight=600, anchor="middle")
         body += text(x, 104, a, size=11.5, cls="muted", anchor="middle")
         body += text(x, 120, b, size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 132, "Roadmap: View, hooks, melact-ppx, compatibility, speed and server rendering with hydration done; publishing next", body)
+    return svg(p, 880, 132, "Roadmap: View, hooks, melact-ppx, compatibility, speed and server rendering with hydration done; publishing in progress: CI runs every law, the opam release is next", body)
 
 
 def transition(p):
@@ -1025,7 +1045,6 @@ def row(p):
         ("projection array", "", "plain"),
     ]
     after = [
-        ("parts { template; refresh; key }", "dropped after mount", "plain"),
         ("Mounted_row { root; scope; holes }", "1 block", "green"),
         ("scope + deps", "+ the last written values", "green"),
         ("holes: the bare nodes", "no hole records", "green"),
@@ -1036,12 +1055,12 @@ def row(p):
     body += column(480, "a row now", "View.rows, flat holes, linked handlers", after, "green")
     body += box(480, 248, 400, 76, p["accent_soft"], p["accent"], rx=12, width=1.3)
     body += text(498, 272, "shared, not per row", size=12.5, cls="accent", weight=700)
-    body += text(498, 292, "the template per site, the patch code of the list,", size=11.5, cls="muted")
+    body += text(498, 292, "the template and one refresh per list, the key function,", size=11.5, cls="muted")
     body += text(498, 309, "one handler per site (View.link) per dispatch", size=11.5, cls="muted")
     body += arrow(p, 420, 160, 466, 160, "green", flow=True, width=1.8)
-    body += text(440, 350, "Creating 1,000 rows of the benchmark allocates 481 kB instead of 939; 1,000 rows take 1.25 MB instead of 1.68.",
+    body += text(440, 350, "Creating 1,000 rows of the benchmark allocates about 430 kB instead of 939; 1,000 rows take 1.22 MB instead of 1.68.",
                  size=12, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 358, "What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: the row parts with a refresh closure, dropped after mount, one Mounted_row record with the root, the scope and the holes, the scope's deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template and one handler per site are shared. Creating 1,000 rows allocates 481 kB instead of 939, and 1,000 rows take 1.25 MB instead of 1.68", body)
+    return svg(p, 880, 358, "What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: one Mounted_row record with the root, the scope and the holes, the scope's deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template, one refresh per list, the key function and one handler per site are shared. Creating 1,000 rows allocates about 430 kB instead of 939, and 1,000 rows take 1.22 MB instead of 1.68", body)
 
 
 def served(p):
@@ -1213,12 +1232,112 @@ def hot(p):
     return svg(p, 880, 186, "Hot reload in Meltea: a program runs on the root with its model and the shape of its module's types. After an edit, Vite runs main.mlx again, and Program.element with ~start:Program.hot finds the running program; when the new code's shape is the same, the model carries over and the new view and update show the old state; when the types changed, the program starts from init. meltea-ppx writes the shape, a digest of the type declarations, next to update", body)
 
 
+def speed(p):
+    frameworks = [("vanilla JS", "faint", 1.00), ("Meltea", "accent", 1.15), ("Melact", "blue", 1.17), ("React 18", "orange", 1.70)]
+    body = box(0, 0, 880, 232, p["card"], p["line"], rx=14, width=1.2, lift=True)
+    body += text(20, 30, "time, geometric mean of nine keyed operations", size=13.5, weight=700)
+    body += text(860, 30, "pale: the work itself · solid: the overhead · lower is better", size=11.5, cls="muted", anchor="end")
+    left, right = 150, 820
+    scale = (right - left) / 1.8
+    for tick in (1.0, 1.2, 1.4, 1.6, 1.8):
+        x = left + tick * scale
+        body += f'<line x1="{x:.1f}" y1="48" x2="{x:.1f}" y2="208" stroke="{p["line"]}" stroke-dasharray="3 4"/>'
+        body += text(x, 222, f"×{tick:.1f}", size=10.5, cls="muted", anchor="middle")
+    for i, (name, color, value) in enumerate(frameworks):
+        y = 58 + i * 38
+        w = value * scale
+        fill = p["line"] if color == "faint" else p[color]
+        body += text(20, y + 18, name, size=13, weight=700 if color in ("accent", "blue") else 500)
+        base = scale
+        soft = p["line"] if color == "faint" else p[color + "_soft"]
+        body += f'<rect x="{left}" y="{y}" width="{base:.1f}" height="26" rx="6" fill="{soft}" stroke="{fill}" stroke-opacity="0.35"/>'
+        if value > 1.0:
+            body += f'<rect x="{left + base - 6:.1f}" y="{y}" width="{w - base + 6:.1f}" height="26" rx="6" fill="{fill}"/>'
+            body += text(left + base + (w - base) / 2, y + 18, f"+{round((value - 1) * 100)}%", size=11.5, weight=800, anchor="middle", fill="#ffffff" if p is LIGHT else "#0d1117")
+        body += text(left + w + 8, y + 18, f"×{value:.2f}", size=13, cls="mono", weight=800)
+
+    def panel(x, title, unit, rows, maximum):
+        out = box(x, 252, 430, 196, p["card"], p["line"], rx=14, width=1.2, lift=True)
+        out += text(x + 20, 282, title, size=13.5, weight=700)
+        out += text(x + 410, 282, unit, size=11.5, cls="muted", anchor="end")
+        inner_left, inner_right = x + 130, x + 360
+        for i, (name, color, value, shown) in enumerate(rows):
+            y = 302 + i * 34
+            w = max(3, value / maximum * (inner_right - inner_left))
+            fill = p["line"] if color == "faint" else p[color]
+            out += text(x + 20, y + 16, name, size=12.5)
+            out += f'<rect x="{inner_left}" y="{y}" width="{w:.1f}" height="22" rx="5" fill="{fill}"/>'
+            out += text(inner_left + w + 8, y + 16, shown, size=12, cls="mono", weight=700)
+        return out
+
+    body += panel(0, "JS bundle of the benchmark app", "kB gzip", [
+        ("vanilla JS", "faint", 1.4, "1.4"), ("Meltea", "accent", 9.0, "9.0"), ("Melact", "blue", 9.9, "9.9"), ("React 18", "orange", 45.6, "45.6")], 45.6)
+    body += panel(450, "heap with 1,000 rows", "MB", [
+        ("vanilla JS", "faint", 0.77, "0.77"), ("Meltea", "accent", 1.22, "1.22"), ("Melact", "blue", 1.64, "1.64"), ("React 18", "orange", 3.17, "3.17")], 3.17)
+    body += box(0, 468, 880, 52, p["green_soft"], p["green"], rx=12, width=1.2)
+    body += text(20, 499, "swap two rows of 1,000:", size=13, weight=700)
+    body += text(200, 499, "Meltea ×1.12 · Melact ×1.17 · React 18 ×5.86", size=13, cls="mono green", weight=800)
+    body += text(860, 499, "two moves, not 998", size=12, cls="muted", anchor="end")
+    return svg(p, 880, 520, "js-framework-benchmark's keyed operations in headless Chrome, slowdown against hand-written vanilla JS, lower is better: vanilla 1.00, Meltea 1.15, Melact 1.17, React 18 1.70. JS bundle of the benchmark app, gzip: vanilla 1.4 kB, Meltea 9.0, Melact 9.9, React 18 45.6. Heap with 1,000 rows: vanilla 0.77 MB, Meltea 1.22, Melact 1.64, React 18 3.17. Swapping two rows of 1,000: Meltea 1.12, Melact 1.17, React 18 5.86", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, hot=hot)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, hot=hot, speed=speed)
+
+HEADERS = dict(
+    overview=("Melact in one picture", "Your reason-react code, compiled: no React underneath",
+              "Two dune lines change. Components, hooks and JSX stay; the build turns each JSX tree into a template and a refresh."),
+    speed=("Benchmark", "Within ×1.2 of hand-written JavaScript",
+           "js-framework-benchmark's keyed operations in headless Chrome, against vanilla JS and React 18."),
+    surface=("Compatibility", "The reason-react API, kept call for call",
+             "Every line on the left compiles unchanged; on the right is what it becomes."),
+    vdom=("No virtual DOM", "React compares trees. Melact compares variables.",
+          "One render of the counter: React allocates and diffs five elements, Melact checks four locals."),
+    pipeline=("How it compiles", "JSX becomes a template, a walk and a refresh",
+              "The markup is parsed once and cloned per mount; a render runs only the guarded writes."),
+    patch=("Fine-grained updates", "One === per local, then only the holes that read it",
+           "A click from 41 to 42 in the counter: one text node is written, nothing else is touched."),
+    reconcile=("Keyed lists", "The fewest moves, the cheapest case first",
+               "Common ends, one-sided changes and stable order never reach the longest-increasing-run search."),
+    selectors=("Compiled selectors", "Only the rows whose inputs changed render",
+               "Selecting a row of 1,000 renders two rows, as in Vue Vapor."),
+    row=("Memory per row", "One record per row instead of a dozen objects",
+         "What one row of a compiled list keeps alive, before and now."),
+    events=("Events", "One listener per event type, on document",
+            "Handlers live on their elements; React's event objects and semantics are kept."),
+    controlled=("Controlled inputs", "Fields always show the state, as in React",
+                "After input, a field the update did not take gets the state's value back."),
+    hydration=("Server rendering", "Hydration in React's own HTML format",
+               "No markers. The server's elements are kept, and clicks made before the code arrives are replayed."),
+    served=("A server without a DOM", "One module, two outputs: templates and strings",
+            "The same view writes HTML natively or in Node, byte for byte what the browser build expects."),
+    updates=("Re-rendering", "Only the component whose state changed renders",
+             "Parents are not visited; children with equal props are skipped."),
+    hooks=("Hooks", "Every hook call gets a key at compile time",
+           "Hooks are slots found by key, and the Rules of Hooks are checked by the type checker."),
+    family=("Two front ends, one compiler", "Meltea and Melact share the compiler and the runtime",
+            "Pick the Elm architecture for new code, or keep your React code; both compile to the same templates."),
+    compiled=("Meltea", "The Elm architecture, compiled like Svelte",
+              "Messages, a pure update and a view in mlx; one click writes one text node."),
+    fields=("A compiler that sees writers", "It knows what each message changes",
+            "So a message that changes nothing the view reads does not even call the view."),
+    fanout=("Fanout alerts", "The compiler warns when typing would check a whole list",
+            "From the event to the message, the fields it writes and the lists that read them, with no annotations."),
+    remember=("Remembered values", "Derived data is computed again only when its fields change",
+              "A filtered list stays the same object while its inputs do, so its hole is skipped."),
+    hot=("Hot reload", "Edit the code, keep the state",
+         "New code takes over the running model when the module's types are the same."),
+    transition=("Transitions", "Enter, leave and move: CSS classes or View Transitions",
+                "As Vue's Transition and TransitionGroup, plus the browser's own View Transitions on request."),
+    roadmap=("Roadmap", "From templates to a release",
+             "Every step is checked by property-based laws in CI."),
+)
 
 if __name__ == "__main__":
     out = Path(__file__).parent
     for name, draw in FIGURES.items():
+        HEADER["current"] = HEADERS.get(name)
         (out / f"{name}.svg").write_text(draw(LIGHT))
         (out / f"{name}-dark.svg").write_text(draw(DARK))
+    HEADER["current"] = None

@@ -29,6 +29,11 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
   <img src="assets/overview.svg" alt="Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, React.Event. Starting fresh? Write Meltea" width="100%">
 </picture>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/speed-dark.svg">
+  <img src="assets/speed.svg" alt="Benchmark: within ×1.2 of hand-written JavaScript. js-framework-benchmark's keyed operations in headless Chrome, slowdown against vanilla JS, lower is better: vanilla 1.00, Meltea 1.15, Melact 1.17, React 18 1.70. JS bundle of the benchmark app, gzip: vanilla 1.4 kB, Meltea 9.0, Melact 9.9, React 18 45.6. Heap with 1,000 rows: vanilla 0.77 MB, Meltea 1.22, Melact 1.64, React 18 3.17. Swapping two rows of 1,000: Meltea 1.12, Melact 1.17, React 18 5.86" width="100%">
+</picture>
+
 > [!NOTE]
 > **Milestones 1–3 of 7 are done:** the `View` layer, components with hooks, and `melact-ppx`.
 > A reason-react component in mlx, Reason or OCaml compiles and runs, and one test suite passes
@@ -200,7 +205,7 @@ without calling the row function: selecting one row of 1,000 renders two.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/row-dark.svg">
-  <img src="assets/row.svg" alt="What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: the row parts with a refresh closure, dropped after mount, one Mounted_row record with the root, the scope and the holes, the scope's deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template and one handler per site are shared. Creating 1,000 rows allocates 481 kB instead of 939, and 1,000 rows take 1.25 MB instead of 1.68" width="100%">
+  <img src="assets/row.svg" alt="What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: one Mounted_row record with the root, the scope and the holes, the scope\'s deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template, one refresh per list, the key function and one handler per site are shared. Creating 1,000 rows allocates about 430 kB instead of 939, and 1,000 rows take 1.22 MB instead of 1.68" width="100%">
 </picture>
 
 A row that is one element with a `key` compiles further, to `View.rows`: one record per row, holes
@@ -471,7 +476,7 @@ $ npx vite                            # then open http://localhost:5173/examples
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/roadmap-dark.svg">
-  <img src="assets/roadmap.svg" alt="Roadmap: View, hooks, melact-ppx, speed and server rendering with hydration done; compatibility in progress; publishing next" width="100%">
+  <img src="assets/roadmap.svg" alt="Roadmap: View, hooks, melact-ppx, compatibility, speed and server rendering with hydration done; publishing in progress: CI runs every law, the opam release is next" width="100%">
 </picture>
 
 | # | milestone | done when |
@@ -482,7 +487,7 @@ $ npx vite                            # then open http://localhost:5173/examples
 | 4 | **Compat** | reason-react's examples and TodoMVC build unmodified and behave identically |
 | 5 | **Speed** ✓ | keyed loops, selectors and pure components: about 1.2× vanilla JS on the keyed benchmark, React 18 about 1.7× |
 | 6 | **SSR** ✓ | `ReactDOMServer.renderToString` / `Program.render`, and hydration that takes the server's nodes over |
-| 7 | **Publish** | opam packages `melact` and `melact-ppx`, CI over all of the above |
+| 7 | **Publish** (now) | CI runs every law on each push ✓; next, the opam packages `melhole`, `melact`, `melact-ppx`, `meltea`, `meltea-ppx` |
 
 The full plan is in [`SPEC.md`](SPEC.md).
 
