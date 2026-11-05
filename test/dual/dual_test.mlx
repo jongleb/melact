@@ -179,6 +179,15 @@ module Address = struct
     <p>(React.string (String.concat "/" url.path ^ "#" ^ url.hash ^ "?" ^ url.search))</p>
 end
 
+module Guarded = struct
+  let[@react.component] make ~disabled =
+    <div onClick=(fun _ -> log "outer click") onMouseDown=(fun _ -> log "outer down")>
+      <button disabled onClick=(fun _ -> log "button click") onMouseDown=(fun _ -> log "button down")>
+        <b>(React.string "inner")</b>
+      </button>
+    </div>
+end
+
 module Toggle = struct
   let[@react.component] make () =
     let shown, setShown = React.useState (fun () -> false) in
@@ -661,6 +670,40 @@ let () =
                expect shown |. to_equal wanted;
                finish ()))
           [%mel.obj { numRuns = 60 }]));
+  describe "disabled" (fun () ->
+    test_async "a disabled button's own mouse handlers do not run, its parents' do" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:20) (fun values ->
+             let tape = tape values in
+             let steps = List.init (1 + draw tape 6) (fun _ -> (draw tape 2 = 0, draw tape 2, draw tape 2)) in
+             let* root, client = mount <Guarded disabled=false /> in
+             let rec run remaining =
+               match remaining with
+               | [] -> Js.Promise.resolve ()
+               | (disabled, kind, target) :: rest ->
+                   let* () = act (fun () -> ReactDOM.Client.render client <Guarded disabled />) in
+                   let* () =
+                     act (fun () ->
+                         let element = select root (match target with 0 -> "b" | _ -> "button") in
+                         match kind with
+                         | 0 -> dispatch element (bubbling "click" [%mel.obj { bubbles = true }])
+                         | _ -> dispatch element (bubbling "mousedown" [%mel.obj { bubbles = true }]))
+                   in
+                   run rest
+             in
+             let* () = run steps in
+             let seen = take () in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             let expected =
+               List.concat_map
+                 (fun (disabled, kind, _) ->
+                   let name = match kind with 0 -> "click" | _ -> "down" in
+                   (match disabled with true -> [] | false -> [ "button " ^ name ]) @ [ "outer " ^ name ])
+                 steps
+             in
+             expect seen |. to_equal expected;
+             finish ()))
+        [%mel.obj { numRuns = 60 }]));
   describe "router" (fun () ->
     test_async "useUrl shows every URL pushed or replaced, parsed as reason-react parses it" (fun () ->
       let addresses =
