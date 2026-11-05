@@ -117,8 +117,8 @@ reads the types: if typing fails for any reason it does nothing, and a law compi
 without it and compares the JavaScript byte for byte. Its first use needs types and nothing else
 gives it: a view that reads a model field which can change in place (an array, `bytes`, a
 `mutable` field, or a type that contains one) gets an alert, `mutable_model`, at that read, because
-Meltea redraws only when the model value changes. dune 3.24 does not run the mlx dialect under
-`staged_pps`, so for now the typed pass works on `.ml` files only.
+Meltea redraws only when the model value changes. It works on `.mlx` and `.ml` files alike; the law
+compiles TodoMVC both ways.
 
 ## The Rules of Hooks, checked by the type checker
 

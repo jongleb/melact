@@ -1,9 +1,8 @@
-; The typed pass only adds warnings: a Meltea app compiles to the same JavaScript with and without it.
-; (dune 3.24 does not run the mlx dialect under staged_pps, so the app is written in .ml.)
+; The typed pass only adds warnings: TodoMVC compiles to the same JavaScript with and without it.
 
 (rule
  (alias runtest)
  (action
   (diff
-   plain/output/test/typed/plain/fixture.mjs
-   typed/output/test/typed/typed/fixture.mjs)))
+   plain/output/test/typed/plain/todomvc.mjs
+   typed/output/test/typed/typed/todomvc.mjs)))

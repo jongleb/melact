@@ -1,10 +1,10 @@
 (copy_files
- (files ../fixture.ml))
+ (files ../../../examples/todomvc/todomvc.mlx))
 
 (melange.emit
  (target output)
- (libraries meltea melange.dom)
+ (libraries meltea jsonkit-melange melange.dom)
  (module_systems
   (es6 mjs))
  (preprocess
-  (pps melange.ppx meltea-ppx)))
+  (pps melange.ppx meltea-ppx jsonkit-melange.ppx)))
