@@ -165,6 +165,22 @@ random model and then behaves like a mounted one; and a dual law hydrates the ou
 conditional blocks, components, neighbouring dynamic parts), then patches it through a series of
 changes, under React 18 and under Melact.
 
+### Events before the code arrives
+
+Between the server's HTML appearing and the code hydrating it, a page looks alive and is not:
+clicks and typing go nowhere. `Served.capture` is a script of a few hundred bytes for the page's
+`<head>`, after Angular's event contract: it listens on `document` in the capture phase for
+`click`, `dblclick`, `input`, `change`, `keydown`, `keyup` and `submit`, and keeps each event with
+the `value` and `checked` its target had at that moment. The first hydration stops it and, once
+the program is running, delivers the events inside its root in order: a delegated type through the
+same path as a live event, any other type to the handlers from the target up to the root. Before
+each event the target gets back the value it had then, so an `onInput` that reads the field sees
+what was typed by that keystroke, not the field's final text; afterwards the final values return,
+and a controlled field is put back from the state as after any input. A native server writes the
+same script; its text is the value of `Served.capture`. A law types, presses Enter and clicks on
+TodoMVC's server page before hydration, and the page must then match a mounted page that got the
+same actions, and keep matching through later ones.
+
 ## Types, where dune can give them
 
 `meltea-ppx` has an optional typed pass, `-typed`, for builds that run it as a staged rewriter:

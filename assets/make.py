@@ -550,7 +550,26 @@ def hydration(p):
     body += text(678, 240, "HTML that does not match", size=13, cls="orange", weight=700)
     body += text(678, 262, "the view: the root is cleared", size=11.5, cls="muted")
     body += text(678, 280, "and mounted from scratch", size=11.5, cls="muted")
-    return svg(p, 880, 300, "Server rendering and hydration in React's format: on the server Program.render, renderToString or server-reason-react write plain HTML with no markers, and a comment only between two adjacent texts; in the browser, code the compiler generated for each template walks the server's nodes in document order, after an off-page clone has let the template's own refresh compute the values: the root with the same tag is taken over, texts and lists take exactly their nodes, and the buttons get their handlers; no element is added to the page, and HTML that does not match the view is cleared and mounted from scratch", body)
+
+    body += box(0, 322, 880, 112, p["blue_soft"], p["blue"], rx=14, width=1.3)
+    body += text(18, 348, "between 1 and 2 · before the code arrives", size=13.5, cls="blue", weight=700)
+    body += text(326, 348, "Served.capture in <head> records them, each with its target's value then", size=11.5, cls="muted")
+    early = [("click", "−"), ("input", "\"mi\""), ("input", "\"milk\""), ("keydown", "Enter")]
+    for i, (kind, detail) in enumerate(early):
+        x = 18 + i * 124
+        body += box(x, 364, 112, 30, p["card"], p["blue"], rx=8)
+        body += text(x + 10, 384, kind, size=11.5, cls="mono blue", weight=700)
+        body += text(x + 102, 384, detail, size=11.5, cls="mono", anchor="end")
+        if i:
+            body += arrow(p, x - 12, 379, x - 2, 379, "blue", width=1.3)
+    body += text(18, 418, "the page looks alive but nothing runs: the events wait, in order", size=11.5, cls="muted")
+    body += arrow(p, 512, 379, 552, 379, "blue", flow=True, width=1.8)
+    body += text(532, 368, "hydrate", size=11, cls="mono muted", anchor="middle")
+    body += box(560, 352, 302, 66, p["card"], p["line"], rx=10)
+    body += text(576, 375, "delivered once the program runs", size=12.5, weight=700)
+    body += text(576, 393, "through the live paths, each target", size=11.5, cls="muted")
+    body += text(576, 409, "showing the value it had at that event", size=11.5, cls="muted")
+    return svg(p, 880, 434, "Server rendering and hydration in React's format: on the server Program.render, renderToString or server-reason-react write plain HTML with no markers, and a comment only between two adjacent texts; in the browser, code the compiler generated for each template walks the server's nodes in document order, after an off-page clone has let the template's own refresh compute the values: the root with the same tag is taken over, texts and lists take exactly their nodes, and the buttons get their handlers; no element is added to the page, and HTML that does not match the view is cleared and mounted from scratch. Before the code arrives, Served.capture in the page's head records clicks, typing and key presses on document with each target's value at that moment, and hydration delivers them in order through the live paths once the program runs", body)
 
 
 def selectors(p):

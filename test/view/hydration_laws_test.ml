@@ -56,7 +56,7 @@ let () =
                  View.unmount mounted;
                  expect (foreign, kept) |. to_equal (0, true)))
             [%mel.obj { numRuns = 400 }]);
-      test "after hydration, patching shows what mounting shows" (fun () ->
+      test "after hydration, patching shows what mounting shows, for new trees and for edits of the first" (fun () ->
           check
             (property
                (array_of (tapes ~shortest:8 ~longest:60) [%mel.obj { minLength = 2; maxLength = 5 }])
@@ -64,10 +64,24 @@ let () =
                  let first = decode sequence.(0) in
                  let root = served first in
                  let mounted = Served.hydrate first ~parent:root in
+                 let edited values =
+                   match Array.length values with
+                   | 0 -> values
+                   | _ when values.(0) mod 2 = 0 -> values
+                   | count ->
+                       let copy = Array.copy sequence.(0) in
+                       for index = 0 to ((count - 1) / 2) - 1 do
+                         match Array.length copy with
+                         | 0 -> ()
+                         | length -> copy.(values.((2 * index) + 1) mod length) <- values.((2 * index) + 2)
+                       done;
+                       copy
+                 in
                  let seen =
                    Array.to_list
                      (Array.map
                         (fun values ->
+                          let values = edited values in
                           View.patch mounted (decode values);
                           (shapes (as_node root), rendered (decode values)))
                         (Array.sub sequence 1 (Array.length sequence - 1)))
