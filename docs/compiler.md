@@ -114,7 +114,10 @@ values it guards, its refresh and its key, instead of a finished child. The loop
 row (`Mounted_row`: the root element, the scope, the holes and a `Type.Id` witness of the holes'
 type) and calls the refresh directly. A row no longer needs a child description, a `with_key`
 wrapper or the three closures of a generic mounted child. Creating 1,000 rows of the benchmark
-allocates a third less, and the heap with 1,000 rows shrinks from 1.68 to 1.40 MB. Rows of another
+allocates a third less, and the heap with 1,000 rows shrinks from 1.68 to 1.40 MB. Text, attribute
+and handler holes are flat as well: the generated holes are the bare text node, element and event
+key, and the last value written to a text or attribute is kept in a slot of the scope's `deps`, next
+to the guarded locals. With both, 1,000 rows take 1.31 MB. Rows of another
 shape, or components such as Melact's `<Row>`, keep `View.each`.
 
 ## Server rendering and hydration

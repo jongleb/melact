@@ -11,9 +11,8 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             ((Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
-                 "class"),
-               (Melhole.View.text_hole
+             ((Melhole.Template.element __melhole_node),
+               (Melhole.View.text_at
                   {
                     Melhole.Template.parent = __melhole_node;
                     before = (Melhole.Template.first_or_end __melhole_node)
@@ -24,9 +23,8 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             ((Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
-                 "class"),
-               (Melhole.View.text_hole
+             ((Melhole.Template.element __melhole_node),
+               (Melhole.View.text_at
                   {
                     Melhole.Template.parent = __melhole_node;
                     before = (Melhole.Template.first_or_end __melhole_node)
@@ -51,7 +49,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
              (Html.render
                 (Html.node
                    (fun __melhole_dispatch ->
-                      Melhole.View.compiled __melhole_template_1 2
+                      Melhole.View.compiled __melhole_template_1 4
                         {
                           Js.Fn.I2 =
                             (fun __melhole_scope
@@ -66,14 +64,16 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                 | (Melhole.View.Unchanged,
                                    Melhole.View.Unchanged) -> ()
                                 | _ ->
-                                    Melhole.View.set_attr __melhole_hole_0
+                                    Melhole.View.put_attr __melhole_scope 2
+                                      __melhole_hole_0 "class"
                                       (Some
                                          (if id = chosen then "on" else "" : 
                                          string)));
                                (match __melhole_changed_1 with
                                 | Melhole.View.Unchanged -> ()
                                 | _ ->
-                                    Melhole.View.set_text __melhole_hole_1
+                                    Melhole.View.put_text __melhole_scope 3
+                                      __melhole_hole_1
                                       (string_of_int (id : int)));
                                ())
                         })) __melhole_dispatch)) in
@@ -106,7 +106,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                    (fun __melhole_item ->
                                       (fun id ->
                                          Melhole.View.row __melhole_template_2
-                                           2
+                                           4
                                            {
                                              Js.Fn.I2 =
                                                (fun __melhole_scope
@@ -126,8 +126,10 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                                       Melhole.View.Unchanged)
                                                        -> ()
                                                    | _ ->
-                                                       Melhole.View.set_attr
+                                                       Melhole.View.put_attr
+                                                         __melhole_scope 2
                                                          __melhole_hole_0
+                                                         "class"
                                                          (Some
                                                             (if id = chosen
                                                              then "on"
@@ -138,7 +140,8 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                                    | Melhole.View.Unchanged ->
                                                        ()
                                                    | _ ->
-                                                       Melhole.View.set_text
+                                                       Melhole.View.put_text
+                                                         __melhole_scope 3
                                                          __melhole_hole_1
                                                          (string_of_int
                                                             (id : int)));
