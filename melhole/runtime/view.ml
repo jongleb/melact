@@ -289,7 +289,6 @@ let keyed entries =
 let with_key key child = { child with shape = Entry (key, child) }
 
 let each items render project outer =
-  let items = Array.of_list items in
   let count = Array.length items in
   let key index child =
     match child.shape with

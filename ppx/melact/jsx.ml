@@ -205,7 +205,45 @@ let mapper =
                     (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
         classify = react_text;
         extra = (fun _ -> None);
-        each = (fun _ _ -> None);
+        each =
+          (fun loc item ->
+            let mapping =
+              match item.pexp_desc with
+              | Pexp_apply
+                  ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "array"); _ }; _ },
+                    [ (Nolabel, { pexp_desc = Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, arguments); _ }) ] )
+                -> (
+                  match (txt, arguments) with
+                  | Ldot (Lident "Array", "map"), [ (Nolabel, row); (Nolabel, items) ]
+                  | Ldot (Ldot (Lident "Belt", "Array"), "map"), [ (Nolabel, items); (Nolabel, row) ] ->
+                      Some (row, self#expression items)
+                  | _ -> None)
+              | Pexp_apply
+                  ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "list"); _ }; _ },
+                    [
+                      ( Nolabel,
+                        {
+                          pexp_desc =
+                            Pexp_apply
+                              ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "List", "map"); _ }; _ },
+                                [ (Nolabel, row); (Nolabel, items) ] );
+                          _;
+                        } );
+                    ] ) ->
+                  Some (row, [%expr Array.of_list [%e self#expression items]])
+              | _ -> None
+            in
+            Option.bind mapping (fun (row, items) ->
+                Element.loop self#frontend ~loc ~definitions:self#definitions
+                  ~view:(fun expression ->
+                    match expression.pexp_desc with
+                    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", _); _ }; _ }, _)
+                    | Pexp_construct ({ txt = Lident ("::" | "[]"); _ }, _) ->
+                        true
+                    | _ -> false)
+                  ~stable:[]
+                  ~render:(fun element -> [%expr React.to_child [%e element]])
+                  row items));
       }
 
     method! structure items = Hoist.structure self#structure_item items

@@ -158,6 +158,57 @@ end
 
 external typed : 'event -> string = "value" [@@mel.get] [@@mel.scope "target"]
 
+(** A row of the marked list. *)
+type entry = { id : int; title : string }
+
+(** A list whose rows read the chosen row and a suffix from outside. *)
+type marked = { entries : entry array; chosen : int option; suffix : string }
+
+(** What changes the marked list. *)
+type mark = Choose of int option | Suffix of string | Drop of int | Grow
+
+let marked_send = ref (fun (_ : mark) -> ())
+
+let mark marked message =
+  match message with
+  | Choose chosen -> { marked with chosen }
+  | Suffix suffix -> { marked with suffix }
+  | Drop id -> { marked with entries = Js.Array.filter ~f:(fun entry -> entry.id <> id) marked.entries }
+  | Grow ->
+      let id = Array.fold_left (fun top entry -> max top (entry.id + 1)) 100 marked.entries in
+      { marked with entries = Array.append marked.entries [| { id; title = "t" ^ string_of_int id } |] }
+
+let marked_start = { entries = Array.init 5 (fun id -> { id; title = "t" ^ string_of_int id }); chosen = None; suffix = "" }
+
+module Marked = struct
+  let[@react.component] make () =
+    let state, send = React.useReducer mark marked_start in
+    marked_send := send;
+    <ul>
+      (React.array
+         (Array.map
+            (fun entry ->
+              <li
+                key=(string_of_int entry.id)
+                className=(match state.chosen with Some id when id = entry.id -> "on" | Some _ | None -> "")>
+                (React.string (entry.title ^ state.suffix))
+              </li>)
+            state.entries))
+    </ul>
+end
+
+let marked_html marked =
+  "<ul>"
+  ^ String.concat ""
+      (Array.to_list
+         (Array.map
+            (fun entry ->
+              "<li class=\""
+              ^ (match marked.chosen with Some id when id = entry.id -> "on" | Some _ | None -> "")
+              ^ "\">" ^ entry.title ^ marked.suffix ^ "</li>")
+            marked.entries))
+  ^ "</ul>"
+
 let digits text =
   String.of_seq (Seq.filter (fun letter -> letter >= '0' && letter <= '9') (String.to_seq text))
 
@@ -370,6 +421,36 @@ let () =
       expect (namespace_uri (select root "path"), inner_html root)
       |. to_equal ("http://www.w3.org/2000/svg", "<svg><path d=\"M0 0L9 9\"></path></svg>");
       finish ()));
+  describe "rows reading outer state" (fun () ->
+    test_async "show the chosen row and the suffix after any actions" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Marked /> in
+             let rec step remaining marked =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let ids = Array.map (fun entry -> entry.id) marked.entries in
+                   let pick () =
+                     match Array.length ids with 0 -> None | count -> Some ids.(draw tape count)
+                   in
+                   let message =
+                     match draw tape 4 with
+                     | 0 -> Choose (match draw tape 3 with 0 -> None | _ -> pick ())
+                     | 1 -> Suffix [| ""; "!"; "?" |].(draw tape 3)
+                     | 2 -> Option.fold ~none:Grow ~some:(fun id -> Drop id) (pick ())
+                     | _ -> Grow
+                   in
+                   let marked = mark marked message in
+                   let* () = act (fun () -> !marked_send message) in
+                   expect (inner_html root) |. to_equal (marked_html marked);
+                   step (remaining - 1) marked
+             in
+             step 10 marked_start))
+        [%mel.obj { numRuns = 60 }]));
   describe "forms" (fun () ->
     test_async "a controlled input and checkbox show the state after any input, kept or rejected"
       (fun () ->
