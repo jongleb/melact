@@ -226,7 +226,7 @@ a `Type.Id` created once at module level, and passes it as a hidden first argume
 let count, setCount = React.useState (fun () -> 0)
 
 (* melact-ppx emits *)
-let __melhole_hook_2 = Melhole.Hook.key ()
+let __melhole_hook_2 = Melact_runtime.Hook.key ()
 let count, setCount = (React.useState __melhole_hook_2) (fun () -> 0)
 ```
 
@@ -372,6 +372,7 @@ The full plan is in [`SPEC.md`](SPEC.md).
 
 ```
 melhole/runtime     melhole           shared runtime: templates, guards, keyed moves, events
+react/runtime       melact.runtime    React's components: instances, hook slots, context, scheduler
 melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages

@@ -51,11 +51,14 @@ inside it is not built at all: `lazy` everywhere, without writing it.
 ## A runtime made of parts
 
 Nothing at run time interprets a description of the whole view. Every kind of child (text, list,
-keyed list, template block, memo, portal, component, context provider) is a value that carries
-its own code to mount itself and to patch a mounted child of its kind, and every hole is a typed
-value written by its own `set_*`. Component instances, hook slots and the update scheduler are installed
-by the first component that mounts. A bundle therefore contains only the parts its compiled code
-names: Meltea's counter has no components, so it has no scheduler, no hooks and no portals.
+keyed list, template block, memo, portal) is a value that carries its own code to mount itself and
+to patch a mounted child of its kind, and every hole is a typed value written by its own `set_*`.
+A bundle therefore contains only the parts its compiled code names.
+
+melhole knows no components: like Elm, it has views that are functions and children that are
+values. The child protocol is open (`View.host`, `View.live`, `View.hosted`), and Melact implements
+React's components on it in its own library, `melact.runtime`: instances with hook slots, effects in
+commit order, context and the scheduler. Meltea never links any of it.
 
 ## Compiled walks
 

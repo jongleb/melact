@@ -1,7 +1,7 @@
 (melange.emit
  (target output)
  (alias runtest-js)
- (libraries melact melhole testing melange.dom)
+ (libraries melact melact_runtime melhole testing melange.dom)
  (module_systems
   (es6 mjs))
  (preprocess

@@ -1,0 +1,7 @@
+(library
+ (name melact_runtime)
+ (public_name melact.runtime)
+ (modes melange)
+ (libraries melhole melange.dom)
+ (preprocess
+  (pps melange.ppx)))

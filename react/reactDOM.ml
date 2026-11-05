@@ -398,10 +398,10 @@ module Client = struct
 
   let render root element =
     let child = React.to_child element in
-    match root.content with
+    (match root.content with
     | Showing mounted -> View.patch mounted child
-    | Nothing ->
-        root.content <- Showing (View.mount child ~parent:root.container ~before:None)
+    | Nothing -> root.content <- Showing (View.mount child ~parent:root.container ~before:None));
+    Melact_runtime.Instance.settle ()
 
   let hydrateRoot container element =
     clear container;
@@ -445,4 +445,4 @@ let unmountComponentAtNode container =
 
 let flushSync run =
   run ();
-  View.flush ()
+  Melact_runtime.Instance.flush ()

@@ -140,7 +140,7 @@ let component ~loc ~name expression =
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
   let definition =
-    Hoist.hoist ~loc "component" [%expr Melhole.Component.make ~name:[%e estring ~loc name]]
+    Hoist.hoist ~loc "component" [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]
   in
   let inputs =
     pexp_array ~loc
@@ -150,7 +150,7 @@ let component ~loc ~name expression =
     (Pfunction_body
        [%expr
          React.of_child
-           (Melhole.View.component [%e definition] [%e inputs] (fun () ->
+           (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () ->
                 [%e unwrap ~loc body]))])
 
 let rec with_unit typ =
@@ -303,7 +303,7 @@ let mapper =
       | Pexp_ident { txt = Ldot (Lident "React", name); _ }
         when List.exists (String.equal name) keyed_hooks ->
           pexp_apply ~loc expression
-            [ (Nolabel, Hoist.hoist ~loc "hook" [%expr Melhole.Hook.key ()]) ]
+            [ (Nolabel, Hoist.hoist ~loc "hook" [%expr Melact_runtime.Hook.key ()]) ]
       | Pexp_apply (callee, arguments) -> (
           match (Element.without_jsx expression.pexp_attributes, callee.pexp_desc) with
           | None, _ -> super#expression expression

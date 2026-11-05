@@ -1,4 +1,5 @@
 open Melhole
+open Melact_runtime
 open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
@@ -15,7 +16,9 @@ let take () =
 let fresh child =
   events := [];
   let root = attached () in
-  (root, View.mount child ~parent:root ~before:None)
+  let mounted = View.mount child ~parent:root ~before:None in
+  Instance.settle ();
+  (root, mounted)
 
 let button =
   Template.make ~html:"<button></button>" ~holes:[| Handler ([], "click"); Text ([], 0) |]
@@ -24,7 +27,7 @@ let counter_def = Component.make ~name:"Counter"
 let count_key = Hook.key ()
 
 let counter label =
-  View.component counter_def [| View.Input label |] (fun () ->
+  Instance.component counter_def [| View.Input label |] (fun () ->
       log ("render " ^ label);
       let count, set = React.useState count_key (fun () -> 0) in
       View.tpl_instance button
@@ -35,7 +38,7 @@ let pair_key = Hook.key ()
 let set_pair = ref (fun (_ : int -> int) -> ())
 
 let pair () =
-  View.component pair_def [||] (fun () ->
+  Instance.component pair_def [||] (fun () ->
       log "render pair";
       let n, set = React.useState pair_key (fun () -> 0) in
       set_pair := set;
@@ -47,7 +50,7 @@ let passive_key = Hook.key ()
 let deps_key = Hook.key ()
 
 let effects name deps =
-  View.component effects_def [| View.Input name; View.Input deps |] (fun () ->
+  Instance.component effects_def [| View.Input name; View.Input deps |] (fun () ->
       React.useLayoutEffect0 layout_key (fun () ->
           log ("layout " ^ name);
           Some (fun () -> log ("layout cleanup " ^ name)));
@@ -66,7 +69,7 @@ let parent_key = Hook.key ()
 let set_parent = ref (fun (_ : string -> string) -> ())
 
 let parent () =
-  View.component parent_def [||] (fun () ->
+  Instance.component parent_def [||] (fun () ->
       let dep, set = React.useState parent_key (fun () -> "a") in
       set_parent := set;
       View.list [ effects "child" [| "x" |]; effects "parent" [| dep |] ])
@@ -78,7 +81,7 @@ let reducer_key = Hook.key ()
 let dispatch = ref (fun (_ : [ `Add of int | `Same ]) -> ())
 
 let memo () =
-  View.component memo_def [||] (fun () ->
+  Instance.component memo_def [||] (fun () ->
       let total, send =
         React.useReducer reducer_key
           (fun total action -> match action with `Add n -> total + n | `Same -> total)
@@ -104,17 +107,17 @@ let theme_key = Hook.key ()
 let set_theme = ref (fun (_ : string -> string) -> ())
 
 let leaf () =
-  View.component leaf_def [||] (fun () ->
+  Instance.component leaf_def [||] (fun () ->
       log "render leaf";
       View.text (React.useContext theme))
 
 let middle () =
-  View.component middle_def [||] (fun () ->
+  Instance.component middle_def [||] (fun () ->
       log "render middle";
       leaf ())
 
 let themed () =
-  View.component themed_def [||] (fun () ->
+  Instance.component themed_def [||] (fun () ->
       log "render themed";
       let value, set = React.useState theme_key (fun () -> "dark") in
       set_theme := set;
@@ -125,7 +128,7 @@ let toggle_key = Hook.key ()
 let set_toggle = ref (fun (_ : bool -> bool) -> ())
 
 let toggle () =
-  View.component toggle_def [||] (fun () ->
+  Instance.component toggle_def [||] (fun () ->
       let shown, set = React.useState toggle_key (fun () -> false) in
       set_toggle := set;
       if shown then View.list [ View.text "A"; View.text "B" ] else View.empty)
@@ -137,7 +140,7 @@ let other_key = Hook.key ()
 let flip = ref (fun (_ : bool -> bool) -> ())
 
 let order () =
-  View.component order_def [||] (fun () ->
+  Instance.component order_def [||] (fun () ->
       let flipped, set = React.useState first_key (fun () -> false) in
       flip := set;
       if flipped then ignore (React.useRef other_key 0)
@@ -148,7 +151,7 @@ let eager_def = Component.make ~name:"Eager"
 let eager_key = Hook.key ()
 
 let eager () =
-  View.component eager_def [||] (fun () ->
+  Instance.component eager_def [||] (fun () ->
       let _, set = React.useState eager_key (fun () -> 0) in
       set (fun n -> n + 1);
       View.empty)
@@ -158,6 +161,7 @@ let () =
       test_async "batches updates into one render per microtask" (fun () ->
           let root = attached () in
           let mounted = View.mount (counter "n=") ~parent:root ~before:None in
+          Instance.settle ();
           ignore (take ());
           let element = select root "button" in
           click element;
@@ -174,20 +178,20 @@ let () =
           let _, _ = fresh (pair ()) in
           ignore (take ());
           !set_pair (fun n -> n);
-          View.flush ();
+          Instance.flush ();
           expect (take ()) |. to_equal []);
       test "re-renders only the component whose state changed" (fun () ->
           let root, _ = fresh (pair ()) in
           ignore (take ());
           click (select root "button");
-          View.flush ();
+          Instance.flush ();
           expect (take (), inner_html root)
           |. to_equal ([ "render fixed" ], "<button>fixed1</button><button>fixed 0</button>"));
       test "skips children whose props are unchanged" (fun () ->
           let root, _ = fresh (pair ()) in
           ignore (take ());
           !set_pair (fun n -> n + 1);
-          View.flush ();
+          Instance.flush ();
           expect (take (), inner_html root)
           |. to_equal
                ([ "render pair"; "render moved" ], "<button>fixed0</button><button>moved0</button>"));
@@ -195,20 +199,21 @@ let () =
           let row label = View.with_key label (counter label) in
           let root, mounted = fresh (View.list [ row "a"; row "b" ]) in
           click (select root "button");
-          View.flush ();
+          Instance.flush ();
           View.patch mounted (View.list [ row "b"; row "a" ]);
+          Instance.settle ();
           expect (inner_html root) |. to_be "<button>b0</button><button>a1</button>");
       test "does nothing for an unmounted component" (fun () ->
           let _, mounted = fresh (pair ()) in
           View.unmount mounted;
           ignore (take ());
           !set_pair (fun n -> n + 1);
-          View.flush ();
+          Instance.flush ();
           expect (take ()) |. to_equal []));
   describe "effects" (fun () ->
       test "run children first, layout before passive" (fun () ->
           let _ = fresh (parent ()) in
-          View.flush ();
+          Instance.flush ();
           expect (take ())
           |. to_equal
                [
@@ -217,17 +222,17 @@ let () =
                ]);
       test "compare dependencies element-wise and clean up before running again" (fun () ->
           let _ = fresh (parent ()) in
-          View.flush ();
+          Instance.flush ();
           ignore (take ());
           !set_parent (fun dep -> dep);
-          View.flush ();
+          Instance.flush ();
           expect (take ()) |. to_equal [];
           !set_parent (fun _ -> "b");
-          View.flush ();
+          Instance.flush ();
           expect (take ()) |. to_equal [ "deps cleanup parent"; "deps parent" ]);
       test "clean up on unmount, children before parents" (fun () ->
           let _, mounted = fresh (parent ()) in
-          View.flush ();
+          Instance.flush ();
           ignore (take ());
           View.unmount mounted;
           expect (take ())
@@ -240,11 +245,11 @@ let () =
       test "recompute only when dependencies change" (fun () ->
           let root, _ = fresh (memo ()) in
           !dispatch (`Add 2);
-          View.flush ();
+          Instance.flush ();
           !dispatch (`Add 1);
-          View.flush ();
+          Instance.flush ();
           !dispatch `Same;
-          View.flush ();
+          Instance.flush ();
           expect (take (), inner_html root) |. to_equal ([ "compute"; "compute" ], "3 odd 3")));
   describe "context" (fun () ->
       test "reads the default without a provider" (fun () ->
@@ -254,22 +259,22 @@ let () =
           let root, _ = fresh (themed ()) in
           ignore (take ());
           !set_theme (fun _ -> "blue");
-          View.flush ();
+          Instance.flush ();
           expect (take (), inner_html root) |. to_equal ([ "render themed"; "render leaf" ], "blue")));
   describe "components" (fun () ->
       test "hold their place while they render nothing" (fun () ->
           let root, _ = fresh (View.list [ View.text "<"; toggle (); View.text ">" ]) in
           !set_toggle (fun _ -> true);
-          View.flush ();
+          Instance.flush ();
           let shown = inner_html root in
           !set_toggle (fun _ -> false);
-          View.flush ();
+          Instance.flush ();
           !set_toggle (fun _ -> true);
-          View.flush ();
+          Instance.flush ();
           expect (shown, inner_html root) |. to_equal ("&lt;AB&gt;", "&lt;AB&gt;"));
       test "reject hooks called in a different order" (fun () ->
           let _ = fresh (order ()) in
           !flip (fun _ -> true);
-          expect (fun () -> View.flush ()) |. to_throw "different order");
+          expect (fun () -> Instance.flush ()) |. to_throw "different order");
       test "reject a setter called while rendering" (fun () ->
           expect (fun () -> fresh (eager ())) |. to_throw "while a component was rendering"))

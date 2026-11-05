@@ -1,4 +1,5 @@
 open Melhole
+open Melact_runtime
 
 type element = View.child
 
@@ -7,9 +8,9 @@ external to_child : element -> View.child = "%identity"
 type 'value ref = { mutable current : 'value }
 
 module Context = struct
-  type 'value t = Context of 'value Melhole.Context.t [@@unboxed]
+  type 'value t = Context of 'value Melact_runtime.Context.t [@@unboxed]
 
-  let provider (Context context) ~value ~children () = View.provide context value children
+  let provider (Context context) ~value ~children () = Instance.provide context value children
 end
 
 type ('state, 'action) state = {
@@ -75,13 +76,13 @@ let cloneElement _ _ =
 
 let setDisplayName _ _ = ()
 let displayName _ = None
-let createContext default = Context.Context (Melhole.Context.make default)
-let useContext (Context.Context context) = View.consume (View.current ()) context
+let createContext default = Context.Context (Melact_runtime.Context.make default)
+let useContext (Context.Context context) = Instance.consume (Instance.current ()) context
 
 let reducer key reduce initial =
-  let instance = View.current () in
+  let instance = Instance.current () in
   let cell =
-    View.slot instance key (fun () ->
+    Instance.slot instance key (fun () ->
         let initial = initial () in
         let rec cell =
           {
@@ -91,7 +92,7 @@ let reducer key reduce initial =
               (fun action ->
                 let next = cell.reduce cell.value action in
                 if not (next == cell.value) then (
-                  View.invalidate instance;
+                  Instance.invalidate instance;
                   cell.value <- next));
           }
         in
@@ -107,17 +108,17 @@ let useReducerWithMapState key reduce initial map =
   reducer key reduce (fun () -> map initial)
 
 let use_effect timing unchanged key run deps =
-  let instance = View.current () in
+  let instance = Instance.current () in
   let schedule cell =
-    View.after_commit instance timing Cleanup (fun () ->
+    Instance.after_commit instance timing Instance.Cleanup (fun () ->
         Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
         cell.cleanup <- None);
-    View.after_commit instance timing Run (fun () -> cell.cleanup <- run ())
+    Instance.after_commit instance timing Instance.Run (fun () -> cell.cleanup <- run ())
   in
   let cell =
-    View.slot instance key (fun () ->
+    Instance.slot instance key (fun () ->
         let cell = { deps; cleanup = None } in
-        View.on_unmount instance (fun () ->
+        Instance.on_unmount instance (fun () ->
             Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
             cell.cleanup <- None);
         schedule cell;
@@ -129,7 +130,7 @@ let use_effect timing unchanged key run deps =
 
 let memoize unchanged key compute deps =
   let cell =
-    View.slot (View.current ()) key (fun () -> { inputs = deps; result = compute () })
+    Instance.slot (Instance.current ()) key (fun () -> { inputs = deps; result = compute () })
   in
   if not (unchanged cell.inputs deps) then (
     cell.inputs <- deps;
@@ -155,24 +156,24 @@ let same6 (a, b, c, d, e, f) (a', b', c', d', e', f') =
 let same7 (a, b, c, d, e, f, g) (a', b', c', d', e', f', g') =
   a == a' && b == b' && c == c' && d == d' && e == e' && f == f' && g == g'
 
-let useEffect key run = use_effect Passive never key run ()
-let useEffect0 key run = use_effect Passive always key run ()
-let useEffect1 key run deps = use_effect Passive same_array key run deps
-let useEffect2 key run deps = use_effect Passive same2 key run deps
-let useEffect3 key run deps = use_effect Passive same3 key run deps
-let useEffect4 key run deps = use_effect Passive same4 key run deps
-let useEffect5 key run deps = use_effect Passive same5 key run deps
-let useEffect6 key run deps = use_effect Passive same6 key run deps
-let useEffect7 key run deps = use_effect Passive same7 key run deps
-let useLayoutEffect key run = use_effect Layout never key run ()
-let useLayoutEffect0 key run = use_effect Layout always key run ()
-let useLayoutEffect1 key run deps = use_effect Layout same_array key run deps
-let useLayoutEffect2 key run deps = use_effect Layout same2 key run deps
-let useLayoutEffect3 key run deps = use_effect Layout same3 key run deps
-let useLayoutEffect4 key run deps = use_effect Layout same4 key run deps
-let useLayoutEffect5 key run deps = use_effect Layout same5 key run deps
-let useLayoutEffect6 key run deps = use_effect Layout same6 key run deps
-let useLayoutEffect7 key run deps = use_effect Layout same7 key run deps
+let useEffect key run = use_effect Instance.Passive never key run ()
+let useEffect0 key run = use_effect Instance.Passive always key run ()
+let useEffect1 key run deps = use_effect Instance.Passive same_array key run deps
+let useEffect2 key run deps = use_effect Instance.Passive same2 key run deps
+let useEffect3 key run deps = use_effect Instance.Passive same3 key run deps
+let useEffect4 key run deps = use_effect Instance.Passive same4 key run deps
+let useEffect5 key run deps = use_effect Instance.Passive same5 key run deps
+let useEffect6 key run deps = use_effect Instance.Passive same6 key run deps
+let useEffect7 key run deps = use_effect Instance.Passive same7 key run deps
+let useLayoutEffect key run = use_effect Instance.Layout never key run ()
+let useLayoutEffect0 key run = use_effect Instance.Layout always key run ()
+let useLayoutEffect1 key run deps = use_effect Instance.Layout same_array key run deps
+let useLayoutEffect2 key run deps = use_effect Instance.Layout same2 key run deps
+let useLayoutEffect3 key run deps = use_effect Instance.Layout same3 key run deps
+let useLayoutEffect4 key run deps = use_effect Instance.Layout same4 key run deps
+let useLayoutEffect5 key run deps = use_effect Instance.Layout same5 key run deps
+let useLayoutEffect6 key run deps = use_effect Instance.Layout same6 key run deps
+let useLayoutEffect7 key run deps = use_effect Instance.Layout same7 key run deps
 let useMemo key compute = memoize never key compute ()
 let useMemo0 key compute = memoize always key compute ()
 let useMemo1 key compute deps = memoize same_array key compute deps
@@ -191,30 +192,30 @@ let useCallback4 key fn deps = memoize same4 key (fun () -> fn) deps
 let useCallback5 key fn deps = memoize same5 key (fun () -> fn) deps
 let useCallback6 key fn deps = memoize same6 key (fun () -> fn) deps
 let useCallback7 key fn deps = memoize same7 key (fun () -> fn) deps
-let useInsertionEffect key run = use_effect Layout never key run ()
-let useInsertionEffect0 key run = use_effect Layout always key run ()
-let useInsertionEffect1 key run deps = use_effect Layout same_array key run deps
-let useInsertionEffect2 key run deps = use_effect Layout same2 key run deps
-let useInsertionEffect3 key run deps = use_effect Layout same3 key run deps
+let useInsertionEffect key run = use_effect Instance.Layout never key run ()
+let useInsertionEffect0 key run = use_effect Instance.Layout always key run ()
+let useInsertionEffect1 key run deps = use_effect Instance.Layout same_array key run deps
+let useInsertionEffect2 key run deps = use_effect Instance.Layout same2 key run deps
+let useInsertionEffect3 key run deps = use_effect Instance.Layout same3 key run deps
 
 let useSyncExternalStore key ~subscribe ~getSnapshot =
-  let instance = View.current () in
+  let instance = Instance.current () in
   let resubscribe cell =
-    View.after_commit instance Passive Run (fun () ->
+    Instance.after_commit instance Instance.Passive Instance.Run (fun () ->
         cell.unsubscribe ();
         cell.unsubscribe <-
           cell.subscribe (fun () ->
               let next = cell.read () in
               if not (next == cell.snapshot) then (
                 cell.snapshot <- next;
-                View.invalidate instance)))
+                Instance.invalidate instance)))
   in
   let cell =
-    View.slot instance key (fun () ->
+    Instance.slot instance key (fun () ->
         let cell =
           { read = getSnapshot; snapshot = getSnapshot (); subscribe; unsubscribe = ignore }
         in
-        View.on_unmount instance (fun () -> cell.unsubscribe ());
+        Instance.on_unmount instance (fun () -> cell.unsubscribe ());
         resubscribe cell;
         cell)
   in
@@ -226,10 +227,10 @@ let useSyncExternalStore key ~subscribe ~getSnapshot =
   cell.snapshot
 
 let useDebugValue _ ?format:_ () = ()
-let useRef key initial = View.slot (View.current ()) key (fun () -> { current = initial })
+let useRef key initial = Instance.slot (Instance.current ()) key (fun () -> { current = initial })
 
 let imperative unchanged key target make deps =
-  use_effect Layout unchanged key
+  use_effect Instance.Layout unchanged key
     (fun () ->
       Option.iter (fun target -> target.current <- make ()) (Js.Nullable.toOption target);
       None)
@@ -246,7 +247,7 @@ let useImperativeHandle7 key target make deps = imperative same7 key target make
 let ids = ref 0
 
 let useId key () =
-  View.slot (View.current ()) key (fun () ->
+  Instance.slot (Instance.current ()) key (fun () ->
       incr ids;
       ":m" ^ string_of_int !ids ^ ":")
 
@@ -254,13 +255,13 @@ let startTransition run = run ()
 let useTransition () = (false, startTransition)
 let act run =
   run ();
-  View.flush ();
+  Instance.flush ();
   Js.Promise.resolve ()
 
 let actAsync run =
   Js.Promise.then_
     (fun () ->
-      View.flush ();
+      Instance.flush ();
       Js.Promise.resolve ())
     (run ())
 

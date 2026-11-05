@@ -48,6 +48,7 @@ and a microtask scheduler, because React's semantics need them; Meltea does not.
 
 ```
 melhole/runtime     melhole           shared runtime: templates, guards, keyed moves, events
+react/runtime       melact.runtime    React's components: instances, hook slots, context, scheduler
 melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
