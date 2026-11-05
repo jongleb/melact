@@ -134,6 +134,14 @@ position but a hole on the element: the first write sets `textContent`, later wr
 HTML needs no markers around such a text, because the element already bounds it. Rows of another
 shape, or components such as Melact's `<Row>`, keep `View.each`.
 
+### Moves that keep state
+
+A keyed row that moves is moved with `parentNode.moveBefore` where the browser has it (Chrome 133,
+Firefox), so a focused input, a playing video, an iframe or a running CSS animation inside the row
+survive the move, as with Preact 11 and Solid; elsewhere, or if `moveBefore` refuses (a node outside
+the document), it is `insertBefore` as before. A law stubs `moveBefore` and checks over random
+edits of both compiled loops that no row is ever inserted again and that the page is right.
+
 ## Server rendering and hydration
 
 `Served.render` renders a view into HTML in any JavaScript environment with a DOM (a server with

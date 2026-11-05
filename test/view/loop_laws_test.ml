@@ -1,6 +1,8 @@
 open Melhole
 open Testing
 
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+
 (** One row of a keyed loop. The same objects recur between steps, so the loop can reuse rows. *)
 type item = { key : string; label : string }
 
@@ -107,6 +109,25 @@ let shown child =
 
 let start = (Array.sub fresh_items 0 6, outers.(0))
 
+let watch_moves : unit -> unit -> int * int =
+  [%mel.raw
+    {|function () {
+        var insert = Node.prototype.insertBefore, moving = false, moved = 0, reinserted = 0;
+        Node.prototype.moveBefore = function (node, before) {
+          moving = true; moved++;
+          try { return insert.call(this, node, before); } finally { moving = false; }
+        };
+        Node.prototype.insertBefore = function (node, before) {
+          if (!moving && node.parentNode === this) reinserted++;
+          return insert.call(this, node, before);
+        };
+        return function () {
+          delete Node.prototype.moveBefore;
+          Node.prototype.insertBefore = insert;
+          return [moved, reinserted];
+        };
+      }|}]
+
 (** A pure component's identity and inputs, from small pools so that both recur. *)
 type slot = { identity : int; input : string }
 
@@ -159,6 +180,28 @@ let () =
                  View.unmount mounted;
                  expect (List.map fst seen) |. to_equal (List.map snd seen)))
             [%mel.obj { numRuns = 400 }]);
+      test "where the browser has moveBefore, every row that moves is moved with it, never inserted again" (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 let root = attached () in
+                 let items, outer = start in
+                 let mounted = View.mount (loop items outer) ~parent:root ~before:None in
+                 let stop = watch_moves () in
+                 let rec run state remaining =
+                   match remaining with
+                   | 0 -> true
+                   | _ ->
+                       let ((items, outer) as next), _ = step tape state in
+                       View.patch mounted (loop items outer);
+                       shapes (as_node root) = shown (loop items outer) && run next (remaining - 1)
+                 in
+                 let agreed = run start (2 + draw tape 12) in
+                 let _, reinserted = stop () in
+                 View.unmount mounted;
+                 remove_root root;
+                 expect (agreed, reinserted) |. to_equal (true, 0)))
+            [%mel.obj { numRuns = 300 }]);
       test "a row whose key stays keeps its element through any edits" (fun () ->
           check
             (property (tapes ~shortest:10 ~longest:80) (fun values ->
