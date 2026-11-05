@@ -146,12 +146,36 @@ let component ~loc ~name expression =
     pexp_array ~loc
       (List.map (fun name -> [%expr Melhole.View.Input [%e evar ~loc name]]) names)
   in
+  let kind =
+    let finder =
+      object
+        inherit [[ `Pure | `Stateful ]] Ast_traverse.fold as super
+
+        method! expression expression found =
+          match (found, expression.pexp_desc) with
+          | `Stateful, _ -> `Stateful
+          | `Pure, Pexp_ident { txt; _ } -> (
+              let name = Longident.last_exn txt in
+              match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
+              | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> `Stateful
+              | true | false -> `Pure)
+          | `Pure, _ -> super#expression expression found
+      end
+    in
+    finder#expression body `Pure
+  in
   pexp_function ~loc complete None
     (Pfunction_body
-       [%expr
-         React.of_child
-           (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () ->
-                [%e unwrap ~loc body]))])
+       (match kind with
+       | `Stateful ->
+           [%expr
+             React.of_child
+               (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () ->
+                    [%e unwrap ~loc body]))]
+       | `Pure ->
+           [%expr
+             React.of_child
+               (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))]))
 
 let rec with_unit typ =
   match typ.ptyp_desc with

@@ -35,6 +35,23 @@ module Counter = struct
     </button>
 end
 
+module Plain_a = struct
+  let[@react.component] make () = <section><Counter label="a" /></section>
+end
+
+module Plain_b = struct
+  let[@react.component] make () = <section><Counter label="a" /></section>
+end
+
+module Switch = struct
+  let[@react.component] make () =
+    let first, setFirst = React.useState (fun () -> true) in
+    <div>
+      (if first then <Plain_a /> else <Plain_b />)
+      <i onClick=(fun _ -> setFirst (fun first -> not first))>(React.string "swap")</i>
+    </div>
+end
+
 module Quiet = struct
   let[@react.component] make = React.memo (fun ~label ->
     log ("render quiet " ^ label);
@@ -362,6 +379,16 @@ let () =
         (async_property (tapes ~shortest:30 ~longest:90) machine)
         [%mel.obj { numRuns = 120 }]));
   describe "state" (fun () ->
+    test_async "resets the state below a component replaced by another one with the same output" (fun () ->
+      let* root, _ = mount <Switch /> in
+      let* () = act (fun () -> click (select root "button")) in
+      let counted = inner_html root in
+      let* () = act (fun () -> click (select root "i")) in
+      expect (counted, inner_html root)
+      |. to_equal
+           ( "<div><section><button>a1</button></section><i>swap</i></div>",
+             "<div><section><button>a0</button></section><i>swap</i></div>" );
+      finish ());
     test_async "batches updates and re-renders the component" (fun () ->
       let* root, _ = mount <Counter label="n" /> in
       let* () = act (fun () -> click (select root "button"); click (select root "button")) in
