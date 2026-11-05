@@ -116,9 +116,18 @@ nothing, anything it does not recognise changes everything. It reads `view` the 
 fields a record pattern names, or the fields read through `model.field`. Both become bit masks over
 field names, and `Program` keeps the fields changed since the last draw. If none of them is one the
 view reads, the view is not called at all. No signals and nothing in the user's code: the masks are
-generated next to `update` and `view` and passed to `Program` by the compiler. When `update` or
-`view` is not a top-level function of the same module, nothing is generated and every message
-draws, as before. Inside the view, `===` stays the exact check for what to write.
+generated next to `update` and `view` and passed to `Program` by the compiler. Inside the view,
+`===` stays the exact check for what to write.
+
+The masks travel between modules without types. Each companion is evidence: the masks and the
+function they were found in. At `Program.element ~update:Todomvc.update` the compiler looks the
+companion up with `open! Todomvc` over a fallback that says "not analysed", so a module the
+compiler never saw, or an `.mli` that hides the companion, still compiles. `Program.track` then
+checks once that the companion describes the function in use (`analysed == Todomvc.update`); a
+redefined `update` or a different function gets no masks. A wrapper such as
+`fun message model -> let next, command = Todomvc.update message model in (next, …)` changes what
+`Todomvc.update` changes, and is recognised as such. `update` may start with helper `let`s before
+its `match`.
 
 ## Components without hooks
 
