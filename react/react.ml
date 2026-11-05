@@ -72,6 +72,7 @@ let createRef () = { current = Js.Nullable.null }
 let isValidElement _ = true
 
 let createElement make props = props make
+let createElementVariadic make props children = Melact_runtime.Variadic.with_children children (fun () -> props make)
 
 let cloneElement _ _ =
   Js.Exn.raiseError "melact: React.cloneElement is not supported; pass props to the component instead"

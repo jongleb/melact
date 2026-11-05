@@ -56,6 +56,10 @@ val createRef : unit -> 'value Js.nullable ref
 val isValidElement : element -> bool
 val createElement : 'make -> ('make -> element) -> element
 
+(** [createElement] with children: a DOM element from [ReactDOM.stringToComponent] gets them as its
+    children; a component gets the props it was given. *)
+val createElementVariadic : 'make -> ('make -> element) -> element array -> element
+
 val cloneElement : element -> 'props -> element
 val setDisplayName : ('props -> element) -> string -> unit
 val displayName : ('props -> element) -> string option

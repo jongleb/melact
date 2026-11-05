@@ -56,6 +56,35 @@ module Npm_bound = struct
     </p>
 end
 
+
+(** What the run-time DOM element shows: its tag, props and children. *)
+type built_shape = { tag : string; label : string; title : string option; off : bool; tint : string option; count : int }
+
+(** Whether the first element has had a style since it was created; React then keeps [style=""]. *)
+type tinted = Never | Once
+
+module Built = struct
+  let[@react.component] make ~shape =
+    let clicks, setClicks = React.useState (fun () -> 0) in
+    let style = Option.map (fun color -> ReactDOM.Style.make ~color ()) shape.tint in
+    let first =
+      React.createElement
+        (ReactDOM.stringToComponent shape.tag)
+        (ReactDOM.domProps ~className:shape.label ?title:shape.title ?style
+           ~onClick:(fun _ -> setClicks (fun n -> n + 1))
+           ~children:(React.string (shape.label ^ string_of_int clicks)) ())
+    in
+    let second =
+      ReactDOM.createElement "button" ~props:(ReactDOM.domProps ~disabled:shape.off ~className:"b" ())
+        [| React.string "go"; React.int shape.count |]
+    in
+    let third =
+      React.createElementVariadic (ReactDOM.stringToComponent "ul") (ReactDOM.domProps ~id:"list" ())
+        (Array.init shape.count (fun index -> ReactDOM.jsx "li" (ReactDOM.domProps ~key:(string_of_int index) ~children:(React.int index) ())))
+    in
+    <div className="built">first second third</div>
+end
+
 module Plain_a = struct
   let[@react.component] make () = <section><Counter label="a" /></section>
 end
@@ -963,6 +992,85 @@ let () =
              expect seen |. to_equal expected;
              finish ()))
           [%mel.obj { numRuns = 60 }]));
+  describe "elements built at run time" (fun () ->
+    test_async "domProps, createElement with a tag, createElementVariadic and jsx show what React shows, through props, children and clicks" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+             let tape = tape values in
+             let words = [| "a"; "b c"; ""; "x" |] in
+             let shape () =
+               let tag = [| "div"; "section"; "p" |].(draw tape 3) in
+               let label = words.(draw tape 4) in
+               let title = match draw tape 2 with 0 -> None | _ -> Some words.(draw tape 4) in
+               let off = draw tape 2 = 1 in
+               let tint = match draw tape 3 with 0 -> None | 1 -> Some "red" | _ -> Some "blue" in
+               let count = draw tape 4 in
+               { tag; label; title; off; tint; count }
+             in
+             let expected tinted shape clicks =
+               let attrs pairs = List.sort compare pairs in
+               [
+                 Element_shape
+                   ( "DIV",
+                     [ ("class", "built") ],
+                     [
+                       Element_shape
+                         ( String.uppercase_ascii shape.tag,
+                           attrs
+                             ([ ("class", shape.label) ]
+                             @ Option.fold ~none:[] ~some:(fun title -> [ ("title", title) ]) shape.title
+                             @
+                             match (shape.tint, tinted) with
+                             | Some color, _ -> [ ("style", "color: " ^ color ^ ";") ]
+                             | None, Once -> [ ("style", "") ]
+                             | None, Never -> []),
+                           [ Text_shape (shape.label ^ string_of_int clicks) ] );
+                       Element_shape
+                         ( "BUTTON",
+                           attrs ([ ("class", "b") ] @ match shape.off with true -> [ ("disabled", "") ] | false -> []),
+                           [ Text_shape ("go" ^ string_of_int shape.count) ] );
+                       Element_shape
+                         ( "UL",
+                           [ ("id", "list") ],
+                           List.init shape.count (fun index -> Element_shape ("LI", [], [ Text_shape (string_of_int index) ])) );
+                     ] );
+               ]
+             in
+             let follow before current next =
+               match (String.equal current.tag next.tag, before, next.tint) with
+               | _, _, Some _ -> Once
+               | true, Once, None -> Once
+               | true, Never, None | false, _, None -> Never
+             in
+             let start = shape () in
+             let* root, client = mount <Built shape=start /> in
+             let rec run remaining current clicks history seen =
+               match remaining with
+               | 0 -> Js.Promise.resolve (List.rev seen)
+               | _ ->
+                   let before = select root ".built > :first-child" in
+                   let next, clicks = match draw tape 2 with 0 -> (shape (), clicks) | _ -> (current, clicks + 1) in
+                   let* () =
+                     act (fun () ->
+                         match next == current with
+                         | false -> ReactDOM.Client.render client <Built shape=next />
+                         | true -> click (select root ".built > :first-child"))
+                   in
+                   let history = follow history current next in
+                   let kept =
+                     match String.equal current.tag next.tag with
+                     | true -> same before (select root ".built > :first-child")
+                     | false -> true
+                   in
+                   run (remaining - 1) next clicks history ((shapes (as_node root), expected history next clicks, kept) :: seen)
+             in
+             let first = follow Never start start in
+             let* seen = run (1 + draw tape 8) start 0 first [ (shapes (as_node root), expected first start 0, true) ] in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             expect (List.map (fun (shown, _, kept) -> (shown, kept)) seen)
+             |. to_equal (List.map (fun (_, wanted, _) -> (wanted, true)) seen);
+             finish ()))
+          [%mel.obj { numRuns = 80 }]));
   describe "events" (fun () ->
     test_async "React.Event reads what was sent, and prevent and stop act as in React" (fun () ->
       check_async

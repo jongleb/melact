@@ -79,6 +79,6 @@ let decode values = description (tape values) 3
 let rendered child =
   let root = create_element document "div" in
   let mounted = View.mount child ~parent:root ~before:None in
-  let shown = shapes (as_node root) in
+  let shown = without_empty_style (shapes (as_node root)) in
   View.unmount mounted;
   shown

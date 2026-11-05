@@ -24,7 +24,7 @@ let () =
                    (fun values ->
                      let child = decode values in
                      View.patch mounted child;
-                     expect (shapes (as_node root)) |. to_equal (rendered child))
+                     expect (without_empty_style (shapes (as_node root))) |. to_equal (rendered child))
                    sequence;
                  View.unmount mounted))
             [%mel.obj { numRuns = 400 }]);

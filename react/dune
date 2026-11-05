@@ -6,3 +6,19 @@
  (libraries melhole melact_runtime melange.dom)
  (preprocess
   (pps melange.ppx)))
+
+(rule
+ (targets reactDOM.ml)
+ (deps reactDOM.ml.in)
+ (action
+  (with-stdout-to
+   reactDOM.ml
+   (run gen/gen.exe reactDOM.ml.in impl))))
+
+(rule
+ (targets reactDOM.mli)
+ (deps reactDOM.mli.in)
+ (action
+  (with-stdout-to
+   reactDOM.mli
+   (run gen/gen.exe reactDOM.mli.in intf))))

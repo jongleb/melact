@@ -38,7 +38,7 @@ let () =
                  let child = decode values in
                  let root = served child in
                  let mounted = Served.hydrate child ~parent:root in
-                 let shown = shapes (as_node root) and left = markers root in
+                 let shown = without_empty_style (shapes (as_node root)) and left = markers root in
                  View.unmount mounted;
                  expect (shown, left) |. to_equal (rendered (decode values), 0)))
             [%mel.obj { numRuns = 400 }]);
@@ -83,7 +83,7 @@ let () =
                         (fun values ->
                           let values = edited values in
                           View.patch mounted (decode values);
-                          (shapes (as_node root), rendered (decode values)))
+                          (without_empty_style (shapes (as_node root)), rendered (decode values)))
                         (Array.sub sequence 1 (Array.length sequence - 1)))
                  in
                  View.unmount mounted;

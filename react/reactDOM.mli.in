@@ -382,3 +382,13 @@ val createPortal : React.element -> Dom.element -> React.element
 val unmountComponentAtNode : Dom.element -> unit
 val domElementToObj : Dom.element -> < .. > Js.t
 val flushSync : (unit -> unit) -> unit
+
+[@@@melact.dom_props]
+
+(** A component for a DOM element whose tag is known only at run time, for [React.createElement]. *)
+val stringToComponent : string -> domComponent
+
+val createElement : string -> ?props:domProps -> React.element array -> React.element
+val createDOMElementVariadic : string -> ?props:domProps -> React.element array -> React.element
+val jsx : string -> domProps -> React.element
+val jsxs : string -> domProps -> React.element

@@ -388,6 +388,27 @@ an optional `key` and `()`, and returns the call to `make` with them, so
 `React.createElement Foo.make (Foo.makeProps ~label ())` is `make ~label ()` with a key, checked
 by the type checker, and no props object exists at run time.
 
+## DOM elements built at run time
+
+Some reason-react code picks a tag at run time: `React.createElement (ReactDOM.stringToComponent
+tag) (ReactDOM.domProps ~className ())`, `ReactDOM.createElement tag ~props children`,
+`createDOMElementVariadic`, `ReactDOM.jsx`, `React.createElementVariadic`. No template can be made
+for a tag the compiler does not know, so these elements are built by the runtime. `ReactDOM.domProps`
+takes every DOM prop as an optional label with reason-react's types, generated at build time from the
+same table `melact-ppx` uses (`Dom_props`), with an event's family (`Mouse`, `Form`, `UI`, …) taken
+from its DOM event; it returns the props as a function of the element to build, so that
+`React.createElement` applies it as it applies a component's `makeProps`. The generated table also
+says how each prop reaches the element: an attribute (text, flag, `"true"`/`"false"`, number), a
+property, a controlled value, a delegated event, a style, a ref or inner HTML. A patch with the same
+tag keeps the element, writes only the props whose values changed (`===`), removes those that went
+and updates the children; another tag builds a new element. An app that does not use these functions
+does not carry the table. A dual law builds elements all five ways from random tags, classes,
+titles, flags, styles, handlers and children, and checks the page and the element's identity against
+a model after every render and click, under React 18 and Melact.
+
+React keeps an empty `style=""` once an element has had a style; Melact now does the same, for
+compiled elements too, where it used to remove the attribute.
+
 ## Transitions
 
 `Melhole.Transition.make` and `group` are a hosted child, like Melact's components, so the core

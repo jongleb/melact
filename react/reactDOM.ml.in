@@ -418,3 +418,178 @@ let unmountComponentAtNode container =
 let flushSync run =
   run ();
   Melact_runtime.Instance.flush ()
+
+type props_object
+
+external new_props : unit -> props_object = "Object" [@@mel.new]
+external put : props_object -> string -> 'a -> unit = "" [@@mel.set_index]
+external read : props_object -> string -> 'a = "" [@@mel.get_index]
+external lookup : props_object -> string -> 'a Js.undefined = "" [@@mel.get_index]
+external keys : props_object -> string array = "keys" [@@mel.scope "Object"]
+external create_element_ns : Dom.document -> string -> string -> Dom.element = "createElementNS" [@@mel.send]
+
+(** How a prop of a DOM element built at run time reaches the element. *)
+type applying =
+  | Text_attribute of string
+  | Flag_attribute of string
+  | Booleanish_attribute of string
+  | Integer_attribute of string
+  | Decimal_attribute of string
+  | Property_value of string
+  | Controlled_value of string
+  | Event of string
+  | Style_value
+  | Ref_value
+  | Inner_html_value
+  | Skipped
+
+[@@@melact.dom_props]
+
+(** A DOM element built at run time, with what it shows and holds. *)
+type built = {
+  tag : string;
+  element : Dom.element;
+  mutable shown : props_object;
+  mutable inner : View.live;
+  mutable events : (string * string) list;
+  mutable cleanups : (unit -> unit) list;
+  mutable controlled : (string * View.Hole.prop) list;
+  mutable styled : View.Hole.style option;
+}
+
+type View.hosted += Dom_built of built
+
+let apply built props name =
+  let element = built.element in
+  match applying name with
+  | Text_attribute attribute -> Dom_api.set_attribute element attribute (read props name : string)
+  | Flag_attribute attribute -> (
+      match (read props name : bool) with
+      | true -> Dom_api.set_attribute element attribute ""
+      | false -> Dom_api.remove_attribute element attribute)
+  | Booleanish_attribute attribute ->
+      Dom_api.set_attribute element attribute (match (read props name : bool) with true -> "true" | false -> "false")
+  | Integer_attribute attribute -> Dom_api.set_attribute element attribute (string_of_int (read props name : int))
+  | Decimal_attribute attribute -> Dom_api.set_attribute element attribute (Js.Float.toString (read props name : float))
+  | Property_value property -> Dom_api.set_property element property (read props name)
+  | Controlled_value property ->
+      let hole =
+        match List.assoc_opt property built.controlled with
+        | Some hole -> hole
+        | None ->
+            let hole = View.controlled_hole element property in
+            built.controlled <- (property, hole) :: built.controlled;
+            hole
+      in
+      View.set_prop hole (read props name)
+  | Event event ->
+      let key =
+        match List.assoc_opt event built.events with
+        | Some key -> key
+        | None ->
+            let key, registration = Events.bind element event in
+            built.events <- (event, key) :: built.events;
+            (match registration with Delegated -> () | Direct stop -> built.cleanups <- stop :: built.cleanups);
+            key
+      in
+      let handle : React.Event.Synthetic.t -> unit = read props name in
+      Events.set element key (fun native -> handle (React.Event.ofNative native))
+  | Style_value ->
+      let hole =
+        match built.styled with
+        | Some hole -> hole
+        | None ->
+            let hole = View.style_hole element in
+            built.styled <- Some hole;
+            hole
+      in
+      View.set_style hole (Style.declarations (read props name))
+  | Ref_value -> Ref.attach (read props name) element
+  | Inner_html_value -> Dom_api.set_inner_html element (read props name)##__html
+  | Skipped -> ()
+
+let clear built name =
+  let element = built.element in
+  match applying name with
+  | Text_attribute attribute
+  | Flag_attribute attribute
+  | Booleanish_attribute attribute
+  | Integer_attribute attribute
+  | Decimal_attribute attribute ->
+      Dom_api.remove_attribute element attribute
+  | Property_value property -> Dom_api.set_property element property Js.undefined
+  | Controlled_value property ->
+      Option.iter
+        (fun hole -> match property with "value" -> View.set_prop hole "" | _ -> View.set_prop hole false)
+        (List.assoc_opt property built.controlled)
+  | Event event -> Option.iter (fun key -> Events.set element key ignore) (List.assoc_opt event built.events)
+  | Style_value -> Option.iter (fun hole -> View.set_style hole []) built.styled
+  | Inner_html_value -> Dom_api.set_inner_html element ""
+  | Ref_value | Skipped -> ()
+
+let given props = Js.Array.filter ~f:(fun name -> not (String.equal name "key" || String.equal name "children")) (keys props)
+
+let dom tag props children =
+  let content () =
+    match Array.length children with
+    | 0 -> Option.fold ~none:View.empty ~some:React.to_child (Js.Undefined.toOption (lookup props "children"))
+    | _ -> React.to_child (React.array children)
+  in
+  let svg = match tag with "svg" | "circle" | "path" | "g" | "rect" | "line" | "polyline" | "polygon" | "ellipse" | "text" | "tspan" | "defs" | "use" | "symbol" | "marker" | "linearGradient" | "radialGradient" | "stop" | "clipPath" | "mask" | "pattern" | "filter" -> `Svg | _ -> `Html in
+  let child =
+    View.host
+      ~build:(fun [@u] (position : Template.position) ->
+        let element =
+          match !View.medium.adoption with
+          | Fresh_nodes -> (
+              match svg with
+              | `Svg -> create_element_ns Dom_api.document "http://www.w3.org/2000/svg" tag
+              | `Html -> Dom_api.create_element Dom_api.document tag)
+          | Server_nodes -> (
+              match Js.Null.toOption position.before with
+              | Some node
+                when Dom_api.node_type node = 1
+                     && String.equal (String.lowercase_ascii (Dom_api.node_name node)) (String.lowercase_ascii tag) ->
+                  Dom_api.unsafe_element node
+              | Some _ | None -> View.expected ("<" ^ tag ^ ">") position.before)
+        in
+        let inside = { Template.parent = Dom_api.to_node element; before = Dom_api.first_child_or_end (Dom_api.to_node element) } in
+        let built =
+          { tag; element; shown = props; inner = View.build (content ()) inside; events = []; cleanups = []; controlled = []; styled = None }
+        in
+        Array.iter (apply built props) (given props);
+        (match !View.medium.adoption with Fresh_nodes -> View.insert position (Dom_api.to_node element) | Server_nodes -> ());
+        View.live (Dom_built built)
+          ~each:(fun [@u] visit -> visit (Dom_api.to_node element) [@u])
+          ~front:(fun [@u] _ -> Js.Null.return (Dom_api.to_node element))
+          ~release:(fun [@u] () ->
+            built.inner.release () [@u];
+            List.iter (fun stop -> stop ()) built.cleanups))
+      ~patch:(fun [@u] _ live ->
+        match View.hosted live with
+        | Some (Dom_built built) when String.equal built.tag tag ->
+            let old = built.shown in
+            Array.iter
+              (fun name -> match Js.Undefined.toOption (lookup props name) with None -> clear built name | Some _ -> ())
+              (given old);
+            Array.iter
+              (fun name -> if not (Dom_api.same (read old name) (read props name)) then apply built props name)
+              (given props);
+            built.shown <- props;
+            built.inner <- View.update { Template.parent = Dom_api.to_node built.element; before = Js.null } built.inner (content ());
+            Some live
+        | Some _ | None -> None)
+  in
+  React.of_child
+    (Option.fold ~none:child ~some:(fun key -> View.with_key key child) (Js.Undefined.toOption (lookup props "key")))
+
+let stringToComponent tag props = dom tag props (Array.map React.of_child (Melact_runtime.Variadic.take ()))
+
+let createElement tag ?props children =
+  (Option.value props ~default:(domProps ())) (fun given -> dom tag given children)
+
+let createDOMElementVariadic tag ?props children =
+  (Option.value props ~default:(domProps ())) (fun given -> dom tag given children)
+
+let jsx tag props = props (fun given -> dom tag given [||])
+let jsxs tag props = props (fun given -> dom tag given [||])
