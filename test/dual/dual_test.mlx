@@ -426,8 +426,8 @@ let type_into : Dom.element -> string -> unit =
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, text);
       }|}]
 
-let later : unit -> unit Js.Promise.t =
-  [%mel.raw {|function () { return new Promise((resolve) => setTimeout(resolve, 0)); }|}]
+let paused : int -> unit Js.Promise.t =
+  [%mel.raw {|function (delay) { return new Promise((resolve) => setTimeout(resolve, delay)); }|}]
 
 (** What the button's handler does to the event before reading it. *)
 type treatment = { prevent : [ `Prevent | `Allow ]; stop : [ `Stop | `Bubble ] }
@@ -620,6 +620,218 @@ let machine values =
   let* () = act (fun () -> ReactDOM.Client.render client <Tallies />) in
   ignore (take ());
   step 12
+
+(** Where a bomb throws once its fuse burns down. *)
+type blast = Rendering | Laying_out | Painting
+
+(** What burns a bomb's fuse: its own clicks, or the ticks of the whole field. *)
+type fuse = Clicks of int * blast | Ticks of int * blast
+
+(** Whether a boundary's fallback shows the error or throws again. *)
+type brittleness =
+  | Sturdy
+  | Brittle  (** The fallback function throws. *)
+  | Trapped  (** The fallback renders a component that throws. *)
+
+(** A field of bombs and error boundaries around them. *)
+type mine =
+  | Bomb of { name : string; fuse : fuse; arrival : int  (** The tick it is laid at. *) }
+  | Guard of { name : string; brittleness : brittleness; mines : mine list }
+
+let bumps : (string, unit -> unit) Hashtbl.t = Hashtbl.create 16
+let ticker = ref (fun () -> ())
+
+module Bomb = struct
+  let[@react.component] make ~name ~fuse ~tick =
+    let count, setCount = React.useState (fun () -> 0) in
+    Hashtbl.replace bumps name (fun () -> setCount (fun count -> count + 1));
+    let thrown blast () =
+      match (fuse, blast) with
+      | (Clicks (at, Rendering), Rendering | Clicks (at, Laying_out), Laying_out | Clicks (at, Painting), Painting)
+        when count >= at ->
+          Js.Exn.raiseError name
+      | (Ticks (at, Rendering), Rendering | Ticks (at, Laying_out), Laying_out | Ticks (at, Painting), Painting)
+        when tick >= at ->
+          Js.Exn.raiseError name
+      | (Clicks _ | Ticks _), _ -> None
+    in
+    ignore (thrown Rendering ());
+    React.useLayoutEffect2 (thrown Laying_out) (count, tick);
+    React.useEffect2 (thrown Painting) (count, tick);
+    <button>(React.string (name ^ " " ^ string_of_int count))</button>
+end
+
+module Dud = struct
+  let[@react.component] make ~name =
+    let shown, _ = React.useState (fun () -> "fallback " ^ name) in
+    Js.Exn.raiseError shown
+end
+
+let rec laid ~tick mine =
+  match mine with
+  | Bomb { name; fuse; _ } -> <Bomb key=name name fuse tick />
+  | Guard { name; brittleness; mines } ->
+      <ReasonReactErrorBoundary
+        key=name
+        fallback=(fun ({ error; _ } : Js.Exn.t ReasonReactErrorBoundary.params) ->
+          match brittleness with
+          | Brittle -> Js.Exn.raiseError ("fallback " ^ name)
+          | Trapped -> <Dud name />
+          | Sturdy -> <i>(React.string (Option.value ~default:"" (Js.Exn.message error)))</i>)>
+        (React.array
+           (Array.of_list
+              (List.filter_map
+                 (fun mine ->
+                   match mine with
+                   | Bomb { arrival; _ } when arrival > tick -> None
+                   | Bomb _ | Guard _ -> Some (laid ~tick mine))
+                 mines)))
+      </ReasonReactErrorBoundary>
+
+module Minefield = struct
+  let[@react.component] make ~mines =
+    let tick, setTick = React.useState (fun () -> 0) in
+    ticker := (fun () -> setTick (fun tick -> tick + 1));
+    <main>(laid ~tick (Guard { name = "g0"; brittleness = Sturdy; mines }))</main>
+end
+
+let quiet_errors : unit -> unit -> unit =
+  [%mel.raw {|function () { const loud = console.error; console.error = () => {}; return () => { console.error = loud; }; }|}]
+
+let minefield values =
+  let tape = tape values in
+  let fresh = ref 0 in
+  let named prefix = incr fresh; prefix ^ string_of_int !fresh in
+  let rec sown depth =
+    List.init (draw tape 4) (fun _ ->
+        match (depth < 3, draw tape 2) with
+        | true, 0 ->
+            let name = named "g" in
+            let brittleness = match draw tape 4 with 0 -> Brittle | 1 -> Trapped | _ -> Sturdy in
+            Guard { name; brittleness; mines = sown (depth + 1) }
+        | _, _ ->
+            let blast = match draw tape 3 with 0 -> Rendering | 1 -> Laying_out | _ -> Painting in
+            let fuse =
+              match (draw tape 2, blast) with
+              | 0, Rendering -> Ticks (draw tape 4, Rendering)
+              | 0, (Laying_out | Painting) -> Ticks (0, blast)
+              | _, Rendering -> Clicks (draw tape 4, Rendering)
+              | _, (Laying_out | Painting) -> Clicks (1 + draw tape 3, blast)
+            in
+            let arrival =
+              match (fuse, draw tape 3) with
+              | Ticks (_, (Laying_out | Painting)), _ | _, (1 | 2) -> 0
+              | _, _ -> 1 + draw tape 2
+            in
+            Bomb { name = named "b"; fuse; arrival })
+  in
+  let mines = sown 0 in
+  let counts = Hashtbl.create 16 and failed = Hashtbl.create 16 and tick = ref 0 in
+  let rec blown blast caught nearest mine =
+    match mine with
+    | Bomb { arrival; _ } when arrival > !tick -> ()
+    | Bomb { name; fuse; _ } -> (
+        let count = Option.value ~default:0 (Hashtbl.find_opt counts name) in
+        match (fuse, blast) with
+        | (Clicks (at, Rendering), Rendering | Clicks (at, Laying_out), Laying_out | Clicks (at, Painting), Painting)
+          when count >= at ->
+            Hashtbl.replace caught nearest name
+        | (Ticks (at, Rendering), Rendering | Ticks (at, Laying_out), Laying_out | Ticks (at, Painting), Painting)
+          when !tick >= at ->
+            Hashtbl.replace caught nearest name
+        | (Clicks _ | Ticks _), _ -> ())
+    | Guard { name; mines; _ } -> (
+        match Hashtbl.mem failed name with true -> () | false -> List.iter (blown blast caught name) mines)
+  in
+  let rec committed caught fallen mine =
+    match mine with
+    | Bomb _ -> ()
+    | Guard { name; mines; _ } -> (
+        match (Hashtbl.mem failed name, Hashtbl.find_opt caught name) with
+        | true, _ -> ()
+        | false, Some error ->
+            Hashtbl.replace failed name error;
+            Hashtbl.replace fallen name ()
+        | false, None -> List.iter (committed caught fallen) mines)
+  in
+  let rec rendered struck fallen caught nearest mine =
+    match mine with
+    | Bomb _ -> ()
+    | Guard { name; brittleness; mines } -> (
+        match (Hashtbl.find_opt struck name, Hashtbl.mem fallen name, Hashtbl.mem failed name, brittleness) with
+        | Some error, _, _, _ -> Hashtbl.replace caught name error
+        | None, true, _, (Brittle | Trapped) -> Hashtbl.replace caught nearest ("fallback " ^ name)
+        | None, true, _, Sturdy | None, false, true, _ -> ()
+        | None, false, false, _ -> List.iter (rendered struck fallen caught name) mines)
+  in
+  let field = Guard { name = "g0"; brittleness = Sturdy; mines } in
+  let settled () =
+    let rec cycle caught effects =
+      let fallen = Hashtbl.create 16 and struck = Hashtbl.create 16 in
+      committed caught fallen field;
+      (match effects with
+      | `Run ->
+          blown Laying_out struck "" field;
+          blown Painting struck "" field
+      | `Done -> ());
+      match (Hashtbl.length fallen, Hashtbl.length struck) with
+      | 0, 0 -> ()
+      | _, _ ->
+          let next = Hashtbl.create 16 in
+          rendered struck fallen next "" field;
+          cycle next `Done
+    in
+    let caught = Hashtbl.create 16 in
+    blown Rendering caught "" field;
+    cycle caught `Run
+  in
+  let rec shown mine =
+    match mine with
+    | Bomb { arrival; _ } when arrival > !tick -> ""
+    | Bomb { name; _ } ->
+        "<button>" ^ name ^ " " ^ string_of_int (Option.value ~default:0 (Hashtbl.find_opt counts name)) ^ "</button>"
+    | Guard { name; mines; _ } ->
+        Option.fold
+          ~none:(String.concat "" (List.map shown mines))
+          ~some:(fun error -> "<i>" ^ error ^ "</i>")
+          (Hashtbl.find_opt failed name)
+  in
+  let rec live mine =
+    match mine with
+    | Bomb { arrival; _ } when arrival > !tick -> []
+    | Bomb { name; _ } -> [ name ]
+    | Guard { name; mines; _ } -> (
+        match Hashtbl.mem failed name with true -> [] | false -> List.concat_map live mines)
+  in
+  let root = attached () in
+  let client = ReactDOM.Client.createRoot root in
+  let loud = quiet_errors () in
+  let rec step remaining seen =
+    match remaining with
+    | 0 -> Js.Promise.resolve (List.rev seen)
+    | _ ->
+        let action =
+          match (draw tape 3, live field) with
+          | 0, _ | _, [] ->
+              incr tick;
+              fun () -> !ticker ()
+          | _, names ->
+              let name = List.nth names (draw tape (List.length names)) in
+              Hashtbl.replace counts name (1 + Option.value ~default:0 (Hashtbl.find_opt counts name));
+              fun () -> Hashtbl.find bumps name ()
+        in
+        settled ();
+        let* () = act action in
+        step (remaining - 1) ((inner_html root, "<main>" ^ shown field ^ "</main>") :: seen)
+  in
+  settled ();
+  let* () = act (fun () -> ReactDOM.Client.render client <Minefield mines />) in
+  let first = (inner_html root, "<main>" ^ shown field ^ "</main>") in
+  let* seen = step 8 [ first ] in
+  let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+  loud ();
+  expect (Array.of_list (List.map fst seen)) |. to_equal (Array.of_list (List.map snd seen));
+  finish ()
 
 let () =
   describe "state machine" (fun () ->
@@ -828,7 +1040,7 @@ let () =
                                dispatch field (bubbling "input" [%mel.obj { bubbles = true }])
                            | `Click -> click box)
                      in
-                     let* () = later () in
+                     let* () = paused 0 in
                      step rest ((value_of field, get_attribute field "value", checked box) :: shown)
                in
                let* shown = step actions [] in
@@ -1142,6 +1354,17 @@ let () =
              expect seen |. to_equal expected;
              finish ()))
         [%mel.obj { numRuns = 100 }]));
+  describe "error boundaries" (fun () ->
+    test_async "show the fallback of the nearest boundary for errors in render, updates and effects" (fun () ->
+      check_async (async_property (tapes ~shortest:10 ~longest:80) minefield) [%mel.obj { numRuns = 1000 }]);
+    test_async "show the fallback for an error in a passive effect without any further update" (fun () ->
+      let loud = quiet_errors () in
+      let* root, _ = mount <Minefield mines=[ Bomb { name = "late"; fuse = Clicks (1, Painting); arrival = 0 } ] /> in
+      Hashtbl.find bumps "late" ();
+      let* () = paused 100 in
+      loud ();
+      expect (inner_html root) |. to_equal "<main><i>late</i></main>";
+      finish ()));
   describe "lists and conditions" (fun () ->
     test_async "React.createElement with makeProps keeps rows and their state exactly as JSX does" (fun () ->
       check_async

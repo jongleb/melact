@@ -12,6 +12,13 @@ type timing =
 (** Within one commit every cleanup runs before any effect, as in React. *)
 type phase = Cleanup | Run
 
+(** Whatever a component threw: an OCaml exception or the value a JavaScript [throw] gave. *)
+type caught
+
+(** An error boundary: [children] until a descendant throws while rendering or in an effect, then
+    [recover] of what it threw, as React's [componentDidCatch] does. *)
+val catch : recover:(caught -> Melhole.View.child) -> Melhole.View.child -> Melhole.View.child
+
 val component : Component.t -> Melhole.View.input array -> (unit -> Melhole.View.child) -> Melhole.View.child
 val provide : 'value Context.t -> 'value -> Melhole.View.child -> Melhole.View.child
 val current : unit -> instance
