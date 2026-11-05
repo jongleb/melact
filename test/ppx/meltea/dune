@@ -1,0 +1,7 @@
+(executable
+ (name pp)
+ (modules pp)
+ (libraries meltea-ppx ppxlib))
+
+(cram
+ (deps pp.exe))

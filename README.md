@@ -336,6 +336,31 @@ values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries mel
 `meltea-ppx` also reads `update` and `view` for the model fields each message can change and the
 view reads. A message that changes nothing the view reads does not call the view at all.
 
+### Transitions
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/transition-dark.svg">
+  <img src="assets/transition.svg" alt="Transitions, as Vue's Transition and TransitionGroup, with name fade. Enter: in the patch the new row b gets fade-enter-from and fade-enter-active, two frames later fade-enter-to replaces fade-enter-from while CSS animates, and when the duration is up no classes are left. Leave: the removed row b is put back where it was with fade-leave-from and fade-leave-active, two frames later fade-leave-to, and when the duration is up it leaves the DOM. Move, in a group: row c went first, so after the patch the DOM is c a b but a transform shows every moved row where it was; two frames later the rows get fade-move and the transforms are cleared, so they slide to their new places; at the end no classes are left" width="100%">
+</picture>
+
+`Html.transition ~name` and `Html.transition_group ~name` animate what enters and leaves, as Vue's
+`<Transition>` and `<TransitionGroup>`: CSS classes named after `name`, the leaving element kept
+in place until its transition ends, and in a group the rows that move slid from where they were
+(FLIP). A list inside a group is still the compiled keyed loop with selectors. The code lives in
+melhole's `Transition` module, so an app that does not animate does not carry it.
+
+```ocaml
+let view model =
+  <ul className="todo-list">
+    (Html.transition_group ~name:"fade" (Html.list (List.map row (visible model))))
+  </ul>
+```
+
+```css
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active, .fade-leave-active, .fade-move { transition: all 200ms; }
+```
+
 ## Status
 
 [`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
@@ -350,7 +375,7 @@ demo component binds React's npm `useReducer` directly, which is a non-goal, so 
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, every `React.Event` family over native events (handlers see the `currentTarget` they were set on, as in React), `React.createElement` with `makeProps`, `ReasonReactRouter`; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
 | **Size** | whole apps, runtime and the Melange stdlib they use included: the counter is 3.0 kB gzip with Meltea and 5.6 kB with Melact, TodoMVC in Meltea is 14.7 kB, most of it jsonkit's `Printf` for error messages; React 18.3 and react-dom alone are 45 kB |
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.16 for Meltea, 1.17 for Melact and 1.64 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
-| **Tests** | 106 vitest + jsdom tests and 24 native QCheck laws: the View layer, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Tests** | 114 vitest + jsdom tests and 24 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
 | **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. Hydration takes the server's nodes over instead of building them again |
 | **Not yet** | `React.createElementVariadic`, code typed against `React.component('props)`, SSR on native OCaml |

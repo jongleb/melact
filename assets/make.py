@@ -929,9 +929,55 @@ def roadmap(p):
     return svg(p, 880, 132, "Roadmap: View, hooks, melact-ppx, compatibility, speed and server rendering with hydration done; publishing next", body)
 
 
+def transition(p):
+    columns = [(150, "the patch"), (400, "two frames later: CSS animates"), (650, "when the duration is up")]
+    body = "".join(text(x + 115, 18, head, size=12.5, weight=700, anchor="middle") for x, head in columns)
+    body += "".join(arrow(p, x + 228, 14, x + 256, 14, "muted", flow=True) for x, _ in columns[:2])
+
+    def chip(x, y, key, tone="plain", opacity=1.0, dash=None):
+        fill, stroke, cls = {"plain": (p["card"], p["line"], ""), "accent": (p["accent_soft"], p["accent"], "accent"),
+                             "orange": (p["orange_soft"], p["orange"], "orange"), "green": (p["green_soft"], p["green"], "green")}[tone]
+        return (f'<g opacity="{opacity}">' + box(x, y, 50, 30, fill, stroke, rx=8, width=1.4, dash=dash)
+                + text(x + 25, y + 20, key, size=13, cls=f"mono {cls}".strip(), weight=700, anchor="middle") + "</g>")
+
+    def cell(x, y, chips, note, note_cls="mono muted"):
+        out = box(x, y, 230, 96, p["card"], p["line"], rx=12)
+        for i, (key, tone, opacity, dash) in enumerate(chips):
+            out += chip(x + 20 + i * 66, y + 14, key, tone, opacity, dash)
+        for k, line in enumerate(note):
+            out += text(x + 14, y + 66 + k * 16, line, size=11, cls=note_cls)
+        return out
+
+    rows = [
+        (40, "enter", ["b is new"], "accent",
+         [([("a", "plain", 1, None), ("b", "accent", 0.3, "4 3"), ("c", "plain", 1, None)], ["fade-enter-from", "fade-enter-active"]),
+          ([("a", "plain", 1, None), ("b", "accent", 0.75, None), ("c", "plain", 1, None)], ["fade-enter-active", "fade-enter-to"]),
+          ([("a", "plain", 1, None), ("b", "plain", 1, None), ("c", "plain", 1, None)], ["no classes left"])]),
+        (152, "leave", ["b was removed", "and is put back"], "orange",
+         [([("a", "plain", 1, None), ("b", "orange", 1, None), ("c", "plain", 1, None)], ["fade-leave-from", "fade-leave-active"]),
+          ([("a", "plain", 1, None), ("b", "orange", 0.35, None), ("c", "plain", 1, None)], ["fade-leave-active", "fade-leave-to"]),
+          ([("a", "plain", 1, None), ("c", "plain", 1, None)], ["b leaves the DOM"])]),
+        (264, "move", ["group only:", "c went first"], "green",
+         [([("a", "green", 1, None), ("b", "green", 1, None), ("c", "green", 1, None)], ["DOM is c a b; a transform", "shows each row where it was"]),
+          ([("c", "green", 1, None), ("a", "green", 1, None), ("b", "green", 1, None)], ["fade-move, transforms", "cleared: the rows slide"]),
+          ([("c", "plain", 1, None), ("a", "plain", 1, None), ("b", "plain", 1, None)], ["no classes left"])]),
+    ]
+    for y, head, notes, color, cells in rows:
+        body += text(0, y + 38, head, size=14, weight=700, cls=color)
+        for k, line in enumerate(notes):
+            body += text(0, y + 58 + k * 16, line, size=11.5, cls="muted")
+        for (x, _), (chips, note) in zip(columns, cells):
+            body += cell(x, y, chips, note)
+        if head == "move":
+            body += curve(p, f"M{400 + 20 + 25 + 132},{y + 12} C{400 + 170},{y - 10} {400 + 60},{y - 10} {400 + 45},{y + 12}", "green", flow=True)
+    body += text(440, 384, "The wrapper stays mounted; only what it shows changes. The first render does not animate.",
+                 size=12, cls="muted", anchor="middle", weight=600)
+    return svg(p, 880, 392, "Transitions, as Vue's Transition and TransitionGroup, with name fade. Enter: in the patch the new row b gets fade-enter-from and fade-enter-active, two frames later fade-enter-to replaces fade-enter-from while CSS animates, and when the duration is up no classes are left. Leave: the removed row b is put back where it was with fade-leave-from and fade-leave-active, two frames later fade-leave-to, and when the duration is up it leaves the DOM. Move, in a group: row c went first, so after the patch the DOM is c a b but a transform shows every moved row where it was; two frames later the rows get fade-move and the transforms are cleared, so they slide to their new places; at the end no classes are left", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, roadmap=roadmap)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, roadmap=roadmap)
 
 if __name__ == "__main__":
     out = Path(__file__).parent

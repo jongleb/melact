@@ -35,7 +35,8 @@ sed '/<!-- monorepo -->/,/<!-- \/monorepo -->/d' meltea/README.md | sed '1{/^$/d
 rm meltea/README.md
 mkdir -p assets
 cp "$root"/assets/compiled.svg "$root"/assets/compiled-dark.svg "$root"/assets/meltea.svg "$root"/assets/meltea-dark.svg \
-  "$root"/assets/fields.svg "$root"/assets/fields-dark.svg "$root"/assets/selectors.svg "$root"/assets/selectors-dark.svg assets/
+  "$root"/assets/fields.svg "$root"/assets/fields-dark.svg "$root"/assets/selectors.svg "$root"/assets/selectors-dark.svg \
+  "$root"/assets/transition.svg "$root"/assets/transition-dark.svg assets/
 
 cat > dune-project <<'EOF'
 (lang dune 3.16)

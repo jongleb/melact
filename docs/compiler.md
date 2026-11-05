@@ -207,6 +207,22 @@ an optional `key` and `()`, and returns the call to `make` with them, so
 `React.createElement Foo.make (Foo.makeProps ~label ())` is `make ~label ()` with a key, checked
 by the type checker, and no props object exists at run time.
 
+## Transitions
+
+`Melhole.Transition.make` and `group` are a hosted child, like Melact's components, so the core
+knows nothing about them and a bundle without them carries none of their code. The wrapper stays
+mounted while its content changes. Around each patch of the content it takes the content's
+top-level nodes before and after: a node that was there and is gone is an element that leaves, so
+it is put back before the node that followed it (walking back through nodes that left too) and
+runs the leave classes; a node that is new runs the enter classes. In a group it also reads every
+kept element's rectangle before and after, and an element that moved gets a transform back to
+its old place, cleared on the next frame with `name-move` on, as FLIP does. Each phase stops the
+one before it on the same element, so an element removed while it enters only leaves. Classes are
+switched after two animation frames, and the phase ends after `duration` or after the longest
+delay plus duration of its computed transition or animation. When the wrapper itself goes, the
+elements still leaving go with it. meltea-ppx looks through `Html.transition_group` for
+`Html.list (List.map …)`, so the list inside is still the keyed loop with selectors.
+
 ## Laws
 
 Accepted only with these holding, by property-based tests:
