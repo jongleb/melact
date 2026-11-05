@@ -20,6 +20,19 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                   })))
       }
   let __melhole_template_2 =
+    Melhole.View.template (Melhole.Template.html "<li></li>")
+      {
+        Js.Fn.I2 =
+          (fun __melhole_scope __melhole_node ->
+             ((Melhole.View.attr_hole (Melhole.Template.element __melhole_node)
+                 "class"),
+               (Melhole.View.text_hole
+                  {
+                    Melhole.Template.parent = __melhole_node;
+                    before = (Melhole.Template.first_or_end __melhole_node)
+                  })))
+      }
+  let __melhole_template_3 =
     Melhole.View.template (Melhole.Template.html "<ul></ul>")
       {
         Js.Fn.I2 =
@@ -66,7 +79,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                         })) __melhole_dispatch)) in
     Html.node
       (fun __melhole_dispatch ->
-         Melhole.View.compiled __melhole_template_2 4
+         Melhole.View.compiled __melhole_template_3 4
            {
              Js.Fn.I2 =
                (fun __melhole_scope __melhole_hole_0 ->
@@ -86,12 +99,52 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                    | _ ->
                        Melhole.View.set_content __melhole_hole_0
                          (Melhole.Transition.group ~name:"row" ~duration:200
-                            (Melhole.View.each (Array.of_list rows)
+                            (let _ = row in
+                             Melhole.View.rows (Array.of_list rows)
                                {
                                  Js.Fn.I1 =
                                    (fun __melhole_item ->
-                                      Html.render (row __melhole_item)
-                                        __melhole_dispatch)
+                                      (fun id ->
+                                         Melhole.View.row __melhole_template_2
+                                           2
+                                           {
+                                             Js.Fn.I2 =
+                                               (fun __melhole_scope
+                                                  (__melhole_hole_0,
+                                                   __melhole_hole_1)
+                                                  ->
+                                                  let __melhole_changed_0 =
+                                                    Melhole.View.check
+                                                      __melhole_scope 0 chosen in
+                                                  let __melhole_changed_1 =
+                                                    Melhole.View.check
+                                                      __melhole_scope 1 id in
+                                                  (match (__melhole_changed_0,
+                                                           __melhole_changed_1)
+                                                   with
+                                                   | (Melhole.View.Unchanged,
+                                                      Melhole.View.Unchanged)
+                                                       -> ()
+                                                   | _ ->
+                                                       Melhole.View.set_attr
+                                                         __melhole_hole_0
+                                                         (Some
+                                                            (if id = chosen
+                                                             then "on"
+                                                             else "" : 
+                                                            string)));
+                                                  (match __melhole_changed_1
+                                                   with
+                                                   | Melhole.View.Unchanged ->
+                                                       ()
+                                                   | _ ->
+                                                       Melhole.View.set_text
+                                                         __melhole_hole_1
+                                                         (string_of_int
+                                                            (id : int)));
+                                                  ())
+                                           } (string_of_int id : string))
+                                        __melhole_item)
                                }
                                {
                                  Js.Fn.I1 =

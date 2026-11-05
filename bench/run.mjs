@@ -20,6 +20,7 @@ const runs = Number(args.runs ?? 10);
 const memoryRuns = Number(args["memory-runs"] ?? 5);
 const frameworks = (args.frameworks ?? "vanilla,meltea,melact,react").split(",");
 const only = args.ops ? args.ops.split(",") : null;
+if (args.alloc) args.profile = true;
 const output = args.out ?? join(bench, args.profile ? "profile.json" : "results.json");
 const dist = join(bench, args.profile ? "_dist-profile" : "_dist");
 
@@ -473,18 +474,35 @@ const profile = async (browser, url, operation) => {
     await operation.init(page);
     await page.evaluate(`__frame()`);
     const point = await page.evaluate(`__point(${JSON.stringify(operation.act)})`);
-    await page.send("Profiler.enable");
-    await page.send("Profiler.setSamplingInterval", { interval: 50 });
-    await page.send("Emulation.setCPUThrottlingRate", { rate: operation.throttle });
-    await page.send("Profiler.start");
+    if (args.alloc) {
+      await page.send("HeapProfiler.enable");
+      await page.send("HeapProfiler.startSampling", { samplingInterval: 256 });
+    } else {
+      await page.send("Profiler.enable");
+      await page.send("Profiler.setSamplingInterval", { interval: 50 });
+      await page.send("Emulation.setCPUThrottlingRate", { rate: operation.throttle });
+      await page.send("Profiler.start");
+    }
     await page.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
     await page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
     await page.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
     await page.evaluate(`__until(() => ${operation.done})`);
+    const self = new Map();
+    if (args.alloc) {
+      const { profile: heap } = await page.send("HeapProfiler.stopSampling");
+      const visit = (node) => {
+        const frame = node.callFrame;
+        const key = `${frame.functionName || "(anonymous)"} ${frame.url.split("/").pop()}:${frame.lineNumber + 1}`;
+        if (node.selfSize) self.set(key, (self.get(key) ?? 0) + node.selfSize / 1024);
+        node.children.forEach(visit);
+      };
+      visit(heap.head);
+      const state = await page.evaluate(`__state()`);
+      return { self, problems: [...expectState(state, operation.expect), ...page.exceptions] };
+    }
     const { profile: data } = await page.send("Profiler.stop");
     await page.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     const nodes = new Map(data.nodes.map((node) => [node.id, node]));
-    const self = new Map();
     data.samples.forEach((id, index) => {
       const frame = nodes.get(id).callFrame;
       if (["(idle)", "(program)", "(root)"].includes(frame.functionName)) return;
@@ -556,8 +574,9 @@ const main = async () => {
           const total = [...self.values()].reduce((sum, time) => sum + time, 0);
           const top = [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, Number(args.top ?? 15));
           results.cpu[operation.name][name] = { total, top };
-          log(`\n${operation.name} / ${name}: ${total.toFixed(2)} ms of samples per run`);
-          for (const [key, time] of top) log(`  ${time.toFixed(2).padStart(7)} ms  ${key}`);
+          const unit = args.alloc ? "kB" : "ms";
+          log(`\n${operation.name} / ${name}: ${total.toFixed(2)} ${unit} of samples per run`);
+          for (const [key, time] of top) log(`  ${time.toFixed(2).padStart(7)} ${unit}  ${key}`);
           continue;
         }
         const of = (key) => median(samples[name].map((sample) => sample[key]));

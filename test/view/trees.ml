@@ -7,6 +7,10 @@ let styled = Template.make ~html:"<span><b>x</b></span>" ~holes:[| Class_list []
 let scrolling = Template.make ~html:"<section></section>" ~holes:[| Handler ([], "scroll"); Child ([], 0) |]
 let mixed = Template.make ~html:"<em>a<!---->b</em>" ~holes:[| Text ([], 1) |]
 let row = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "data-key"); Text ([], 0) |]
+let word_line =
+  View.template (Template.html "<b></b>")
+    (fun [@u] _ node -> View.text_hole { parent = node; before = Template.first_or_end node })
+
 let lazy_text n = View.text ("lazy" ^ string_of_int n)
 let ignore_event (_ : Dom.event) = ()
 let identities = [| ref 0; ref 1 |]
@@ -43,6 +47,12 @@ let rec description tape depth =
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
       View.each items
         (fun [@u] item -> View.with_key item (View.text item))
+        (fun [@u] _ -> [||])
+        [||]
+  | 7 ->
+      let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
+      View.rows items
+        (fun [@u] item -> View.row word_line 0 (fun [@u] _ text -> View.set_text text item) item)
         (fun [@u] _ -> [||])
         [||]
   | 9 ->

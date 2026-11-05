@@ -29,6 +29,29 @@ let loop items outer =
     (fun [@u] item -> [| View.Input (marked outer item); View.Input (item.label ^ outer.suffix) |])
     [| View.Input outer |]
 
+let line_template =
+  View.template (Template.html "<li></li>")
+    (fun [@u] _ node ->
+      (View.attr_hole (Template.element node) "class", View.text_hole { parent = node; before = Template.first_or_end node }))
+
+let lines items outer =
+  View.rows items
+    (fun [@u] item ->
+      incr renders;
+      View.row line_template 0
+        (fun [@u] _ (marking, text) ->
+          View.set_attr marking (Some (marked outer item));
+          View.set_text text (item.label ^ outer.suffix))
+        item.key)
+    (fun [@u] item -> [| View.Input (marked outer item); View.Input (item.label ^ outer.suffix) |])
+    [| View.Input outer |]
+
+(** Which compiled loop a law runs on. *)
+type loop = Each | Rows
+
+let looped kind items outer = match kind with Each -> loop items outer | Rows -> lines items outer
+let loops = [ ("View.each", Each); ("View.rows", Rows) ]
+
 (** How a step changes the rows. *)
 type edit = Structural | Same_order
 
@@ -108,26 +131,67 @@ let slots tape count =
   List.init count (fun _ -> { identity = draw tape 2; input = inputs.(draw tape 3) })
 
 let () =
-  describe "Keyed loop laws" (fun () ->
-      test "after any edits and outer changes, patching shows what mounting from scratch shows" (fun () ->
+  List.iter (fun (title, kind) ->
+  let loop = looped kind in
+  describe ("Keyed loop laws: " ^ title) (fun () ->
+      test "after any edits and outer changes, patching shows what mounting from scratch shows, beside any neighbours"
+        (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 let framed =
+                   match draw tape 2 with
+                   | 0 -> fun child -> child
+                   | _ -> fun child -> View.list [ View.text "<"; child; View.text ">" ]
+                 in
+                 let root = create_element document "ul" in
+                 let items, outer = start in
+                 let mounted = View.mount (framed (loop items outer)) ~parent:root ~before:None in
+                 let rec run state remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let ((items, outer) as next), _ = step tape state in
+                       View.patch mounted (framed (loop items outer));
+                       (shapes (as_node root), shown (framed (loop items outer))) :: run next (remaining - 1)
+                 in
+                 let seen = run start (2 + draw tape 12) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 400 }]);
+      test "a row whose key stays keeps its element through any edits" (fun () ->
           check
             (property (tapes ~shortest:10 ~longest:80) (fun values ->
                  let tape = tape values in
                  let root = create_element document "ul" in
                  let items, outer = start in
                  let mounted = View.mount (loop items outer) ~parent:root ~before:None in
-                 let rec run state remaining =
+                 let elements () = nodes (child_nodes root) in
+                 let rec run (items, outer) remaining =
                    match remaining with
                    | 0 -> []
                    | _ ->
-                       let ((items, outer) as next), _ = step tape state in
-                       View.patch mounted (loop items outer);
-                       (shapes (as_node root), shown (loop items outer)) :: run next (remaining - 1)
+                       let before = elements () in
+                       let ((next_items, next_outer) as next), _ = step tape (items, outer) in
+                       View.patch mounted (loop next_items next_outer);
+                       let after = elements () in
+                       let lost =
+                         List.length
+                           (List.filter
+                              (fun (index, item) ->
+                                Option.fold ~none:false
+                                  ~some:(fun at -> not (same before.(index) after.(at)))
+                                  (List.find_map
+                                     (fun (at, other) -> match String.equal other.key item.key with true -> Some at | false -> None)
+                                     (List.mapi (fun at other -> (at, other)) (Array.to_list next_items))))
+                              (List.mapi (fun index item -> (index, item)) (Array.to_list items)))
+                       in
+                       lost :: run next (remaining - 1)
                  in
                  let seen = run start (2 + draw tape 12) in
                  View.unmount mounted;
-                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
-            [%mel.obj { numRuns = 400 }]);
+                 expect (List.fold_left ( + ) 0 seen) |. to_be 0))
+            [%mel.obj { numRuns = 300 }]);
       test "when the order is kept, exactly the rows whose item or projection changed are rendered" (fun () ->
           check
             (property (tapes ~shortest:10 ~longest:80) (fun values ->
@@ -178,7 +242,8 @@ let () =
                  disconnect watcher;
                  View.unmount mounted;
                  expect records |. to_be 0))
-            [%mel.obj { numRuns = 200 }]));
+            [%mel.obj { numRuns = 200 }])))
+    loops;
   describe "Pure component laws" (fun () ->
       test "patching shows what mounting shows, and renders exactly the slots whose inputs or identity changed"
         (fun () ->

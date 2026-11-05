@@ -108,6 +108,15 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+When a row is a single lowercase element with a `key` (after any `let`s), the compiler goes one step
+further and emits `View.rows`: the row function returns the row's parts, its template, how many
+values it guards, its refresh and its key, instead of a finished child. The loop keeps one record per
+row (`Mounted_row`: the root element, the scope, the holes and a `Type.Id` witness of the holes'
+type) and calls the refresh directly. A row no longer needs a child description, a `with_key`
+wrapper or the three closures of a generic mounted child. Creating 1,000 rows of the benchmark
+allocates a third less, and the heap with 1,000 rows shrinks from 1.68 to 1.40 MB. Rows of another
+shape, or components such as Melact's `<Row>`, keep `View.each`.
+
 ## Server rendering and hydration
 
 `Served.render` renders a view into HTML in any JavaScript environment with a DOM (a server with

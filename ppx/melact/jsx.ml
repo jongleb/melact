@@ -409,8 +409,8 @@ let mapper =
       | Pexp_apply (callee, arguments) -> (
           match (Element.without_jsx expression.pexp_attributes, callee.pexp_desc) with
           | None, _ -> super#expression expression
-          | Some _, Pexp_ident { txt = Lident tag; _ } ->
-              Element.lowercase self#frontend ~loc tag arguments
+          | Some attributes, Pexp_ident { txt = Lident tag; _ } ->
+              Element.lowercase self#frontend ~loc ~attributes tag arguments
           | Some _, Pexp_ident { txt = Ldot (path, name); _ } ->
               self#uppercase ~loc path
                 (match name with "createElement" -> "make" | other -> other)
