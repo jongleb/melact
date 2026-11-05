@@ -226,6 +226,28 @@ let marked_html marked =
             marked.entries))
   ^ "</ul>"
 
+module Served = struct
+  let[@react.component] make ~start =
+    let count, setCount = React.useState (fun () -> start) in
+    <section>
+      <button onClick=(fun _ -> setCount (fun n -> n + 1))>(React.int count)</button>
+      <ul>
+        (React.array
+           (Array.map
+              (fun label -> <li key=label>(React.string label)</li>)
+              (Array.init count (fun index -> "r" ^ string_of_int index))))
+      </ul>
+    </section>
+end
+
+external set_inner_html : Dom.element -> string -> unit = "innerHTML" [@@mel.set]
+external document_prototype : prototype = "prototype" [@@mel.scope "Document"]
+
+let served count =
+  "<section><button>" ^ string_of_int count ^ "</button><ul>"
+  ^ String.concat "" (List.init count (fun index -> "<li>r" ^ string_of_int index ^ "</li>"))
+  ^ "</ul></section>"
+
 let digits text =
   String.of_seq (Seq.filter (fun letter -> letter >= '0' && letter <= '9') (String.to_seq text))
 
@@ -478,6 +500,33 @@ let () =
              in
              step 10 marked_start))
         [%mel.obj { numRuns = 60 }]));
+  describe "server rendering" (fun () ->
+    test_async "hydrating the server's HTML creates no element and then updates like a render" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+             let tape = tape values in
+             let start = draw tape 4 and clicks = draw tape 4 in
+             let root = attached () in
+             set_inner_html root (ReactDOMServer.renderToString <Served start />);
+             let creates = spy_on document_prototype "createElement" in
+             let client = ref None in
+             let* () = act (fun () -> client := Some (ReactDOM.Client.hydrateRoot root <Served start />)) in
+             let created = Array.length (calls (mock creates)) in
+             restore creates;
+             let hydrated = inner_html root in
+             let rec click remaining shown =
+               match remaining with
+               | 0 -> Js.Promise.resolve (List.rev shown)
+               | _ ->
+                   let* () = act (fun () -> Testing.click (select root "button")) in
+                   click (remaining - 1) (inner_html root :: shown)
+             in
+             let* shown = click clicks [] in
+             let* () = act (fun () -> Option.iter (fun client -> ReactDOM.Client.unmount client ()) !client) in
+             expect (created, hydrated, shown)
+             |. to_equal (0, served start, List.init clicks (fun index -> served (start + index + 1)));
+             finish ()))
+        [%mel.obj { numRuns = 40 }]));
   describe "forms" (fun () ->
     test_async "a controlled input and checkbox show the state after any input, kept or rejected"
       (fun () ->

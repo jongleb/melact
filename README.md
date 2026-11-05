@@ -300,7 +300,8 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.16 for Meltea, 1.17 for Melact and 1.64 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
 | **Tests** | 94 vitest + jsdom tests and 24 native QCheck laws: the View layer, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
-| **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, real hydration, SSR |
+| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. Hydration takes the server's nodes over instead of building them again |
+| **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, SSR on native OCaml |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 
 A whole tree compiles to one template. This mlx counter is one `<template>` with six holes,
@@ -343,7 +344,7 @@ $ npx vite                            # then open http://localhost:5173/examples
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/roadmap-dark.svg">
-  <img src="assets/roadmap.svg" alt="Roadmap: 1 View done; then hooks, melact-ppx, compatibility, speed, SSR, publish" width="100%">
+  <img src="assets/roadmap.svg" alt="Roadmap: View, hooks, melact-ppx, speed and server rendering with hydration done; compatibility in progress; publishing next" width="100%">
 </picture>
 
 | # | milestone | done when |
@@ -352,8 +353,8 @@ $ npx vite                            # then open http://localhost:5173/examples
 | 2 | **Hooks** ✓ | one test suite passes twice: against reason-react with real React, and against melact |
 | 3 | **melact-ppx** ✓ | the counter in reason-react style compiles to one template with the same holes as by hand |
 | 4 | **Compat** | reason-react's examples and TodoMVC build unmodified and behave identically |
-| 5 | **Speed** | js-framework-benchmark within Solid's band on keyed results, memory ≤ 1.5× vanilla |
-| 6 | **SSR** | `to_string` on native, hydration that binds holes to existing nodes by path |
+| 5 | **Speed** ✓ | keyed loops, selectors and pure components: about 1.2× vanilla JS on the keyed benchmark, React 18 about 1.7× |
+| 6 | **SSR** ✓ | `ReactDOMServer.renderToString` / `Program.render`, and hydration that takes the server's nodes over |
 | 7 | **Publish** | opam packages `melact` and `melact-ppx`, CI over all of the above |
 
 The full plan is in [`SPEC.md`](SPEC.md).

@@ -381,12 +381,10 @@ module Ref = struct
     | Some (Callback _) | None -> Js.Nullable.null
 end
 
-external set_text_content : Dom.element -> string -> unit = "textContent" [@@mel.set]
 external querySelector : string -> Dom.element option = "querySelector"
 [@@mel.scope "document"] [@@mel.return nullable]
 external domElementToObj : Dom.element -> < .. > Js.t = "%identity"
 
-let clear container = set_text_content container ""
 
 module Client = struct
   (** What a root shows. *)
@@ -404,9 +402,9 @@ module Client = struct
     Melact_runtime.Instance.settle ()
 
   let hydrateRoot container element =
-    clear container;
     let root = createRoot container in
-    render root element;
+    root.content <- Showing (Served.hydrate (React.to_child element) ~parent:container);
+    Melact_runtime.Instance.settle ();
     root
 
   let unmount root () =
@@ -431,8 +429,9 @@ let render element container =
   Client.render root element
 
 let hydrate element container =
-  clear container;
-  render element container
+  roots :=
+    (container, Client.hydrateRoot container element)
+    :: List.filter (fun (known, _) -> not (known == container)) !roots
 
 let createPortal element container = React.of_child (View.portal container (React.to_child element))
 

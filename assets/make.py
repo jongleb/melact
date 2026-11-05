@@ -753,27 +753,25 @@ def controlled(p):
 
 def roadmap(p):
     stages = [
-        ("View", "templates, holes,", "reconcile, events"),
-        ("Hooks", "instances, useState,", "effects, context"),
-        ("melact-ppx", "JSX → templates", "Reason, OCaml, mlx"),
-        ("Compat", "ReactDOM, ReactEvent,", "TodoMVC unmodified"),
-        ("Speed", "js-framework-", "benchmark"),
-        ("SSR", "to_string,", "hydration"),
-        ("Publish", "opam, CI,", "README numbers"),
+        ("View", "templates, holes,", "reconcile, events", "done"),
+        ("Hooks", "instances, useState,", "effects, context", "done"),
+        ("melact-ppx", "JSX → templates", "Reason, OCaml, mlx", "done"),
+        ("Compat", "ReactDOM, ReactEvent,", "TodoMVC unmodified", "now"),
+        ("Speed", "keyed loops,", "1.2× vanilla", "done"),
+        ("SSR", "render to HTML,", "hydration", "done"),
+        ("Publish", "opam, CI,", "README numbers", "next"),
     ]
     step = 124
     body = f'<line x1="66" y1="44" x2="{66 + step * 6}" y2="44" stroke="{p["line"]}" stroke-width="3"/>'
-    body += f'<line x1="66" y1="44" x2="{66 + step * 2}" y2="44" stroke="{p["accent"]}" stroke-width="3"/>'
-    body += f'<line x1="{66 + step * 2}" y1="44" x2="{66 + step * 3}" y2="44" stroke="{p["accent"]}" stroke-width="3" class="flow"/>'
-    for i, (name, a, b) in enumerate(stages):
+    for i, (name, a, b, status) in enumerate(stages):
         x = 66 + i * step
-        if i < 3:
+        if status == "done":
             body += f'<circle cx="{x}" cy="44" r="16" fill="{p["accent"]}"/>'
             body += f'<path d="M{x - 7},44 l5,5 l9,-10" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
             body += text(x, 16, "done", size=11, cls="accent", weight=700, anchor="middle")
-        elif i == 3:
+        elif status == "now":
             body += f'<circle cx="{x}" cy="44" r="16" fill="{p["accent_soft"]}" stroke="{p["accent"]}" stroke-width="2.5" class="pulse"/>'
-            body += text(x, 49, "4", size=12, cls="accent", weight=700, anchor="middle")
+            body += text(x, 49, str(i + 1), size=12, cls="accent", weight=700, anchor="middle")
             body += text(x, 16, "now", size=11, cls="accent", weight=700, anchor="middle")
         else:
             body += f'<circle cx="{x}" cy="44" r="13" fill="{p["card"]}" stroke="{p["line"]}" stroke-width="2"/>'
@@ -781,7 +779,7 @@ def roadmap(p):
         body += text(x, 84, name, size=13.5, weight=600, anchor="middle")
         body += text(x, 104, a, size=11.5, cls="muted", anchor="middle")
         body += text(x, 120, b, size=11.5, cls="muted", anchor="middle")
-    return svg(p, 880, 132, "Roadmap: View, hooks and melact-ppx done; compatibility in progress; then speed, SSR, publish", body)
+    return svg(p, 880, 132, "Roadmap: View, hooks, melact-ppx, speed and server rendering with hydration done; compatibility in progress; publishing next", body)
 
 
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks, compat=compat, pipeline=pipeline, patch=patch, reconcile=reconcile,

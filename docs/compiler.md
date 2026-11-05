@@ -108,6 +108,29 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+## Server rendering and hydration
+
+`Served.render` renders a view into HTML in any JavaScript environment with a DOM (a server with
+linkedom or jsdom, a build step). Every dynamic part, a text or a content hole's children, is
+written between two comments, `<!--[-->` and `<!--]-->`, so that the browser's HTML parser cannot
+merge a dynamic text with its neighbours, and the anchors between neighbouring parts are written
+as `<!---->`.
+
+`Served.hydrate` takes such HTML over instead of building it again. Every block takes the element
+right before its anchor; lists are built from the last item back, so each item takes the nodes
+just before the next one. The compiled `firstChild`/`nextSibling` walk skips the marked ranges, so
+it reaches the same nodes it reaches in a fresh clone. Texts take the text node between their
+markers; the markers are removed and the anchors become the empty texts a browser render has. If
+the HTML does not match the view, hydration falls back to a plain render, as React does.
+
+The browser path does not carry this code: every child reaches the DOM through a small record,
+`View.medium`, whose browser value only clones and inserts; the server and hydration values live in
+`Served`. Meltea's counter grows by 65 bytes. Laws: on random trees of every kind of child,
+hydration shows what mounting shows and leaves no comment behind, creates no element and keeps
+every element the server sent, and patching afterwards matches mounting; TodoMVC hydrates a random
+model and then behaves like a mounted one under random user actions; and one dual law hydrates
+`ReactDOMServer.renderToString` with `ReactDOM.Client.hydrateRoot` under React 18 and Melact.
+
 ## Types, where dune can give them
 
 `meltea-ppx` has an optional typed pass, `-typed`, for builds that run it as a staged rewriter:
