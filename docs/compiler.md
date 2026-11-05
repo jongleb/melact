@@ -84,6 +84,27 @@ each hole expression appears once in the generated code. A later render of the s
 finds the mounted holes through its template: the mounted clone lends them to the template, and
 the refresh that belongs to that template takes them back, typed, without `Obj` or a type witness.
 
+## Compiled lists
+
+`Html.list (List.map row items)` in a content hole compiles to a keyed loop, `View.each`, instead
+of a list of row descriptions. The compiler finds what a row reads besides its item: the free
+variables of `row`, looking through local `let` definitions. If none of them changed and an item is
+physically the same as before, the loop keeps the row as it is and never calls `row`.
+
+When an outer variable does change, the loop does not re-render every row. As in Vue Vapor's
+selectors, the compiler splits the row into its item and the smallest pieces without JSX that read
+outer variables (its leaves), for example
+
+```ocaml
+match selected with Some id when id = item.id -> "danger" | _ -> ""
+```
+
+and emits a projection that evaluates only those leaves for an item. A row is re-rendered only when
+its projection changed: selecting a row of 1,000 re-renders two. Leaves that build fresh values
+(closures, records) never compare equal, so such rows simply re-render; that is slower, never wrong.
+A law runs random messages against a view whose rows read two outer values and compares the page
+with a fresh mount.
+
 ## Controlled inputs
 
 `value` and `checked` are properties the user changes too. A guard compares a value with the one
