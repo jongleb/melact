@@ -1,0 +1,217 @@
+open Melhole
+open Testing
+
+(** One row of a keyed loop. The same objects recur between steps, so the loop can reuse rows. *)
+type item = { key : string; label : string }
+
+(** What every row reads besides its item. *)
+type outer = { chosen : string; suffix : string }
+
+let fresh_items = Array.init 12 (fun index -> { key = "k" ^ string_of_int index; label = "l" ^ string_of_int index })
+let relabelled = Array.map (fun item -> { item with label = item.label ^ "*" }) fresh_items
+
+let outers =
+  Array.concat
+    (List.map
+       (fun chosen -> [| { chosen; suffix = "" }; { chosen; suffix = "?" } |])
+       [ "none"; "k0"; "k1"; "k2"; "k3" ])
+
+let row_template = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "class"); Text ([], 0) |]
+let renders = ref 0
+let marked outer item = match String.equal item.key outer.chosen with true -> "on" | false -> ""
+
+let loop items outer =
+  View.each items
+    (fun [@u] item ->
+      incr renders;
+      View.with_key item.key
+        (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ outer.suffix) |]))
+    (fun [@u] item -> [| View.Input (marked outer item); View.Input (item.label ^ outer.suffix) |])
+    [| View.Input outer |]
+
+(** How a step changes the rows. *)
+type edit = Structural | Same_order
+
+let step tape (items, outer) =
+  let count = Array.length items in
+  let pick () = draw tape (max 1 count) in
+  let unused () =
+    List.find_opt
+      (fun item -> not (Array.exists (fun shown -> String.equal shown.key item.key) items))
+      (List.filteri (fun index _ -> index >= draw tape 12) (Array.to_list fresh_items))
+  in
+  match (draw tape 10, count) with
+  | 0, _ -> ((items, outers.(draw tape (Array.length outers))), Same_order)
+  | 1, _ -> ((items, outer), Same_order)
+  | 2, _ when count > 0 ->
+      let at = pick () in
+      let swap item = if String.equal item.key items.(at).key then relabelled.(int_of_string (String.sub item.key 1 (String.length item.key - 1))) else item in
+      ((Array.map swap items, outer), Same_order)
+  | 3, _ when count > 1 ->
+      let next = Array.copy items in
+      next.(0) <- items.(count - 1);
+      next.(count - 1) <- items.(0);
+      ((next, outer), Structural)
+  | 4, _ when count > 0 ->
+      let at = pick () in
+      ((Array.of_list (List.filteri (fun index _ -> index <> at) (Array.to_list items)), outer), Structural)
+  | 5, _ ->
+      ( ( Option.fold ~none:items
+            ~some:(fun item ->
+              let at = draw tape (count + 1) in
+              Array.concat [ Array.sub items 0 at; [| item |]; Array.sub items at (count - at) ])
+            (unused ()),
+          outer ),
+        Structural )
+  | 6, _ -> ((Array.of_list (List.rev (Array.to_list items)), outer), Structural)
+  | 7, _ -> (([||], outer), Structural)
+  | 8, _ when count > 1 ->
+      let first = pick () and second = pick () in
+      let next = Array.copy items in
+      next.(first) <- items.(second);
+      next.(second) <- items.(first);
+      ((next, outer), Structural)
+  | _, _ ->
+      ( (Array.of_list (List.filter (fun _ -> draw tape 2 = 0) (Array.to_list fresh_items)), outer),
+        Structural )
+
+let shown child =
+  let root = create_element document "ul" in
+  let mounted = View.mount child ~parent:root ~before:None in
+  let shapes = shapes (as_node root) in
+  View.unmount mounted;
+  shapes
+
+let start = (Array.sub fresh_items 0 6, outers.(0))
+
+(** A pure component's identity and inputs, from small pools so that both recur. *)
+type slot = { identity : int; input : string }
+
+let identities = [| ref 0; ref 1 |]
+let card_template = Template.make ~html:"<p></p>" ~holes:[| Text ([], 0) |]
+let card_renders = ref 0
+
+let cards slots =
+  View.list
+    (List.map
+       (fun slot ->
+         View.pure identities.(slot.identity)
+           [| View.Input slot.input |]
+           (fun () ->
+             incr card_renders;
+             View.tpl_instance card_template [| HText (string_of_int slot.identity ^ slot.input) |]))
+       slots)
+
+let inputs = [| "a"; "b"; "c" |]
+
+let slots tape count =
+  List.init count (fun _ -> { identity = draw tape 2; input = inputs.(draw tape 3) })
+
+let () =
+  describe "Keyed loop laws" (fun () ->
+      test "after any edits and outer changes, patching shows what mounting from scratch shows" (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 let root = create_element document "ul" in
+                 let items, outer = start in
+                 let mounted = View.mount (loop items outer) ~parent:root ~before:None in
+                 let rec run state remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let ((items, outer) as next), _ = step tape state in
+                       View.patch mounted (loop items outer);
+                       (shapes (as_node root), shown (loop items outer)) :: run next (remaining - 1)
+                 in
+                 let seen = run start (2 + draw tape 12) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 400 }]);
+      test "when the order is kept, exactly the rows whose item or projection changed are rendered" (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 let root = create_element document "ul" in
+                 let items, outer = start in
+                 let mounted = View.mount (loop items outer) ~parent:root ~before:None in
+                 let rec run ((items, outer) as state) remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ -> (
+                       let ((next_items, next_outer) as next), edit = step tape state in
+                       renders := 0;
+                       View.patch mounted (loop next_items next_outer);
+                       match edit with
+                       | Structural -> run next (remaining - 1)
+                       | Same_order ->
+                           let expected =
+                             List.length
+                               (List.filteri
+                                  (fun index item ->
+                                    let before = items.(index) in
+                                    not
+                                      (same before item
+                                      && String.equal (marked outer before) (marked next_outer item)
+                                      && String.equal (before.label ^ outer.suffix) (item.label ^ next_outer.suffix)))
+                                  (Array.to_list next_items))
+                           in
+                           (!renders, expected) :: run next (remaining - 1))
+                 in
+                 let seen = run start (2 + draw tape 12) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 400 }]);
+      test "a change outside the rows that no projection sees writes nothing to the DOM" (fun () ->
+          check
+            (property (tapes ~shortest:4 ~longest:30) (fun values ->
+                 let tape = tape values in
+                 let root = create_element document "ul" in
+                 let items = Array.sub fresh_items 0 (1 + draw tape 8) in
+                 let outer = { chosen = "none"; suffix = "" } in
+                 let mounted = View.mount (loop items outer) ~parent:root ~before:None in
+                 let watcher = observer (fun () -> ()) in
+                 observe watcher root
+                   [%mel.obj { childList = true; subtree = true; attributes = true; characterData = true }];
+                 View.patch mounted (loop items { chosen = "elsewhere"; suffix = "" });
+                 let records = Array.length (take_records watcher) in
+                 disconnect watcher;
+                 View.unmount mounted;
+                 expect records |. to_be 0))
+            [%mel.obj { numRuns = 200 }]));
+  describe "Pure component laws" (fun () ->
+      test "patching shows what mounting shows, and renders exactly the slots whose inputs or identity changed"
+        (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:60) (fun values ->
+                 let tape = tape values in
+                 let count = 1 + draw tape 4 in
+                 let root = create_element document "div" in
+                 let first = slots tape count in
+                 let mounted = View.mount (cards first) ~parent:root ~before:None in
+                 let rec run previous remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let next = slots tape count in
+                       let nodes_before = nodes (child_nodes root) in
+                       card_renders := 0;
+                       View.patch mounted (cards next);
+                       let nodes_after = nodes (child_nodes root) in
+                       let changed =
+                         List.length
+                           (List.filter
+                              (fun (before, after) -> before.identity <> after.identity || not (String.equal before.input after.input))
+                              (List.combine previous next))
+                       in
+                       let kept =
+                         List.mapi (fun index (before, after) -> (before.identity = after.identity, same nodes_before.(index) nodes_after.(index)))
+                           (List.combine previous next)
+                       in
+                       ((shapes (as_node root), !card_renders, List.map fst kept), (shown (cards next), changed, List.map snd kept))
+                       :: run next (remaining - 1)
+                 in
+                 let seen = run first (1 + draw tape 10) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 400 }]))
