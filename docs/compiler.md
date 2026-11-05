@@ -326,6 +326,19 @@ a frame is pending moves the draw to the next microtask. A model-based law sends
 clicks between microtask and frame boundaries (with a stubbed `requestAnimationFrame`) and checks
 the number of view calls and the page after every boundary against a model of the schedule.
 
+### Hot reload
+
+A model lives outside the code, so new code can take it over, as elm-watch does. `meltea-ppx`
+writes a shape next to `update`: a digest of the type declarations of its module. A program leaves
+its model, its shape and a way to stop on its root. `Program.element ~start:Program.hot` (and
+`sandbox`) finds the program running on the root, stops it, and starts from its model when the
+shapes are the same, or from `init` when the types changed, without running `init`'s commands. With
+Vite, `main.mlx` accepts its own updates (`import.meta.hot.accept()`), so an edit runs it again and
+the page shows the new view of the old state; examples/todomvc does this. A stopped program drops
+the messages that still reach it. A law runs a program, starts new code on its root with the same
+or another shape, and checks the page against a mount of the new view on the carried model or on
+`init`, and that the old program no longer draws.
+
 ## Components without hooks
 
 By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body

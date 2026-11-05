@@ -1179,9 +1179,38 @@ def remember(p):
     return svg(p, 880, 290, "Remembered values in a Meltea view: Type m changes only the draft field. Without remembering, let shown = List.filter over model.items builds a new list on every call, so the list hole sees a different value and checks all 1,000 rows. meltea-ppx compiles the let to View.remember keyed by model.filter and model.items; both are the same objects, so the old list comes back, the hole is skipped, and only the draft hole is written", body)
 
 
+def hot(p):
+    body = box(0, 0, 250, 150, p["card"], p["line"], rx=14, width=1.3, lift=True)
+    body += text(18, 28, "running on #root", size=13.5, weight=700)
+    body += text(18, 56, "model", size=11.5, cls="muted")
+    body += text(18, 76, "{ todos = [milk];", size=11.5, cls="mono")
+    body += text(18, 94, "  field = \"half typed\" }", size=11.5, cls="mono")
+    body += text(18, 124, "shape", size=11.5, cls="muted")
+    body += text(64, 124, "a3f1…", size=11.5, cls="mono accent", weight=700)
+    body += arrow(p, 254, 75, 300, 75, "muted", flow=True, width=1.6)
+    body += text(277, 64, "edit", size=11, cls="muted", anchor="middle")
+    body += box(304, 0, 250, 150, p["accent_soft"], p["accent"], rx=14, width=1.3, lift=True)
+    body += text(322, 28, "new code arrives", size=13.5, cls="accent", weight=700)
+    body += text(322, 54, "Vite re-runs main.mlx:", size=11.5, cls="muted")
+    body += text(322, 76, "Program.element", size=11.5, cls="mono")
+    body += text(322, 94, "  ~start:Program.hot …", size=11.5, cls="mono")
+    body += text(322, 124, "shape of its types", size=11.5, cls="muted")
+    body += text(452, 124, "a3f1…", size=11.5, cls="mono accent", weight=700)
+    body += curve(p, "M558,50 C590,50 590,24 622,24", "green", flow=True, width=1.8)
+    body += curve(p, "M558,100 C590,100 590,124 622,124", "orange", flow=True, width=1.6)
+    body += box(626, 0, 254, 66, p["green_soft"], p["green"], rx=12, width=1.3)
+    body += text(642, 26, "same shape: the model carries over", size=12, cls="green", weight=700)
+    body += text(642, 48, "new view and update, old state", size=11.5, cls="muted")
+    body += box(626, 90, 254, 60, p["orange_soft"], p["orange"], rx=12, width=1.3)
+    body += text(642, 114, "types changed: start from init", size=12, cls="orange", weight=700)
+    body += text(642, 136, "the old model may not fit them", size=11.5, cls="muted")
+    body += text(0, 180, "meltea-ppx writes the shape, a digest of the module's type declarations, next to update; the old program stops and leaves the root.", size=11.5, cls="muted")
+    return svg(p, 880, 186, "Hot reload in Meltea: a program runs on the root with its model and the shape of its module's types. After an edit, Vite runs main.mlx again, and Program.element with ~start:Program.hot finds the running program; when the new code's shape is the same, the model carries over and the new view and update show the old state; when the types changed, the program starts from init. meltea-ppx writes the shape, a digest of the type declarations, next to update", body)
+
+
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, hot=hot)
 
 if __name__ == "__main__":
     out = Path(__file__).parent

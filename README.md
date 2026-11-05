@@ -378,6 +378,14 @@ an alert, `fanout`, and the user writes nothing to get it.
 A derived `let` at the top of a view is remembered by the fields it reads, so typing in a field no
 longer rebuilds a filtered list and makes its loop check every row.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hot-dark.svg">
+  <img src="assets/hot.svg" alt="Hot reload in Meltea: a program runs on the root with its model and the shape of its module's types. After an edit, Vite runs main.mlx again, and Program.element with ~start:Program.hot finds the running program; when the new code's shape is the same, the model carries over and the new view and update show the old state; when the types changed, the program starts from init" width="100%">
+</picture>
+
+`~start:Program.hot` with Vite's HMR shows an edit as the new view of the old model, as elm-watch
+does, and starts from `init` when the module's types changed.
+
 ### Transitions
 
 <picture>
@@ -417,7 +425,7 @@ demo component binds React's npm `useReducer` directly, which is a non-goal, so 
 | **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, every `React.Event` family over native events (handlers see the `currentTarget` they were set on, as in React), `React.createElement` with `makeProps`, `ReasonReactRouter`; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
 | **Size** | whole apps, runtime and the Melange stdlib they use included: the counter is 3.0 kB gzip with Meltea and 5.6 kB with Melact, TodoMVC in Meltea is 14.7 kB, most of it jsonkit's `Printf` for error messages; React 18.3 and react-dom alone are 45 kB |
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.16 for Meltea, 1.17 for Melact and 1.64 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
-| **Tests** | 141 vitest + jsdom tests and 25 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Tests** | 142 vitest + jsdom tests and 25 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
 | **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable`. `meltea-ppx -server` compiles a view to code that writes its HTML with no DOM, natively or in Node ([`examples/served`](examples/served)); a Melact app renders natively with server-reason-react. `Melhole_server.capture`, a script for the page's head, keeps clicks and typing made before the code arrives and hydration delivers them |
 | **Not yet** | `React.createElementVariadic`, code typed against `React.component('props)`, Suspense on the server |
