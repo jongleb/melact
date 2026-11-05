@@ -22,6 +22,33 @@ let stub_rects : unit -> unit -> unit =
         return function () { Element.prototype.getBoundingClientRect = original; };
       }|}]
 
+let animated : int -> unit -> unit =
+  [%mel.raw
+    {|function (count) {
+        const original = Element.prototype.getAnimations;
+        globalThis.__finish = [];
+        Element.prototype.getAnimations = function () {
+          const made = [];
+          for (let i = 0; i < count; i++) {
+            let done;
+            const finished = new Promise((resolve) => { done = resolve; });
+            globalThis.__finish.push(done);
+            made.push({ finished });
+          }
+          return made;
+        };
+        return function () {
+          if (original) Element.prototype.getAnimations = original;
+          else delete Element.prototype.getAnimations;
+        };
+      }|}]
+
+let finish_animation : int -> unit = [%mel.raw {|function (index) { globalThis.__finish[index](); }|}]
+let drained : unit -> unit Js.Promise.t = [%mel.raw {|function () { return new Promise((resolve) => setTimeout(resolve, 0)); }|}]
+external inert : Dom.element -> string -> string Js.null = "getAttribute" [@@mel.send]
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external use_real_timers_now : unit -> unit = "useRealTimers" [@@mel.scope "vi"]
+
 let duration = 100
 let keys = [| "a"; "b"; "c"; "d"; "e"; "f" |]
 let plain = Template.make ~html:"<li></li>" ~holes:[| Text ([], 0) |]
@@ -126,6 +153,12 @@ let () =
                          start
                      in
                      let at_once = classes root in
+                     let inert_keys =
+                       List.filter_map
+                         (fun element ->
+                           Option.map (fun _ -> text_of element) (Js.Null.toOption (inert element "inert")))
+                         (Array.to_list (elements (children root)))
+                     in
                      advance two_frames;
                      let framed = classes root in
                      advance (duration - two_frames - 1);
@@ -133,8 +166,13 @@ let () =
                      advance 50;
                      let after = shown_keys root in
                      View.unmount mounted;
-                     expect (at_once, framed, still, after)
-                     |. to_equal (leaving "t-leave-from t-leave-active", leaving "t-leave-active t-leave-to", start, kept))))
+                     expect (at_once, inert_keys, framed, still, after)
+                     |. to_equal
+                          ( leaving "t-leave-from t-leave-active",
+                            List.filter (fun key -> not (List.mem key kept)) start,
+                            leaving "t-leave-active t-leave-to",
+                            start,
+                            kept ))))
             [%mel.obj { numRuns = 200 }]);
       test "a new row enters with the enter classes, which are gone when its time is up" (fun () ->
           check
@@ -225,6 +263,40 @@ let () =
                      expect (at_once, framed)
                      |. to_equal ("t-leave-from t-leave-active", "t-leave-active t-leave-to"))))
             [%mel.obj { numRuns = 200 }]);
+      test_async "without a duration, a row leaves exactly when the last of its animations finishes" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:10) (fun values ->
+                 let tape = tape values in
+                 let count = draw tape 4 in
+                 let order = shuffle tape (List.init count Fun.id) in
+                 let restore = animated count in
+                 use_fake_timers [%mel.obj { toFake = [| "requestAnimationFrame" |] }];
+                 let shown items = Transition.make ~name:"t" (rows items) in
+                 let root = create_element document "ul" in
+                 let mounted = View.mount (shown [ "a"; "b" ]) ~parent:root ~before:None in
+                 View.patch mounted (shown [ "a" ]);
+                 advance two_frames;
+                 use_real_timers_now ();
+                 let rec finish remaining seen =
+                   Js.Promise.then_
+                     (fun () ->
+                       let seen = shown_keys root :: seen in
+                       match remaining with
+                       | [] -> Js.Promise.resolve (List.rev seen)
+                       | index :: rest ->
+                           finish_animation index;
+                           finish rest seen)
+                     (drained ())
+                 in
+                 Js.Promise.then_
+                   (fun seen ->
+                     View.unmount mounted;
+                     restore ();
+                     expect seen
+                     |. to_equal (List.init count (fun _ -> [ "a"; "b" ]) @ [ [ "a" ] ]);
+                     Js.Promise.resolve ())
+                   (finish order [])))
+            [%mel.obj { numRuns = 60 }]);
       test "unmounting the wrapper takes its leaving rows with it at once" (fun () ->
           check
             (property (tapes ~shortest:2 ~longest:20) (fun values ->

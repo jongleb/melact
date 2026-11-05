@@ -244,8 +244,9 @@ runs the leave classes; a node that is new runs the enter classes. In a group it
 kept element's rectangle before and after, and an element that moved gets a transform back to
 its old place, cleared on the next frame with `name-move` on, as FLIP does. Each phase stops the
 one before it on the same element, so an element removed while it enters only leaves. Classes are
-switched after two animation frames, and the phase ends after `duration` or after the longest
-delay plus duration of its computed transition or animation. When the wrapper itself goes, the
+switched after two animation frames, and the phase ends after `duration`, or when every animation
+`getAnimations()` returns has finished, or, without the Web Animations API, after the longest delay
+plus duration of its computed transition or animation. An element that leaves is `inert`. When the wrapper itself goes, the
 elements still leaving go with it. meltea-ppx looks through `Html.transition_group` for
 `Html.list (List.map …)`, so the list inside is still the keyed loop with selectors.
 
