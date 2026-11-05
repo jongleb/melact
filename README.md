@@ -338,13 +338,12 @@ view reads. A message that changes nothing the view reads does not call the view
 
 ## Status
 
-
-*[`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
+[`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
 in their `dune` files and builds them against Melact. Then it renders reason-react's demo with React and with Melact and
 compares the DOM after every click, and walks the TodoMVC randomly (five walks, 605 steps of clicks, typing, submits and
 route changes) comparing the DOM after every step. The TodoMVC was written for reason-react 0.9, so both copies first get
 the same upgrade to reason-react 0.17 (`ReactEvent.` becomes `React.Event.`, and `Index.re` uses `ReactDOM.Client`). One
-demo component binds React's npm `useReducer` directly, which is a non-goal, so the script removes it.*
+demo component binds React's npm `useReducer` directly, which is a non-goal, so the script removes it.
 
 | | |
 |---|---|
