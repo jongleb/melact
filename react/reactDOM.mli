@@ -369,15 +369,7 @@ module Ref : sig
   val forwarded : domRef option -> Dom.element Js.nullable React.ref Js.Nullable.t
 end
 
-module Client : sig
-  (** A container element and what is rendered into it. *)
-  type root
-
-  val createRoot : Dom.element -> root
-  val hydrateRoot : Dom.element -> React.element -> root
-  val render : root -> React.element -> unit
-  val unmount : root -> unit -> unit
-end
+module Client = ReactDOMClient
 
 val render : React.element -> Dom.element -> unit
 [@@deprecated "Use ReactDOM.Client.createRoot and ReactDOM.Client.render instead."]

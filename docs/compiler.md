@@ -125,7 +125,7 @@ the HTML does not match the view, hydration falls back to a plain render, as Rea
 
 The browser path does not carry this code: every child reaches the DOM through a small record,
 `View.medium`, whose browser value only clones and inserts; the server and hydration values live in
-`Served`. Meltea's counter grows by 65 bytes. Laws: on random trees of every kind of child,
+`Served`. Meltea's counter grows by 65 bytes. `ReactDOM.Client` lives in its own module, `ReactDOMClient`, so that a Melact app that never hydrates does not carry hydration either: Melange compiles a submodule into one object, which bundlers cannot shake. Laws: on random trees of every kind of child,
 hydration shows what mounting shows and leaves no comment behind, creates no element and keeps
 every element the server sent, and patching afterwards matches mounting; TodoMVC hydrates a random
 model and then behaves like a mounted one under random user actions; and one dual law hydrates
