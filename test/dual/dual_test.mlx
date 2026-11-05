@@ -4,6 +4,9 @@ external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
 external tag_name : Dom.element -> string = "tagName" [@@mel.get]
 external namespace_uri : Dom.element -> string = "namespaceURI" [@@mel.get]
 external get_attribute : Dom.element -> string -> string = "getAttribute" [@@mel.send]
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external window_object : prototype = "window"
 
 external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
 
@@ -162,6 +165,20 @@ module Rows = struct
     <div>(React.array (Array.map (fun label -> <Counter key=label label />) labels))</div>
 end
 
+module Created_rows = struct
+  let[@react.component] make ~labels =
+    <div>
+      (React.array
+         (Array.map (fun label -> React.createElement Counter.make (Counter.makeProps ~key:label ~label ())) labels))
+    </div>
+end
+
+module Address = struct
+  let[@react.component] make () =
+    let url = ReasonReactRouter.useUrl () in
+    <p>(React.string (String.concat "/" url.path ^ "#" ^ url.hash ^ "?" ^ url.search))</p>
+end
+
 module Toggle = struct
   let[@react.component] make () =
     let shown, setShown = React.useState (fun () -> false) in
@@ -276,6 +293,81 @@ let type_into : Dom.element -> string -> unit =
 
 let later : unit -> unit Js.Promise.t =
   [%mel.raw {|function () { return new Promise((resolve) => setTimeout(resolve, 0)); }|}]
+
+(** What the button's handler does to the event before reading it. *)
+type treatment = { prevent : [ `Prevent | `Allow ]; stop : [ `Stop | `Bubble ] }
+
+(** An event sent to the probe, and the element it is sent to. *)
+type probe_event =
+  | Mouse of { x : int; y : int; button : int; shift : bool; alt : bool; ctrl : bool; meta : bool }
+  | Key of { key : string; shift : bool; ctrl : bool; repeat : bool }
+
+let treatment = ref { prevent = `Allow; stop = `Bubble }
+
+let treat ~prevent_default ~stop_propagation =
+  (match !treatment.prevent with `Prevent -> prevent_default () | `Allow -> ());
+  match !treatment.stop with `Stop -> stop_propagation () | `Bubble -> ()
+
+external tag_of : 'target -> string = "tagName" [@@mel.get]
+external current_target_of : Dom.event -> Dom.element Js.null = "currentTarget" [@@mel.get]
+external dispatch_kept : Dom.element -> Dom.event -> bool = "dispatchEvent" [@@mel.send]
+
+external mouse_event :
+  string ->
+  < bubbles : bool ; cancelable : bool ; clientX : int ; clientY : int ; button : int ; shiftKey : bool
+  ; altKey : bool ; ctrlKey : bool ; metaKey : bool >
+  Js.t ->
+  Dom.event = "MouseEvent"
+[@@mel.new]
+
+external keyboard_event :
+  string ->
+  < bubbles : bool ; cancelable : bool ; key : string ; shiftKey : bool ; ctrlKey : bool ; repeat : bool > Js.t ->
+  Dom.event = "KeyboardEvent"
+[@@mel.new]
+
+let flags values = String.concat "" (List.map (fun value -> match value with true -> "1" | false -> "0") values)
+
+module Probe = struct
+  let[@react.component] make () =
+    <section
+      onClick=(fun event -> log ("section " ^ tag_of (React.Event.Mouse.currentTarget event)))
+      onKeyDown=(fun event -> log ("section " ^ tag_of (React.Event.Keyboard.currentTarget event)))>
+      <button
+        onClick=(fun event ->
+          treat
+            ~prevent_default:(fun () -> React.Event.Mouse.preventDefault event)
+            ~stop_propagation:(fun () -> React.Event.Mouse.stopPropagation event);
+          log
+            (String.concat " "
+               [ React.Event.Mouse.type_ event;
+                 tag_of (React.Event.Mouse.currentTarget event);
+                 tag_of (React.Event.Mouse.target event);
+                 string_of_int (React.Event.Mouse.clientX event);
+                 string_of_int (React.Event.Mouse.clientY event);
+                 string_of_int (React.Event.Mouse.button event);
+                 flags
+                   [ React.Event.Mouse.shiftKey event; React.Event.Mouse.altKey event;
+                     React.Event.Mouse.ctrlKey event; React.Event.Mouse.metaKey event;
+                     React.Event.Mouse.isDefaultPrevented event; React.Event.Mouse.isPropagationStopped event ] ]))
+        onKeyDown=(fun event ->
+          treat
+            ~prevent_default:(fun () -> React.Event.Keyboard.preventDefault event)
+            ~stop_propagation:(fun () -> React.Event.Keyboard.stopPropagation event);
+          log
+            (String.concat " "
+               [ React.Event.Keyboard.type_ event;
+                 tag_of (React.Event.Keyboard.currentTarget event);
+                 tag_of (React.Event.Keyboard.target event);
+                 React.Event.Keyboard.key event;
+                 flags
+                   [ React.Event.Keyboard.shiftKey event; React.Event.Keyboard.ctrlKey event;
+                     React.Event.Keyboard.repeat event; React.Event.Keyboard.isDefaultPrevented event;
+                     React.Event.Keyboard.isPropagationStopped event ] ]))>
+        <b>(React.string "go")</b>
+      </button>
+    </section>
+end
 
 let setters : (string, (int -> int) -> unit) Hashtbl.t = Hashtbl.create 16
 let set_labels = ref (fun (_ : string array -> string array) -> ())
@@ -569,7 +661,187 @@ let () =
                expect shown |. to_equal wanted;
                finish ()))
           [%mel.obj { numRuns = 60 }]));
+  describe "router" (fun () ->
+    test_async "useUrl shows every URL pushed or replaced, parsed as reason-react parses it" (fun () ->
+      let addresses =
+        [|
+          ("/", "#?");
+          ("/a/b", "a/b#?");
+          ("/a/b/", "a/b#?");
+          ("/books#title", "books#title?");
+          ("/c?q=2#h", "c#h?q=2");
+          ("/x//y", "x/y#?");
+          ("/d/?r=1", "d#?r=1");
+        |]
+      in
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let steps =
+               List.init (1 + draw tape 6) (fun _ ->
+                   (addresses.(draw tape (Array.length addresses)), match draw tape 2 with 0 -> `Push | _ -> `Replace))
+             in
+             ReasonReactRouter.replace "/";
+             let adds = spy_on window_object "addEventListener" in
+             let removes = spy_on window_object "removeEventListener" in
+             let* root, client = mount <Address /> in
+             let rec run remaining seen =
+               match remaining with
+               | [] -> Js.Promise.resolve (List.rev seen)
+               | ((address, _), change) :: rest ->
+                   let* () =
+                     act (fun () ->
+                         match change with
+                         | `Push -> ReasonReactRouter.push address
+                         | `Replace -> ReasonReactRouter.replace address)
+                   in
+                   run rest (inner_html root :: seen)
+             in
+             let* seen = run steps [] in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             let popstate spy =
+               List.length (List.filter (fun call -> String.equal call.(0) "popstate") (Array.to_list (calls (mock spy))))
+             in
+             let left = popstate adds - popstate removes in
+             restore adds;
+             restore removes;
+             let requested = List.filter (fun ((address, _), _) -> not (String.contains address '#')) steps in
+             let served =
+               List.map
+                 (fun ((address, _), _) ->
+                   let url = ReasonReactRouter.dangerouslyGetInitialUrl ~serverUrlString:address () in
+                   String.concat "/" url.path ^ "?" ^ url.search)
+                 requested
+             in
+             let parsed =
+               List.map
+                 (fun ((_, shown), _) ->
+                   match String.split_on_char '#' shown with
+                   | [ path; rest ] -> path ^ "?" ^ List.nth (String.split_on_char '?' rest) 1
+                   | _ -> shown)
+                 requested
+             in
+             expect (seen, left, served)
+             |. to_equal (List.map (fun ((_, shown), _) -> "<p>" ^ shown ^ "</p>") steps, 0, parsed);
+             finish ()))
+        [%mel.obj { numRuns = 60 }]));
+  describe "events" (fun () ->
+    test_async "React.Event reads what was sent, and prevent and stop act as in React" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let keys = [| "a"; "Enter"; "Escape"; "ArrowLeft"; " " |] in
+             let sent =
+               List.init (1 + draw tape 6) (fun _ ->
+                   let bit () = draw tape 2 = 1 in
+                   let event =
+                     match draw tape 2 with
+                     | 0 ->
+                         Mouse
+                           { x = draw tape 500; y = draw tape 500; button = draw tape 2; shift = bit (); alt = bit ();
+                             ctrl = bit (); meta = bit () }
+                     | _ -> Key { key = keys.(draw tape (Array.length keys)); shift = bit (); ctrl = bit (); repeat = bit () }
+                   in
+                   let inner = match draw tape 2 with 0 -> "button" | _ -> "b" in
+                   let treatment =
+                     { prevent = (match draw tape 2 with 0 -> `Prevent | _ -> `Allow);
+                       stop = (match draw tape 2 with 0 -> `Stop | _ -> `Bubble) }
+                   in
+                   (event, inner, treatment))
+             in
+             let expected =
+               List.concat_map
+                 (fun (event, inner, treatment) ->
+                   let prevented = match treatment.prevent with `Prevent -> true | `Allow -> false in
+                   let stopped = match treatment.stop with `Stop -> true | `Bubble -> false in
+                   let reading =
+                     match event with
+                     | Mouse { x; y; button; shift; alt; ctrl; meta } ->
+                         String.concat " "
+                           [ "click"; "BUTTON"; String.uppercase_ascii inner; string_of_int x; string_of_int y;
+                             string_of_int button; flags [ shift; alt; ctrl; meta; prevented; stopped ] ]
+                     | Key { key; shift; ctrl; repeat } ->
+                         String.concat " "
+                           [ "keydown"; "BUTTON"; String.uppercase_ascii inner; key;
+                             flags [ shift; ctrl; repeat; prevented; stopped ] ]
+                   in
+                   let bubbled = match treatment.stop with `Stop -> [] | `Bubble -> [ "section SECTION" ] in
+                   (reading :: bubbled) @ [ "kept " ^ flags [ not prevented ]; "released 1" ])
+                 sent
+             in
+             let* root, client = mount <Probe /> in
+             let* () =
+               act (fun () ->
+                   List.iter
+                     (fun (event, inner, chosen) ->
+                       treatment := chosen;
+                       let native =
+                         match event with
+                         | Mouse { x; y; button; shift; alt; ctrl; meta } ->
+                             mouse_event "click"
+                               [%mel.obj
+                                 { bubbles = true; cancelable = true; clientX = x; clientY = y; button; shiftKey = shift;
+                                   altKey = alt; ctrlKey = ctrl; metaKey = meta }]
+                         | Key { key; shift; ctrl; repeat } ->
+                             keyboard_event "keydown"
+                               [%mel.obj { bubbles = true; cancelable = true; key; shiftKey = shift; ctrlKey = ctrl; repeat }]
+                       in
+                       let kept = dispatch_kept (select root inner) native in
+                       log ("kept " ^ flags [ kept ]);
+                       log ("released " ^ flags [ Option.is_none (Js.Null.toOption (current_target_of native)) ]))
+                     sent)
+             in
+             let seen = take () in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             expect seen |. to_equal expected;
+             finish ()))
+        [%mel.obj { numRuns = 100 }]));
   describe "lists and conditions" (fun () ->
+    test_async "React.createElement with makeProps keeps rows and their state exactly as JSX does" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+             let tape = tape values in
+             let pool = [| "a"; "b"; "c"; "d"; "e" |] in
+             let steps =
+               List.init (1 + draw tape 8) (fun _ ->
+                   match draw tape 2 with
+                   | 0 -> `Show (Array.of_list (List.filter (fun _ -> draw tape 2 = 0) (Array.to_list pool)))
+                   | _ -> `Click (draw tape 5))
+             in
+             let* written, written_client = mount <Rows labels=[| "a"; "b"; "c" |] /> in
+             let* created, created_client = mount <Created_rows labels=[| "a"; "b"; "c" |] /> in
+             let rec run remaining seen =
+               match remaining with
+               | [] -> Js.Promise.resolve (List.rev seen)
+               | step :: rest ->
+                   let* () =
+                     act (fun () ->
+                         match step with
+                         | `Show labels ->
+                             ReactDOM.Client.render written_client <Rows labels />;
+                             ReactDOM.Client.render created_client <Created_rows labels />
+                         | `Click index ->
+                             List.iter
+                               (fun root ->
+                                 let buttons = nodes (select_all root "button") in
+                                 Option.iter click
+                                   (match Array.length buttons with
+                                   | 0 -> None
+                                   | count -> Some (element_of buttons.(index mod count))))
+                               [ written; created ])
+                   in
+                   run rest ((inner_html written, inner_html created) :: seen)
+             in
+             let* seen = run steps [] in
+             let* () =
+               act (fun () ->
+                   ReactDOM.Client.unmount written_client ();
+                   ReactDOM.Client.unmount created_client ())
+             in
+             ignore (take ());
+             expect (List.map snd seen) |. to_equal (List.map fst seen);
+             finish ()))
+        [%mel.obj { numRuns = 60 }]);
     test_async "keep component state with its key" (fun () ->
       let* root, client = mount <Rows labels=[| "a"; "b"; "c" |] /> in
       let* () = act (fun () -> click (select root "button")) in

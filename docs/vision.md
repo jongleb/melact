@@ -52,7 +52,7 @@ react/runtime       melact.runtime    React's components: instances, hook slots,
 melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
-react/             melact           React, ReactDOM, ReactEvent
+react/             melact           React (with React.Event), ReactDOM, ReasonReactRouter
 meltea/            meltea           Program (sandbox, element), Cmd, Sub, Html
 ```
 

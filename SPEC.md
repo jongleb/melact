@@ -43,7 +43,7 @@ scheduler beyond "coalesce updates into one microtask", no reactive graph.
 | Element creation | `<template>` + `cloneNode(true)` + precomputed child paths | the actual speedup |
 | Hole diff | physical equality on hole values, recursive on child holes, keyed reconcile on lists | dartea model |
 | Component identity | a module-level `Type.Id`-indexed id per `[@react.component]`; props carried as a tuple, compared element-wise with `==` | typed, no `Obj`, no proxies |
-| Events | delegated on `document` for the standard bubbling set; handler holes are overwritten, never diffed; `ReactEvent.*` modules wrap native events | same as reason-react's surface, Solid's cost |
+| Events | delegated on `document` for the standard bubbling set; handler holes are overwritten, never diffed; `React.Event.*` read native events; a delegated handler sees its own element as `currentTarget` | same as reason-react's surface, Solid's cost |
 | Update scheduling | `setState` marks the instance dirty; dirty instances flushed in one microtask, parent before child | React batching semantics without the machinery |
 
 ## 2. Repository layout
@@ -53,7 +53,7 @@ dune-project                 ; (lang dune 3.16) (using melange 0.1) mlx dialect
 melact.opam  melact-ppx.opam
 view/        ; lib melact.view — description type, template/hole patcher, reconcile, events. melange only.
   view.ml view.mli reconcile.ml events.ml template.ml
-react/       ; lib melact — the reason-react-compatible API: React, ReactDOM, ReactEvent, ReactDOMStyle
+react/       ; lib melact — the reason-react-compatible API: React (with React.Event), ReactDOM, ReactDOMStyle, ReasonReactRouter
   react.ml react.mli reactDOM.ml reactDOM.mli reactEvent.ml reactDOMStyle.ml instance.ml hooks.ml
 ppx/         ; melact-ppx (ppxlib)
   frontend/  ; forked from reason-react-ppx, minimal edits
@@ -251,7 +251,7 @@ the hand-written milestone-1 version (one template, same hole count).
 
 Fill out the rest of the surface reason-react projects actually use:
 `ReactDOM.Client.createRoot/render/hydrateRoot`, `ReactDOM.render` (deprecated but present),
-`ReactDOM.createPortal`, `ReactEvent.{Synthetic,Mouse,Keyboard,Form,Focus,...}` with
+`ReactDOM.createPortal`, `React.Event.{Synthetic,Mouse,Keyboard,Form,Focus,...}` with
 `preventDefault/stopPropagation/target/currentTarget/key/...` over native events,
 `ReactDOMStyle.make` and `unsafeAddProp`, `React.Ref`, `React.cloneElement` (error with message:
 unsupported), `ReactDOM.domProps` as an alias shape so code that pattern-matches on it keeps compiling.

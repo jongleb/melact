@@ -198,7 +198,39 @@ let component ~loc ~name expression =
     in
     marker#expression body
   in
-  pexp_function ~loc complete None
+  let props =
+    let given =
+      List.mapi
+        (fun index label -> (label, Printf.sprintf "__melhole_given_%d" index))
+        (List.filter_map
+           (fun param ->
+             match param.pparam_desc with
+             | Pparam_val (((Labelled _ | Optional _) as label), _, _) -> Some label
+             | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
+           complete)
+    in
+    pexp_function ~loc
+      (List.map
+         (fun (label, name) -> { pparam_loc = loc; pparam_desc = Pparam_val (label, None, pvar ~loc name) })
+         given
+      @ [
+          { pparam_loc = loc; pparam_desc = Pparam_val (Optional "key", None, [%pat? __melhole_key]) };
+          { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) };
+          { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? __melhole_make]) };
+        ])
+      None
+      (Pfunction_body
+         [%expr
+           let __melhole_element =
+             [%e
+               pexp_apply ~loc [%expr __melhole_make]
+                 (List.map (fun (label, name) -> (label, evar ~loc name)) given @ [ (Nolabel, [%expr ()]) ])]
+           in
+           Option.fold ~none:__melhole_element
+             ~some:(fun key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element)))
+             __melhole_key])
+  in
+  ( pexp_function ~loc complete None
     (Pfunction_body
        (match kind with
        | `Stateful ->
@@ -209,7 +241,10 @@ let component ~loc ~name expression =
        | `Pure ->
            [%expr
              React.of_child
-               (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))]))
+               (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))])),
+    props )
+
+let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
 
 let rec with_unit typ =
   match typ.ptyp_desc with
@@ -232,12 +267,8 @@ let mapper =
         wrap = (fun loc child -> [%expr React.of_child [%e child]]);
         unwrap = (fun loc element -> unwrap ~loc element);
         handler =
-          (fun loc { family; requirement; value; _ } ->
-            let native =
-              pexp_construct ~loc
-                { loc; txt = Ldot (Ldot (Lident "ReactEvent", family), "Native") }
-                (Some [%expr __melhole_event])
-            in
+          (fun loc { requirement; value; _ } ->
+            let native = [%expr React.Event.ofNative __melhole_event] in
             match requirement with
             | `Required ->
                 [%expr (fun __melhole_event -> [%e value] [%e native])]
@@ -310,29 +341,38 @@ let mapper =
       match item.pstr_desc with
       | Pstr_value (flag, bindings) ->
           super#structure_item
-            { item with pstr_desc = Pstr_value (flag, List.map self#component bindings) }
+            { item with pstr_desc = Pstr_value (flag, List.concat_map self#component bindings) }
       | _ -> super#structure_item item
 
-    method! signature_item item =
-      match item.psig_desc with
-      | Psig_value description -> (
-          match without_component description.pval_attributes with
-          | Some attributes ->
-              {
-                item with
-                psig_desc =
-                  Psig_value
-                    {
-                      description with
-                      pval_type = with_unit description.pval_type;
-                      pval_attributes = attributes;
-                    };
-              }
-          | None -> super#signature_item item)
-      | _ -> super#signature_item item
+    method! signature items =
+      List.concat_map
+        (fun item ->
+          match item.psig_desc with
+          | Psig_value description ->
+              Option.fold
+                ~none:[ super#signature_item item ]
+                ~some:(fun attributes ->
+                  let loc = item.psig_loc in
+                  let make = with_unit description.pval_type in
+                  let rec given typ =
+                    match typ.ptyp_desc with
+                    | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) ->
+                        ptyp_arrow ~loc label argument (given result)
+                    | _ -> [%type: ?key:string -> unit -> [%t make] -> React.element]
+                  in
+                  [
+                    { item with psig_desc = Psig_value { description with pval_type = make; pval_attributes = attributes } };
+                    psig_value ~loc
+                      (value_description ~loc
+                         ~name:{ loc; txt = props_name description.pval_name.txt }
+                         ~type_:(given make) ~prim:[]);
+                  ])
+                (without_component description.pval_attributes)
+          | _ -> [ super#signature_item item ])
+        items
 
     method private component binding =
-      Option.fold ~none:binding
+      Option.fold ~none:[ binding ]
         ~some:(fun attributes ->
           let loc = binding.pvb_loc in
           let file =
@@ -348,11 +388,15 @@ let mapper =
                 Location.raise_errorf ~loc
                   "melact: [@react.component] needs a plain name, like make"
           in
-          {
-            binding with
-            pvb_attributes = attributes;
-            pvb_expr = component ~loc ~name:(file ^ "." ^ name) binding.pvb_expr;
-          })
+          let make, props = component ~loc ~name:(file ^ "." ^ name) binding.pvb_expr in
+          [
+            { binding with pvb_attributes = attributes; pvb_expr = make };
+            {
+              (value_binding ~loc ~pat:(pvar ~loc (props_name name)) ~expr:props) with
+              pvb_attributes =
+                [ attribute ~loc ~name:{ loc; txt = "warning" } ~payload:(PStr [ pstr_eval ~loc (estring ~loc "-32") [] ]) ];
+            };
+          ])
         (without_component binding.pvb_attributes)
 
     method! expression expression =

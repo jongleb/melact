@@ -181,13 +181,13 @@ def overview(p):
     body += text(468, 352, "Stays", size=14.5, weight=700)
     body += text(512, 352, "your code compiles unchanged", size=12.5, cls="muted")
     body += chips(468, 366, 400, ["your components", "hooks", "mlx · Reason · OCaml",
-                                  "ReactDOM", "ReactEvent"], "stays")
+                                  "ReactDOM", "React.Event"], "stays")
     body += box(0, 470, 880, 64, p["green_soft"], p["green"], rx=14, width=1.5)
     body += text(20, 497, "Starting fresh? Write Meltea.", size=15, weight=700, cls="green")
     body += text(20, 520, "No setState and no hooks: messages and a pure update, compiled by the same compiler into the same templates.",
                  size=12.5, cls="muted")
     body += text(860, 497, "Melact is the way out of React", size=12.5, cls="muted", anchor="end", weight=600)
-    return svg(p, 880, 540, "Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, ReactEvent. Starting fresh? Write Meltea: messages and a pure update instead of setState and hooks, with the same compiler", body)
+    return svg(p, 880, 540, "Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, React.Event. Starting fresh? Write Meltea: messages and a pure update instead of setState and hooks, with the same compiler", body)
 
 
 def pipeline(p):
@@ -756,7 +756,7 @@ def roadmap(p):
         ("View", "templates, holes,", "reconcile, events", "done"),
         ("Hooks", "instances, useState,", "effects, context", "done"),
         ("melact-ppx", "JSX → templates", "Reason, OCaml, mlx", "done"),
-        ("Compat", "ReactDOM, ReactEvent,", "TodoMVC unmodified", "now"),
+        ("Compat", "React.Event, makeProps,", "TodoMVC unmodified", "now"),
         ("Speed", "keyed loops,", "1.2× vanilla", "done"),
         ("SSR", "render to HTML,", "hydration", "done"),
         ("Publish", "opam, CI,", "README numbers", "next"),

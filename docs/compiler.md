@@ -193,6 +193,20 @@ DOM differs. The guard stays; the check after input costs one property read. One
 reason-react with React 18 and against Melact, types and clicks into a controlled field and
 checkbox whose handlers keep or reject the input, and compares what the page shows.
 
+## Events and makeProps
+
+A handler prop compiles to `fun event -> handler (React.Event.ofNative event)`: `ofNative` is the
+identity, and its result is polymorphic, so the handler's own type (`React.Event.Mouse.t`,
+`Keyboard.t`, …) picks the family and the compiler needs no table of them. Every accessor reads the
+native event; React's own members map onto the native ones (`isDefaultPrevented` is
+`defaultPrevented`, `isPropagationStopped` is `cancelBubble`, `persist` does nothing). Delegation
+sets `currentTarget` to the element whose handler runs, as React does, and removes it afterwards.
+
+melact-ppx writes `makeProps` next to every `[@react.component]`. It takes the component's labels,
+an optional `key` and `()`, and returns the call to `make` with them, so
+`React.createElement Foo.make (Foo.makeProps ~label ())` is `make ~label ()` with a key, checked
+by the type checker, and no props object exists at run time.
+
 ## Laws
 
 Accepted only with these holding, by property-based tests:

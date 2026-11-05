@@ -207,7 +207,7 @@ Every kind of prop, static and dynamic, required and optional:
                    | _ ->
                        Melhole.View.set_handler __melhole_hole_9
                          (fun __melhole_event ->
-                            onInput (ReactEvent.Form.Native __melhole_event)));
+                            onInput (React.Event.ofNative __melhole_event)));
                   (match __melhole_changed_6 with
                    | Melhole.View.Unchanged -> ()
                    | _ ->
@@ -215,8 +215,7 @@ Every kind of prop, static and dynamic, required and optional:
                          (fun __melhole_event ->
                             Option.iter
                               (fun handle ->
-                                 handle
-                                   (ReactEvent.Keyboard.Native __melhole_event))
+                                 handle (React.Event.ofNative __melhole_event))
                               None));
                   ())
            })),
@@ -296,12 +295,30 @@ A component with optional, defaulted and children props, and its signature:
                                   (React.to_child children));
                            ())
                     }))))
+  and makeProps ~title:__melhole_given_0 ?size:__melhole_given_1
+    ?subtitle:__melhole_given_2 ~children:__melhole_given_3 ?key:__melhole_key
+    () __melhole_make =
+    let __melhole_element =
+      __melhole_make ~title:__melhole_given_0 ?size:__melhole_given_1
+        ?subtitle:__melhole_given_2 ~children:__melhole_given_3 () in
+    Option.fold ~none:__melhole_element
+      ~some:(fun key ->
+               React.of_child
+                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      __melhole_key[@@warning "-32"]
   let __melhole_component_3 =
     Melact_runtime.Component.make ~name:"Card.nothing"
   let nothing () =
     React.of_child
       (Melhole.View.pure __melhole_component_3 [||]
          (fun () -> React.to_child React.null))
+  and nothingProps ?key:__melhole_key () __melhole_make =
+    let __melhole_element = __melhole_make () in
+    Option.fold ~none:__melhole_element
+      ~some:(fun key ->
+               React.of_child
+                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      __melhole_key[@@warning "-32"]
   $ cat > card.mli <<'EOF'
   > val make : title:string -> ?size:int -> ?subtitle:string -> children:React.element -> React.element
   > [@@react.component]
@@ -311,6 +328,18 @@ A component with optional, defaulted and children props, and its signature:
     title:string ->
       ?size:int ->
         ?subtitle:string -> children:React.element -> unit -> React.element
+  val makeProps :
+    title:string ->
+      ?size:int ->
+        ?subtitle:string ->
+          children:React.element ->
+            ?key:string ->
+              unit ->
+                (title:string ->
+                   ?size:int ->
+                     ?subtitle:string ->
+                       children:React.element -> unit -> React.element)
+                  -> React.element
 
 React.forwardRef: the ref becomes an optional prop and reaches the body as reason-react passes it:
 
@@ -361,6 +390,15 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                                    (Js.Nullable.toOption ref)));
                            ())
                     }))))
+  and makeProps ~label:__melhole_given_0 ?ref:__melhole_given_1
+    ?key:__melhole_key () __melhole_make =
+    let __melhole_element =
+      __melhole_make ~label:__melhole_given_0 ?ref:__melhole_given_1 () in
+    Option.fold ~none:__melhole_element
+      ~some:(fun key ->
+               React.of_child
+                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      __melhole_key[@@warning "-32"]
 
 Calls with children, keys and fragments:
 
@@ -443,6 +481,13 @@ Hooks get one key per call site, also inside custom hooks:
                (React.useEffect1 __melhole_hook_3) ((fun () -> None)
                  [@alert "+hook"]) [|shown|];
                React.string (React.useContext Theme.context))))
+  and makeProps ?key:__melhole_key () __melhole_make =
+    let __melhole_element = __melhole_make () in
+    Option.fold ~none:__melhole_element
+      ~some:(fun key ->
+               React.of_child
+                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      __melhole_key[@@warning "-32"]
 
 Reason input:
 
@@ -487,6 +532,13 @@ Reason input:
                                   ("Hello, " ^ name : string));
                            ())
                     }))))
+  and makeProps ~name:__melhole_given_0 ?key:__melhole_key () __melhole_make =
+    let __melhole_element = __melhole_make ~name:__melhole_given_0 () in
+    Option.fold ~none:__melhole_element
+      ~some:(fun key ->
+               React.of_child
+                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      __melhole_key[@@warning "-32"]
 
 mlx input:
 
@@ -531,6 +583,13 @@ mlx input:
                                   ("Hello, " ^ name : string));
                            ())
                     }))))
+  and makeProps ~name:__melhole_given_0 ?key:__melhole_key () __melhole_make =
+    let __melhole_element = __melhole_make ~name:__melhole_given_0 () in
+    Option.fold ~none:__melhole_element
+      ~some:(fun key ->
+               React.of_child
+                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      __melhole_key[@@warning "-32"]
 
 Errors point at the source:
 

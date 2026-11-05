@@ -26,14 +26,15 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/overview-dark.svg">
-  <img src="assets/overview.svg" alt="Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, ReactEvent. Starting fresh? Write Meltea" width="100%">
+  <img src="assets/overview.svg" alt="Melact in one picture, for code already on React: a reason-react component switches two dune lines; Melact compiles its JSX into a template parsed once and a refresh; in the browser setState, kept for React code, re-renders only that component, checks n against its last value with one === and writes the text node. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, React.Event. Starting fresh? Write Meltea" width="100%">
 </picture>
 
 > [!NOTE]
 > **Milestones 1–3 of 7 are done:** the `View` layer, components with hooks, and `melact-ppx`.
 > A reason-react component in mlx, Reason or OCaml compiles and runs, and one test suite passes
-> both against reason-react with React 18 and against melact. The rest of the reason-react surface
-> (`ReactDOM.createPortal`, the full `ReactEvent`, TodoMVC unmodified) is milestone 4.
+> both against reason-react with React 18 and against Melact. Milestone 4, the rest of the
+> reason-react surface, is under way: the full `React.Event`, `React.createElement` with
+> `makeProps` and `ReasonReactRouter` are in; a community TodoMVC built unmodified is next.
 
 ## The idea
 
@@ -65,7 +66,7 @@ let[@react.component] make ~initial () =
 ```
 
 melact keeps reason-react's surface (`React.useState`, `useEffect`, `useContext`, `ReactDOM.Client`,
-`ReactEvent`, `ReactDOMStyle` …) and replaces what is underneath it.
+`React.Event`, `ReasonReactRouter` …) and replaces what is underneath it.
 
 ## Why melact
 
@@ -295,13 +296,13 @@ every click. One demo component binds React's npm `useReducer` directly, which i
 
 | | |
 |---|---|
-| **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, the common `ReactEvent` families; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
+| **Works** | `View`, `Template`, `Reconcile`, delegated events; components, context and every reason-react hook with a key (`useState`, `useReducer`, `useEffect*`, `useLayoutEffect*`, `useMemo*`, `useCallback*`, `useRef`, `useImperativeHandle*`, `useId`); `React.memo`, `React.act`, `ReactDOM.Client`, `ReactDOM.Style`, `ReactDOM.Ref`, every `React.Event` family over native events (handlers see the `currentTarget` they were set on, as in React), `React.createElement` with `makeProps`, `ReasonReactRouter`; `melact-ppx` for Reason, OCaml `[@JSX]` and mlx |
 | **Size** | whole apps, runtime and the Melange stdlib they use included: the counter is 3.0 kB gzip with Meltea and 5.6 kB with Melact, TodoMVC in Meltea is 14.7 kB, most of it jsonkit's `Printf` for error messages; React 18.3 and react-dom alone are 45 kB |
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.16 for Meltea, 1.17 for Melact and 1.64 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
-| **Tests** | 94 vitest + jsdom tests and 24 native QCheck laws: the View layer, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
+| **Tests** | 106 vitest + jsdom tests and 24 native QCheck laws: the View layer, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
 | **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. Hydration takes the server's nodes over instead of building them again |
-| **Not yet** | the rest of `ReactEvent`, `React.createElement` with `makeProps`, SSR on native OCaml |
+| **Not yet** | `React.createElementVariadic`, code typed against `React.component('props)`, SSR on native OCaml |
 | **Limits** | a component or custom hook that is polymorphic in its state type gets a weak type for its hook key; annotate it, or keep the state type concrete |
 
 A whole tree compiles to one template. This mlx counter is one `<template>` with six holes,
@@ -377,7 +378,7 @@ react/runtime       melact.runtime    React's components: instances, hook slots,
 melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards, DOM props
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
-react/             melact           React, ReactDOM, ReactEvent
+react/             melact           React (with React.Event), ReactDOM, ReasonReactRouter
 meltea/            meltea           the Elm architecture: Program, Cmd, Sub, Html
 test/                               laws: QCheck, fast-check in jsdom, React vs Melact
 examples/                           counter (Meltea), counter-react (Melact)
