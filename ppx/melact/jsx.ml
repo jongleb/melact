@@ -206,6 +206,7 @@ let mapper =
                     (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
         classify = react_text;
         extra = (fun _ -> None);
+        each = (fun _ _ -> None);
       }
 
     method! structure items = Hoist.structure self#structure_item items

@@ -69,6 +69,44 @@ let mapper =
             match name with
             | "onCheck" -> Some (Dom_props.Handler ("change", "Form"))
             | _ -> None);
+        each =
+          (fun loc item ->
+            match item.pexp_desc with
+            | Pexp_apply
+                ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "Html", "list"); _ }; _ },
+                  [
+                    ( Nolabel,
+                      {
+                        pexp_desc =
+                          Pexp_apply
+                            ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "List", "map"); _ }; _ },
+                              [ (Nolabel, row); (Nolabel, items) ] );
+                        _;
+                      } );
+                  ] ) -> (
+                match Free.closure ~definitions:self#definitions ~locals:self#locals row with
+                | Volatile -> None
+                | Reads names ->
+                    let render =
+                      Ast_builder.Default.pexp_record ~loc
+                        [
+                          ( { txt = Ldot (Ldot (Lident "Js", "Fn"), "I1"); loc },
+                            [%expr
+                              fun __melhole_item ->
+                                let (Html.Node __melhole_render) = [%e self#expression row] __melhole_item in
+                                __melhole_render __melhole_dispatch] );
+                        ]
+                        None
+                    in
+                    Some
+                      [%expr
+                        Melhole.View.each [%e self#expression items] [%e render]
+                          [%e
+                            Ast_builder.Default.pexp_array ~loc
+                              (List.map
+                                 (fun name -> [%expr Melhole.View.Input [%e Ast_builder.Default.evar ~loc name]])
+                                 ("__melhole_dispatch" :: names))]])
+            | _ -> None);
       }
 
     method! structure items = Hoist.structure self#structure_item items
