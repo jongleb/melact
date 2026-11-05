@@ -42,3 +42,4 @@
 - Fixed: hydration refused a `<textarea>` with a value, whose server HTML holds the value as text.
 - A checkbox gets the `checked` attribute it had at mount, as React's does (`defaultChecked` on the first write). A dual law toggles and remounts checkboxes under React 18 and Melact and compares the property and the attribute.
 - Fixed: a child with a `key` outside a list kept its state when the key changed; it is now mounted again, as in React, which is how React code resets a component.
+- The model in the page: `Melhole_server.data ~id json` writes JSON into a `<script type="application/json">` with every `<` escaped, and `Served.data ~id` reads it back, so a hydrating program starts from the server's model without running `init` again. A law sends text full of `</script>` and `<!--` through a full HTML parse.

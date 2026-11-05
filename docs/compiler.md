@@ -214,6 +214,12 @@ with the model, `update` and `view` builds twice: against `meltea` for the brows
 subscriptions are inert there. [`examples/served`](../examples/served) is a native server that
 writes a page with the capture script and the counter, and a client that hydrates it.
 
+The model goes into the page as data, so the browser starts from it without running `init` and
+its commands again: `Melhole_server.data ~id json` writes a `<script type="application/json">`
+with every `<` written as `\u003c`, and `Served.data ~id` reads the text back. A law puts random
+text full of `</script>`, `<!--` and `<script>` through a full HTML parse and reads it back
+unchanged, with nothing after the script swallowed.
+
 Laws, on a view with every kind of part (texts next to texts, empty texts, attributes of every
 type, a style, a checkbox, a textarea, rows, a keyed list, `Html.map`, `Html.memo`, a
 transition, void tags): the server's HTML parses into the same nodes, separators and attributes as
