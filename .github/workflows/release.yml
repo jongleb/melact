@@ -1,0 +1,47 @@
+name: Release
+
+# A tag, or a run started by hand for a tag, makes a GitHub release with dune-release's tarball and
+# opens the pull request to ocaml/opam-repository for the five packages. GH_TOKEN is a personal
+# token that may fork opam-repository and open the pull request.
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release
+        required: true
+        type: string
+      dry_run:
+        description: Check everything, publish nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      OPAMYES: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.5"
+      - run: opam install . --deps-only --yes
+      - run: opam install dune-release --yes
+      - uses: davesnx/dune-release-action@v0.5.0
+        with:
+          packages: melhole,melact,melact-ppx,meltea,meltea-ppx
+          changelog: ./CHANGELOG.md
+          github-token: ${{ secrets.GH_TOKEN }}
+          to-opam-repository: true
+          to-github-releases: true
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}

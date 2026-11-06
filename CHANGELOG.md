@@ -2,10 +2,21 @@
 
 ## 0.1.0
 
-The first release of melhole, Melact, melact-ppx, Meltea and meltea-ppx. Melact covers reason-react
-0.17's API, React 19's experimental hooks and Suspense included, and runs reason-react's demo and a
-community TodoMVC unchanged but for two lines of `dune`; Meltea is the Elm architecture in mlx. What
-follows is how they got here, step by step.
+The first release.
+
+- melhole: views compiled at build time to DOM templates with holes, each hole guarded by `===` on
+  the values it reads; keyed loops that re-render only the rows whose item changed; server rendering
+  in React's HTML format, natively or in JavaScript, and hydration.
+- Melact (`melact`, `melact-ppx`): reason-react 0.17's API without React: components and every hook,
+  context, `ReactDOM` and `ReactDOMServer`, `ReasonReactRouter`, `ReasonReactErrorBoundary`,
+  `React.Suspense`, React 19's experimental hooks, `ReactDOMTestUtils`, and bindings to npm's
+  `react` rewritten to Melact's own functions. An app moves over by changing two lines of `dune`.
+- Meltea (`meltea`, `meltea-ppx`): the Elm architecture in mlx, with a compiler that reads `update`
+  and `view` to re-render only what a message changed, commands, subscriptions and transitions.
+
+## Before 0.1.0
+
+How the five packages got here, step by step.
 
 - Milestone 1: `melact.view` (templates with holes, hole patcher, keyed reconcile, delegated events), `melact.program` sandbox, hand-written counter example, 26 vitest + jsdom tests.
 - Milestone 2: component instances and hooks (`Hook` keys, `Component`, `Context`, microtask flush, effects), `React`, `ReactDOM.Client`; the same test suite passes against reason-react with React 18 and against melact.
