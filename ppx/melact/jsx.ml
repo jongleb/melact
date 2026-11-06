@@ -206,21 +206,27 @@ let component ~loc ~name ~props_constructor expression =
                        && match name.[0] with 'a' .. 'z' | '_' -> true | _ -> false)
                      names)
               in
-              let at = !sites in
-              sites := at + List.length captures + 1;
-              let make = [%expr fun () -> [%e value]] and at = eint ~loc at in
-              match captures with
-              | [] -> [%expr Melact_runtime.Memo.cached0 __melact_memo [%e at] [%e make]]
-              | [ a ] -> [%expr Melact_runtime.Memo.cached1 __melact_memo [%e at] [%e a] [%e make]]
-              | [ a; b ] -> [%expr Melact_runtime.Memo.cached2 __melact_memo [%e at] [%e a] [%e b] [%e make]]
-              | [ a; b; c ] -> [%expr Melact_runtime.Memo.cached3 __melact_memo [%e at] [%e a] [%e b] [%e c] [%e make]]
-              | [ a; b; c; d ] ->
-                  [%expr Melact_runtime.Memo.cached4 __melact_memo [%e at] [%e a] [%e b] [%e c] [%e d] [%e make]]
-              | more ->
-                  [%expr
-                    Melact_runtime.Memo.cached __melact_memo [%e at]
-                      [%e pexp_array ~loc (List.map (fun capture -> [%expr Melhole.View.Input [%e capture]]) more)]
-                      [%e make]])
+              let at = !sites and count = List.length captures in
+              sites := at + count + 1;
+              let lookup =
+                match captures with
+                | [] -> [%expr Melact_runtime.Memo.lookup0 __melact_memo [%e eint ~loc at]]
+                | [ a ] -> [%expr Melact_runtime.Memo.lookup1 __melact_memo [%e eint ~loc at] [%e a]]
+                | [ a; b ] -> [%expr Melact_runtime.Memo.lookup2 __melact_memo [%e eint ~loc at] [%e a] [%e b]]
+                | [ a; b; c ] ->
+                    [%expr Melact_runtime.Memo.lookup3 __melact_memo [%e eint ~loc at] [%e a] [%e b] [%e c]]
+                | [ a; b; c; d ] ->
+                    [%expr Melact_runtime.Memo.lookup4 __melact_memo [%e eint ~loc at] [%e a] [%e b] [%e c] [%e d]]
+                | more ->
+                    [%expr
+                      Melact_runtime.Memo.lookup __melact_memo [%e eint ~loc at]
+                        [%e pexp_array ~loc (List.map (fun capture -> [%expr Melhole.View.Input [%e capture]]) more)]]
+              in
+              [%expr
+                let __melact_found = [%e lookup] in
+                match Melact_runtime.Memo.kept __melact_found with
+                | Some __melact_kept -> __melact_kept
+                | None -> Melact_runtime.Memo.store __melact_memo [%e eint ~loc (at + count)] __melact_found [%e value]])
         in
         let rec worth value =
           match value.pexp_desc with

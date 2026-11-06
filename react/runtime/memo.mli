@@ -8,14 +8,16 @@ type t
 (** The cells of the instance being rendered, [count] of them, taken as one hook. *)
 val cells : t Hook.key -> int -> t
 
-(** [cachedK cells at d1 … dK make]: the value at [at + K] when [d1 … dK] are the ones in the cells
-    from [at], else [make ()], kept there with them. *)
-val cached0 : t -> int -> (unit -> 'value) -> 'value
+(** One site's cells in this render; abstract, hence invariant, so the prop's type reaches [store]. *)
+type 'value found
 
-val cached1 : t -> int -> 'a -> (unit -> 'value) -> 'value
-val cached2 : t -> int -> 'a -> 'b -> (unit -> 'value) -> 'value
-val cached3 : t -> int -> 'a -> 'b -> 'c -> (unit -> 'value) -> 'value
-val cached4 : t -> int -> 'a -> 'b -> 'c -> 'd -> (unit -> 'value) -> 'value
+val lookup0 : t -> int -> 'value found
+val lookup1 : t -> int -> 'a -> 'value found
+val lookup2 : t -> int -> 'a -> 'b -> 'value found
+val lookup3 : t -> int -> 'a -> 'b -> 'c -> 'value found
+val lookup4 : t -> int -> 'a -> 'b -> 'c -> 'd -> 'value found
+val lookup : t -> int -> Melhole.View.input array -> 'value found
 
-(** For more captures than [cached4] takes; the value is at [at + Array.length captures]. *)
-val cached : t -> int -> Melhole.View.input array -> (unit -> 'value) -> 'value
+external kept : 'value found -> 'value option = "%identity"
+
+val store : t -> int -> 'value found -> 'value -> 'value

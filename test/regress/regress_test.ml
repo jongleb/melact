@@ -45,4 +45,23 @@ let () =
       let* _, _ = mount (Findings.Referred.make (Findings.Referred.makeProps ())) in
       expect (inner_html inner, inner_html own, !Findings.seen, ({ Findings.a = 1 }).a)
       |. to_equal ("<div><b>x</b></div>", "<div>7</div>", "input", 1);
+      Js.Promise.resolve ());
+    test_async "cached props whose type is declared in a module not opened, written with its bare names" (fun () ->
+      let shown n =
+        let k = string_of_int n in
+        String.concat " "
+          [ k; "strong1"; "all" ^ k; "soft"; "strong" ^ k; "soft" ^ k; "soft,strong" ^ k; "soft,strong" ^ k;
+            "strong" ^ k; string_of_int (n + n); string_of_int (n + 1); "soft" ]
+      in
+      let* root, _ = mount (Disambiguated.make (Disambiguated.makeProps ())) in
+      let rec clicks n seen =
+        match n with
+        | 4 -> Js.Promise.resolve (List.rev seen)
+        | _ ->
+            let* () = React.act (fun () -> click (select root "div")) in
+            clicks (n + 1) (inner_html root :: seen)
+      in
+      let first = inner_html root in
+      let* later = clicks 1 [] in
+      expect (first :: later) |. to_equal (List.map (fun n -> "<div><p>" ^ shown n ^ "</p></div>") [ 0; 1; 2; 3 ]);
       Js.Promise.resolve ()))

@@ -376,13 +376,20 @@ the props of the components it renders, and each render makes them again, so the
 props although nothing it shows has changed. In a component with an instance, `melact-ppx` caches
 each such value on what it captures, as React Compiler does: `Free.captured` reads the free
 variables, a closure's body counting as run when it is called, and the value is kept in the
-instance's cells (`Memo.cached2 cells at index setCount (fun () -> …)`) while they are the same
-(`===`). A value that calls a hook, or reads mutable state while rendering, is left as written.
-Hole guards already skip a child whose reads did not change, so the cache pays when a hole is
-evaluated again and the child's props are equal anyway: a derived value that came out the same,
-or several children in one hole. A dual law clicks through closures and state changes against
-React 18; two Melact laws count the child's renders, and mutants that always or never hit the
-cache, or cache a value that reads a `ref`, each break one.
+instance's cells while they are the same (`===`). The prop becomes `let found = Memo.lookup2 cells
+at index setCount in match Memo.kept found with Some kept -> kept | None -> Memo.store cells (at +
+2) found value`, which allocates no closure: the kept branch is typed first and `found` is invariant
+in the value's type, so the type the prop expects reaches `value`, and the bare constructors and
+labels of a type declared in a module that is not opened resolve as they do in reason-react (a thunk
+`fun () -> value` passed to a function would lose that type, and such code would not compile). A
+value that calls a hook, or reads mutable state while rendering, is left as written. Hole guards
+already skip a child whose reads did not change, so the cache pays when a hole is evaluated again
+and the child's props are equal anyway: a derived value that came out the same, or several children
+in one hole. A dual law clicks through closures and state changes against React 18; two Melact laws
+count the child's renders, and mutants that always or never hit the cache, or cache a value that
+reads a `ref`, each break one. A regression test renders a child whose props use the bare names of
+another file's record and variants, in records, constructors, tuples, arrays, lists, and closures
+that return them, read fields or match on them.
 
 ## Controlled inputs
 

@@ -658,6 +658,47 @@ callbacks of a component, so a hook called there is reported by the type checker
   61:                                               [@alert "+hook"]))
   62:                                           [@alert "+hook"])
 
+Values written in props are cached as an expression whose first branch returns the kept value,
+so the type the prop expects reaches the value in the branch that stores it, and the bare
+constructors and labels of a type declared in a module that is not opened resolve; a value that
+reads mutable state while rendering is left as written:
+
+  $ cat > props.ml <<'EOF'
+  > let make () =
+  >   let n, _ = React.useState (fun () -> 0) in
+  >   ((Box.createElement ~style:{ pad = n; tone = Strong 1 } ~tone:Soft ~pick:(fun () -> Strong n)
+  >       ~pair:(Soft, !Box.outside) ~children:[] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl props.ml | sed -n '/Box.make/,/())))) in/p'
+                     Box.make
+                       (Box.makeProps
+                          ~style:(let __melact_found =
+                                    Melact_runtime.Memo.lookup1 __melact_memo 0
+                                      n in
+                                  match Melact_runtime.Memo.kept __melact_found
+                                  with
+                                  | Some __melact_kept -> ((__melact_kept)
+                                      [@alert "+hook"])
+                                  | None ->
+                                      ((Melact_runtime.Memo.store __melact_memo
+                                          1 __melact_found
+                                          { pad = n; tone = (Strong 1) })
+                                      [@alert "+hook"])) ~tone:Soft
+                          ~pick:(let __melact_found =
+                                   Melact_runtime.Memo.lookup1 __melact_memo 2
+                                     n in
+                                 match Melact_runtime.Memo.kept __melact_found
+                                 with
+                                 | Some __melact_kept -> ((__melact_kept)
+                                     [@alert "+hook"])
+                                 | None ->
+                                     ((Melact_runtime.Memo.store __melact_memo
+                                         3 __melact_found ((fun () -> Strong n)
+                                         [@alert "+hook"]))
+                                     [@alert "+hook"]))
+                          ~pair:(Soft, (!Box.outside)) ())))) in
+
 Bindings to npm's react: dependencies typed as an n-tuple pick the hook with n dependencies, an
 array the one with an array; uses below become Melact's hooks with their own keys, and the binding
 stays as a definition other files can call, with no limit on the number of dependencies:
