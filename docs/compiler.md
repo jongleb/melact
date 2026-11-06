@@ -369,6 +369,21 @@ its place mounts afresh, as React does. Only components that call hooks get an i
 slots, effects and a place in the scheduler. A dual test checks the remount against React 18:
 replacing one hookless component by another with the same output resets the state below it.
 
+## Values written in props
+
+reason-react code writes closures, style records, arrays, tuples and child elements straight into
+the props of the components it renders, and each render makes them again, so the child sees new
+props although nothing it shows has changed. In a component with an instance, `melact-ppx` caches
+each such value on what it captures, as React Compiler does: `Free.captured` reads the free
+variables, a closure's body counting as run when it is called, and the value is kept in the
+instance's cells (`Memo.cached2 cells at index setCount (fun () -> …)`) while they are the same
+(`===`). A value that calls a hook, or reads mutable state while rendering, is left as written.
+Hole guards already skip a child whose reads did not change, so the cache pays when a hole is
+evaluated again and the child's props are equal anyway: a derived value that came out the same,
+or several children in one hole. A dual law clicks through closures and state changes against
+React 18; two Melact laws count the child's renders, and mutants that always or never hit the
+cache, or cache a value that reads a `ref`, each break one.
+
 ## Controlled inputs
 
 `value` and `checked` are properties the user changes too. A guard compares a value with the one

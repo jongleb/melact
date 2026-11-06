@@ -1,0 +1,78 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+let act run = adopt (React.act run)
+
+(** What the parent holds: [near] is captured by the cached props, [far] only through its parity. *)
+type state = { near : int; far : int }
+
+let send = ref (fun (_ : state -> state) -> ())
+let renders = ref 0
+let outside = ref 0
+
+module Shown = struct
+  let[@react.component] make ~onPick ~pair ~tags ~parity ~children =
+    incr renders;
+    <p onClick=(fun _ -> onPick ())>
+      (React.string (fst pair ^ string_of_int (snd pair) ^ String.concat "" (Array.to_list tags) ^ string_of_int parity))
+      children
+    </p>
+end
+
+module Parent = struct
+  let[@react.component] make ~volatile =
+    let state, setState = React.useState (fun () -> { near = 0; far = 0 }) in
+    send := setState;
+    let { near; far } = state in
+    match volatile with
+    | `Captures_state ->
+        <div>
+          <Shown onPick=(fun () -> setState (fun current -> { current with near = current.near + near })) pair=("n", near) tags=[| "t" |] parity=(far mod 2)>
+            <b>(React.int near)</b>
+          </Shown>
+          <span>(React.int far)</span>
+        </div>
+    | `Reads_a_ref ->
+        <div>
+          <Shown onPick=(fun () -> ()) pair=("n", near) tags=[| string_of_int !outside |] parity=(far mod 2)><b>(React.int near)</b></Shown>
+          <span>(React.int far)</span>
+        </div>
+end
+
+let law volatile expected =
+  check_async
+    (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+         let tape = tape values in
+         let root = attached () in
+         let client = ReactDOM.Client.createRoot root in
+         let* () = act (fun () -> ReactDOM.Client.render client <Parent volatile />) in
+         let rec step remaining (state : state) seen =
+           match remaining with
+           | 0 ->
+               let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+               expect (List.map fst seen) |. to_equal (List.map snd seen);
+               Js.Promise.resolve ()
+           | _ ->
+               let next =
+                 match draw tape 2 with
+                 | 0 -> { state with near = draw tape 3 }
+                 | _ -> { state with far = draw tape 4 }
+               in
+               renders := 0;
+               let* () = act (fun () -> !send (fun _ -> next)) in
+               step (remaining - 1) next ((!renders, expected state next) :: seen)
+         in
+         step 10 { near = 0; far = 0 } []))
+    [%mel.obj { numRuns = 150 }]
+
+let () =
+  describe "props written inline in a component" (fun () ->
+      test_async "a child whose props capture nothing that changed, and are equal otherwise, is not rendered again"
+        (fun () ->
+          law `Captures_state (fun before after ->
+              match (before.near = after.near, before.far mod 2 = after.far mod 2) with true, true -> 0 | _ -> 1));
+      test_async "a value that reads mutable state while rendering is made again on every render" (fun () ->
+          law `Reads_a_ref (fun _ _ -> 1)))

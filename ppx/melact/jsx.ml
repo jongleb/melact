@@ -154,7 +154,7 @@ let component ~loc ~name ~props_constructor expression =
     pexp_array ~loc
       (List.map (fun name -> [%expr Melhole.View.Input [%e evar ~loc name]]) names)
   in
-  let kind =
+  let stateful expression =
     let finder =
       object
         inherit [[ `Pure | `Stateful ]] Ast_traverse.fold as super
@@ -170,7 +170,117 @@ let component ~loc ~name ~props_constructor expression =
           | `Pure, _ -> super#expression expression found
       end
     in
-    finder#expression body `Pure
+    finder#expression expression `Pure
+  in
+  let kind = stateful body in
+  let body =
+    match kind with
+    | `Pure -> body
+    | `Stateful -> (
+        let sites = ref 0 in
+        let untagged =
+          object
+            inherit Ast_traverse.map as super
+
+            method! expression expression =
+              let expression = super#expression expression in
+              match expression.pexp_desc with
+              | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Lident _; loc }; _ } as callee), arguments)
+                when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
+                  {
+                    expression with
+                    pexp_desc = Pexp_apply ({ callee with pexp_desc = Pexp_ident { txt = Ldot (Lident "Tag", "tag"); loc } }, arguments);
+                  }
+              | _ -> expression
+          end
+        in
+        let cache value =
+          match (stateful value, Free.captured (untagged#expression value)) with
+          | `Stateful, _ | `Pure, Volatile -> value
+          | `Pure, Reads names -> (
+              let captures =
+                List.map (evar ~loc)
+                  (List.filter
+                     (fun name ->
+                       (not (String.equal name "__melact_memo"))
+                       && match name.[0] with 'a' .. 'z' | '_' -> true | _ -> false)
+                     names)
+              in
+              let at = !sites in
+              sites := at + List.length captures + 1;
+              let make = [%expr fun () -> [%e value]] and at = eint ~loc at in
+              match captures with
+              | [] -> [%expr Melact_runtime.Memo.cached0 __melact_memo [%e at] [%e make]]
+              | [ a ] -> [%expr Melact_runtime.Memo.cached1 __melact_memo [%e at] [%e a] [%e make]]
+              | [ a; b ] -> [%expr Melact_runtime.Memo.cached2 __melact_memo [%e at] [%e a] [%e b] [%e make]]
+              | [ a; b; c ] -> [%expr Melact_runtime.Memo.cached3 __melact_memo [%e at] [%e a] [%e b] [%e c] [%e make]]
+              | [ a; b; c; d ] ->
+                  [%expr Melact_runtime.Memo.cached4 __melact_memo [%e at] [%e a] [%e b] [%e c] [%e d] [%e make]]
+              | more ->
+                  [%expr
+                    Melact_runtime.Memo.cached __melact_memo [%e at]
+                      [%e pexp_array ~loc (List.map (fun capture -> [%expr Melhole.View.Input [%e capture]]) more)]
+                      [%e make]])
+        in
+        let rec worth value =
+          match value.pexp_desc with
+          | Pexp_function _ | Pexp_record _ | Pexp_array _ | Pexp_tuple _ | Pexp_construct (_, Some _)
+          | Pexp_variant (_, Some _) ->
+              `Worth
+          | Pexp_apply _ when Option.is_some (Element.without_jsx value.pexp_attributes) -> `Worth
+          | Pexp_apply
+              ( {
+                  pexp_desc =
+                    Pexp_ident
+                      { txt = Ldot (Ldot (Lident "ReactDOM", "Style"), ("make" | "combine" | "unsafeAddProp")); _ };
+                  _;
+                },
+                _ ) ->
+              `Worth
+          | Pexp_constraint (inner, _) -> worth inner
+          | _ -> `Not
+        in
+        let walker =
+          object (walker)
+            inherit Ast_traverse.map as super
+
+            method! expression expression =
+              let passed value =
+                let inner = match value.pexp_desc with Pexp_function _ -> value | _ -> walker#expression value in
+                match worth value with `Worth -> cache inner | `Not -> inner
+              in
+              match expression.pexp_desc with
+              | Pexp_function _ -> expression
+              | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot _; _ }; _ } as callee), arguments)
+                when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
+                  {
+                    expression with
+                    pexp_desc =
+                      Pexp_apply
+                        ( callee,
+                          List.map
+                            (fun (label, value) ->
+                              match (label, Element.list_items value) with
+                              | (Labelled "key" | Nolabel), _ -> (label, value)
+                              | Labelled "children", Some items ->
+                                  (label, { value with pexp_desc = (elist ~loc (List.map passed items)).pexp_desc })
+                              | (Labelled _ | Optional _), _ -> (label, passed value))
+                            arguments );
+                  }
+              | _ -> super#expression expression
+          end
+        in
+        let walked = walker#expression body in
+        match !sites with
+        | 0 -> body
+        | count ->
+            [%expr
+              let __melact_memo =
+                Melact_runtime.Memo.cells
+                  [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
+                  [%e eint ~loc count]
+              in
+              [%e walked]])
   in
   let checked =
     let watched expression =

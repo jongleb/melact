@@ -614,6 +614,46 @@ let listing_html form { labels; suffix } =
             labels))
   ^ "</ul>"
 
+(** What the parent of the memo law holds: every leaf reads some of it. *)
+type tally = { step : int; label : string; total : int }
+
+let tally_start = { step = 1; label = "a"; total = 0 }
+let tally_send = ref (fun (_ : tally -> tally) -> ())
+
+module Tally_leaf = struct
+  let[@react.component] make ~onPick ~style ~tags ~pair ~children =
+    <li className="leaf" style onClick=(fun _ -> onPick ())>
+      (React.string (String.concat "," (Array.to_list tags) ^ "|" ^ fst pair ^ string_of_int (snd pair)))
+      children
+    </li>
+end
+
+module Tallied = struct
+  let[@react.component] make () =
+    let tally, setTally = React.useState (fun () -> tally_start) in
+    tally_send := setTally;
+    let { step; label; total } = tally in
+    <ul>
+      <Tally_leaf
+        onPick=(fun () -> setTally (fun _ -> { step; label; total = total + step }))
+        style=(ReactDOM.Style.make ~color:(match label with "a" -> "red" | _ -> "blue") ())
+        tags=[| label; string_of_int step |]
+        pair=(label, total)>
+        <b>(React.int total)</b>
+      </Tally_leaf>
+      <Tally_leaf
+        onPick=(fun () -> setTally (fun current -> { current with total = current.total + 1 }))
+        style=(ReactDOM.Style.make ~color:"green" ())
+        tags=[||]
+        pair=("", step)>
+        <i>(React.string label)</i>
+      </Tally_leaf>
+    </ul>
+end
+
+let tallied_text { step; label; total } =
+  label ^ "," ^ string_of_int step ^ "|" ^ label ^ string_of_int total ^ string_of_int total ^ "|" ^ string_of_int step ^ label
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1257,6 +1297,39 @@ let () =
                    step (remaining - 1) listing
              in
              step 10 { labels = [||]; suffix = "" }))
+        [%mel.obj { numRuns = 120 }]));
+  describe "values written in the props of children" (fun () ->
+    test_async "closures, styles, arrays, tuples and children in props see the state of the latest render" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Tallied /> in
+             let rec step remaining tally =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let tally, action =
+                     match draw tape 4 with
+                     | 0 ->
+                         let step = 1 + draw tape 3 in
+                         ({ tally with step }, fun () -> !tally_send (fun current -> { current with step }))
+                     | 1 ->
+                         let label = [| "a"; "b" |].(draw tape 2) in
+                         ({ tally with label }, fun () -> !tally_send (fun current -> { current with label }))
+                     | 2 -> ({ tally with total = tally.total + tally.step }, fun () -> click (select root ".leaf"))
+                     | _ -> ({ tally with total = tally.total + 1 }, fun () -> click (select root ".leaf + .leaf"))
+                   in
+                   let* () = act action in
+                   expect
+                     ( text_content root,
+                       style_property (style (select root ".leaf")) "color",
+                       style_property (style (select root ".leaf + .leaf")) "color" )
+                   |. to_equal (tallied_text tally, (match tally.label with "a" -> "red" | _ -> "blue"), "green");
+                   step (remaining - 1) tally
+             in
+             step 12 tally_start))
         [%mel.obj { numRuns = 120 }]));
   describe "server rendering" (fun () ->
     test_async "hydrating the server's HTML creates no element and then updates like a render" (fun () ->
