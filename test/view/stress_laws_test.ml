@@ -55,7 +55,40 @@ let rec nested depth leaf =
   | 0 -> View.text leaf
   | _ -> View.tpl_instance box_template [| HHandler (fun _ -> ()); HChild (nested (depth - 1) leaf) |]
 
+external clearings : unit -> int = "__melhole_clearings"
+[@@mel.scope "globalThis"]
+
+let counted : unit =
+  [%mel.raw
+    {|(function () {
+        if (!globalThis.__melhole_clearings) {
+          var count = 0;
+          var described = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+          Object.defineProperty(Node.prototype, "textContent", Object.assign({}, described, {
+            set: function (value) { if (value === "") count++; described.set.call(this, value); }
+          }));
+          globalThis.__melhole_clearings = function () { return count; };
+        }
+      })()|}]
+
 let () =
+  describe "Filling an empty place" (fun () ->
+      test "a place that showed nothing takes its first content with no clearing write, in any form" (fun () ->
+          check
+            (property (tapes ~shortest:2 ~longest:8) (fun values ->
+                 let tape = tape values in
+                 counted;
+                 let words = List.init (1 + draw tape 30) (fun index -> "w" ^ string_of_int index) in
+                 let structure = match draw tape 3 with 0 -> Listed | 1 -> Keyed | _ -> Each in
+                 let root = create_element document "ul" in
+                 let mounted = View.mount (View.list []) ~parent:root ~before:None in
+                 let before = clearings () in
+                 View.patch mounted (described structure words);
+                 let written = clearings () - before in
+                 let shown = inner_html root in
+                 View.unmount mounted;
+                 expect (written, shown) |. to_equal (0, html words)))
+            [%mel.obj { numRuns = 200 }]));
   describe "Wide and deep trees" (fun () ->
       List.iter
         (fun (title, structure) ->
