@@ -382,6 +382,21 @@ On the SSR benchmark (1,000 rows, median of 200 renders, Node 26), Melact's serv
 0.04 ms and Meltea 0.27 and 0.15 ms; with 10,000 rows 3.0 and 1.8 ms against React's 17.7 ms.
 Before, Melact's `renderToString` needed a DOM in Node and was 13 to 55 times slower than React.
 
+`ReactDOM.Client.resumeRoot` is Melact's own, not React's: it leaves a server's page as the server
+wrote it, rendering no component and running no effect, until the first click, key, input, submit or
+pointer press inside the container, through `Served.resumable` as Meltea's `Program.resume` does.
+That input hydrates the page as `hydrateRoot` does and flushes its effects, layout and passive,
+before it reaches its handlers, as React 18 does for a hydration a discrete input forces. A law on
+random server pages: before the first click the page's markup is unchanged and no effect has run;
+the click keeps every element the server sent, finds as many effects run when its handler runs as a
+hydrated page does, and leaves the page as a hydrated page that got the same click. Taking over at
+startup, running no effect after the takeover, or only the layout ones, each break it. Melact's
+hydration is cheap, so the gain is modest: on a served page of 5,000 rows at 4× CPU throttling the
+main thread's work over the load falls from 1,119 to 1,012 ms and its blocking time from 645 to
+609 ms, while the first click pays the takeover (to paint 38 → 175 ms); with 1,000 rows at 4×, 243
+to 193 ms and 95 to 74 ms. The rest of the load is the browser parsing, styling and laying out the
+page. `hydrateRoot` stays the default; `resumeRoot` is for long pages that are mostly read.
+
 ## Types, where dune can give them
 
 `meltea-ppx` has an optional typed pass, `-typed`, for builds that run it as a staged rewriter:

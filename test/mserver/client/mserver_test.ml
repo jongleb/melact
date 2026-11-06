@@ -151,4 +151,61 @@ let () =
           in
           expect (!hydrated > 200) |. to_be true;
           Js.Promise.resolve ())
+        60000;
+      test_async_long
+        "is resumed by Melact: nothing renders and no effect runs until the first click, which then gets what a hydrated page gets, with the server's own elements"
+        (fun () ->
+          let resumed_pages = ref 0 in
+          let* () =
+            check_async
+              (async_property (tapes ~shortest:0 ~longest:200) (fun values ->
+                   match Pages.on_client (Pages.decode values) with
+                   | `Sets_state | `Throws -> Js.Promise.resolve ()
+                   | `Renders ->
+                       incr resumed_pages;
+                       let tape = tape values in
+                       let html = melact_page values in
+                       let resumed = attached () and hydrated = attached () in
+                       set_inner_html resumed html;
+                       set_inner_html hydrated html;
+                       let sent = nodes (select_all resumed "*") in
+                       let written = inner_html resumed in
+                       Pages.effects := 0;
+                       let resuming = ref None in
+                       let* () = act (fun () -> resuming := Some (ReactDOM.Client.resumeRoot resumed (Pages.shown values))) in
+                       let untouched = (Pages.effects.contents, inner_html resumed) in
+                       let quiet = (0, written) in
+                       let* () = act (fun () -> ignore (ReactDOM.Client.hydrateRoot hydrated (Pages.shown values))) in
+                       Pages.effects := 0;
+                       let* () = act (fun () -> ignore (ReactDOM.Client.hydrateRoot hydrated (Pages.shown values))) in
+                       let hydration_effects = Pages.effects.contents in
+                       let counters root = elements (select_all root "button.counter") in
+                       let pick = draw tape (1 + Array.length (counters resumed)) in
+                       let first root = match pick with 0 -> root | _ -> (counters root).(pick - 1) in
+                       Pages.effects := 0;
+                       Pages.effects_when_clicked := -1;
+                       let* () = act (fun () -> click (first resumed)) in
+                       let resumed_effects = (Pages.effects.contents, Pages.effects_when_clicked.contents) in
+                       Pages.effects := hydration_effects;
+                       Pages.effects_when_clicked := -1;
+                       let* () = act (fun () -> click (first hydrated)) in
+                       let hydrated_effects = (hydration_effects, Pages.effects_when_clicked.contents) in
+                       let present = nodes (select_all resumed "*") in
+                       let foreign =
+                         Array.length (Js.Array.filter ~f:(fun node -> not (Array.exists (fun other -> same node other) sent)) present)
+                       in
+                       let after_click = (observe resumed, observe hydrated) in
+                       let* () =
+                         act (fun () ->
+                             Option.iter (fun root -> ReactDOM.Client.unmount root ()) !resuming)
+                       in
+                       remove resumed;
+                       remove hydrated;
+                       expect (stringify (untouched, foreign, resumed_effects, fst after_click))
+                       |. to_equal (stringify (quiet, 0, hydrated_effects, snd after_click));
+                       Js.Promise.resolve ()))
+              [%mel.obj { numRuns = 300 }]
+          in
+          expect (!resumed_pages > 150) |. to_be true;
+          Js.Promise.resolve ())
         60000)

@@ -40,6 +40,7 @@ type node =
   | Picked of string
 
 let effects = ref 0
+let effects_when_clicked = ref (-1)
 let decode values =
   let words = [| ""; "a"; "b c"; "<&>\"'"; " "; "x"; "\nnew"; "1" |] in
   let floats = [| 0.; 1.; -1.5; 0.1; 1e21; 1e-7; 3.14159; 100.; 2.5 |] in
@@ -138,7 +139,13 @@ module Counter = struct
     let total, dispatch = React.useReducer (fun total by -> total + by) (start * 2) in
     let doubled = React.useMemo1 (fun () -> count * 2) [| count |] in
     let held = React.useRef label in
-    let clicked = React.useCallback1 (fun _ -> dispatch 1) [| dispatch |] in
+    let clicked =
+      React.useCallback1
+        (fun _ ->
+          effects_when_clicked := !effects;
+          dispatch 1)
+        [| dispatch |]
+    in
     React.useEffect0 (fun () ->
         incr effects;
         None);
