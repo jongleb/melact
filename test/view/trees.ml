@@ -65,6 +65,7 @@ let rec description tape depth =
         (fun [@u] _ _ _ _ -> ())
         0
         [||]
+        View.Unselecting
   | 7 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
       View.rows items word_line
@@ -76,6 +77,7 @@ let rec description tape depth =
         (fun [@u] _ _ _ _ -> ())
         0
         [||]
+        View.Unselecting
   | 9 ->
       let inner = description tape (depth - 1) in
       View.pure identities.(draw tape 2) [| View.Input words.(draw tape 5); View.Input inner |] (fun () -> inner)

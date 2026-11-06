@@ -4,13 +4,26 @@ open Testing
 external remove_root : Dom.element -> unit = "remove" [@@mel.send]
 
 (** One row of a keyed loop. The same objects recur between steps, so the loop can reuse rows. *)
-type item = { key : string; label : string }
+type item = {
+  key : string;
+  label : string;
+  group : string;  (** What a selector compares, shared by every third row. *)
+  tag : string ref;  (** The same, as an object shared by every third row. *)
+}
+
+let groups = [| "a"; "b"; "c"; "d" |]
+let tags = Array.map (fun group -> ref group) groups
 
 (** What every row reads besides its item. *)
 type outer = { chosen : string; suffix : string }
 
-let fresh_items = Array.init 12 (fun index -> { key = "k" ^ string_of_int index; label = "l" ^ string_of_int index })
-let relabelled = Array.map (fun item -> { item with label = item.label ^ "*" }) fresh_items
+let fresh_items =
+  Array.init 12 (fun index ->
+      { key = "k" ^ string_of_int index; label = "l" ^ string_of_int index; group = groups.(index mod 3); tag = tags.(index mod 3) })
+let relabelled =
+  Array.mapi
+    (fun index item -> { item with label = item.label ^ "*"; group = groups.((index + 1) mod 3); tag = tags.((index + 1) mod 3) })
+    fresh_items
 
 let outers =
   Array.concat
@@ -34,6 +47,7 @@ let loop numbering items outer =
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
     2
     [| View.Input outer |]
+    View.Unselecting
 
 let line_template =
   View.template (Template.html "<li></li>")
@@ -56,6 +70,7 @@ let lines items outer =
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
     2
     [| View.Input outer |]
+    View.Unselecting
 
 (** Which compiled loop a law runs on. *)
 type loop = Each | Numbered_each | Rows
@@ -71,7 +86,7 @@ let loops = [ ("View.each", Each); ("View.each, numbered rows", Numbered_each); 
 (** How a step changes the rows. *)
 type edit = Structural | Same_order
 
-let step tape (items, outer) =
+let step changed tape (items, outer) =
   let count = Array.length items in
   let pick () = draw tape (max 1 count) in
   let unused () =
@@ -80,7 +95,7 @@ let step tape (items, outer) =
       (List.filteri (fun index _ -> index >= draw tape 12) (Array.to_list fresh_items))
   in
   match (draw tape 10, count) with
-  | 0, _ -> ((items, outers.(draw tape (Array.length outers))), Same_order)
+  | 0, _ -> ((items, changed tape outer), Same_order)
   | 1, _ -> ((items, outer), Same_order)
   | 2, _ when count > 0 ->
       let at = pick () in
@@ -113,6 +128,8 @@ let step tape (items, outer) =
   | _, _ ->
       ( (Array.of_list (List.filter (fun _ -> draw tape 2 = 0) (Array.to_list fresh_items)), outer),
         Structural )
+
+let other_outer tape _ = outers.(draw tape (Array.length outers))
 
 let shown child =
   let root = create_element document "ul" in
@@ -186,7 +203,7 @@ let () =
                    match remaining with
                    | 0 -> []
                    | _ ->
-                       let ((items, outer) as next), _ = step tape state in
+                       let ((items, outer) as next), _ = step other_outer tape state in
                        View.patch mounted (framed (loop items outer));
                        (shapes (as_node root), shown (framed (loop items outer))) :: run next (remaining - 1)
                  in
@@ -206,7 +223,7 @@ let () =
                    match remaining with
                    | 0 -> true
                    | _ ->
-                       let ((items, outer) as next), _ = step tape state in
+                       let ((items, outer) as next), _ = step other_outer tape state in
                        View.patch mounted (loop items outer);
                        shapes (as_node root) = shown (loop items outer) && run next (remaining - 1)
                  in
@@ -229,7 +246,7 @@ let () =
                    | 0 -> []
                    | _ ->
                        let before = elements () in
-                       let ((next_items, next_outer) as next), _ = step tape (items, outer) in
+                       let ((next_items, next_outer) as next), _ = step other_outer tape (items, outer) in
                        View.patch mounted (loop next_items next_outer);
                        let after = elements () in
                        let lost =
@@ -260,7 +277,7 @@ let () =
                    match remaining with
                    | 0 -> []
                    | _ -> (
-                       let ((next_items, next_outer) as next), edit = step tape state in
+                       let ((next_items, next_outer) as next), edit = step other_outer tape state in
                        renders := 0;
                        View.patch mounted (loop next_items next_outer);
                        match edit with
@@ -349,7 +366,7 @@ let hashed items =
     (fun [@u] (_, text) item -> View.set_text text ("#" ^ item.label))
     (fun [@u] item -> item.key)
     (fun [@u] _ _ _ _ -> ())
-    0 View.no_inputs
+    0 View.no_inputs View.Unselecting
 
 let () =
   describe "Compiled loops of two templates" (fun () ->
@@ -365,7 +382,7 @@ let () =
                    match remaining with
                    | 0 -> []
                    | _ ->
-                       let next, _ = step tape state in
+                       let next, _ = step other_outer tape state in
                        let child = drawn next in
                        View.patch mounted child;
                        (shapes (as_node root), shown child) :: run next (remaining - 1)
@@ -408,7 +425,7 @@ let referring items =
       View.set_reference reference callback callback)
     (fun [@u] item -> item.key)
     (fun [@u] _ _ _ _ -> ())
-    0 View.no_inputs
+    0 View.no_inputs View.Unselecting
 
 let () =
   describe "Compiled loops with refs" (fun () ->
@@ -428,7 +445,7 @@ let () =
                    match remaining with
                    | 0 -> []
                    | _ ->
-                       let ((items, _) as next), _ = step tape state in
+                       let ((items, _) as next), _ = step other_outer tape state in
                        View.patch mounted (referring items);
                        (held (), expected items) :: run next (remaining - 1)
                  in
@@ -436,3 +453,206 @@ let () =
                  View.unmount mounted;
                  expect ((held (), []) :: seen) |. to_equal (([], []) :: List.map (fun (_, wanted) -> (wanted, wanted)) seen)))
             [%mel.obj { numRuns = 300 }]))
+
+(** What a row with a selector reads besides its item: the key the selection chooses, by its place
+    in a pool that has one key no row has, and a suffix. *)
+type picked = { choice : int option; suffix : string }
+
+(** The key a selector compares. *)
+type keying =
+  | Group  (** A string, compared with [=]. *)
+  | Boxed_group  (** A tuple made afresh by every call, compared with [=]. *)
+  | Tag  (** An object shared by rows, compared with [==]. *)
+  | Position  (** The row's index modulo 3, compared with [=]. *)
+
+let class_of keying picked index item =
+  match keying with
+  | Group -> ( match Option.map (fun at -> groups.(at)) picked.choice with Some chosen when chosen = item.group -> "on" | _ -> "")
+  | Boxed_group -> (
+      match Option.map (fun at -> (groups.(at), 0)) picked.choice with
+      | Some chosen when chosen = (item.group, 0) -> "on"
+      | _ -> "")
+  | Tag -> ( match Option.map (fun at -> tags.(at)) picked.choice with Some chosen when chosen == item.tag -> "on" | _ -> "")
+  | Position -> ( match picked.choice with Some chosen when chosen = index mod 3 -> "on" | _ -> "")
+
+let selector keying picked =
+  match keying with
+  | Group -> View.selector View.Structural (Option.map (fun at -> groups.(at)) picked.choice) (fun [@u] item _ -> item.group)
+  | Boxed_group ->
+      View.selector View.Structural (Option.map (fun at -> (groups.(at), 0)) picked.choice) (fun [@u] item _ -> (item.group, 0))
+  | Tag -> View.selector View.Physical (Option.map (fun at -> tags.(at)) picked.choice) (fun [@u] item _ -> item.tag)
+  | Position -> View.selector View.Structural picked.choice (fun [@u] _ index -> index mod 3)
+
+let projected = ref 0
+let each_selection = View.selection 2
+let rows_selection = View.selection 2
+
+let selected_project keying picked =
+  fun [@u] item index out at ->
+   incr projected;
+   Array.unsafe_set out at (View.Input (class_of keying picked index item));
+   Array.unsafe_set out (at + 1) (View.Input (item.label ^ picked.suffix))
+
+let selected kind keying items picked =
+  let inputs = [| View.Input picked.choice; View.Input picked.suffix |] in
+  match kind with
+  | Each | Numbered_each ->
+      let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows -> View.Items in
+      View.each numbering items
+        (fun [@u] item index ->
+          incr renders;
+          let place = match numbering with View.Items -> "" | View.Numbered -> string_of_int index ^ ":" in
+          View.with_key item.key
+            (View.tpl_instance row_template
+               [| HAttr (Some (class_of keying picked index item)); HText (place ^ item.label ^ picked.suffix) |]))
+        (selected_project keying picked) 2 inputs
+        (View.Selecting (each_selection, [| selector keying picked |]))
+  | Rows ->
+      View.rows items line_template
+        (fun [@u] (root, _, _) -> root)
+        (fun [@u] (_, marking, text) item ->
+          incr renders;
+          View.set_attr marking (Some (class_of keying picked 0 item));
+          View.set_text text (item.label ^ picked.suffix))
+        (fun [@u] item -> item.key)
+        (selected_project keying picked) 2 inputs
+        (View.Selecting (rows_selection, [| selector keying picked |]))
+
+let repicked tape picked =
+  let choice () = match draw tape 5 with 4 -> None | at -> Some at in
+  match draw tape 4 with
+  | 0 | 1 -> { picked with choice = choice () }
+  | 2 -> { picked with suffix = (match picked.suffix with "" -> "?" | _ -> "") }
+  | _ -> { choice = choice (); suffix = (match picked.suffix with "" -> "?" | _ -> "") }
+
+let selections =
+  [
+    ("View.each", Each, Group);
+    ("View.each", Each, Boxed_group);
+    ("View.each", Each, Tag);
+    ("View.each, numbered rows", Numbered_each, Group);
+    ("View.each, numbered rows", Numbered_each, Boxed_group);
+    ("View.each, numbered rows", Numbered_each, Tag);
+    ("View.each, numbered rows", Numbered_each, Position);
+    ("View.rows", Rows, Group);
+    ("View.rows", Rows, Boxed_group);
+    ("View.rows", Rows, Tag);
+  ]
+
+let keyed = function
+  | Group -> "a string key"
+  | Boxed_group -> "a tuple key made afresh"
+  | Tag -> "a shared object compared with =="
+  | Position -> "the index"
+
+let () =
+  List.iter
+    (fun (title, kind, keying) ->
+      let start = (Array.sub fresh_items 0 6, { choice = None; suffix = "" }) in
+      let loop = selected kind keying in
+      describe ("Selector laws: " ^ title ^ ", " ^ keyed keying) (fun () ->
+          test "after any edits, selections and outer changes, patching shows what mounting from scratch shows" (fun () ->
+              check
+                (property (tapes ~shortest:10 ~longest:120) (fun values ->
+                     let tape = tape values in
+                     let framed =
+                       match draw tape 2 with
+                       | 0 -> fun child -> child
+                       | _ -> fun child -> View.list [ View.text "<"; child; View.text ">" ]
+                     in
+                     let root = create_element document "ul" in
+                     let items, picked = start in
+                     let mounted = View.mount (framed (loop items picked)) ~parent:root ~before:None in
+                     let rec run state remaining =
+                       match remaining with
+                       | 0 -> []
+                       | _ ->
+                           let ((items, picked) as next), _ = step repicked tape state in
+                           View.patch mounted (framed (loop items picked));
+                           (shapes (as_node root), shown (framed (loop items picked))) :: run next (remaining - 1)
+                     in
+                     let seen = run start (2 + draw tape 20) in
+                     View.unmount mounted;
+                     expect (List.map fst seen) |. to_equal (List.map snd seen)))
+                [%mel.obj { numRuns = 300 }]);
+          test "when the order is kept, exactly the rows whose item, selection or text changed are rendered" (fun () ->
+              check
+                (property (tapes ~shortest:10 ~longest:120) (fun values ->
+                     let tape = tape values in
+                     let root = create_element document "ul" in
+                     let items, picked = start in
+                     let mounted = View.mount (loop items picked) ~parent:root ~before:None in
+                     let rec run ((items, picked) as state) remaining =
+                       match remaining with
+                       | 0 -> []
+                       | _ -> (
+                           let ((next_items, next_picked) as next), edit = step repicked tape state in
+                           renders := 0;
+                           View.patch mounted (loop next_items next_picked);
+                           match edit with
+                           | Structural -> run next (remaining - 1)
+                           | Same_order ->
+                               let expected =
+                                 List.length
+                                   (List.filteri
+                                      (fun index item ->
+                                        let before = items.(index) in
+                                        not
+                                          (same before item
+                                          && String.equal (class_of keying picked index before)
+                                               (class_of keying next_picked index item)
+                                          && String.equal (before.label ^ picked.suffix) (item.label ^ next_picked.suffix)))
+                                      (Array.to_list next_items))
+                               in
+                               (!renders, expected) :: run next (remaining - 1))
+                     in
+                     let seen = run start (2 + draw tape 20) in
+                     View.unmount mounted;
+                     expect (List.map fst seen) |. to_equal (List.map snd seen)))
+                [%mel.obj { numRuns = 300 }]);
+          match keying with
+          | Boxed_group -> ()
+          | Group | Tag | Position ->
+              test "a change of the selection alone projects only the rows whose key was or is chosen" (fun () ->
+                  check
+                    (property (tapes ~shortest:10 ~longest:120) (fun values ->
+                         let tape = tape values in
+                         let root = create_element document "ul" in
+                         let items, picked = start in
+                         let mounted = View.mount (loop items picked) ~parent:root ~before:None in
+                         let keyed_by chosen index item =
+                           match (keying, chosen) with
+                           | _, None -> 0
+                           | (Group | Boxed_group), Some at -> ( match groups.(at) = item.group with true -> 1 | false -> 0)
+                           | Tag, Some at -> ( match tags.(at) == item.tag with true -> 1 | false -> 0)
+                           | Position, Some at -> ( match at = index mod 3 with true -> 1 | false -> 0)
+                         in
+                         let rec run ((items, picked) as state) remaining =
+                           match remaining with
+                           | 0 -> []
+                           | _ ->
+                               let ((next_items, next_picked) as next), _ = step repicked tape state in
+                               projected := 0;
+                               View.patch mounted (loop next_items next_picked);
+                               let alone =
+                                 Array.length items = Array.length next_items
+                                 && List.for_all2 same (Array.to_list items) (Array.to_list next_items)
+                                 && String.equal picked.suffix next_picked.suffix
+                               in
+                               let expected =
+                                 match picked.choice = next_picked.choice with
+                                 | true -> 0
+                                 | false ->
+                                     List.fold_left ( + ) 0
+                                       (List.mapi
+                                          (fun index item -> keyed_by picked.choice index item + keyed_by next_picked.choice index item)
+                                          (Array.to_list next_items))
+                               in
+                               (match alone with true -> [ (!projected, expected) ] | false -> [])
+                               @ run next (remaining - 1)
+                         in
+                         let seen = run start (2 + draw tape 20) in
+                         View.unmount mounted;
+                         expect (List.map fst seen) |. to_equal (List.map snd seen)))
+                    [%mel.obj { numRuns = 300 }])))
+    selections
