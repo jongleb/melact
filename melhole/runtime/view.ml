@@ -68,13 +68,12 @@ end = struct
 
   let of_rows key items =
     let index = make () in
-    Array.iteri
-      (fun row item ->
-        let found = key item row [@u] in
-        match Js.Undefined.toOption (get index found) with
-        | Some rows -> ignore (push rows row)
-        | None -> ignore (set index found [| row |]))
-      items;
+    for row = 0 to Array.length items - 1 do
+      let found = key (Array.unsafe_get items row) row [@u] in
+      match Js.Undefined.toOption (get index found) with
+      | Some rows -> ignore (push rows row)
+      | None -> ignore (set index found [| row |])
+    done;
     index
 
   let rows index key = Js.Undefined.toOption (get index key)
@@ -509,11 +508,11 @@ let reselected (type drawn item) (old_items : drawn array) (old_selectors : draw
          && Array.length old_items = Array.length items
          && Array.length old_outer = Array.length outer -> (
       let changed = ref 0 in
-      Array.iteri
-        (fun at (Input next) ->
-          let (Input before) = Array.unsafe_get old_outer at in
-          if not (Dom_api.same before next) then changed := !changed lor (1 lsl at))
-        outer;
+      for at = 0 to Array.length outer - 1 do
+        let (Input before) = Array.unsafe_get old_outer at in
+        let (Input next) = Array.unsafe_get outer at in
+        if not (Dom_api.same before next) then changed := !changed lor (1 lsl at)
+      done;
       let rec kept row =
         match row = Array.length items with
         | true -> `Kept
@@ -548,18 +547,18 @@ let reselected (type drawn item) (old_items : drawn array) (old_selectors : draw
                 index := Indexed (current, built);
                 built
           in
-          Array.iteri
-            (fun j (Selector next) ->
-              let (Selector before) = Array.unsafe_get old_table j in
-              match (before.chosen, next.chosen) with
-              | Some a, Some b when Dom_api.same a b -> ()
-              | None, None -> ()
-              | before_key, next_key ->
-                  let rows = Array.unsafe_get (built ()) j in
-                  let look key = Option.iter (Array.iter redraw) (Index.rows rows key) in
-                  Option.iter look before_key;
-                  Option.iter look next_key)
-            table;
+          for j = 0 to Array.length table - 1 do
+            let (Selector before) = Array.unsafe_get old_table j in
+            let (Selector next) = Array.unsafe_get table j in
+            match (before.chosen, next.chosen) with
+            | Some a, Some b when Dom_api.same a b -> ()
+            | None, None -> ()
+            | before_key, next_key ->
+                let rows = Array.unsafe_get (built ()) j in
+                let look key = Option.iter (Array.iter redraw) (Index.rows rows key) in
+                Option.iter look before_key;
+                Option.iter look next_key
+          done;
           Some !index
       | _, (`Kept | `Replaced), (`Usable | `Unusable) -> None)
   | (Unselecting | Selecting _), _ -> None
