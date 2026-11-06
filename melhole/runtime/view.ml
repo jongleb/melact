@@ -341,17 +341,18 @@ let keyed entries =
         match live.state with
         | Keyed_state (old_keys, items) ->
             let plan = Reconcile.plan ~old:old_keys ~next:keys in
-            (match (List.compare_length_with plan.dropped (Array.length items), extent position live) with
+            (match (Array.length plan.dropped - Array.length items, extent position live) with
             | 0, Whole ->
                 Dom_api.set_text_content position.parent "";
                 live.release () [@u]
-            | _, (Whole | Part) -> List.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped);
+            | _, (Whole | Part) -> Array.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped);
             let items =
               backwards (Array.length children) position (fun [@u] j at ->
-                  match Array.unsafe_get plan.steps j with
-                  | Create -> (Array.unsafe_get children j).build at [@u]
-                  | Keep i -> update at (Array.unsafe_get items i) (Array.unsafe_get children j)
-                  | Move i ->
+                  let step = Array.unsafe_get plan.steps j in
+                  match (Reconcile.kept step, Reconcile.moved step) with
+                  | None, None -> (Array.unsafe_get children j).build at [@u]
+                  | Some i, _ -> update at (Array.unsafe_get items i) (Array.unsafe_get children j)
+                  | None, Some i ->
                       let live = update at (Array.unsafe_get items i) (Array.unsafe_get children j) in
                       live.each (fun [@u] node -> move at.parent node at.before) [@u];
                       live)
@@ -576,12 +577,12 @@ let each items render project pieces outer =
                 Some (group (Each_state { items; keys; outer; projections; lives }) lives)
             | _, (`Same | `Moved) ->
                 let plan = Reconcile.plan ~old:old.keys ~next:keys in
-                (match (List.compare_length_with plan.dropped old_count, extent position live) with
+                (match (Array.length plan.dropped - old_count, extent position live) with
                 | 0, Whole ->
                     Dom_api.set_text_content position.parent "";
                     live.release () [@u]
                 | _, (Whole | Part) ->
-                    List.iter (fun i -> remove position (Array.unsafe_get old.lives i)) plan.dropped);
+                    Array.iter (fun i -> remove position (Array.unsafe_get old.lives i)) plan.dropped);
                 let carried at i j =
                   match Origin.kept_from (Array.unsafe_get origins j) with
                   | Some from when from = i -> Array.unsafe_get old.lives i
@@ -589,10 +590,11 @@ let each items render project pieces outer =
                 in
                 let lives =
                   backwards count position (fun [@u] j at ->
-                      match Array.unsafe_get plan.steps j with
-                      | Create -> (described j).build at [@u]
-                      | Keep i -> carried at i j
-                      | Move i ->
+                      let step = Array.unsafe_get plan.steps j in
+                      match (Reconcile.kept step, Reconcile.moved step) with
+                      | None, None -> (described j).build at [@u]
+                      | Some i, _ -> carried at i j
+                      | None, Some i ->
                           let live = carried at i j in
                           live.each (fun [@u] node -> move at.parent node at.before) [@u];
                           live)
@@ -905,7 +907,7 @@ let rows (type holes item) (items : item array) (template : holes template) slot
             | _, (`Same | `Moved) ->
                 let plan = Reconcile.plan ~old:old.keys ~next:keys in
                 let whole =
-                  match List.compare_length_with plan.dropped old_count with
+                  match Array.length plan.dropped - old_count with
                   | 0 when old_count > 0 -> (
                       match
                         ( Dom_api.same
@@ -926,17 +928,18 @@ let rows (type holes item) (items : item array) (template : holes template) slot
                       let (Mounted_row row) = Array.unsafe_get old.rows index in
                       let_go row.scope
                     done
-                | `Part -> List.iter (fun i -> drop position (Array.unsafe_get old.rows i)) plan.dropped);
+                | `Part -> Array.iter (fun i -> drop position (Array.unsafe_get old.rows i)) plan.dropped);
                 let carried i j =
                   match Origin.kept_from (Array.unsafe_get next j) with
                   | Some from when from = i -> Array.unsafe_get old.rows i
                   | Some _ | None -> refreshed (Array.unsafe_get old.rows i) (drawn j)
                 in
                 let placed j before =
-                  match Array.unsafe_get plan.steps j with
-                  | Create -> mount { position with before } (drawn j)
-                  | Keep i -> carried i j
-                  | Move i ->
+                  let step = Array.unsafe_get plan.steps j in
+                  match (Reconcile.kept step, Reconcile.moved step) with
+                  | None, None -> mount { position with before } (drawn j)
+                  | Some i, _ -> carried i j
+                  | None, Some i ->
                       let moved = carried i j in
                       move position.parent (root_of moved) before;
                       moved

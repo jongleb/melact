@@ -9,7 +9,7 @@ let describe_steps (plan : Reconcile.t) =
   Array.to_list
     (Array.map
        (fun step ->
-         match step with
+         match Reconcile.view step with
          | Reconcile.Keep i -> "keep " ^ string_of_int i
          | Move i -> "move " ^ string_of_int i
          | Create -> "create")
@@ -19,7 +19,7 @@ let () =
   describe "plan" (fun () ->
       test "keeps prefix and suffix" (fun () ->
           let plan = Reconcile.plan ~old:[| "a"; "b"; "c" |] ~next:[| "a"; "x"; "c" |] in
-          expect (describe_steps plan, plan.dropped)
+          expect (describe_steps plan, Array.to_list plan.dropped)
           |. to_equal ([ "keep 0"; "create"; "keep 2" ], [ 1 ]));
       test "moves only the swapped entries" (fun () ->
           let plan =
@@ -34,7 +34,7 @@ let () =
           expect (describe_steps plan) |. to_equal [ "move 2"; "keep 1"; "move 0" ]);
       test "never reuses an old entry twice for duplicate keys" (fun () ->
           let plan = Reconcile.plan ~old:[| "a"; "b" |] ~next:[| "b"; "b"; "b" |] in
-          expect (describe_steps plan, plan.dropped)
+          expect (describe_steps plan, Array.to_list plan.dropped)
           |. to_equal ([ "create"; "create"; "keep 1" ], [ 0 ])));
   describe "keyed rows" (fun () ->
       let mounted_rows labels =
