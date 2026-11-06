@@ -621,31 +621,31 @@ def selectors(p):
     for i, parts in enumerate(lines):
         line = "".join(span(t, c) if c else escape(t) for t, c in parts)
         body += text(18, 66 + i * 24, line, size=12, cls="mono", raw=True)
-    body += text(18, 204, "The leaf has no JSX and reads the outer", size=11.5, cls="muted")
-    body += text(18, 222, "selected. The compiler emits a projection:", size=11.5, cls="muted")
-    body += text(18, 248, "fun row -> [| leaf row |]", size=12.5, cls="mono green", weight=700)
-    body += text(18, 278, "A row renders only if its item is another", size=11.5, cls="muted")
-    body += text(18, 296, "object or its projection changed.", size=11.5, cls="muted")
+    body += text(18, 204, "The leaf picks rows by key, so it is a selector:", size=11.5, cls="muted")
+    body += text(18, 222, "the outer value chooses a key, and a row has one.", size=11.5, cls="muted")
+    body += text(18, 248, "chosen = Some selected · key = Some row.id", size=12.5, cls="mono green", weight=700)
+    body += text(18, 278, "A Map from key to rows gives the rows whose key", size=11.5, cls="muted")
+    body += text(18, 296, "was or is chosen: only they are projected.", size=11.5, cls="muted")
 
     body += text(430, 24, "selected: Some 2 → Some 5", size=13.5, weight=700)
     body += text(868, 24, "6 items, same objects", size=11.5, cls="muted", anchor="end")
-    heads = [(446, "row"), (500, "item"), (580, "projection"), (866, "row is")]
+    heads = [(446, "row"), (500, "key"), (580, "found by"), (866, "row is")]
     for x, head in heads:
         body += text(x, 50, head, size=11.5, cls="muted", weight=600, anchor="end" if head == "row is" else "start")
     rows = [
-        (1, "\"\" → \"\"", "kept"), (2, "\"danger\" → \"\"", "rendered"), (3, "\"\" → \"\"", "kept"),
-        (4, "\"\" → \"\"", "kept"), (5, "\"\" → \"danger\"", "rendered"), (6, "\"\" → \"\"", "kept"),
+        (1, "—", "not visited"), (2, "old key: \"danger\" → \"\"", "rendered"), (3, "—", "not visited"),
+        (4, "—", "not visited"), (5, "new key: \"\" → \"danger\"", "rendered"), (6, "—", "not visited"),
     ]
     for i, (n, change, verdict) in enumerate(rows):
         y = 62 + i * 36
         hot = verdict == "rendered"
         body += box(430, y, 450, 30, p["accent_soft"] if hot else p["card"], p["accent"] if hot else p["line"], rx=8, width=1.3 if hot else 1, lift=hot)
         body += text(446, y + 20, str(n), size=12.5, cls="mono", weight=700)
-        body += text(500, y + 20, "===", size=12, cls="mono green")
+        body += text(500, y + 20, str(n), size=12, cls="mono green")
         body += text(580, y + 20, change, size=12, cls="mono accent" if hot else "mono muted", weight=600 if hot else None)
         body += text(866, y + 20, verdict, size=12, cls="accent" if hot else "green", weight=700, anchor="end")
-    body += text(430, 296, "keys in the same order: the two rows are patched in place", size=11.5, cls="muted")
-    return svg(p, 880, 310, "Compiled selectors, after Vue Vapor: a row of Html.list (List.map …) reads its item and the outer value selected through one leaf without JSX; the compiler emits a projection that evaluates only that leaf for each row. When selected goes from Some 2 to Some 5 and the six items are the same objects, only rows 2 and 5 have a changed projection, so only they render, in place; the other four are kept without calling the row function", body)
+    body += text(430, 296, "two lookups: two rows projected and patched in place", size=11.5, cls="muted")
+    return svg(p, 880, 310, "Compiled selectors, after Vue Vapor: a row of Html.list (List.map …) reads its item and the outer value selected through one leaf without JSX that picks rows by key, so the compiler makes it a selector: selected chooses a key, and the key of a row is Some row.id. When selected goes from Some 2 to Some 5 and the six items are the same objects, a Map from key to rows gives rows 2 and 5, the rows whose key was or is chosen; only they are projected and render, in place, and the other four are not visited", body)
 
 
 def fields(p):
@@ -1362,8 +1362,8 @@ HEADERS = dict(
            "A click from 41 to 42 in the counter: one text node is written, nothing else is touched."),
     reconcile=("Keyed lists", "The fewest moves, the cheapest case first",
                "Common ends, one-sided changes and stable order never reach the longest-increasing-run search."),
-    selectors=("Compiled selectors", "Only the rows whose inputs changed render",
-               "Selecting a row of 1,000 renders two rows, as in Vue Vapor."),
+    selectors=("Compiled selectors", "Only the rows whose key was or is chosen are visited",
+               "Selecting a row of 1,000 projects and renders two rows, as in Vue Vapor."),
     row=("Memory per row", "One record per row instead of a dozen objects",
          "What one row of a compiled list keeps alive, before and now."),
     events=("Events", "One listener per event type, on document",

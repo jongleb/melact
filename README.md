@@ -194,14 +194,16 @@ never reuse one old entry twice.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/selectors-dark.svg">
-  <img src="assets/selectors.svg" alt="Compiled selectors, after Vue Vapor: a row of Html.list (List.map …) reads its item and the outer value selected through one leaf without JSX; the compiler emits a projection that evaluates only that leaf for each row. When selected goes from Some 2 to Some 5 and the six items are the same objects, only rows 2 and 5 have a changed projection, so only they render, in place; the other four are kept without calling the row function" width="100%">
+  <img src="assets/selectors.svg" alt="Compiled selectors, after Vue Vapor: a row of Html.list (List.map …) reads its item and the outer value selected through one leaf without JSX that picks rows by key, so the compiler makes it a selector: selected chooses a key, and the key of a row is Some row.id. When selected goes from Some 2 to Some 5 and the six items are the same objects, a Map from key to rows gives rows 2 and 5, the rows whose key was or is chosen; only they are projected and render, in place, and the other four are not visited" width="100%">
 </picture>
 
 `React.array (Array.map row items)` and Meltea's `Html.list (List.map row items)` compile to a
 keyed loop. As in Vue Vapor's selectors, the compiler splits a row into its item and its leaves,
 the smallest pieces without JSX that read outer variables, and emits a projection that evaluates
 only those. A row whose item is the same object and whose projection did not change is kept
-without calling the row function: selecting one row of 1,000 renders two.
+without calling the row function. A leaf that picks rows by key, like the `className` above, is a
+selector: when only the selection changes, a map from key to rows gives the rows whose key was or
+is chosen, and only they are projected: selecting one row of 1,000 visits and renders two.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/row-dark.svg">

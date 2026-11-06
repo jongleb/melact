@@ -503,8 +503,8 @@ let selector equality chosen key = Selector { equality; chosen; key }
 let reselected (type drawn item) (old_items : drawn array) (old_selectors : drawn selectors) indexes old_outer
     (items : item array) (selectors : item selectors) outer redraw =
   match (old_selectors, selectors) with
-  | Selecting (old_site, old_table), Selecting (site, table)
-    when Dom_api.same old_site site
+  | Selecting (drawn_selection, old_table), Selecting (current, table)
+    when Dom_api.same drawn_selection current
          && Array.length old_table = Array.length table
          && Array.length old_items = Array.length items
          && Array.length old_outer = Array.length outer -> (
@@ -521,48 +521,47 @@ let reselected (type drawn item) (old_items : drawn array) (old_selectors : draw
             if Dom_api.same (Array.unsafe_get old_items row) (Array.unsafe_get items row) then kept (row + 1)
             else `Replaced
       in
-      let lookable equality (Input key) =
-        match (equality, Js.typeof key) with
-        | Physical, _ | Structural, ("number" | "string" | "boolean") -> Some (Input key)
-        | Structural, _ -> None
+      let lookable equality chosen =
+        match (equality, chosen) with
+        | _, None | Physical, Some _ -> `Lookable
+        | Structural, Some key -> (
+            match Js.typeof key with "number" | "string" | "boolean" -> `Lookable | _ -> `Unlookable)
       in
-      let sought (Selector before) (Selector next) j found =
-        let add found chosen =
-          Option.bind found (fun found ->
-              Option.fold ~none:(Some found)
-                ~some:(fun key -> Option.map (fun key -> (j, key) :: found) (lookable next.equality key))
-                chosen)
-        in
-        let before_key = Option.map (fun key -> Input key) before.chosen
-        and next_key = Option.map (fun key -> Input key) next.chosen in
-        match (before_key, next_key) with
-        | Some (Input a), Some (Input b) when Dom_api.same a b -> Some found
-        | _ -> add (add (Some found) before_key) next_key
-      in
-      let rec all j found =
+      let rec usable j =
         match j = Array.length table with
-        | true -> found
-        | false ->
-            all (j + 1) (Option.bind found (sought (Array.unsafe_get old_table j) (Array.unsafe_get table j) j))
+        | true -> `Usable
+        | false -> (
+            let (Selector before) = Array.unsafe_get old_table j in
+            let (Selector next) = Array.unsafe_get table j in
+            match (lookable next.equality before.chosen, lookable next.equality next.chosen) with
+            | `Lookable, `Lookable -> usable (j + 1)
+            | `Unlookable, _ | _, `Unlookable -> `Unusable)
       in
-      match (!changed land site.others, kept 0) with
-      | 0, `Kept ->
-          Option.map
-            (fun found ->
-              match found with
-              | [] -> indexes
-              | _ :: _ ->
-                  let built =
-                    match indexes with
-                    | Indexed (indexed, built) when Dom_api.same indexed site -> built
-                    | Indexed _ | Unindexed -> Array.map (fun (Selector selector) -> Index.of_rows selector.key items) table
-                  in
-                  List.iter
-                    (fun (j, Input key) -> Option.iter (Array.iter redraw) (Index.rows (Array.unsafe_get built j) key))
-                    found;
-                  Indexed (site, built))
-            (all 0 (Some []))
-      | _, (`Kept | `Replaced) -> None)
+      match (!changed land current.others, kept 0, usable 0) with
+      | 0, `Kept, `Usable ->
+          let index = ref indexes in
+          let built () =
+            match !index with
+            | Indexed (indexed, built) when Dom_api.same indexed current -> built
+            | Indexed _ | Unindexed ->
+                let built = Array.map (fun (Selector selector) -> Index.of_rows selector.key items) table in
+                index := Indexed (current, built);
+                built
+          in
+          Array.iteri
+            (fun j (Selector next) ->
+              let (Selector before) = Array.unsafe_get old_table j in
+              match (before.chosen, next.chosen) with
+              | Some a, Some b when Dom_api.same a b -> ()
+              | None, None -> ()
+              | before_key, next_key ->
+                  let rows = Array.unsafe_get (built ()) j in
+                  let look key = Option.iter (Array.iter redraw) (Index.rows rows key) in
+                  Option.iter look before_key;
+                  Option.iter look next_key)
+            table;
+          Some !index
+      | _, (`Kept | `Replaced), (`Usable | `Unusable) -> None)
   | (Unselecting | Selecting _), _ -> None
 
 let each numbering items render project pieces outer selectors =

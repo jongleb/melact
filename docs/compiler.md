@@ -128,6 +128,22 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
 
+Re-projecting is still a pass over every row, so the compiler also recognises the leaves that pick
+rows by key, `match o with p when x = i -> a | q -> b` (or `if e = i then a else b`) where `p` binds
+`x` alone, `q` binds nothing, `o` reads no row name and `i`, `a`, `b` read no outer one. Such a
+leaf is a selector: the loop gets the key `o` chooses this render (`match o with p -> Some x | _ ->
+None`), a function from a row to its key `i`, and, once per site, the bits of the outer inputs the
+row's other pieces read. When only inputs that no other piece reads change and every item is the
+one it was, the loop looks up the rows whose key the selector chose before or chooses now in a
+JavaScript `Map` from key to rows (built at the first such change, dropped when items change or
+move) and re-projects those alone; otherwise it takes the pass above. `=` is structural, so the
+`Map` is used for it only when the keys are numbers, strings or booleans, and for `==` always.
+Selecting a row of 1,000 now projects two rows instead of 1,000. Laws over `View.each` (numbered
+or not) and `View.rows` with string, tuple, shared-object and index keys, duplicated across rows,
+compare every patch with a fresh mount and count renders and projections; mutants that keep the
+`Map` across edits, forget the old key, ignore another piece's input or drop the primitive check
+each break them, and a dual law selects component rows against React 18.
+
 When a row is a single lowercase element with a `key` (after any `let`s), the compiler goes one step
 further and emits `View.rows` with what all rows share, once per loop: the template, the root of a
 row's frame, one refresh that takes the item, and a function from an item to its key; the
