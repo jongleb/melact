@@ -31,7 +31,7 @@ JSX compiles to DOM templates with holes. A re-render writes only the holes whos
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/speed-dark.svg">
-  <img src="assets/speed.svg" alt="Benchmark: within ×1.2 of hand-written JavaScript. js-framework-benchmark's keyed operations in headless Chrome, slowdown against vanilla JS, lower is better: vanilla 1.00, Meltea 1.15, Melact 1.17, React 18 1.70. JS bundle of the benchmark app, gzip: vanilla 1.4 kB, Meltea 9.0, Melact 9.9, React 18 45.6. Heap with 1,000 rows: vanilla 0.77 MB, Meltea 1.22, Melact 1.64, React 18 3.17. Swapping two rows of 1,000: Meltea 1.12, Melact 1.17, React 18 5.86" width="100%">
+  <img src="assets/speed.svg" alt="Benchmark: within ×1.2 of hand-written JavaScript. js-framework-benchmark's keyed operations in headless Chrome, slowdown against vanilla JS, lower is better: vanilla 1.00, Meltea 1.14, Melact 1.12, Svelte 5 1.20, Vue Vapor 1.12, React 18 1.68. JS bundle of the benchmark app, gzip: vanilla 1.4 kB, Meltea 9.5, Melact 12.0, Svelte 16.9, Vue Vapor 28.8, React 18 45.6. Heap with 1,000 rows: vanilla 0.77 MB, Meltea 1.07, Melact 1.26, Svelte 1.91, Vue Vapor 2.00, React 18 3.17. Swapping two rows of 1,000: Meltea 1.05, Melact 1.09, Svelte 1.12, Vue Vapor 1.14, React 18 5.55" width="100%">
 </picture>
 
 > [!NOTE]
@@ -205,7 +205,7 @@ without calling the row function: selecting one row of 1,000 renders two.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/row-dark.svg">
-  <img src="assets/row.svg" alt="What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: one Mounted_row record with the root, the scope and the holes, the scope\'s deps also holding the last written values, the holes as bare nodes, the handler data as a property of the element, and the projection array; the template, one refresh per list, the key function and one handler per site are shared. Creating 1,000 rows allocates about 430 kB instead of 939, and 1,000 rows take 1.22 MB instead of 1.68" width="100%">
+  <img src="assets/row.svg" alt="What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: one record per row, a frame the compiler generates for the template, with the row's 4 hole nodes and 5 slots for the last values read, only where a value needs one; the handler data as a property of the element, and the projection array. The template, its record type, one refresh per list, the key function and one handler per site are shared. Creating 1,000 rows allocates about 290 kB instead of 939, and 1,000 rows take 1.07 MB instead of 1.68" width="100%">
 </picture>
 
 A row that is one element with a `key` compiles further, to `View.rows`: one record per row, holes
