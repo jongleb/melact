@@ -35,10 +35,10 @@ val current : unit -> instance
 val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
 val invalidate : instance -> unit
 
-(** Marks an instance to render again because a state value changed; [check] tells, when the render
-    is due, whether the value still differs from the one it last rendered with. If no check does
-    and nothing else asked, the render is skipped, as React bails out. *)
-val invalidate_state : instance -> (unit -> Melhole.View.change) -> unit
+(** Marks an instance to render again because a state cell changed; [check] tells, when the render
+    is due, whether the cell's value still differs from the one it last rendered with. If no check
+    does and nothing else asked, the render is skipped, as React bails out. *)
+val invalidate_state : instance -> 'cell -> ('cell -> Melhole.View.change) -> unit
 val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
 
 (** An effect hook: made once, its cleanup and run queued after each commit that changes its

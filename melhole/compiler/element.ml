@@ -817,8 +817,9 @@ let loop frontend ~loc ~definitions ~view ~stable ~render ~numbering row items =
   | Volatile -> None
   | Reads names ->
       let inputs values =
-        pexp_array ~loc
-          (List.map (fun value -> [%expr Melhole.View.Input [%e value]]) (stable @ values))
+        match stable @ values with
+        | [] -> [%expr Melhole.View.no_inputs]
+        | given -> pexp_array ~loc (List.map (fun value -> [%expr Melhole.View.Input [%e value]]) given)
       in
       let uncurried lambda =
         pexp_record ~loc [ ({ txt = Ldot (Ldot (Lident "Js", "Fn"), "I1"); loc }, lambda) ] None

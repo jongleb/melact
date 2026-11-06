@@ -82,6 +82,7 @@ val compiled : 'frame template -> ('frame -> unit[@u]) -> child
 val static : Template.t -> child
 
 val unset : input
+val no_inputs : input array
 
 val check : input -> 'a -> change
 
@@ -112,7 +113,10 @@ val live : 'value hosting -> 'value -> live
 val hosted : 'value hosting -> live -> 'value option
 
 (** Whether a content hole shows its children, or only remembers them for hydration's first pass. *)
-type range = Settled | Collecting
+type range = Settled | Collecting of collecting
+
+(** The children a collecting content hole was last given. *)
+and collecting
 
 (** Where a medium's nodes come from. *)
 type adoption = Fresh_nodes | Server_nodes

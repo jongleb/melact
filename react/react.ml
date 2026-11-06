@@ -124,10 +124,11 @@ let state_cell instance key reduce initial =
         (fun action ->
           let next = cell.reduce cell.value action in
           if not (next == cell.value) then (
-            Instance.invalidate_state instance check;
+            Instance.invalidate_state instance cell (fun cell ->
+                match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed);
             cell.value <- next));
     }
-  and check () = match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed in
+  in
   Instance.put instance key cell;
   cell
 

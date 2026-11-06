@@ -160,7 +160,10 @@ let move parent node before =
       try move_before parent node before with Js.Exn.Error _ -> Dom_api.insert_before parent node before)
 
 (** Whether a content hole shows its children, or only remembers them for hydration's first pass. *)
-type range = Settled | Collecting
+type range = Settled | Collecting of collecting
+
+(** The children a collecting content hole was last given. *)
+and collecting = { mutable given : child }
 
 (** Where a medium's nodes come from. *)
 type adoption = Fresh_nodes | Server_nodes
@@ -418,6 +421,8 @@ end = struct
 end
 
 let unset = Input (ref ())
+let no_inputs : input array = [||]
+let no_keys : string array = [||]
 
 let piece_change flat at scratch pieces =
   let rec scan index =
@@ -449,7 +454,7 @@ let each numbering items render project pieces outer =
     shape = Single;
     build =
       (fun [@u] position ->
-        let keys = Array.make count "" in
+        let keys = (match count with 0 -> no_keys | _ -> Array.make count "") in
         let lives =
           !medium.built count position
             (fun [@u] index at ->
@@ -458,7 +463,7 @@ let each numbering items render project pieces outer =
               child.build at [@u])
             after_of [@u]
         in
-        let projections = Array.make (count * pieces) unset in
+        let projections = (match count * pieces with 0 -> no_inputs | size -> Array.make size unset) in
         for index = 0 to count - 1 do
           project (Array.unsafe_get items index) index projections (index * pieces) [@u]
         done;
@@ -530,8 +535,8 @@ let each numbering items render project pieces outer =
                 Some (Each_state { items; keys = old.keys; outer; projections; lives })
             | None ->
             let origins = Array.make count Origin.fresh and made = Array.make count None in
-            let keys = Array.make count "" in
-            let projections = Array.make (count * pieces) unset in
+            let keys = (match count with 0 -> no_keys | _ -> Array.make count "") in
+            let projections = (match count * pieces with 0 -> no_inputs | size -> Array.make size unset) in
             let shift = ref 0 in
             Array.iteri
               (fun index item ->
@@ -723,7 +728,7 @@ let found node =
 let expected what node =
   Js.Exn.raiseError ("melhole: the HTML from the server does not match the view: expected " ^ what ^ ", found " ^ found node)
 
-let collecting = { browser with opened = (fun [@u] _ -> Collecting) }
+let collecting = { browser with opened = (fun [@u] _ -> Collecting { given = empty }) }
 
 let adopted template refresh (position : Template.position) =
   match template.adopt with
@@ -766,7 +771,7 @@ let rows (type frame item) (items : item array) (template : frame template) (roo
     shape = Single;
     build =
       (fun [@u] position ->
-        let keys = Array.make count "" in
+        let keys = (match count with 0 -> no_keys | _ -> Array.make count "") in
         let frames =
           !medium.built count position
             (fun [@u] index at ->
@@ -775,7 +780,7 @@ let rows (type frame item) (items : item array) (template : frame template) (roo
               mount at item)
             after [@u]
         in
-        let projections = Array.make (count * pieces) unset in
+        let projections = (match count * pieces with 0 -> no_inputs | size -> Array.make size unset) in
         for index = 0 to count - 1 do
           project (Array.unsafe_get items index) index projections (index * pieces) [@u]
         done;
@@ -827,8 +832,8 @@ let rows (type frame item) (items : item array) (template : frame template) (roo
                 done;
                 Some (shown items old.keys projections frames)
             | _, (`In_place | `Rearranged) ->
-            let next = Array.make count Origin.fresh and keys = Array.make count "" in
-            let projections = Array.make (count * pieces) unset in
+            let next = Array.make count Origin.fresh and keys = (match count with 0 -> no_keys | _ -> Array.make count "") in
+            let projections = (match count * pieces with 0 -> no_inputs | size -> Array.make size unset) in
             let fits from item =
               from >= 0 && from < old_count
               && Dom_api.same (Array.unsafe_get old.items from) item
@@ -1007,12 +1012,7 @@ module Hole = struct
     mutable identity : input;  (** What tells this ref from another, like React's ref object or function. *)
     mutable callback : Dom.element Js.nullable -> unit;
   }
-  type content = {
-    position : Template.position;
-    mutable source : child;
-    mutable live : live;
-    range : range;
-  }
+  type content = { parent : Dom.node; before : Dom.node Js.null; mutable live : live; range : range }
 end
 
 let text_hole position =
@@ -1194,17 +1194,14 @@ let set_reference (hole : Hole.reference) identity callback =
     | Detached -> ())
 
 let content_hole (position : Template.position) : Hole.content =
-  { position; source = empty; live = nothing; range = !medium.opened position [@u] }
+  { parent = position.parent; before = position.before; live = nothing; range = !medium.opened position [@u] }
 
 let release_content (hole : Hole.content) = release hole.live
 
 let set_content (hole : Hole.content) child =
-  match (hole.range, Dom_api.same hole.source child) with
-  | Settled, true -> ()
-  | Settled, false ->
-      hole.live <- update hole.position hole.live child;
-      hole.source <- child
-  | Collecting, _ -> hole.source <- child
+  match hole.range with
+  | Settled -> hole.live <- update { parent = hole.parent; before = hole.before } hole.live child
+  | Collecting collecting -> collecting.given <- child
 
 (** Where hydration has got to among one parent's children. *)
 type cursor = { parent : Dom.node; mutable at : Dom.node Js.null }
@@ -1263,7 +1260,7 @@ let adopt_content cursor child ending : Hole.content =
   let live = child.build { Template.parent = cursor.parent; before = cursor.at } [@u] in
   cursor.at <- after_of live cursor.at [@u];
   let before = match ending with Before_next -> cursor.at | Before_anchor -> Js.Null.return (anchor cursor) in
-  { position = { parent = cursor.parent; before }; source = child; live; range = Settled }
+  { parent = cursor.parent; before; live; range = Settled }
 
 let adopt_finish cursor =
   let rec rest node =
@@ -1276,7 +1273,8 @@ let adopt_finish cursor =
   in
   rest cursor.at
 
-let collected (hole : Hole.content) = hole.source
+let collected (hole : Hole.content) =
+  match hole.range with Collecting collecting -> collecting.given | Settled -> mismatch ()
 let collected_text node = Dom_api.data (Dom_api.to_node node)
 
 (** A hole of a hand-written template. *)

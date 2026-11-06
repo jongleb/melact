@@ -106,15 +106,21 @@ and 'deps effect_hook = {
 }
 
 (** What an instance lets go of when it unmounts. *)
-and ending = Finishes : 'deps effect_hook -> ending | Calls of (unit -> unit)
+and ending =
+  | Finishes : 'deps effect_hook -> ending
+  | Leaves of { consumers : audience; known : audience }  (** Stops reading a provider. *)
+  | Calls of (unit -> unit)
 
 and status = Clean | Dirty of dirt | Unmounted
 
 (** Why an instance is to render again. *)
 and dirt =
   | Forced  (** Its parent, a context or a boundary asks for it. *)
-  | Stated of (unit -> View.change) list
+  | Stated of checking list
       (** Only its own state changed: each check tells whether a value differs from the one it last rendered with. *)
+
+(** A state cell and how to tell whether its value differs from the one it last rendered with. *)
+and checking = Checking : 'cell * ('cell -> View.change) -> checking
 
 (** Where an instance sits in the DOM when its output has no nodes. *)
 and region =
@@ -236,7 +242,13 @@ let instances =
           View.release instance.output;
           instance.status <- Unmounted;
           List.iter
-            (fun ending -> match ending with Finishes hook -> finish hook | Calls cleanup -> cleanup ())
+            (fun ending ->
+              match ending with
+              | Finishes hook -> finish hook
+              | Leaves { consumers; known } ->
+                  leave consumers instance;
+                  leave known instance
+              | Calls cleanup -> cleanup ())
             (List.rev instance.teardown)
       | Catches _ ->
           View.release instance.output;
@@ -353,7 +365,9 @@ let rec settle () =
           (fun (_, instance) ->
             match instance.status with
             | Dirty (Stated checks)
-              when List.for_all (fun check -> match check () with View.Unchanged -> true | View.Changed -> false) checks ->
+              when List.for_all
+                     (fun (Checking (cell, check)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
+                     checks ->
                 instance.status <- Clean
             | Dirty (Forced | Stated _) -> refresh (position_of instance) instance
             | Clean | Unmounted -> ())
@@ -509,16 +523,16 @@ let invalidate instance =
       mark_dirty instance;
       queue_render ()
 
-let invalidate_state instance check =
+let invalidate_state instance cell check =
   match !rendering with
   | Some _ ->
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
   | None ->
       (match instance.status with
       | Clean ->
-          instance.status <- Dirty (Stated [ check ]);
+          instance.status <- Dirty (Stated [ Checking (cell, check) ]);
           dirty := instance :: !dirty
-      | Dirty (Stated checks) -> instance.status <- Dirty (Stated (check :: checks))
+      | Dirty (Stated checks) -> instance.status <- Dirty (Stated (Checking (cell, check) :: checks))
       | Dirty Forced | Unmounted -> ());
       queue_render ()
 
@@ -553,9 +567,8 @@ let rec provided : type value. instance -> value Context.t -> instance option ->
           | Some Equal ->
               if not (member provision.known instance) then (
                 join provision.known instance;
-                on_unmount instance (fun () ->
-                    leave provision.consumers instance;
-                    leave provision.known instance));
+                instance.teardown <-
+                  Leaves { consumers = provision.consumers; known = provision.known } :: instance.teardown);
               join provision.consumers instance;
               provision.value
           | None -> provided instance context above.parent)
