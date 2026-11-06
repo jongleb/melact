@@ -292,12 +292,9 @@ let useImperativeHandle4 key target make deps = imperative same4 key target make
 let useImperativeHandle5 key target make deps = imperative same5 key target make deps
 let useImperativeHandle6 key target make deps = imperative same6 key target make deps
 let useImperativeHandle7 key target make deps = imperative same7 key target make deps
-let ids = ref 0
-
 let useId key () =
-  Instance.slot (Instance.current ()) key (fun () ->
-      incr ids;
-      ":m" ^ string_of_int !ids ^ ":")
+  let instance = Instance.current () in
+  Instance.slot instance key (fun () -> Instance.id instance)
 
 let useSyncExternalStoreWithServer key ~subscribe ~getSnapshot ~getServerSnapshot:_ =
   useSyncExternalStore key ~subscribe ~getSnapshot

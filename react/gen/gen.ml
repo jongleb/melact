@@ -149,12 +149,17 @@ let () =
         @ [ "  | _ -> Skipped" ]
     | "native_impl" ->
         [
-          "type domProps = { key : string option; children : React.element option; props : Melact_server.Dom.prop list }";
+          "type domProps = { children : React.element option; props : Melact_server.Dom.prop list }";
           "";
-          "let domProps ?key ?children";
+          "let domProps ?key:_ ?children";
         ]
-        @ List.map (fun (name, _) -> Printf.sprintf "    ?%s:%s" (label name) ("prop_" ^ name)) props
-        @ [ "    () ="; "  { key; children; props = List.filter_map Fun.id [" ]
+        @ List.map
+            (fun (name, kind) ->
+              match native_prop name kind ("prop_" ^ name) with
+              | Some _ -> Printf.sprintf "    ?%s:%s" (label name) ("prop_" ^ name)
+              | None -> Printf.sprintf "    ?%s:_" (label name))
+            props
+        @ [ "    () ="; "  { children; props = List.filter_map Fun.id [" ]
         @ List.filter_map
             (fun (name, kind) -> Option.map (fun made -> "    " ^ made ^ ";") (native_prop name kind ("prop_" ^ name)))
             props

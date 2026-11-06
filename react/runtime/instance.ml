@@ -17,9 +17,15 @@ external caught_of : 'a -> caught = "%identity"
 (** A JavaScript [Set] of the instances that read a provider. *)
 type audience
 
+(** Where an instance is as React's [useId] numbers positions: known when it took over a server's
+    nodes, else not counted. *)
+type numbered = Unnumbered | Numbered of Melhole_server.Tree.t
+
 type instance = {
   parent : instance option;  (** The nearest enclosing instance. *)
   depth : int;
+  tree : numbered;
+  mutable ids : int;  (** The [useId]s its first render took. *)
   slots : Hook.slots;
   kind : kind;
   mutable status : status;
@@ -530,11 +536,47 @@ let flush () =
   settle ();
   run_passive ()
 
+let position = ref Melhole_server.Tree.root
+let around = ref []
+
+let () =
+  View.positions :=
+    {
+      fork =
+        (fun [@u] count index ->
+          around := !position :: !around;
+          position := Melhole_server.Tree.pushed !position count index);
+      join =
+        (fun [@u] () ->
+          match !around with
+          | outer :: rest ->
+              position := outer;
+              around := rest
+          | [] -> ());
+    }
+
+let number_from_root () =
+  position := Melhole_server.Tree.root;
+  around := []
+
+let counted = ref 0
+
+let id instance =
+  let local = instance.ids in
+  instance.ids <- local + 1;
+  match instance.tree with
+  | Numbered tree -> Melhole_server.Tree.id tree local
+  | Unnumbered ->
+      incr counted;
+      ":m" ^ string_of_int !counted ^ ":"
+
 let born kind =
   let instance =
     {
       parent = !owner;
       depth = Option.fold ~none:0 ~some:(fun parent -> parent.depth + 1) !owner;
+      tree = (match !View.medium.adoption with View.Server_nodes -> Numbered !position | View.Fresh_nodes -> Unnumbered);
+      ids = 0;
       slots = Hook.slots ();
       kind;
       status = Clean;
@@ -550,7 +592,14 @@ let mount_instance position kind =
   let instance = born kind in
   (match
      let child = render instance in
-     within owner (Some instance) (fun () -> View.build child position)
+     within owner (Some instance) (fun () ->
+         match (instance.tree, instance.ids) with
+         | Numbered _, 0 | Unnumbered, _ -> View.build child position
+         | Numbered _, _ ->
+             !View.positions.fork 1 0 [@u];
+             let built = View.build child position in
+             !View.positions.join () [@u];
+             built)
    with
   | output ->
       instance.output <- output;
@@ -977,10 +1026,40 @@ let suspend =
           | _ -> Busy);
     }
   in
+  let marker data node =
+    Option.bind (Js.Null.toOption node) (fun found ->
+        match (Dom_api.node_type found, Dom_api.data found) with
+        | 8, given when String.equal given data -> Some found
+        | _ -> None)
+  in
+  let rec dropped parent node depth =
+    match Js.Null.toOption node with
+    | None -> node
+    | Some found -> (
+        let next = Dom_api.following_sibling found in
+        let depth =
+          match (Dom_api.node_type found, Dom_api.data found) with
+          | 8, ("$" | "$!" | "$?") -> depth + 1
+          | 8, "/$" -> depth - 1
+          | _ -> depth
+        in
+        Dom_api.remove_child parent found;
+        match depth with 0 -> next | _ -> dropped parent next depth)
+  in
   fun ~fallback children ->
     View.host
       ~build:(fun [@u] (position : Template.position) ->
         suspension := installed;
+        let position, server =
+          match (!View.medium.adoption, marker "$" position.before, marker "$!" position.before) with
+          | View.Server_nodes, Some opened, _ ->
+              let next = Dom_api.following_sibling opened in
+              Dom_api.remove_child position.parent opened;
+              ({ position with before = next }, `Rendered)
+          | View.Server_nodes, None, Some _ ->
+              ({ position with before = dropped position.parent position.before 0 }, `Left_to_client)
+          | (View.Server_nodes | View.Fresh_nodes), _, _ -> (position, `Rendered)
+        in
         let opening = !View.medium.text position None [@u] in
         let closing = Dom_api.create_text_node Dom_api.document "" in
         let suspending =
@@ -994,11 +1073,27 @@ let suspend =
             suspending.content <-
               within owner (Some boundary) (fun () ->
                   View.build children { position with before = Js.Null.return (Dom_api.to_node closing) })
-        | View.Server_nodes ->
-            suspending.content <- within owner (Some boundary) (fun () -> View.build children position);
-            let last = ref (Dom_api.to_node opening) in
-            View.visit suspending.content (fun [@u] node -> last := node);
-            Dom_api.insert_before position.parent (Dom_api.to_node closing) (Dom_api.following_sibling !last));
+        | View.Server_nodes -> (
+            match server with
+            | `Left_to_client ->
+                Dom_api.insert_before position.parent (Dom_api.to_node closing) position.before;
+                suspending.content <-
+                  !View.medium.aside (fun [@u] () ->
+                      within owner (Some boundary) (fun () ->
+                          View.build children { position with before = Js.Null.return (Dom_api.to_node closing) }))
+                  [@u]
+            | `Rendered ->
+                suspending.content <- within owner (Some boundary) (fun () -> View.build children position);
+                let last = ref (Dom_api.to_node opening) in
+                View.visit suspending.content (fun [@u] node -> last := node);
+                let after = Dom_api.following_sibling !last in
+                Dom_api.insert_before position.parent (Dom_api.to_node closing)
+                  (Option.fold ~none:after
+                     ~some:(fun closed ->
+                       let next = Dom_api.following_sibling closed in
+                       Dom_api.remove_child position.parent closed;
+                       next)
+                     (marker "/$" after))));
         View.live instances boundary)
       ~patch:(fun [@u] _ live ->
         match View.hosted instances live with

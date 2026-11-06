@@ -1,0 +1,22 @@
+(library
+ (name melact_server_native)
+ (public_name melact.server.native)
+ (wrapped false)
+ (modes native)
+ (libraries melact.server.core melhole.server))
+
+(rule
+ (targets reactDOM.ml)
+ (deps reactDOM.ml.in ../../reactDOM.ml.in)
+ (action
+  (with-stdout-to
+   reactDOM.ml
+   (run ../../gen/gen.exe reactDOM.ml.in native_impl ../../reactDOM.ml.in))))
+
+(rule
+ (targets reactDOM.mli)
+ (deps reactDOM.mli.in ../../reactDOM.mli.in)
+ (action
+  (with-stdout-to
+   reactDOM.mli
+   (run ../../gen/gen.exe reactDOM.mli.in native_intf ../../reactDOM.mli.in))))

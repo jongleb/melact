@@ -565,6 +565,7 @@ let dom tag props children =
   let content () =
     match Array.length children with
     | 0 -> Option.fold ~none:View.empty ~some:React.to_child (Js.Undefined.toOption (lookup props "children"))
+    | 1 -> React.to_child (Array.unsafe_get children 0)
     | _ -> React.to_child (React.array children)
   in
   let svg = match tag with "svg" | "circle" | "path" | "g" | "rect" | "line" | "polyline" | "polygon" | "ellipse" | "text" | "tspan" | "defs" | "use" | "symbol" | "marker" | "linearGradient" | "radialGradient" | "stop" | "clipPath" | "mask" | "pattern" | "filter" -> `Svg | _ -> `Html in

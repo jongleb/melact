@@ -1,0 +1,19 @@
+(copy_files
+ (files ../{pages.mlx,rendered.ml}))
+
+(executable
+ (name corpus)
+ (libraries melact.server.native)
+ (preprocess
+  (pps melact-ppx -server)))
+
+(rule
+ (targets corpus.json)
+ (action
+  (with-stdout-to
+   corpus.json
+   (run ./corpus.exe))))
+
+(alias
+ (name runtest-js)
+ (deps corpus.json))

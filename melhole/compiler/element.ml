@@ -242,9 +242,12 @@ let rec analyse frontend ~loc ~forks tag arguments =
             match label with Optional _ -> `Optional | Labelled _ | Nolabel -> `Required
           in
           match
-            match Dom_props.Prop.of_string name with
-            | Some parsed -> Some (Dom_props.kind parsed)
-            | None -> frontend.extra name
+            match (Dom_props.Prop.of_string name, tag) with
+            | Some _, "option" when String.equal name "value" -> Some (Dom_props.Attribute ("value", Text))
+            | Some _, "textarea" when String.equal name "defaultValue" && not (!output = Server) ->
+                Some (Dom_props.Property ("defaultValue", Text))
+            | Some parsed, _ -> Some (Dom_props.kind parsed)
+            | None, _ -> frontend.extra name
           with
           | None ->
               Location.raise_errorf ~loc:value.pexp_loc "%s: <%s> has no prop %s" frontend.name tag
@@ -957,18 +960,38 @@ let lowercase frontend ~loc ~attributes tag arguments =
                      let named = hole_name (hole_of value) in
                      [%expr
                        let [%p pvar ~loc named] =
-                         Melhole.View.adopt_content [%e evar ~loc (cursor indices)]
-                           (Melhole.View.collected [%e evar ~loc (from named)])
-                           Melhole.View.Before_next
+                         [%e
+                           Option.fold
+                             ~none:
+                               [%expr
+                                 Melhole.View.adopt_content [%e evar ~loc (cursor indices)]
+                                   (Melhole.View.collected [%e evar ~loc (from named)])
+                                   Melhole.View.Before_next]
+                             ~some:(fun path ->
+                               [%expr
+                                 Melhole.View.adopt_forked [%e evar ~loc (cursor indices)]
+                                   (Melhole.View.collected [%e evar ~loc (from named)])
+                                   Melhole.View.Before_next [%e path]])
+                             (fork_path value)]
                        in
                        [%e body]]
                  | Child_before_anchor (indices, value) ->
                      let named = hole_name (hole_of value) in
                      [%expr
                        let [%p pvar ~loc named] =
-                         Melhole.View.adopt_content [%e evar ~loc (cursor indices)]
-                           (Melhole.View.collected [%e evar ~loc (from named)])
-                           Melhole.View.Before_anchor
+                         [%e
+                           Option.fold
+                             ~none:
+                               [%expr
+                                 Melhole.View.adopt_content [%e evar ~loc (cursor indices)]
+                                   (Melhole.View.collected [%e evar ~loc (from named)])
+                                   Melhole.View.Before_anchor]
+                             ~some:(fun path ->
+                               [%expr
+                                 Melhole.View.adopt_forked [%e evar ~loc (cursor indices)]
+                                   (Melhole.View.collected [%e evar ~loc (from named)])
+                                   Melhole.View.Before_anchor [%e path]])
+                             (fork_path value)]
                        in
                        [%e body]])
                (Markup.adoption element) finished
@@ -1260,7 +1283,7 @@ let loop frontend ~loc ~definitions ~view ~stable ~render ~numbering row items =
 let fragment frontend ~loc items =
   let children = List.map (fun item -> frontend.unwrap loc (frontend.map item)) items in
   match (!output, frontend.ids, children) with
-  | Server, Tree_ids, [ only ] -> frontend.wrap loc only
+  | _, Tree_ids, [ only ] -> frontend.wrap loc only
   | Server, Tree_ids, _ -> frontend.wrap loc [%expr Melhole_server.array [%e pexp_array ~loc children]]
   | Server, No_ids, _ -> frontend.wrap loc [%expr Melhole_server.list [%e elist ~loc children]]
   | (Client_only | Hydratable), _, _ -> frontend.wrap loc [%expr Melhole.View.list [%e elist ~loc children]]
