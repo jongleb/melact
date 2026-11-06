@@ -801,6 +801,28 @@ module Defaulted = struct
     <p>(React.string (label ^ ":" ^ Option.fold ~none:"none" ~some:string_of_int choice))</p>
 end
 
+let ordered_send = ref (fun (_ : string * string array -> string * string array) -> ())
+
+module Ordered_reader = struct
+  let[@react.component] make ~label =
+    let shade = React.useContext theme in
+    React.useEffect1
+      (fun () ->
+        log (label ^ shade);
+        None)
+      [| shade |];
+    <li>(React.string (label ^ shade))</li>
+end
+
+module Ordered = struct
+  let[@react.component] make () =
+    let (shade, labels), setState = React.useState (fun () -> ("a", Array.init 30 (fun index -> "r" ^ string_of_int index))) in
+    ordered_send := setState;
+    <Theme_provider value=shade>
+      <ul>(React.array (Array.map (fun label -> <Ordered_reader key=label label />) labels))</ul>
+    </Theme_provider>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1492,6 +1514,30 @@ let () =
       expect (text_content root) |. to_equal "default:5default:5given:1";
       let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
       finish ()));
+  describe "many readers of a context made dirty at once" (fun () ->
+    test_async "render and run their effects in the order of the page, after any reordering" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+             let tape = tape values in
+             let* _, client = mount <Ordered /> in
+             let rec step remaining shade labels =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let ranked = Array.map (fun label -> (draw tape 1000, label)) labels in
+                   Array.stable_sort compare ranked;
+                   let reordered = Array.map snd ranked in
+                   let* () = act (fun () -> !ordered_send (fun _ -> (shade, reordered))) in
+                   ignore (take ());
+                   let next = match shade with "a" -> "b" | _ -> "a" in
+                   let* () = act (fun () -> !ordered_send (fun _ -> (next, reordered))) in
+                   expect (take ()) |. to_equal (Array.to_list (Array.map (fun label -> label ^ next) reordered));
+                   step (remaining - 1) next reordered
+             in
+             step 4 "a" (Array.init 30 (fun index -> "r" ^ string_of_int index))))
+        [%mel.obj { numRuns = 30 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async

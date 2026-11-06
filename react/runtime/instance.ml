@@ -162,6 +162,21 @@ external leave : audience -> instance -> unit = "delete" [@@mel.send]
 external each_member : audience -> ((instance -> unit)[@mel.uncurry]) -> unit = "forEach" [@@mel.send]
 external disband : audience -> unit = "clear" [@@mel.send]
 
+(** A JavaScript [Map] from a DOM node to the dirty instances that start at it. *)
+type starts
+
+external nodes_of : unit -> starts = "Map" [@@mel.new]
+external found_get : starts -> Dom.node -> instance list Js.undefined = "get" [@@mel.send]
+external found_set : starts -> Dom.node -> instance list -> unit = "set" [@@mel.send]
+external found_delete : starts -> Dom.node -> unit = "delete" [@@mel.send]
+external node_contains : Dom.node -> Dom.node -> bool = "contains" [@@mel.send]
+
+(** A DOM [TreeWalker]: it visits a subtree's nodes in document order. *)
+type walker
+
+external tree_walker : Dom.document -> Dom.node -> int -> walker = "createTreeWalker" [@@mel.send]
+external next_node : walker -> Dom.node Js.null = "nextNode" [@@mel.send]
+
 let thrown error =
   match error with
   | Js.Exn.Error raw -> ([%mel.raw "function (error) { throw error }"] : Js.Exn.t -> unit) raw
@@ -371,13 +386,50 @@ let rec settle () =
                 instance.status <- Clean
             | Dirty (Forced | Stated _) -> refresh (position_of instance) instance
             | Clean | Unmounted -> ())
-          (List.stable_sort
-             (fun (front_a, a) (front_b, b) ->
-               match (front_a, front_b) with
-               | Some first, Some second when not (Dom_api.same first second) ->
-                   if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
-               | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
-             (List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending));
+          (let fronted = List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending in
+           let by_depth = List.stable_sort (fun (_, a) (_, b) -> Int.compare a.depth b.depth) in
+           match fronted with
+           | [] | [ _ ] -> fronted
+           | _ when List.compare_length_with fronted 16 <= 0 ->
+               List.stable_sort
+                 (fun (front_a, a) (front_b, b) ->
+                   match (front_a, front_b) with
+                   | Some first, Some second when not (Dom_api.same first second) ->
+                       if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
+                   | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
+                 fronted
+           | (first, _) :: _ ->
+               let placed = List.filter_map (fun (front, instance) -> Option.map (fun node -> (node, instance)) front) fronted in
+               let unplaced = List.filter (fun (front, _) -> Option.is_none front) fronted in
+               let starts = nodes_of () in
+               List.iter
+                 (fun (node, instance) ->
+                   Option.fold ~none:(found_set starts node [ instance ])
+                     ~some:(fun others -> found_set starts node (instance :: others))
+                     (Js.Undefined.toOption (found_get starts node)))
+                 placed;
+               let rec common candidate =
+                 match List.for_all (fun (node, _) -> node_contains candidate node) placed with
+                 | true -> Some candidate
+                 | false -> Option.bind (Dom_api.parent_node candidate) common
+               in
+               let walked = ref [] in
+               let take node =
+                 Option.iter
+                   (fun instances ->
+                     walked := List.rev_append (by_depth (List.map (fun instance -> (Some node, instance)) instances)) !walked;
+                     found_delete starts node)
+                   (Js.Undefined.toOption (found_get starts node))
+               in
+               Option.iter
+                 (fun ancestor ->
+                   take ancestor;
+                   let walker = tree_walker Dom_api.document ancestor (-1) in
+                   let rec next () = Option.iter (fun node -> take node; next ()) (Js.Null.toOption (next_node walker)) in
+                   next ())
+                 (Option.bind first common);
+               let missed = List.filter (fun (node, _) -> Js.Undefined.testAny (found_get starts node) |> not) placed in
+               List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced);
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
         run_phases layout_cleanups layout_runs;
