@@ -57,14 +57,16 @@ let rec description tape depth =
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
       View.each items
         (fun [@u] item -> View.with_key item (View.text item))
-        (fun [@u] _ -> [||])
+        (fun [@u] _ _ _ -> ())
+        0
         [||]
   | 7 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
       View.rows items word_line 1
         (fun [@u] scope text item -> View.put_text scope 0 text item)
         (fun [@u] item -> item)
-        (fun [@u] _ -> [||])
+        (fun [@u] _ _ _ -> ())
+        0
         [||]
   | 9 ->
       let inner = description tape (depth - 1) in

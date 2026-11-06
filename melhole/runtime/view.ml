@@ -41,7 +41,7 @@ type state =
       items : 'item array;
       keys : string array;
       outer : input array;  (** What the rendering reads besides the item. *)
-      projections : input array array;  (** Per row, the parts of its rendering that read [outer]. *)
+      projections : input array;  (** Row after row, the parts of its rendering that read [outer]. *)
       lives : live array;
     }
       -> state
@@ -49,7 +49,7 @@ type state =
       items : 'item array;
       keys : string array;
       outer : input array;
-      projections : input array array;
+      projections : input array;
       rows : mounted_row array;
     }
       -> state
@@ -389,7 +389,25 @@ end = struct
   let kept_from origin = match origin < 0 with true -> None | false -> Some origin
 end
 
-let each items render project outer =
+let unset = Input (ref ())
+
+let piece_change flat at scratch pieces =
+  let rec scan index =
+    match index = pieces with
+    | true -> Unchanged
+    | false ->
+        let (Input a) = Array.unsafe_get flat (at + index) in
+        let (Input b) = Array.unsafe_get scratch index in
+        if Dom_api.same a b then scan (index + 1) else Changed
+  in
+  scan 0
+
+let pieces_copied source from target at pieces =
+  for index = 0 to pieces - 1 do
+    Array.unsafe_set target (at + index) (Array.unsafe_get source (from + index))
+  done
+
+let each items render project pieces outer =
   let count = Array.length items in
   let rendered index item =
     let child = render item [@u] in
@@ -410,40 +428,99 @@ let each items render project outer =
               child.build at [@u])
             after_of [@u]
         in
-        let projections = Array.map (fun item -> project item [@u]) items in
+        let projections = Array.make (count * pieces) unset in
+        for index = 0 to count - 1 do
+          project (Array.unsafe_get items index) projections (index * pieces) [@u]
+        done;
         group (Each_state { items; keys; outer; projections; lives }) lives);
     patch =
       (fun [@u] position live ->
         match live.state with
-        | Each_state old ->
+        | Each_state old -> (
             let old_count = Array.length old.items in
+            let outer_change = compare_inputs old.outer outer in
+            let scratch = Array.make pieces unset in
+            let ahead lives index =
+              let rec find index =
+                match index = count with
+                | true -> position.before
+                | false ->
+                    let found = (Array.unsafe_get lives index).front Js.null [@u] in
+                    if Dom_api.same found Js.null then find (index + 1) else found
+              in
+              find index
+            in
+            let in_place =
+              match count = old_count with
+              | false -> None
+              | true ->
+                  let made = ref [||] in
+                  let rec check index =
+                    match index = count with
+                    | true -> Some !made
+                    | false -> (
+                        let item = Array.unsafe_get items index in
+                        match Dom_api.same item (Array.unsafe_get old.items index) with
+                        | true -> check (index + 1)
+                        | false -> (
+                            let child, key = rendered index item in
+                            match String.equal key (Array.unsafe_get old.keys index) with
+                            | false -> None
+                            | true ->
+                                (match Array.length !made with 0 -> made := Array.make count None | _ -> ());
+                                Array.unsafe_set !made index (Some child);
+                                check (index + 1)))
+                  in
+                  check 0
+            in
+            match in_place with
+            | Some made ->
+                let lives = old.lives and projections = old.projections in
+                for index = count - 1 downto 0 do
+                  let item = Array.unsafe_get items index and at = index * pieces in
+                  let fresh = match Array.length made with 0 -> None | _ -> Array.unsafe_get made index in
+                  match (fresh, outer_change) with
+                  | Some child, _ ->
+                      project item projections at [@u];
+                      Array.unsafe_set lives index
+                        (update { position with before = ahead lives (index + 1) } (Array.unsafe_get lives index) child)
+                  | None, Unchanged -> ()
+                  | None, Changed -> (
+                      project item scratch 0 [@u];
+                      match piece_change projections at scratch pieces with
+                      | Unchanged -> ()
+                      | Changed ->
+                          pieces_copied scratch 0 projections at pieces;
+                          Array.unsafe_set lives index
+                            (update
+                               { position with before = ahead lives (index + 1) }
+                               (Array.unsafe_get lives index)
+                               (fst (rendered index item))))
+                done;
+                Some (group (Each_state { items; keys = old.keys; outer; projections; lives }) lives)
+            | None ->
             let origins = Array.make count Origin.fresh and made = Array.make count None in
             let keys = Array.make count "" in
-            let projections = Array.make count [||] in
-            let outer_change = compare_inputs old.outer outer in
+            let projections = Array.make (count * pieces) unset in
             let shift = ref 0 in
             Array.iteri
               (fun index item ->
-                let projected =
-                  match outer_change with
-                  | Unchanged -> None
-                  | Changed -> Some (project item [@u])
-                in
+                (match outer_change with Unchanged -> () | Changed -> project item scratch 0 [@u]);
                 let fits from =
                   from >= 0 && from < old_count
                   && Dom_api.same (Array.unsafe_get old.items from) item
-                  && Option.fold ~none:true
-                       ~some:(fun projection ->
-                         match compare_inputs (Array.unsafe_get old.projections from) projection with
-                         | Unchanged -> true
-                         | Changed -> false)
-                       projected
+                  &&
+                  match outer_change with
+                  | Unchanged -> true
+                  | Changed -> (
+                      match piece_change old.projections (from * pieces) scratch pieces with
+                      | Unchanged -> true
+                      | Changed -> false)
                 in
                 let reuse from =
                   Array.unsafe_set origins index (Origin.kept from);
                   Array.unsafe_set keys index (Array.unsafe_get old.keys from);
-                  Array.unsafe_set projections index
-                    (Option.value ~default:(Array.unsafe_get old.projections from) projected)
+                  pieces_copied old.projections (from * pieces) projections (index * pieces) pieces
                 in
                 if fits (index + !shift) then reuse (index + !shift)
                 else if fits (index + !shift + 1) then (
@@ -456,8 +533,9 @@ let each items render project outer =
                   let child, key = rendered index item in
                   Array.unsafe_set made index (Some child);
                   Array.unsafe_set keys index key;
-                  Array.unsafe_set projections index
-                    (match projected with Some projection -> projection | None -> project item [@u])))
+                  match outer_change with
+                  | Unchanged -> project item projections (index * pieces) [@u]
+                  | Changed -> pieces_copied scratch 0 projections (index * pieces) pieces))
               items;
             let described index =
               match Array.unsafe_get made index with
@@ -520,7 +598,7 @@ let each items render project outer =
                           live)
                     front_of
                 in
-                Some (group (Each_state { items; keys; outer; projections; lives }) lives))
+                Some (group (Each_state { items; keys; outer; projections; lives }) lives)))
         | _ -> None);
   }
 
@@ -622,7 +700,6 @@ let place position root scope state =
     release = (fun [@u] () -> let_go scope);
   }
 
-let unset = Input (ref ())
 let fresh count = { deps = Array.make count unset; cleanups = []; references = []; placement = Detached }
 
 let template markup holes = { markup; holes; lent = None; witness = Witness.make (); adopt = Not_hydratable }
@@ -663,7 +740,7 @@ let adopted template slots refresh (position : Template.position) =
       (root, scope, holes)
 
 let rows (type holes item) (items : item array) (template : holes template) slots
-    (refresh : (scope -> holes -> item -> unit)[@u]) (key : (item -> string)[@u]) project outer =
+    (refresh : (scope -> holes -> item -> unit)[@u]) (key : (item -> string)[@u]) project pieces outer =
   let count = Array.length items in
   let mount (position : Template.position) item =
     match !medium.adoption with
@@ -715,53 +792,18 @@ let rows (type holes item) (items : item array) (template : holes template) slot
               mount at item)
             after [@u]
         in
-        let projections = Array.make count [||] in
+        let projections = Array.make (count * pieces) unset in
         for index = 0 to count - 1 do
-          Array.unsafe_set projections index (project (Array.unsafe_get items index) [@u])
+          project (Array.unsafe_get items index) projections (index * pieces) [@u]
         done;
         shown items keys projections rows);
     patch =
       (fun [@u] position live ->
         match live.state with
-        | Rows_state old ->
+        | Rows_state old -> (
             let old_count = Array.length old.items in
-            let next = Array.make count Origin.fresh and keys = Array.make count "" in
-            let projections = Array.make count [||] in
             let outer_change = compare_inputs old.outer outer in
-            let fits from item projected =
-              from >= 0 && from < old_count
-              && Dom_api.same (Array.unsafe_get old.items from) item
-              &&
-              match projected with
-              | None -> true
-              | Some projection -> (
-                  match compare_inputs (Array.unsafe_get old.projections from) projection with
-                  | Unchanged -> true
-                  | Changed -> false)
-            in
-            let reuse index from projected =
-              Array.unsafe_set next index (Origin.kept from);
-              Array.unsafe_set keys index (Array.unsafe_get old.keys from);
-              Array.unsafe_set projections index
-                (match projected with Some projection -> projection | None -> Array.unsafe_get old.projections from)
-            in
-            let shift = ref 0 in
-            for index = 0 to count - 1 do
-              let item = Array.unsafe_get items index in
-              let projected = match outer_change with Unchanged -> None | Changed -> Some (project item [@u]) in
-              let from = index + !shift in
-              if fits from item projected then reuse index from projected
-              else if fits (from + 1) item projected then (
-                incr shift;
-                reuse index (from + 1) projected)
-              else if fits (from - 1) item projected then (
-                decr shift;
-                reuse index (from - 1) projected)
-              else (
-                Array.unsafe_set keys index (key item [@u]);
-                Array.unsafe_set projections index
-                  (match projected with Some projection -> projection | None -> project item [@u]))
-            done;
+            let scratch = Array.make pieces unset in
             let drawn index = Array.unsafe_get items index in
             let refreshed (Mounted_row row as mounted) item =
               match Witness.equal row.witness template.witness with
@@ -775,6 +817,74 @@ let rows (type holes item) (items : item array) (template : holes template) slot
                   drop position mounted;
                   made
             in
+            let rec in_place index =
+              match index = count with
+              | true -> `In_place
+              | false -> (
+                  let item = Array.unsafe_get items index in
+                  match Dom_api.same item (Array.unsafe_get old.items index) with
+                  | true -> in_place (index + 1)
+                  | false -> (
+                      match String.equal (key item [@u]) (Array.unsafe_get old.keys index) with
+                      | true -> in_place (index + 1)
+                      | false -> `Rearranged))
+            in
+            match (count = old_count, match count = old_count with true -> in_place 0 | false -> `Rearranged) with
+            | true, `In_place ->
+                let rows = old.rows and projections = old.projections in
+                for index = 0 to count - 1 do
+                  let item = Array.unsafe_get items index and at = index * pieces in
+                  match (Dom_api.same item (Array.unsafe_get old.items index), outer_change) with
+                  | true, Unchanged -> ()
+                  | true, Changed -> (
+                      project item scratch 0 [@u];
+                      match piece_change projections at scratch pieces with
+                      | Unchanged -> ()
+                      | Changed ->
+                          pieces_copied scratch 0 projections at pieces;
+                          Array.unsafe_set rows index (refreshed (Array.unsafe_get rows index) item))
+                  | false, _ ->
+                      project item projections at [@u];
+                      Array.unsafe_set rows index (refreshed (Array.unsafe_get rows index) item)
+                done;
+                Some (shown items old.keys projections rows)
+            | _, (`In_place | `Rearranged) ->
+            let next = Array.make count Origin.fresh and keys = Array.make count "" in
+            let projections = Array.make (count * pieces) unset in
+            let fits from item =
+              from >= 0 && from < old_count
+              && Dom_api.same (Array.unsafe_get old.items from) item
+              &&
+              match outer_change with
+              | Unchanged -> true
+              | Changed -> (
+                  match piece_change old.projections (from * pieces) scratch pieces with
+                  | Unchanged -> true
+                  | Changed -> false)
+            in
+            let reuse index from =
+              Array.unsafe_set next index (Origin.kept from);
+              Array.unsafe_set keys index (Array.unsafe_get old.keys from);
+              pieces_copied old.projections (from * pieces) projections (index * pieces) pieces
+            in
+            let shift = ref 0 in
+            for index = 0 to count - 1 do
+              let item = Array.unsafe_get items index in
+              (match outer_change with Unchanged -> () | Changed -> project item scratch 0 [@u]);
+              let from = index + !shift in
+              if fits from item then reuse index from
+              else if fits (from + 1) item then (
+                incr shift;
+                reuse index (from + 1))
+              else if fits (from - 1) item then (
+                decr shift;
+                reuse index (from - 1))
+              else (
+                Array.unsafe_set keys index (key item [@u]);
+                match outer_change with
+                | Unchanged -> project item projections (index * pieces) [@u]
+                | Changed -> pieces_copied scratch 0 projections (index * pieces) pieces)
+            done;
             let rec order index =
               match index = count with
               | true -> `Same
@@ -845,7 +955,7 @@ let rows (type holes item) (items : item array) (template : holes template) slot
                       done;
                       rows
                 in
-                Some (shown items keys projections rows))
+                Some (shown items keys projections rows)))
         | _ -> None);
   }
 

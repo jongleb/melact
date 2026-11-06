@@ -28,7 +28,10 @@ let loop items outer =
       incr renders;
       View.with_key item.key
         (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ outer.suffix) |]))
-    (fun [@u] item -> [| View.Input (marked outer item); View.Input (item.label ^ outer.suffix) |])
+    (fun [@u] item out at ->
+      Array.unsafe_set out at (View.Input (marked outer item));
+      Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
+    2
     [| View.Input outer |]
 
 let line_template =
@@ -43,7 +46,10 @@ let lines items outer =
       View.set_attr marking (Some (marked outer item));
       View.set_text text (item.label ^ outer.suffix))
     (fun [@u] item -> item.key)
-    (fun [@u] item -> [| View.Input (marked outer item); View.Input (item.label ^ outer.suffix) |])
+    (fun [@u] item out at ->
+      Array.unsafe_set out at (View.Input (marked outer item));
+      Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
+    2
     [| View.Input outer |]
 
 (** Which compiled loop a law runs on. *)

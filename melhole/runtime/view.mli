@@ -23,8 +23,11 @@ val empty : child
 val list : child list -> child
 val keyed : (string * child) list -> child
 val with_key : string -> child -> child
+(** A compiled loop: [project item out at] writes the [pieces] values of a row's rendering that read
+    [outer] into [out] from [at], so that a change of [outer] re-renders only the rows they differ in
+    and allocates nothing per row. *)
 val each :
-  'item array -> ('item -> child[@u]) -> ('item -> input array[@u]) -> input array -> child
+  'item array -> ('item -> child[@u]) -> ('item -> input array -> int -> unit[@u]) -> int -> input array -> child
 
 (** A mounted compiled template: the values its refresh last read and what it holds. *)
 type scope
@@ -40,7 +43,8 @@ val rows :
   int ->
   (scope -> 'holes -> 'item -> unit[@u]) ->
   ('item -> string[@u]) ->
-  ('item -> input array[@u]) ->
+  ('item -> input array -> int -> unit[@u]) ->
+  int ->
   input array ->
   child
 val tpl_instance : Template.t -> hole array -> child
