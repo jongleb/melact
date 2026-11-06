@@ -1,365 +1,368 @@
 open Melhole
 
 module Style = struct
-  type t = Declarations of (string * string) list [@@unboxed]
+  type t
 
-  let make ?azimuth ?background ?backgroundAttachment ?backgroundColor ?backgroundImage ?backgroundPosition ?backgroundRepeat ?border ?borderCollapse ?borderColor ?borderSpacing ?borderStyle ?borderTop ?borderRight ?borderBottom ?borderLeft ?borderTopColor ?borderRightColor ?borderBottomColor ?borderLeftColor ?borderTopStyle ?borderRightStyle ?borderBottomStyle ?borderLeftStyle ?borderTopWidth ?borderRightWidth ?borderBottomWidth ?borderLeftWidth ?borderWidth ?bottom ?captionSide ?clear ?clip ?color ?content ?counterIncrement ?counterReset ?cue ?cueAfter ?cueBefore ?cursor ?direction ?display ?elevation ?emptyCells ?float ?font ?fontFamily ?fontSize ?fontSizeAdjust ?fontStretch ?fontStyle ?fontVariant ?fontWeight ?height ?left ?letterSpacing ?lineHeight ?listStyle ?listStyleImage ?listStylePosition ?listStyleType ?margin ?marginTop ?marginRight ?marginBottom ?marginLeft ?markerOffset ?marks ?maxHeight ?maxWidth ?minHeight ?minWidth ?orphans ?outline ?outlineColor ?outlineStyle ?outlineWidth ?overflow ?overflowX ?overflowY ?padding ?paddingTop ?paddingRight ?paddingBottom ?paddingLeft ?page ?pageBreakAfter ?pageBreakBefore ?pageBreakInside ?pause ?pauseAfter ?pauseBefore ?pitch ?pitchRange ?playDuring ?position ?quotes ?richness ?right ?size ?speak ?speakHeader ?speakNumeral ?speakPunctuation ?speechRate ?stress ?tableLayout ?textAlign ?textDecoration ?textIndent ?textShadow ?textTransform ?top ?unicodeBidi ?verticalAlign ?visibility ?voiceFamily ?volume ?whiteSpace ?widows ?width ?wordSpacing ?zIndex ?opacity ?backgroundOrigin ?backgroundSize ?backgroundClip ?borderRadius ?borderTopLeftRadius ?borderTopRightRadius ?borderBottomLeftRadius ?borderBottomRightRadius ?borderImage ?borderImageSource ?borderImageSlice ?borderImageWidth ?borderImageOutset ?borderImageRepeat ?boxShadow ?columns ?columnCount ?columnFill ?columnGap ?columnRule ?columnRuleColor ?columnRuleStyle ?columnRuleWidth ?columnSpan ?columnWidth ?breakAfter ?breakBefore ?breakInside ?rest ?restAfter ?restBefore ?speakAs ?voiceBalance ?voiceDuration ?voicePitch ?voiceRange ?voiceRate ?voiceStress ?voiceVolume ?objectFit ?objectPosition ?imageResolution ?imageOrientation ?alignContent ?alignItems ?alignSelf ?flex ?flexBasis ?flexDirection ?flexFlow ?flexGrow ?flexShrink ?flexWrap ?justifyContent ?order ?textDecorationColor ?textDecorationLine ?textDecorationSkip ?textDecorationStyle ?textEmphasis ?textEmphasisColor ?textEmphasisPosition ?textEmphasisStyle ?textUnderlinePosition ?fontFeatureSettings ?fontKerning ?fontLanguageOverride ?fontSynthesis ?forntVariantAlternates ?fontVariantCaps ?fontVariantEastAsian ?fontVariantLigatures ?fontVariantNumeric ?fontVariantPosition ?all ?glyphOrientationVertical ?textCombineUpright ?textOrientation ?writingMode ?shapeImageThreshold ?shapeMargin ?shapeOutside ?clipPath ?clipRule ?mask ?maskBorder ?maskBorderMode ?maskBorderOutset ?maskBorderRepeat ?maskBorderSlice ?maskBorderSource ?maskBorderWidth ?maskClip ?maskComposite ?maskImage ?maskMode ?maskOrigin ?maskPosition ?maskRepeat ?maskSize ?maskType ?backgroundBlendMode ?isolation ?mixBlendMode ?boxDecorationBreak ?boxSizing ?caretColor ?navDown ?navLeft ?navRight ?navUp ?outlineOffset ?resize ?textOverflow ?grid ?gridArea ?gridAutoColumns ?gridAutoFlow ?gridAutoRows ?gridColumn ?gridColumnEnd ?gridColumnGap ?gridColumnStart ?gridGap ?gridRow ?gridRowEnd ?gridRowGap ?gridRowStart ?gridTemplate ?gridTemplateAreas ?gridTemplateColumns ?gridTemplateRows ?willChange ?hangingPunctuation ?hyphens ?lineBreak ?overflowWrap ?tabSize ?textAlignLast ?textJustify ?wordBreak ?wordWrap ?animation ?animationDelay ?animationDirection ?animationDuration ?animationFillMode ?animationIterationCount ?animationName ?animationPlayState ?animationTimingFunction ?transition ?transitionDelay ?transitionDuration ?transitionProperty ?transitionTimingFunction ?backfaceVisibility ?perspective ?perspectiveOrigin ?transform ?transformOrigin ?transformStyle ?justifyItems ?justifySelf ?placeContent ?placeItems ?placeSelf ?appearance ?caret ?caretAnimation ?caretShape ?userSelect ?maxLines ?marqueeDirection ?marqueeLoop ?marqueeSpeed ?marqueeStyle ?overflowStyle ?rotation ?rotationPoint ?alignmentBaseline ?baselineShift ?colorInterpolation ?colorInterpolationFilters ?colorProfile ?colorRendering ?dominantBaseline ?fill ?fillOpacity ?fillRule ?filter ?floodColor ?floodOpacity ?glyphOrientationHorizontal ?imageRendering ?kerning ?lightingColor ?markerEnd ?markerMid ?markerStart ?pointerEvents ?shapeRendering ?stopColor ?stopOpacity ?stroke ?strokeDasharray ?strokeDashoffset ?strokeLinecap ?strokeLinejoin ?strokeMiterlimit ?strokeOpacity ?strokeWidth ?textAnchor ?textRendering ?rubyAlign ?rubyMerge ?rubyPosition ?gap ?rowGap () =
-    let declared name (value : string option) declarations =
-      match value with Some value -> (name, value) :: declarations | None -> declarations
-    in
-    Declarations
-      (declared "azimuth" azimuth
-      @@ declared "background" background
-      @@ declared "backgroundAttachment" backgroundAttachment
-      @@ declared "backgroundColor" backgroundColor
-      @@ declared "backgroundImage" backgroundImage
-      @@ declared "backgroundPosition" backgroundPosition
-      @@ declared "backgroundRepeat" backgroundRepeat
-      @@ declared "border" border
-      @@ declared "borderCollapse" borderCollapse
-      @@ declared "borderColor" borderColor
-      @@ declared "borderSpacing" borderSpacing
-      @@ declared "borderStyle" borderStyle
-      @@ declared "borderTop" borderTop
-      @@ declared "borderRight" borderRight
-      @@ declared "borderBottom" borderBottom
-      @@ declared "borderLeft" borderLeft
-      @@ declared "borderTopColor" borderTopColor
-      @@ declared "borderRightColor" borderRightColor
-      @@ declared "borderBottomColor" borderBottomColor
-      @@ declared "borderLeftColor" borderLeftColor
-      @@ declared "borderTopStyle" borderTopStyle
-      @@ declared "borderRightStyle" borderRightStyle
-      @@ declared "borderBottomStyle" borderBottomStyle
-      @@ declared "borderLeftStyle" borderLeftStyle
-      @@ declared "borderTopWidth" borderTopWidth
-      @@ declared "borderRightWidth" borderRightWidth
-      @@ declared "borderBottomWidth" borderBottomWidth
-      @@ declared "borderLeftWidth" borderLeftWidth
-      @@ declared "borderWidth" borderWidth
-      @@ declared "bottom" bottom
-      @@ declared "captionSide" captionSide
-      @@ declared "clear" clear
-      @@ declared "clip" clip
-      @@ declared "color" color
-      @@ declared "content" content
-      @@ declared "counterIncrement" counterIncrement
-      @@ declared "counterReset" counterReset
-      @@ declared "cue" cue
-      @@ declared "cueAfter" cueAfter
-      @@ declared "cueBefore" cueBefore
-      @@ declared "cursor" cursor
-      @@ declared "direction" direction
-      @@ declared "display" display
-      @@ declared "elevation" elevation
-      @@ declared "emptyCells" emptyCells
-      @@ declared "float" float
-      @@ declared "font" font
-      @@ declared "fontFamily" fontFamily
-      @@ declared "fontSize" fontSize
-      @@ declared "fontSizeAdjust" fontSizeAdjust
-      @@ declared "fontStretch" fontStretch
-      @@ declared "fontStyle" fontStyle
-      @@ declared "fontVariant" fontVariant
-      @@ declared "fontWeight" fontWeight
-      @@ declared "height" height
-      @@ declared "left" left
-      @@ declared "letterSpacing" letterSpacing
-      @@ declared "lineHeight" lineHeight
-      @@ declared "listStyle" listStyle
-      @@ declared "listStyleImage" listStyleImage
-      @@ declared "listStylePosition" listStylePosition
-      @@ declared "listStyleType" listStyleType
-      @@ declared "margin" margin
-      @@ declared "marginTop" marginTop
-      @@ declared "marginRight" marginRight
-      @@ declared "marginBottom" marginBottom
-      @@ declared "marginLeft" marginLeft
-      @@ declared "markerOffset" markerOffset
-      @@ declared "marks" marks
-      @@ declared "maxHeight" maxHeight
-      @@ declared "maxWidth" maxWidth
-      @@ declared "minHeight" minHeight
-      @@ declared "minWidth" minWidth
-      @@ declared "orphans" orphans
-      @@ declared "outline" outline
-      @@ declared "outlineColor" outlineColor
-      @@ declared "outlineStyle" outlineStyle
-      @@ declared "outlineWidth" outlineWidth
-      @@ declared "overflow" overflow
-      @@ declared "overflowX" overflowX
-      @@ declared "overflowY" overflowY
-      @@ declared "padding" padding
-      @@ declared "paddingTop" paddingTop
-      @@ declared "paddingRight" paddingRight
-      @@ declared "paddingBottom" paddingBottom
-      @@ declared "paddingLeft" paddingLeft
-      @@ declared "page" page
-      @@ declared "pageBreakAfter" pageBreakAfter
-      @@ declared "pageBreakBefore" pageBreakBefore
-      @@ declared "pageBreakInside" pageBreakInside
-      @@ declared "pause" pause
-      @@ declared "pauseAfter" pauseAfter
-      @@ declared "pauseBefore" pauseBefore
-      @@ declared "pitch" pitch
-      @@ declared "pitchRange" pitchRange
-      @@ declared "playDuring" playDuring
-      @@ declared "position" position
-      @@ declared "quotes" quotes
-      @@ declared "richness" richness
-      @@ declared "right" right
-      @@ declared "size" size
-      @@ declared "speak" speak
-      @@ declared "speakHeader" speakHeader
-      @@ declared "speakNumeral" speakNumeral
-      @@ declared "speakPunctuation" speakPunctuation
-      @@ declared "speechRate" speechRate
-      @@ declared "stress" stress
-      @@ declared "tableLayout" tableLayout
-      @@ declared "textAlign" textAlign
-      @@ declared "textDecoration" textDecoration
-      @@ declared "textIndent" textIndent
-      @@ declared "textShadow" textShadow
-      @@ declared "textTransform" textTransform
-      @@ declared "top" top
-      @@ declared "unicodeBidi" unicodeBidi
-      @@ declared "verticalAlign" verticalAlign
-      @@ declared "visibility" visibility
-      @@ declared "voiceFamily" voiceFamily
-      @@ declared "volume" volume
-      @@ declared "whiteSpace" whiteSpace
-      @@ declared "widows" widows
-      @@ declared "width" width
-      @@ declared "wordSpacing" wordSpacing
-      @@ declared "zIndex" zIndex
-      @@ declared "opacity" opacity
-      @@ declared "backgroundOrigin" backgroundOrigin
-      @@ declared "backgroundSize" backgroundSize
-      @@ declared "backgroundClip" backgroundClip
-      @@ declared "borderRadius" borderRadius
-      @@ declared "borderTopLeftRadius" borderTopLeftRadius
-      @@ declared "borderTopRightRadius" borderTopRightRadius
-      @@ declared "borderBottomLeftRadius" borderBottomLeftRadius
-      @@ declared "borderBottomRightRadius" borderBottomRightRadius
-      @@ declared "borderImage" borderImage
-      @@ declared "borderImageSource" borderImageSource
-      @@ declared "borderImageSlice" borderImageSlice
-      @@ declared "borderImageWidth" borderImageWidth
-      @@ declared "borderImageOutset" borderImageOutset
-      @@ declared "borderImageRepeat" borderImageRepeat
-      @@ declared "boxShadow" boxShadow
-      @@ declared "columns" columns
-      @@ declared "columnCount" columnCount
-      @@ declared "columnFill" columnFill
-      @@ declared "columnGap" columnGap
-      @@ declared "columnRule" columnRule
-      @@ declared "columnRuleColor" columnRuleColor
-      @@ declared "columnRuleStyle" columnRuleStyle
-      @@ declared "columnRuleWidth" columnRuleWidth
-      @@ declared "columnSpan" columnSpan
-      @@ declared "columnWidth" columnWidth
-      @@ declared "breakAfter" breakAfter
-      @@ declared "breakBefore" breakBefore
-      @@ declared "breakInside" breakInside
-      @@ declared "rest" rest
-      @@ declared "restAfter" restAfter
-      @@ declared "restBefore" restBefore
-      @@ declared "speakAs" speakAs
-      @@ declared "voiceBalance" voiceBalance
-      @@ declared "voiceDuration" voiceDuration
-      @@ declared "voicePitch" voicePitch
-      @@ declared "voiceRange" voiceRange
-      @@ declared "voiceRate" voiceRate
-      @@ declared "voiceStress" voiceStress
-      @@ declared "voiceVolume" voiceVolume
-      @@ declared "objectFit" objectFit
-      @@ declared "objectPosition" objectPosition
-      @@ declared "imageResolution" imageResolution
-      @@ declared "imageOrientation" imageOrientation
-      @@ declared "alignContent" alignContent
-      @@ declared "alignItems" alignItems
-      @@ declared "alignSelf" alignSelf
-      @@ declared "flex" flex
-      @@ declared "flexBasis" flexBasis
-      @@ declared "flexDirection" flexDirection
-      @@ declared "flexFlow" flexFlow
-      @@ declared "flexGrow" flexGrow
-      @@ declared "flexShrink" flexShrink
-      @@ declared "flexWrap" flexWrap
-      @@ declared "justifyContent" justifyContent
-      @@ declared "order" order
-      @@ declared "textDecorationColor" textDecorationColor
-      @@ declared "textDecorationLine" textDecorationLine
-      @@ declared "textDecorationSkip" textDecorationSkip
-      @@ declared "textDecorationStyle" textDecorationStyle
-      @@ declared "textEmphasis" textEmphasis
-      @@ declared "textEmphasisColor" textEmphasisColor
-      @@ declared "textEmphasisPosition" textEmphasisPosition
-      @@ declared "textEmphasisStyle" textEmphasisStyle
-      @@ declared "textUnderlinePosition" textUnderlinePosition
-      @@ declared "fontFeatureSettings" fontFeatureSettings
-      @@ declared "fontKerning" fontKerning
-      @@ declared "fontLanguageOverride" fontLanguageOverride
-      @@ declared "fontSynthesis" fontSynthesis
-      @@ declared "forntVariantAlternates" forntVariantAlternates
-      @@ declared "fontVariantCaps" fontVariantCaps
-      @@ declared "fontVariantEastAsian" fontVariantEastAsian
-      @@ declared "fontVariantLigatures" fontVariantLigatures
-      @@ declared "fontVariantNumeric" fontVariantNumeric
-      @@ declared "fontVariantPosition" fontVariantPosition
-      @@ declared "all" all
-      @@ declared "glyphOrientationVertical" glyphOrientationVertical
-      @@ declared "textCombineUpright" textCombineUpright
-      @@ declared "textOrientation" textOrientation
-      @@ declared "writingMode" writingMode
-      @@ declared "shapeImageThreshold" shapeImageThreshold
-      @@ declared "shapeMargin" shapeMargin
-      @@ declared "shapeOutside" shapeOutside
-      @@ declared "clipPath" clipPath
-      @@ declared "clipRule" clipRule
-      @@ declared "mask" mask
-      @@ declared "maskBorder" maskBorder
-      @@ declared "maskBorderMode" maskBorderMode
-      @@ declared "maskBorderOutset" maskBorderOutset
-      @@ declared "maskBorderRepeat" maskBorderRepeat
-      @@ declared "maskBorderSlice" maskBorderSlice
-      @@ declared "maskBorderSource" maskBorderSource
-      @@ declared "maskBorderWidth" maskBorderWidth
-      @@ declared "maskClip" maskClip
-      @@ declared "maskComposite" maskComposite
-      @@ declared "maskImage" maskImage
-      @@ declared "maskMode" maskMode
-      @@ declared "maskOrigin" maskOrigin
-      @@ declared "maskPosition" maskPosition
-      @@ declared "maskRepeat" maskRepeat
-      @@ declared "maskSize" maskSize
-      @@ declared "maskType" maskType
-      @@ declared "backgroundBlendMode" backgroundBlendMode
-      @@ declared "isolation" isolation
-      @@ declared "mixBlendMode" mixBlendMode
-      @@ declared "boxDecorationBreak" boxDecorationBreak
-      @@ declared "boxSizing" boxSizing
-      @@ declared "caretColor" caretColor
-      @@ declared "navDown" navDown
-      @@ declared "navLeft" navLeft
-      @@ declared "navRight" navRight
-      @@ declared "navUp" navUp
-      @@ declared "outlineOffset" outlineOffset
-      @@ declared "resize" resize
-      @@ declared "textOverflow" textOverflow
-      @@ declared "grid" grid
-      @@ declared "gridArea" gridArea
-      @@ declared "gridAutoColumns" gridAutoColumns
-      @@ declared "gridAutoFlow" gridAutoFlow
-      @@ declared "gridAutoRows" gridAutoRows
-      @@ declared "gridColumn" gridColumn
-      @@ declared "gridColumnEnd" gridColumnEnd
-      @@ declared "gridColumnGap" gridColumnGap
-      @@ declared "gridColumnStart" gridColumnStart
-      @@ declared "gridGap" gridGap
-      @@ declared "gridRow" gridRow
-      @@ declared "gridRowEnd" gridRowEnd
-      @@ declared "gridRowGap" gridRowGap
-      @@ declared "gridRowStart" gridRowStart
-      @@ declared "gridTemplate" gridTemplate
-      @@ declared "gridTemplateAreas" gridTemplateAreas
-      @@ declared "gridTemplateColumns" gridTemplateColumns
-      @@ declared "gridTemplateRows" gridTemplateRows
-      @@ declared "willChange" willChange
-      @@ declared "hangingPunctuation" hangingPunctuation
-      @@ declared "hyphens" hyphens
-      @@ declared "lineBreak" lineBreak
-      @@ declared "overflowWrap" overflowWrap
-      @@ declared "tabSize" tabSize
-      @@ declared "textAlignLast" textAlignLast
-      @@ declared "textJustify" textJustify
-      @@ declared "wordBreak" wordBreak
-      @@ declared "wordWrap" wordWrap
-      @@ declared "animation" animation
-      @@ declared "animationDelay" animationDelay
-      @@ declared "animationDirection" animationDirection
-      @@ declared "animationDuration" animationDuration
-      @@ declared "animationFillMode" animationFillMode
-      @@ declared "animationIterationCount" animationIterationCount
-      @@ declared "animationName" animationName
-      @@ declared "animationPlayState" animationPlayState
-      @@ declared "animationTimingFunction" animationTimingFunction
-      @@ declared "transition" transition
-      @@ declared "transitionDelay" transitionDelay
-      @@ declared "transitionDuration" transitionDuration
-      @@ declared "transitionProperty" transitionProperty
-      @@ declared "transitionTimingFunction" transitionTimingFunction
-      @@ declared "backfaceVisibility" backfaceVisibility
-      @@ declared "perspective" perspective
-      @@ declared "perspectiveOrigin" perspectiveOrigin
-      @@ declared "transform" transform
-      @@ declared "transformOrigin" transformOrigin
-      @@ declared "transformStyle" transformStyle
-      @@ declared "justifyItems" justifyItems
-      @@ declared "justifySelf" justifySelf
-      @@ declared "placeContent" placeContent
-      @@ declared "placeItems" placeItems
-      @@ declared "placeSelf" placeSelf
-      @@ declared "appearance" appearance
-      @@ declared "caret" caret
-      @@ declared "caretAnimation" caretAnimation
-      @@ declared "caretShape" caretShape
-      @@ declared "userSelect" userSelect
-      @@ declared "maxLines" maxLines
-      @@ declared "marqueeDirection" marqueeDirection
-      @@ declared "marqueeLoop" marqueeLoop
-      @@ declared "marqueeSpeed" marqueeSpeed
-      @@ declared "marqueeStyle" marqueeStyle
-      @@ declared "overflowStyle" overflowStyle
-      @@ declared "rotation" rotation
-      @@ declared "rotationPoint" rotationPoint
-      @@ declared "alignmentBaseline" alignmentBaseline
-      @@ declared "baselineShift" baselineShift
-      @@ declared "colorInterpolation" colorInterpolation
-      @@ declared "colorInterpolationFilters" colorInterpolationFilters
-      @@ declared "colorProfile" colorProfile
-      @@ declared "colorRendering" colorRendering
-      @@ declared "dominantBaseline" dominantBaseline
-      @@ declared "fill" fill
-      @@ declared "fillOpacity" fillOpacity
-      @@ declared "fillRule" fillRule
-      @@ declared "filter" filter
-      @@ declared "floodColor" floodColor
-      @@ declared "floodOpacity" floodOpacity
-      @@ declared "glyphOrientationHorizontal" glyphOrientationHorizontal
-      @@ declared "imageRendering" imageRendering
-      @@ declared "kerning" kerning
-      @@ declared "lightingColor" lightingColor
-      @@ declared "markerEnd" markerEnd
-      @@ declared "markerMid" markerMid
-      @@ declared "markerStart" markerStart
-      @@ declared "pointerEvents" pointerEvents
-      @@ declared "shapeRendering" shapeRendering
-      @@ declared "stopColor" stopColor
-      @@ declared "stopOpacity" stopOpacity
-      @@ declared "stroke" stroke
-      @@ declared "strokeDasharray" strokeDasharray
-      @@ declared "strokeDashoffset" strokeDashoffset
-      @@ declared "strokeLinecap" strokeLinecap
-      @@ declared "strokeLinejoin" strokeLinejoin
-      @@ declared "strokeMiterlimit" strokeMiterlimit
-      @@ declared "strokeOpacity" strokeOpacity
-      @@ declared "strokeWidth" strokeWidth
-      @@ declared "textAnchor" textAnchor
-      @@ declared "textRendering" textRendering
-      @@ declared "rubyAlign" rubyAlign
-      @@ declared "rubyMerge" rubyMerge
-      @@ declared "rubyPosition" rubyPosition
-      @@ declared "gap" gap
-      @@ declared "rowGap" rowGap
-      @@ [])
+  external make :
+    ?azimuth:string ->
+    ?background:string ->
+    ?backgroundAttachment:string ->
+    ?backgroundColor:string ->
+    ?backgroundImage:string ->
+    ?backgroundPosition:string ->
+    ?backgroundRepeat:string ->
+    ?border:string ->
+    ?borderCollapse:string ->
+    ?borderColor:string ->
+    ?borderSpacing:string ->
+    ?borderStyle:string ->
+    ?borderTop:string ->
+    ?borderRight:string ->
+    ?borderBottom:string ->
+    ?borderLeft:string ->
+    ?borderTopColor:string ->
+    ?borderRightColor:string ->
+    ?borderBottomColor:string ->
+    ?borderLeftColor:string ->
+    ?borderTopStyle:string ->
+    ?borderRightStyle:string ->
+    ?borderBottomStyle:string ->
+    ?borderLeftStyle:string ->
+    ?borderTopWidth:string ->
+    ?borderRightWidth:string ->
+    ?borderBottomWidth:string ->
+    ?borderLeftWidth:string ->
+    ?borderWidth:string ->
+    ?bottom:string ->
+    ?captionSide:string ->
+    ?clear:string ->
+    ?clip:string ->
+    ?color:string ->
+    ?content:string ->
+    ?counterIncrement:string ->
+    ?counterReset:string ->
+    ?cue:string ->
+    ?cueAfter:string ->
+    ?cueBefore:string ->
+    ?cursor:string ->
+    ?direction:string ->
+    ?display:string ->
+    ?elevation:string ->
+    ?emptyCells:string ->
+    ?float:string ->
+    ?font:string ->
+    ?fontFamily:string ->
+    ?fontSize:string ->
+    ?fontSizeAdjust:string ->
+    ?fontStretch:string ->
+    ?fontStyle:string ->
+    ?fontVariant:string ->
+    ?fontWeight:string ->
+    ?height:string ->
+    ?left:string ->
+    ?letterSpacing:string ->
+    ?lineHeight:string ->
+    ?listStyle:string ->
+    ?listStyleImage:string ->
+    ?listStylePosition:string ->
+    ?listStyleType:string ->
+    ?margin:string ->
+    ?marginTop:string ->
+    ?marginRight:string ->
+    ?marginBottom:string ->
+    ?marginLeft:string ->
+    ?markerOffset:string ->
+    ?marks:string ->
+    ?maxHeight:string ->
+    ?maxWidth:string ->
+    ?minHeight:string ->
+    ?minWidth:string ->
+    ?orphans:string ->
+    ?outline:string ->
+    ?outlineColor:string ->
+    ?outlineStyle:string ->
+    ?outlineWidth:string ->
+    ?overflow:string ->
+    ?overflowX:string ->
+    ?overflowY:string ->
+    ?padding:string ->
+    ?paddingTop:string ->
+    ?paddingRight:string ->
+    ?paddingBottom:string ->
+    ?paddingLeft:string ->
+    ?page:string ->
+    ?pageBreakAfter:string ->
+    ?pageBreakBefore:string ->
+    ?pageBreakInside:string ->
+    ?pause:string ->
+    ?pauseAfter:string ->
+    ?pauseBefore:string ->
+    ?pitch:string ->
+    ?pitchRange:string ->
+    ?playDuring:string ->
+    ?position:string ->
+    ?quotes:string ->
+    ?richness:string ->
+    ?right:string ->
+    ?size:string ->
+    ?speak:string ->
+    ?speakHeader:string ->
+    ?speakNumeral:string ->
+    ?speakPunctuation:string ->
+    ?speechRate:string ->
+    ?stress:string ->
+    ?tableLayout:string ->
+    ?textAlign:string ->
+    ?textDecoration:string ->
+    ?textIndent:string ->
+    ?textShadow:string ->
+    ?textTransform:string ->
+    ?top:string ->
+    ?unicodeBidi:string ->
+    ?verticalAlign:string ->
+    ?visibility:string ->
+    ?voiceFamily:string ->
+    ?volume:string ->
+    ?whiteSpace:string ->
+    ?widows:string ->
+    ?width:string ->
+    ?wordSpacing:string ->
+    ?zIndex:string ->
+    ?opacity:string ->
+    ?backgroundOrigin:string ->
+    ?backgroundSize:string ->
+    ?backgroundClip:string ->
+    ?borderRadius:string ->
+    ?borderTopLeftRadius:string ->
+    ?borderTopRightRadius:string ->
+    ?borderBottomLeftRadius:string ->
+    ?borderBottomRightRadius:string ->
+    ?borderImage:string ->
+    ?borderImageSource:string ->
+    ?borderImageSlice:string ->
+    ?borderImageWidth:string ->
+    ?borderImageOutset:string ->
+    ?borderImageRepeat:string ->
+    ?boxShadow:string ->
+    ?columns:string ->
+    ?columnCount:string ->
+    ?columnFill:string ->
+    ?columnGap:string ->
+    ?columnRule:string ->
+    ?columnRuleColor:string ->
+    ?columnRuleStyle:string ->
+    ?columnRuleWidth:string ->
+    ?columnSpan:string ->
+    ?columnWidth:string ->
+    ?breakAfter:string ->
+    ?breakBefore:string ->
+    ?breakInside:string ->
+    ?rest:string ->
+    ?restAfter:string ->
+    ?restBefore:string ->
+    ?speakAs:string ->
+    ?voiceBalance:string ->
+    ?voiceDuration:string ->
+    ?voicePitch:string ->
+    ?voiceRange:string ->
+    ?voiceRate:string ->
+    ?voiceStress:string ->
+    ?voiceVolume:string ->
+    ?objectFit:string ->
+    ?objectPosition:string ->
+    ?imageResolution:string ->
+    ?imageOrientation:string ->
+    ?alignContent:string ->
+    ?alignItems:string ->
+    ?alignSelf:string ->
+    ?flex:string ->
+    ?flexBasis:string ->
+    ?flexDirection:string ->
+    ?flexFlow:string ->
+    ?flexGrow:string ->
+    ?flexShrink:string ->
+    ?flexWrap:string ->
+    ?justifyContent:string ->
+    ?order:string ->
+    ?textDecorationColor:string ->
+    ?textDecorationLine:string ->
+    ?textDecorationSkip:string ->
+    ?textDecorationStyle:string ->
+    ?textEmphasis:string ->
+    ?textEmphasisColor:string ->
+    ?textEmphasisPosition:string ->
+    ?textEmphasisStyle:string ->
+    ?textUnderlinePosition:string ->
+    ?fontFeatureSettings:string ->
+    ?fontKerning:string ->
+    ?fontLanguageOverride:string ->
+    ?fontSynthesis:string ->
+    ?forntVariantAlternates:string ->
+    ?fontVariantCaps:string ->
+    ?fontVariantEastAsian:string ->
+    ?fontVariantLigatures:string ->
+    ?fontVariantNumeric:string ->
+    ?fontVariantPosition:string ->
+    ?all:string ->
+    ?glyphOrientationVertical:string ->
+    ?textCombineUpright:string ->
+    ?textOrientation:string ->
+    ?writingMode:string ->
+    ?shapeImageThreshold:string ->
+    ?shapeMargin:string ->
+    ?shapeOutside:string ->
+    ?clipPath:string ->
+    ?clipRule:string ->
+    ?mask:string ->
+    ?maskBorder:string ->
+    ?maskBorderMode:string ->
+    ?maskBorderOutset:string ->
+    ?maskBorderRepeat:string ->
+    ?maskBorderSlice:string ->
+    ?maskBorderSource:string ->
+    ?maskBorderWidth:string ->
+    ?maskClip:string ->
+    ?maskComposite:string ->
+    ?maskImage:string ->
+    ?maskMode:string ->
+    ?maskOrigin:string ->
+    ?maskPosition:string ->
+    ?maskRepeat:string ->
+    ?maskSize:string ->
+    ?maskType:string ->
+    ?backgroundBlendMode:string ->
+    ?isolation:string ->
+    ?mixBlendMode:string ->
+    ?boxDecorationBreak:string ->
+    ?boxSizing:string ->
+    ?caretColor:string ->
+    ?navDown:string ->
+    ?navLeft:string ->
+    ?navRight:string ->
+    ?navUp:string ->
+    ?outlineOffset:string ->
+    ?resize:string ->
+    ?textOverflow:string ->
+    ?grid:string ->
+    ?gridArea:string ->
+    ?gridAutoColumns:string ->
+    ?gridAutoFlow:string ->
+    ?gridAutoRows:string ->
+    ?gridColumn:string ->
+    ?gridColumnEnd:string ->
+    ?gridColumnGap:string ->
+    ?gridColumnStart:string ->
+    ?gridGap:string ->
+    ?gridRow:string ->
+    ?gridRowEnd:string ->
+    ?gridRowGap:string ->
+    ?gridRowStart:string ->
+    ?gridTemplate:string ->
+    ?gridTemplateAreas:string ->
+    ?gridTemplateColumns:string ->
+    ?gridTemplateRows:string ->
+    ?willChange:string ->
+    ?hangingPunctuation:string ->
+    ?hyphens:string ->
+    ?lineBreak:string ->
+    ?overflowWrap:string ->
+    ?tabSize:string ->
+    ?textAlignLast:string ->
+    ?textJustify:string ->
+    ?wordBreak:string ->
+    ?wordWrap:string ->
+    ?animation:string ->
+    ?animationDelay:string ->
+    ?animationDirection:string ->
+    ?animationDuration:string ->
+    ?animationFillMode:string ->
+    ?animationIterationCount:string ->
+    ?animationName:string ->
+    ?animationPlayState:string ->
+    ?animationTimingFunction:string ->
+    ?transition:string ->
+    ?transitionDelay:string ->
+    ?transitionDuration:string ->
+    ?transitionProperty:string ->
+    ?transitionTimingFunction:string ->
+    ?backfaceVisibility:string ->
+    ?perspective:string ->
+    ?perspectiveOrigin:string ->
+    ?transform:string ->
+    ?transformOrigin:string ->
+    ?transformStyle:string ->
+    ?justifyItems:string ->
+    ?justifySelf:string ->
+    ?placeContent:string ->
+    ?placeItems:string ->
+    ?placeSelf:string ->
+    ?appearance:string ->
+    ?caret:string ->
+    ?caretAnimation:string ->
+    ?caretShape:string ->
+    ?userSelect:string ->
+    ?maxLines:string ->
+    ?marqueeDirection:string ->
+    ?marqueeLoop:string ->
+    ?marqueeSpeed:string ->
+    ?marqueeStyle:string ->
+    ?overflowStyle:string ->
+    ?rotation:string ->
+    ?rotationPoint:string ->
+    ?alignmentBaseline:string ->
+    ?baselineShift:string ->
+    ?colorInterpolation:string ->
+    ?colorInterpolationFilters:string ->
+    ?colorProfile:string ->
+    ?colorRendering:string ->
+    ?dominantBaseline:string ->
+    ?fill:string ->
+    ?fillOpacity:string ->
+    ?fillRule:string ->
+    ?filter:string ->
+    ?floodColor:string ->
+    ?floodOpacity:string ->
+    ?glyphOrientationHorizontal:string ->
+    ?imageRendering:string ->
+    ?kerning:string ->
+    ?lightingColor:string ->
+    ?markerEnd:string ->
+    ?markerMid:string ->
+    ?markerStart:string ->
+    ?pointerEvents:string ->
+    ?shapeRendering:string ->
+    ?stopColor:string ->
+    ?stopOpacity:string ->
+    ?stroke:string ->
+    ?strokeDasharray:string ->
+    ?strokeDashoffset:string ->
+    ?strokeLinecap:string ->
+    ?strokeLinejoin:string ->
+    ?strokeMiterlimit:string ->
+    ?strokeOpacity:string ->
+    ?strokeWidth:string ->
+    ?textAnchor:string ->
+    ?textRendering:string ->
+    ?rubyAlign:string ->
+    ?rubyMerge:string ->
+    ?rubyPosition:string ->
+    ?gap:string ->
+    ?rowGap:string ->
+    unit ->
+    t = ""
+  [@@mel.obj]
 
-  let combine (Declarations first) (Declarations second) = Declarations (first @ second)
+  external combine : (_[@mel.as {json|{}|json}]) -> t -> t -> t = "assign" [@@mel.scope "Object"]
+  external set : t -> string -> string -> unit = "" [@@mel.set_index]
+  external get : t -> string -> string = "" [@@mel.get_index]
+  external names : t -> string array = "keys" [@@mel.scope "Object"]
 
-  let unsafeAddProp (Declarations declarations) name value =
-    Declarations (declarations @ [ (name, value) ])
+  let unsafeAddProp style name value =
+    let added = combine style (make ()) in
+    set added name value;
+    added
 
-  let declarations (Declarations declarations) = declarations
+  let declarations style = Array.to_list (Array.map (fun name -> (name, get style name)) (names style))
 end
 
 type domRef =

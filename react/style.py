@@ -12,33 +12,33 @@ block = source[source.index("module Style: {"):source.index("external combine")]
 names = list(dict.fromkeys(re.findall(r"~(\w+): string=\?", block)))
 
 signature = ["module Style : sig",
-             "  (** Inline style declarations, in the order they are applied. *)",
-             "  type t = Declarations of (string * string) list [@@unboxed]",
+             "  (** Inline style declarations: a JavaScript object of camelCase properties, as reason-react's. *)",
+             "  type t",
              "",
-             "  val make :"]
+             "  external make :"]
 signature += [f"    ?{name}:string ->" for name in names]
-signature += ["    unit ->", "    t", "",
-              "  val combine : t -> t -> t",
+signature += ["    unit ->", "    t = \"\"", "  [@@mel.obj]", "",
+              "  external combine : (_[@mel.as {json|{}|json}]) -> t -> t -> t = \"assign\" [@@mel.scope \"Object\"]",
               "  val unsafeAddProp : t -> string -> string -> t",
               "  val declarations : t -> (string * string) list",
               "end"]
 
 implementation = ["module Style = struct",
-                  "  type t = Declarations of (string * string) list [@@unboxed]", "",
-                  "  let make " + " ".join(f"?{name}" for name in names) + " () ="]
-implementation += ["    let declared name (value : string option) declarations =",
-                   "      match value with Some value -> (name, value) :: declarations | None -> declarations",
-                   "    in",
-                   "    Declarations"]
-implementation += [f'      (declared "{names[0]}" {names[0]}']
-implementation += [f'      @@ declared "{name}" {name}' for name in names[1:]]
-implementation += ["      @@ [])", "",
-                   "  let combine (Declarations first) (Declarations second) = Declarations (first @ second)",
+                  "  type t", "",
+                  "  external make :"]
+implementation += [f"    ?{name}:string ->" for name in names]
+implementation += ["    unit ->", "    t = \"\"", "  [@@mel.obj]", "",
+                   "  external combine : (_[@mel.as {json|{}|json}]) -> t -> t -> t = \"assign\" [@@mel.scope \"Object\"]",
+                   "  external set : t -> string -> string -> unit = \"\" [@@mel.set_index]",
+                   "  external get : t -> string -> string = \"\" [@@mel.get_index]",
+                   "  external names : t -> string array = \"keys\" [@@mel.scope \"Object\"]",
                    "",
-                   "  let unsafeAddProp (Declarations declarations) name value =",
-                   "    Declarations (declarations @ [ (name, value) ])",
+                   "  let unsafeAddProp style name value =",
+                   "    let added = combine style (make ()) in",
+                   "    set added name value;",
+                   "    added",
                    "",
-                   "  let declarations (Declarations declarations) = declarations",
+                   "  let declarations style = Array.to_list (Array.map (fun name -> (name, get style name)) (names style))",
                    "end"]
 
 print("\n".join(signature))

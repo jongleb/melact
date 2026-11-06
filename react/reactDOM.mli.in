@@ -1,10 +1,10 @@
 (** reason-react's [ReactDOM] for melact: mounting roots, styles and refs. *)
 
 module Style : sig
-  (** Inline style declarations, in the order they are applied. *)
-  type t = Declarations of (string * string) list [@@unboxed]
+  (** Inline style declarations: a JavaScript object of camelCase properties, as reason-react's. *)
+  type t
 
-  val make :
+  external make :
     ?azimuth:string ->
     ?background:string ->
     ?backgroundAttachment:string ->
@@ -350,9 +350,10 @@ module Style : sig
     ?gap:string ->
     ?rowGap:string ->
     unit ->
-    t
+    t = ""
+  [@@mel.obj]
 
-  val combine : t -> t -> t
+  external combine : (_[@mel.as {json|{}|json}]) -> t -> t -> t = "assign" [@@mel.scope "Object"]
   val unsafeAddProp : t -> string -> string -> t
   val declarations : t -> (string * string) list
 end

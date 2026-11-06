@@ -394,6 +394,45 @@ module Painted = struct
     <div style>(React.string "painted")</div>
 end
 
+(** A style built the ways reason-react code builds one. *)
+type styled =
+  | Made of string option * string option
+  | Combined of styled * styled
+  | Added of styled * string * string
+
+let rec built styled =
+  match styled with
+  | Made (color, width) -> ReactDOM.Style.make ?color ?width ()
+  | Combined (first, second) -> ReactDOM.Style.combine (built first) (built second)
+  | Added (inner, name, value) -> ReactDOM.Style.unsafeAddProp (built inner) name value
+
+let rec declared styled =
+  let over later earlier = later @ List.filter (fun (name, _) -> not (List.mem_assoc name later)) earlier in
+  match styled with
+  | Made (color, width) ->
+      List.filter_map (fun (name, value) -> Option.map (fun value -> (name, value)) value) [ ("color", color); ("width", width) ]
+  | Combined (first, second) -> over (declared second) (declared first)
+  | Added (inner, name, value) -> over [ (name, value) ] (declared inner)
+
+let rec styled tape depth =
+  match draw tape (match depth with 0 -> 1 | _ -> 3) with
+  | 0 ->
+      let pick values = match draw tape 3 with 0 -> None | index -> Some values.(index - 1) in
+      Made (pick [| "red"; "blue" |], pick [| "1px"; "2px" |])
+  | 1 -> Combined (styled tape (depth - 1), styled tape (depth - 1))
+  | _ ->
+      let name, value = [| ("color", "green"); ("width", "3px"); ("--gap", "4px") |].(draw tape 3) in
+      Added (styled tape (depth - 1), name, value)
+
+let styled_send = ref (fun (_ : ReactDOM.Style.t) -> ())
+
+module Styled = struct
+  let[@react.component] make ~first =
+    let style, setStyle = React.useState (fun () -> first) in
+    styled_send := (fun next -> setStyle (fun _ -> next));
+    <p style>(React.string "styled")</p>
+end
+
 module Optional_child = struct
   let[@react.component] make ?(children = React.null) () =
     <p>
@@ -1248,6 +1287,39 @@ let () =
              in
              step (Array.length values) Held))
         [%mel.obj { numRuns = 40 }]));
+  describe "styles made, combined and added to" (fun () ->
+    test_async "show the last value of each property, and combining leaves both styles as they were" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let first = styled tape 3 in
+             let kept = built first in
+             let* root, client = mount <Styled first=kept /> in
+             let shown expected =
+               let declaration = style (select root "p") in
+               expect (List.map (fun name -> property_value declaration name) [ "color"; "width"; "--gap" ])
+               |. to_equal (List.map (fun name -> Option.value ~default:"" (List.assoc_opt name expected)) [ "color"; "width"; "--gap" ])
+             in
+             shown (declared first);
+             let rec step remaining =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = styled tape 3 in
+                   let made = built next in
+                   ignore (ReactDOM.Style.combine kept made);
+                   ignore (ReactDOM.Style.unsafeAddProp made "color" "black");
+                   ignore (ReactDOM.Style.unsafeAddProp kept "width" "9px");
+                   let* () = act (fun () -> !styled_send made) in
+                   shown (declared next);
+                   let* () = act (fun () -> !styled_send kept) in
+                   shown (declared first);
+                   step (remaining - 1)
+             in
+             step 5))
+        [%mel.obj { numRuns = 100 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async
