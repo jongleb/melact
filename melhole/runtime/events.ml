@@ -25,10 +25,9 @@ let key_of event =
       keys := (event, key) :: !keys;
       key
 
-let bind element event =
+let register element event =
   let key = key_of event in
-  let registration =
-    match event with
+  match event with
     | "beforeinput" | "click" | "dblclick" | "contextmenu" | "focusin"
     | "focusout" | "input" | "keydown" | "keyup" | "mousedown" | "mousemove"
     | "mouseout" | "mouseover" | "mouseup" | "pointerdown" | "pointermove"
@@ -70,8 +69,6 @@ let bind element event =
         in
         Dom_api.add_listener element event listener;
         Direct (fun () -> Dom_api.remove_listener element event listener)
-  in
-  (key, registration)
 
 let controlled = "$$melhole:controlled"
 let set element key handler = Dom_api.set_handler element key handler

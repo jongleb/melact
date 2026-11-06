@@ -492,9 +492,11 @@ let apply built props name =
         match List.assoc_opt event built.events with
         | Some key -> key
         | None ->
-            let key, registration = Events.bind element event in
+            let key = Events.key_of event in
             built.events <- (event, key) :: built.events;
-            (match registration with Delegated -> () | Direct stop -> built.cleanups <- stop :: built.cleanups);
+            (match Events.register element event with
+            | Delegated -> ()
+            | Direct stop -> built.cleanups <- stop :: built.cleanups);
             key
       in
       let handle : React.Event.Synthetic.t -> unit = read props name in

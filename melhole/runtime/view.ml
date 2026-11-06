@@ -1031,8 +1031,8 @@ let set_classes (hole : Hole.classes) value =
     hole.value <- value)
 
 let handler_hole scope element event =
-  let key, registration = Events.bind element event in
-  (match registration with
+  let key = Events.key_of event in
+  (match Events.register element event with
   | Events.Delegated -> ()
   | Events.Direct remove -> scope.cleanups <- (fun [@u] () -> remove ()) :: scope.cleanups);
   ({ element; key } : Hole.handler)
@@ -1064,8 +1064,8 @@ let put_attr scope slot element name value =
     Array.unsafe_set scope.deps slot (Input value))
 
 let listen scope element event =
-  let key, registration = Events.bind element event in
-  (match registration with
+  let key = Events.key_of event in
+  (match Events.register element event with
   | Events.Delegated -> ()
   | Events.Direct remove -> scope.cleanups <- (fun [@u] () -> remove ()) :: scope.cleanups);
   key
