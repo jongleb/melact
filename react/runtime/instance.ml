@@ -359,6 +359,24 @@ let refresh (position : Template.position) instance =
       instance.pending <- [];
       !suspension.rescue While_rendering instance error [@u]
 
+let wrote (position : Template.position) instance rendered =
+  let at =
+    match instance.region with
+    | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
+    | Nodes -> position
+  in
+  match
+    match rendered with
+    | Ok child -> within owner (Some instance) (fun () -> View.update at instance.output child)
+    | Error error -> raise error
+  with
+  | output ->
+      instance.output <- output;
+      commit position instance
+  | exception error ->
+      instance.pending <- [];
+      !suspension.rescue While_rendering instance error [@u]
+
 let rec settle () =
   let position_of instance =
     let last = ref None in
@@ -374,19 +392,7 @@ let rec settle () =
     | _ ->
         !recovery.before_rendering () [@u];
         !suspension.before_rendering () [@u];
-        let pending = !dirty in
-        dirty := [];
-        List.iter
-          (fun (_, instance) ->
-            match instance.status with
-            | Dirty (Stated checks)
-              when List.for_all
-                     (fun (Checking (cell, check)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
-                     checks ->
-                instance.status <- Clean
-            | Dirty (Forced | Stated _) -> refresh (position_of instance) instance
-            | Clean | Unmounted -> ())
-          (let fronted = List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending in
+        let ordered pending = (let fronted = List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending in
            let by_depth = List.stable_sort (fun (_, a) (_, b) -> Int.compare a.depth b.depth) in
            match fronted with
            | [] | [ _ ] -> fronted
@@ -435,7 +441,67 @@ let rec settle () =
                    next ())
                  (Option.bind first common);
                let missed = List.filter (fun (node, _) -> Js.Undefined.testAny (found_get starts node) |> not) placed in
-               List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced);
+               List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced) in
+        let waiting = ref [] in
+        let rec rendering round =
+          let pending =
+            match round with
+            | `First -> !dirty
+            | `Later ->
+                let forced, stated =
+                  List.partition (fun instance -> match instance.status with Dirty Forced -> true | Dirty (Stated _) | Clean | Unmounted -> false) !dirty
+                in
+                waiting := stated @ !waiting;
+                dirty := forced;
+                forced
+          in
+          match pending with
+          | [] -> ()
+          | pending ->
+              dirty := [];
+              let topmost instance =
+                let rec up ancestor =
+                  match ancestor with
+                  | None -> `Topmost
+                  | Some above -> ( match above.status with Dirty _ -> `Under_dirty | Clean | Unmounted -> up above.parent)
+                in
+                up instance.parent
+              in
+              let roots, later =
+                List.partition
+                  (fun (_, instance) ->
+                    match (instance.status, topmost instance) with Dirty _, `Topmost -> true | (Dirty _ | Clean | Unmounted), _ -> false)
+                  (ordered pending)
+              in
+              let rendered =
+                List.filter_map
+                  (fun (_, instance) ->
+                    match instance.status with
+                    | Dirty (Stated checks)
+                      when List.for_all
+                             (fun (Checking (cell, check)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
+                             checks ->
+                        instance.status <- Clean;
+                        None
+                    | Dirty (Forced | Stated _) -> Some (instance, match render instance with child -> Ok child | exception error -> Error error)
+                    | Clean | Unmounted -> None)
+                  roots
+              in
+              List.iter
+                (fun (instance, result) ->
+                  match instance.status with
+                  | Unmounted -> ()
+                  | Clean | Dirty _ -> wrote (position_of instance) instance result)
+                rendered;
+              dirty :=
+                List.filter_map
+                  (fun (_, instance) -> match instance.status with Dirty _ -> Some instance | Clean | Unmounted -> None)
+                  later
+                @ !dirty;
+              rendering `Later
+        in
+        rendering `First;
+        dirty := !waiting @ !dirty;
         View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];

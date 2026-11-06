@@ -479,6 +479,16 @@ runs after all the dirty instances are written, made Melact faster than React th
 wait the same way: a placed ref is queued and gets its element when the outermost `View.mount` or
 `View.patch` ends, or, in Melact, after a flush's renders and before its layout effects, so a
 callback sees the whole tree, as in React; a dual law reads the number of rows from each row's ref.
+A flush now renders in rounds. A round renders every dirty instance that has no dirty ancestor,
+in document order, and only then writes them; instances made dirty by those writes (a context's
+consumers, children with new state) form the next round, still before refs and layout effects, while
+state set during the writes (a ref called with null) waits for the next pass, as React's commit does.
+So the user team's rows, which read `offsetTop` and re-render through a context, now cost one
+layout. A dual law counts DOM writes from inside each row's render and finds the same count in all
+of them under React 18 and under Melact; a mutant that writes each instance right after rendering it
+breaks it. A component that re-renders because its parent passed new props still renders during the
+parent's write.
+
 `MelactDebug.warnLayoutReadsInRender ()` wraps the layout getters and methods of the DOM
 (`offset*`, `client*`, `scroll*`, `innerText`, `getBoundingClientRect`, `getClientRects`,
 `getComputedStyle`) and warns once per component and property when one is read while a component

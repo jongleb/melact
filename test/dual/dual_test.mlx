@@ -894,6 +894,45 @@ module Counted_rows = struct
     </ul>
 end
 
+let dom_writes : unit -> int =
+  [%mel.raw
+    {|function () {
+        if (!globalThis.__domWrites) {
+          globalThis.__domWrites = { count: 0 };
+          var counted = function (owner, name) {
+            var fn = owner[name];
+            owner[name] = function () { globalThis.__domWrites.count++; return fn.apply(this, arguments); };
+          };
+          ["insertBefore", "appendChild", "removeChild", "replaceChild"].forEach(function (name) { counted(Node.prototype, name); });
+          ["setAttribute", "removeAttribute"].forEach(function (name) { counted(Element.prototype, name); });
+          var setter = function (proto, name) {
+            var described = Object.getOwnPropertyDescriptor(proto, name);
+            Object.defineProperty(proto, name, Object.assign({}, described, {
+              set: function (value) { globalThis.__domWrites.count++; described.set.call(this, value); }
+            }));
+          };
+          setter(CharacterData.prototype, "data");
+          setter(Node.prototype, "textContent");
+        }
+        return globalThis.__domWrites.count;
+      }|}]
+
+module Measured_row = struct
+  let[@react.component] make ~label =
+    let opened = React.useContext opened_context in
+    log (string_of_int (dom_writes ()));
+    <li>(React.string (label ^ match opened with true -> "+" | false -> "-"))</li>
+end
+
+module Measured = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    opened_send := setOpened;
+    <Opened_provider value=opened>
+      <ul>(React.array (Array.init count (fun index -> <Measured_row key=(string_of_int index) label=(string_of_int index) />)))</ul>
+    </Opened_provider>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1690,6 +1729,32 @@ let () =
              let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
              finish ()))
         [%mel.obj { numRuns = 20 }]));
+  describe "components made dirty together" (fun () ->
+    test_async "all render before any of them writes the DOM, so reading layout while rendering costs one layout" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+             let tape = tape values in
+             let count = 2 + draw tape 40 in
+             ignore (dom_writes ());
+             let* root, client = mount <Measured count /> in
+             let rec step remaining opened =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = not opened in
+                   let* () = act (fun () -> !opened_send (fun _ -> next)) in
+                   let seen = take () in
+                   expect (List.length seen, List.length (List.sort_uniq compare seen), text_content root)
+                   |. to_equal
+                        ( count,
+                          1,
+                          String.concat "" (List.init count (fun index -> string_of_int index ^ match next with true -> "+" | false -> "-")) );
+                   step (remaining - 1) next
+             in
+             step 3 false))
+        [%mel.obj { numRuns = 40 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async
