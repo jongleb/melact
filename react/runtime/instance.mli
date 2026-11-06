@@ -40,6 +40,18 @@ val invalidate : instance -> unit
     and nothing else asked, the render is skipped, as React bails out. *)
 val invalidate_state : instance -> (unit -> Melhole.View.change) -> unit
 val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
+
+(** An effect's cleanup or run for an instance, made once and queued by [schedule] after each commit
+    that needs it. *)
+type job
+
+val job : instance -> timing -> phase -> (unit -> unit) -> job
+val schedule : job -> unit
+
+(** The value of the instance's next hook when an earlier render made it, else [None]: then [put] makes it. *)
+val found : instance -> 'a Hook.key -> 'a option
+
+val put : instance -> 'a Hook.key -> 'a -> unit
 val on_unmount : instance -> (unit -> unit) -> unit
 val consume : instance -> 'value Context.t -> 'value
 val settle : unit -> unit

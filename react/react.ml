@@ -27,7 +27,14 @@ type ('state, 'action) state = {
   dispatch : 'action -> unit;
 }
 
-type 'deps effect_cell = { mutable deps : 'deps; mutable cleanup : (unit -> unit) option }
+type 'deps effect_state = {
+  mutable deps : 'deps;
+  mutable cleanup : (unit -> unit) option;
+  mutable run : unit -> (unit -> unit) option;  (** The effect of the render that last changed [deps]. *)
+}
+
+(** An effect hook: its cell, and its cleanup and run, made once and queued whenever [deps] change. *)
+type 'deps effect_cell = { cell : 'deps effect_state; cleaning : Instance.job; running : Instance.job }
 type ('deps, 'value) memo = { mutable inputs : 'deps; mutable result : 'value }
 
 type 'snapshot store = {
@@ -110,69 +117,97 @@ let displayName _ = None
 let createContext default = Context.Context (Melact_runtime.Context.make default)
 let useContext (Context.Context context) = Instance.consume (Instance.current ()) context
 
-let reducer key reduce initial =
-  let instance = Instance.current () in
-  let cell =
-    Instance.slot instance key (fun () ->
-        let initial = initial () in
-        let rec cell =
-          {
-            value = initial;
-            rendered = initial;
-            reduce;
-            dispatch =
-              (fun action ->
-                let next = cell.reduce cell.value action in
-                if not (next == cell.value) then (
-                  Instance.invalidate_state instance check;
-                  cell.value <- next));
-          }
-        and check () = match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed in
-        cell)
-  in
+let stated cell reduce =
   cell.reduce <- reduce;
   cell.rendered <- cell.value;
   (cell.value, cell.dispatch)
 
-let useState key init = reducer key (fun state update -> update state) init
-let useReducer key reduce initial = reducer key reduce (fun () -> initial)
+let state_cell instance key reduce initial =
+  let rec cell =
+    {
+      value = initial;
+      rendered = initial;
+      reduce;
+      dispatch =
+        (fun action ->
+          let next = cell.reduce cell.value action in
+          if not (next == cell.value) then (
+            Instance.invalidate_state instance check;
+            cell.value <- next));
+    }
+  and check () = match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed in
+  Instance.put instance key cell;
+  cell
+
+let applied state update = update state
+
+let useState key init =
+  let instance = Instance.current () in
+  stated
+    (match Instance.found instance key with Some cell -> cell | None -> state_cell instance key applied (init ()))
+    applied
+
+let useReducer key reduce initial =
+  let instance = Instance.current () in
+  stated (match Instance.found instance key with Some cell -> cell | None -> state_cell instance key reduce initial) reduce
 
 let useReducerWithMapState key reduce initial map =
-  reducer key reduce (fun () -> map initial)
+  let instance = Instance.current () in
+  stated
+    (match Instance.found instance key with Some cell -> cell | None -> state_cell instance key reduce (map initial))
+    reduce
 
 let use_effect timing unchanged key run deps =
   let instance = Instance.current () in
-  let schedule cell =
-    Instance.after_commit instance timing Instance.Cleanup (fun () ->
+  match Instance.found instance key with
+  | Some hook ->
+      if not (unchanged hook.cell.deps deps) then (
+        hook.cell.deps <- deps;
+        hook.cell.run <- run;
+        Instance.schedule hook.cleaning;
+        Instance.schedule hook.running)
+  | None ->
+      let cell = { deps; cleanup = None; run } in
+      let finished () =
         Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
-        cell.cleanup <- None);
-    Instance.after_commit instance timing Instance.Run (fun () -> cell.cleanup <- run ())
-  in
-  let made = ref `Kept in
-  let cell =
-    Instance.slot instance key (fun () ->
-        let cell = { deps; cleanup = None } in
-        Instance.on_unmount instance (fun () ->
-            Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
-            cell.cleanup <- None);
-        made := `Made;
-        cell)
-  in
-  match !made with
-  | `Made -> schedule cell
-  | `Kept ->
-      if not (unchanged cell.deps deps) then (
-        cell.deps <- deps;
-        schedule cell)
+        cell.cleanup <- None
+      in
+      let hook =
+        {
+          cell;
+          cleaning = Instance.job instance timing Instance.Cleanup finished;
+          running = Instance.job instance timing Instance.Run (fun () -> cell.cleanup <- cell.run ());
+        }
+      in
+      Instance.on_unmount instance finished;
+      Instance.put instance key hook;
+      Instance.schedule hook.cleaning;
+      Instance.schedule hook.running
 
 let memoize unchanged key compute deps =
-  let cell =
-    Instance.slot (Instance.current ()) key (fun () -> { inputs = deps; result = compute () })
-  in
-  if not (unchanged cell.inputs deps) then (
-    cell.inputs <- deps;
-    cell.result <- compute ());
-  cell.result
+  let instance = Instance.current () in
+  match Instance.found instance key with
+  | Some cell ->
+      if not (unchanged cell.inputs deps) then (
+        cell.inputs <- deps;
+        cell.result <- compute ());
+      cell.result
+  | None ->
+      let result = compute () in
+      Instance.put instance key { inputs = deps; result };
+      result
+
+let remember unchanged key value deps =
+  let instance = Instance.current () in
+  match Instance.found instance key with
+  | Some cell ->
+      if not (unchanged cell.inputs deps) then (
+        cell.inputs <- deps;
+        cell.result <- value);
+      cell.result
+  | None ->
+      Instance.put instance key { inputs = deps; result = value };
+      value
 
 let never () () = false
 let always () () = true
@@ -220,15 +255,15 @@ let useMemo4 key compute deps = memoize same4 key compute deps
 let useMemo5 key compute deps = memoize same5 key compute deps
 let useMemo6 key compute deps = memoize same6 key compute deps
 let useMemo7 key compute deps = memoize same7 key compute deps
-let useCallback key fn = memoize never key (fun () -> fn) ()
-let useCallback0 key fn = memoize always key (fun () -> fn) ()
-let useCallback1 key fn deps = memoize same_array key (fun () -> fn) deps
-let useCallback2 key fn deps = memoize same2 key (fun () -> fn) deps
-let useCallback3 key fn deps = memoize same3 key (fun () -> fn) deps
-let useCallback4 key fn deps = memoize same4 key (fun () -> fn) deps
-let useCallback5 key fn deps = memoize same5 key (fun () -> fn) deps
-let useCallback6 key fn deps = memoize same6 key (fun () -> fn) deps
-let useCallback7 key fn deps = memoize same7 key (fun () -> fn) deps
+let useCallback key fn = remember never key fn ()
+let useCallback0 key fn = remember always key fn ()
+let useCallback1 key fn deps = remember same_array key fn deps
+let useCallback2 key fn deps = remember same2 key fn deps
+let useCallback3 key fn deps = remember same3 key fn deps
+let useCallback4 key fn deps = remember same4 key fn deps
+let useCallback5 key fn deps = remember same5 key fn deps
+let useCallback6 key fn deps = remember same6 key fn deps
+let useCallback7 key fn deps = remember same7 key fn deps
 let useInsertionEffect key run = use_effect Instance.Layout never key run ()
 let useInsertionEffect0 key run = use_effect Instance.Layout always key run ()
 let useInsertionEffect1 key run deps = use_effect Instance.Layout same_array key run deps

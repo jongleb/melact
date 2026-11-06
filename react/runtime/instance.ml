@@ -25,7 +25,7 @@ type instance = {
   mutable status : status;
   mutable output : View.live;
   mutable region : region;
-  mutable pending : (timing * phase * (unit -> unit)) list;  (** Effects of the last render, newest first. *)
+  mutable pending : job list;  (** Effects of the last render, newest first. *)
   mutable teardown : (unit -> unit) list;  (** Run on unmount, newest first. *)
 }
 
@@ -90,6 +90,9 @@ and failure =
   | Caught of { error : caught; thrower : instance }  (** Caught while rendering: the children go at commit. *)
   | Struck of caught  (** Caught in an effect: the children go on the next pass. *)
   | Failed of caught  (** Shows the fallback. *)
+
+(** An effect's cleanup or run, made once for its hook and queued after every commit that changes it. *)
+and job = { owner : instance; timing : timing; phase : phase; work : unit -> unit }
 
 and status = Clean | Dirty of dirt | Unmounted
 
@@ -213,10 +216,10 @@ let mark_dirty instance =
 let run_phases cleanups runs =
   let run_jobs jobs =
     List.iter
-      (fun (instance, job) ->
-        match instance.status with
+      (fun job ->
+        match job.owner.status with
         | Unmounted -> ()
-        | Clean | Dirty _ -> ( try job () with error -> !suspension.rescue In_effect instance error [@u]))
+        | Clean | Dirty _ -> ( try job.work () with error -> !suspension.rescue In_effect job.owner error [@u]))
       (List.rev jobs)
   in
   let pending_cleanups = !cleanups and pending_runs = !runs in
@@ -249,12 +252,12 @@ let commit (position : Template.position) instance =
       View.insert position (Dom_api.to_node node);
       instance.region <- Marker node);
   List.iter
-    (fun (timing, phase, job) ->
-      match (timing, phase) with
-      | Layout, Cleanup -> layout_cleanups := (instance, job) :: !layout_cleanups
-      | Layout, Run -> layout_runs := (instance, job) :: !layout_runs
-      | Passive, Cleanup -> passive_cleanups := (instance, job) :: !passive_cleanups
-      | Passive, Run -> passive_runs := (instance, job) :: !passive_runs)
+    (fun job ->
+      match (job.timing, job.phase) with
+      | Layout, Cleanup -> layout_cleanups := job :: !layout_cleanups
+      | Layout, Run -> layout_runs := job :: !layout_runs
+      | Passive, Cleanup -> passive_cleanups := job :: !passive_cleanups
+      | Passive, Run -> passive_runs := job :: !passive_runs)
     (List.rev instance.pending);
   instance.pending <- []
 
@@ -465,32 +468,34 @@ let invalidate_state instance check =
       | Dirty Forced | Unmounted -> ());
       queue_render ()
 
-let after_commit instance timing phase job =
-  instance.pending <- (timing, phase, job) :: instance.pending
+let job owner timing phase work = { owner; timing; phase; work }
+let schedule job = job.owner.pending <- job :: job.owner.pending
+let after_commit instance timing phase work = schedule (job instance timing phase work)
+let found instance key = Hook.found instance.slots key
+let put instance key value = Hook.put instance.slots key value
 
 let on_unmount instance cleanup = instance.teardown <- cleanup :: instance.teardown
 
-let consume : type value. instance -> value Context.t -> value =
- fun instance context ->
-  let rec find ancestor =
-    match ancestor with
-    | None -> context.default
-    | Some above -> (
-        match above.kind with
-        | Provides provision -> (
-            match Type.Id.provably_equal provision.context.witness context.witness with
-            | Some Equal ->
-                if not (member provision.known instance) then (
-                  join provision.known instance;
-                  on_unmount instance (fun () ->
-                      leave provision.consumers instance;
-                      leave provision.known instance));
-                join provision.consumers instance;
-                provision.value
-            | None -> find above.parent)
-        | Renders _ | Catches _ | Suspends _ -> find above.parent)
-  in
-  find instance.parent
+let rec provided : type value. instance -> value Context.t -> instance option -> value =
+ fun instance context ancestor ->
+  match ancestor with
+  | None -> context.default
+  | Some above -> (
+      match above.kind with
+      | Provides provision -> (
+          match Type.Id.provably_equal provision.context.witness context.witness with
+          | Some Equal ->
+              if not (member provision.known instance) then (
+                join provision.known instance;
+                on_unmount instance (fun () ->
+                    leave provision.consumers instance;
+                    leave provision.known instance));
+              join provision.consumers instance;
+              provision.value
+          | None -> provided instance context above.parent)
+      | Renders _ | Catches _ | Suspends _ -> provided instance context above.parent)
+
+let consume instance context = provided instance context instance.parent
 
 let catch =
   let caught_boundaries = ref [] and struck_boundaries = ref [] and fallen_boundaries = ref [] in

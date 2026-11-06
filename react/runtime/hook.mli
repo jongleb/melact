@@ -22,3 +22,8 @@ type slots
 val slots : unit -> slots
 val rewind : slots -> unit
 val take : slots -> 'a key -> (unit -> 'a) -> 'a
+
+(** The value of the next hook call when an earlier render made it, else [None]: then [put] makes it. *)
+val found : slots -> 'a key -> 'a option
+
+val put : slots -> 'a key -> 'a -> unit
