@@ -526,6 +526,16 @@ let mapper =
                     | _, _ -> Pexp_apply (step, [ (Nolabel, subject) ])
                   in
                   { expression with pexp_desc = applied }
+              | Pexp_apply
+                  ( {
+                      pexp_desc =
+                        Pexp_apply
+                          ( { pexp_desc = Pexp_ident { txt = Lident "|."; _ }; _ },
+                            [ (Nolabel, subject); (Nolabel, step) ] );
+                      _;
+                    },
+                    arguments ) ->
+                  { expression with pexp_desc = Pexp_apply (step, (Nolabel, piped subject) :: arguments) }
               | _ -> expression
             in
             let mapping =
@@ -533,7 +543,13 @@ let mapper =
               | Pexp_apply
                   ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", (("array" | "list") as shown)); _ }; _ },
                     [ (Nolabel, inner) ] ) -> (
-                  match (piped inner).pexp_desc with
+                  let rec flattened expression =
+                    match expression.pexp_desc with
+                    | Pexp_apply ({ pexp_desc = Pexp_apply (callee, first); _ }, rest) ->
+                        flattened { expression with pexp_desc = Pexp_apply (callee, first @ rest) }
+                    | _ -> expression
+                  in
+                  match (flattened (piped inner)).pexp_desc with
                   | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, arguments) -> (
                       let path = match Longident.flatten_exn txt with path -> path | exception Invalid_argument _ -> [] in
                       let unlabelled = List.filter_map (fun (label, value) -> match label with Nolabel -> Some value | Labelled _ | Optional _ -> None) arguments in
@@ -548,8 +564,7 @@ let mapper =
                         | (["Array"; "mapi"] | ["Stdlib"; "Array"; "mapi"]), [ _; _ ], [ row; items ]
                           ->
                             Some (path, row, items)
-                        | ["Belt"; "Array"; "mapWithIndex"], [ _; _ ], [ items; row ]
-                          ->
+                        | ["Belt"; "Array"; "mapWithIndex"], [ _; _ ], [ items; row ] ->
                             Some (path, row, items)
                         | (["Js"; "Array"; "map"] | ["Js"; "Array"; "mapi"]), [ _; _ ], [ items ] ->
                             Option.map

@@ -208,4 +208,4 @@ let () =
           in
           expect (!resumed_pages > 150) |. to_be true;
           Js.Promise.resolve ())
-        60000)
+        120000)

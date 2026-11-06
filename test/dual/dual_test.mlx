@@ -630,9 +630,22 @@ type form =
   | Index_unused
   | Belt_indexed
   | Js_indexed
+  | Reason_piped  (** [labels->Belt.Array.map(f)->React.array], as refmt parses it. *)
+  | Reason_indexed  (** [labels->Belt.Array.mapWithIndex(f)->React.array], as refmt parses it. *)
 
 let forms =
-  [| Mapped; Last_piped; Belt_piped; Js_labelled; Indexed; Index_unused; Belt_indexed; Js_indexed |]
+  [|
+    Mapped;
+    Last_piped;
+    Belt_piped;
+    Js_labelled;
+    Indexed;
+    Index_unused;
+    Belt_indexed;
+    Js_indexed;
+    Reason_piped;
+    Reason_indexed;
+  |]
 
 (** The labels a list shows and the suffix every row reads. *)
 type listing = { labels : string array; suffix : string }
@@ -672,10 +685,22 @@ module Forms = struct
           |. Js.Array.mapi ~f:(fun label index -> <Entry key=label text=(string_of_int index ^ ":" ^ label ^ suffix) onPick=pick />)
           |. React.array)
         </ul>
+    | Reason_piped ->
+        <ul>(((labels |. Belt.Array.map) (fun label -> <Entry key=label text=(label ^ suffix) onPick=pick />)) |. React.array)</ul>
+    | Reason_indexed ->
+        <ul>
+          (((labels |. Belt.Array.mapWithIndex) (fun index label ->
+               <Entry key=label text=(string_of_int index ^ ":" ^ label ^ suffix) onPick=pick />))
+          |. React.array)
+        </ul>
 end
 
 let listing_html form { labels; suffix } =
-  let numbered = match form with Indexed | Belt_indexed | Js_indexed -> `Numbered | Mapped | Last_piped | Belt_piped | Js_labelled | Index_unused -> `Plain in
+  let numbered =
+    match form with
+    | Indexed | Belt_indexed | Js_indexed | Reason_indexed -> `Numbered
+    | Mapped | Last_piped | Belt_piped | Js_labelled | Index_unused | Reason_piped -> `Plain
+  in
   "<ul>"
   ^ String.concat ""
       (Array.to_list
