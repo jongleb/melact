@@ -194,17 +194,30 @@ let component ~loc ~name ~props_constructor expression =
               | _ -> expression
           end
         in
+        let bound_here =
+          let collector =
+            object
+              inherit [string list] Ast_traverse.fold as super
+
+              method! pattern pattern found =
+                super#pattern pattern
+                  (match pattern.ppat_desc with
+                  | Ppat_var { txt; _ } | Ppat_alias (_, { txt; _ }) -> txt :: found
+                  | _ -> found)
+            end
+          in
+          List.fold_left
+            (fun found param ->
+              match param.pparam_desc with Pparam_val (_, _, pattern) -> collector#pattern pattern found | Pparam_newtype _ -> found)
+            (collector#expression body []) params
+        in
         let cache value =
           match (stateful value, Free.captured (untagged#expression value)) with
           | `Stateful, _ | `Pure, Volatile -> value
           | `Pure, Reads names -> (
               let captures =
                 List.map (evar ~loc)
-                  (List.filter
-                     (fun name ->
-                       (not (String.equal name "__melact_memo"))
-                       && match name.[0] with 'a' .. 'z' | '_' -> true | _ -> false)
-                     names)
+                  (List.filter (fun name -> List.mem name bound_here) names)
               in
               let at = !sites and count = List.length captures in
               sites := at + count + 1;
