@@ -449,9 +449,11 @@ let rec settle () =
             | `First -> !dirty
             | `Later ->
                 let forced, stated =
-                  List.partition (fun instance -> match instance.status with Dirty Forced -> true | Dirty (Stated _) | Clean | Unmounted -> false) !dirty
+                  List.partition
+                    (fun instance -> match instance.status with Dirty Forced -> true | Dirty (Stated _) | Clean | Unmounted -> false)
+                    (!dirty @ !waiting)
                 in
-                waiting := stated @ !waiting;
+                waiting := stated;
                 dirty := forced;
                 forced
           in
@@ -459,11 +461,15 @@ let rec settle () =
           | [] -> ()
           | pending ->
               dirty := [];
+              let round = audience () in
+              List.iter
+                (fun instance -> match instance.status with Dirty _ -> join round instance | Clean | Unmounted -> ())
+                pending;
               let topmost instance =
                 let rec up ancestor =
                   match ancestor with
                   | None -> `Topmost
-                  | Some above -> ( match above.status with Dirty _ -> `Under_dirty | Clean | Unmounted -> up above.parent)
+                  | Some above -> ( match member round above with true -> `Under_dirty | false -> up above.parent)
                 in
                 up instance.parent
               in

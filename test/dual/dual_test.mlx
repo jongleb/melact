@@ -959,6 +959,32 @@ module Mixed = struct
     </Opened_provider>
 end
 
+let nested_middle = ref (fun (_ : int -> int) -> ())
+
+module Nested_row = struct
+  let[@react.component] make ~index ~extra =
+    let opened = React.useContext opened_context in
+    <li>(React.string (string_of_int index ^ ":" ^ string_of_int extra ^ match opened with true -> "o" | false -> "c"))</li>
+end
+
+module Nested_middle = struct
+  let[@react.component] make ~count =
+    let extra, setExtra = React.useState (fun () -> 0) in
+    nested_middle := setExtra;
+    <ul>(React.array (Array.init count (fun index -> <Nested_row key=(string_of_int index) index extra />)))</ul>
+end
+
+module Nested_between = struct
+  let[@react.component] make = React.memo (fun ~count -> <Nested_middle count />)
+end
+
+module Nested = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    opened_send := setOpened;
+    <Opened_provider value=opened><Nested_between count /></Opened_provider>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1819,6 +1845,42 @@ let () =
                                 string_of_int index ^ ":" ^ string_of_int !generation
                                 ^ (match !opened with true -> "o" | false -> "c")
                                 ^ match folds.(index) with true -> "+" | false -> "-")));
+                   step (remaining - 1)
+             in
+             step 8))
+        [%mel.obj { numRuns = 150 }]));
+  describe "a context changed above a component whose own state changed too" (fun () ->
+    test_async "its readers below show the change, whatever else is set in the same batch" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+             let tape = tape values in
+             let count = 1 + draw tape 30 in
+             let* root, client = mount <Nested count /> in
+             let opened = ref false and extra = ref 0 in
+             let rec step remaining =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let actions =
+                     List.init (1 + draw tape 4) (fun _ ->
+                         match draw tape 3 with
+                         | 0 ->
+                             opened := not !opened;
+                             fun () -> !opened_send (fun value -> not value)
+                         | 1 ->
+                             incr extra;
+                             fun () -> !nested_middle (fun value -> value + 1)
+                         | _ -> fun () -> !nested_middle (fun value -> value))
+                   in
+                   let* () = act (fun () -> List.iter (fun run -> run ()) actions) in
+                   expect (text_content root)
+                   |. to_equal
+                        (String.concat ""
+                           (List.init count (fun index ->
+                                string_of_int index ^ ":" ^ string_of_int !extra
+                                ^ match !opened with true -> "o" | false -> "c")));
                    step (remaining - 1)
              in
              step 8))

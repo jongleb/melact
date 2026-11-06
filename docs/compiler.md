@@ -516,7 +516,10 @@ So the user team's rows, which read `offsetTop` and re-render through a context,
 layout. A dual law counts DOM writes from inside each row's render and finds the same count in all
 of them under React 18 and under Melact; a mutant that writes each instance right after rendering it
 breaks it. A component that re-renders because its parent passed new props still renders during the
-parent's write.
+parent's write. Only instances of the same round count as dirty ancestors: a component whose own
+state waits for the next pass, hidden from its dirty parent by a memoized one in between, must not
+hold back the context consumers under it, or the rounds never end. A dual law sets the state of
+such a component together with the context above it.
 
 `MelactDebug.warnLayoutReadsInRender ()` wraps the layout getters and methods of the DOM
 (`offset*`, `client*`, `scroll*`, `innerText`, `getBoundingClientRect`, `getClientRects`,
