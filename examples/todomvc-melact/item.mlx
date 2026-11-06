@@ -1,0 +1,40 @@
+(** What a row shows: the todo, or a field to rename it. *)
+type draft = Viewing | Editing of string
+
+external focus : Dom.element -> unit = "focus" [@@mel.send]
+
+let[@react.component] make ~(todo : Todo.t) ~dispatch =
+  let draft, setDraft = React.useState (fun () -> Viewing) in
+  let finish title =
+    setDraft (fun _ -> Viewing);
+    match String.trim title with "" -> dispatch (Todo.Destroy todo.id) | trimmed -> dispatch (Todo.Rename (todo.id, trimmed))
+  in
+  let completed = match todo.status with Completed -> "completed" | Active -> "" in
+  let editing = match draft with Editing _ -> " editing" | Viewing -> "" in
+  <li className=(completed ^ editing)>
+    <div className="view">
+      <input
+        className="toggle"
+        type_="checkbox"
+        checked=(todo.status = Completed)
+        onChange=(fun _ -> dispatch (Todo.Toggle todo.id)) />
+      <label onDoubleClick=(fun _ -> setDraft (fun _ -> Editing todo.title))>(React.string todo.title)</label>
+      <button className="destroy" onClick=(fun _ -> dispatch (Todo.Destroy todo.id)) />
+    </div>
+    (match draft with
+     | Viewing -> React.null
+     | Editing text ->
+         <input
+           className="edit"
+           ref=(ReactDOM.Ref.callbackDomRef (fun element -> Option.iter focus (Js.Nullable.toOption element)))
+           value=text
+           onChange=(fun event ->
+             let value = (React.Event.Form.target event)##value in
+             setDraft (fun _ -> Editing value))
+           onBlur=(fun _ -> finish text)
+           onKeyDown=(fun event ->
+             match React.Event.Keyboard.key event with
+             | "Enter" -> finish text
+             | "Escape" -> setDraft (fun _ -> Viewing)
+             | _ -> ()) />)
+  </li>

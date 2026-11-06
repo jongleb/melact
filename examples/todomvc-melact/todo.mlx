@@ -1,0 +1,58 @@
+(** Whether a todo still needs doing. *)
+type status = Active | Completed
+
+type t = { id : int; title : string; status : status }
+
+(** Which todos the list shows. *)
+type filter = All | Only of status
+
+type action =
+  | Add of string
+  | Toggle of int
+  | Toggle_all
+  | Rename of int * string
+  | Destroy of int
+  | Clear_completed
+
+let flipped status = match status with Active -> Completed | Completed -> Active
+
+let reduce todos action =
+  match action with
+  | Add title -> todos @ [ { id = 1 + List.fold_left (fun top todo -> max top todo.id) 0 todos; title; status = Active } ]
+  | Toggle id -> List.map (fun todo -> match todo.id = id with true -> { todo with status = flipped todo.status } | false -> todo) todos
+  | Toggle_all ->
+      let status =
+        Option.fold ~none:Active ~some:(fun _ -> Completed) (List.find_opt (fun todo -> todo.status = Active) todos)
+      in
+      List.map (fun todo -> { todo with status }) todos
+  | Rename (id, title) -> List.map (fun todo -> match todo.id = id with true -> { todo with title } | false -> todo) todos
+  | Destroy id -> List.filter (fun todo -> todo.id <> id) todos
+  | Clear_completed -> List.filter (fun todo -> todo.status = Active) todos
+
+let encode todos =
+  Js.Json.stringify
+    (Js.Json.array
+       (Array.of_list
+          (List.map
+             (fun todo ->
+               Js.Json.object_
+                 (Js.Dict.fromList
+                    [
+                      ("id", Js.Json.number (float_of_int todo.id));
+                      ("title", Js.Json.string todo.title);
+                      ("completed", Js.Json.boolean (todo.status = Completed));
+                    ]))
+             todos)))
+
+let decode text =
+  let field name decoder fields = Option.bind (Js.Dict.get fields name) decoder in
+  let todo json =
+    Option.bind (Js.Json.decodeObject json) (fun fields ->
+        match (field "id" Js.Json.decodeNumber fields, field "title" Js.Json.decodeString fields, field "completed" Js.Json.decodeBoolean fields) with
+        | Some id, Some title, Some completed ->
+            Some { id = int_of_float id; title; status = (match completed with true -> Completed | false -> Active) }
+        | _, _, _ -> None)
+  in
+  match Js.Json.parseExn text with
+  | json -> Option.fold ~none:[] ~some:(fun items -> List.filter_map todo (Array.to_list items)) (Js.Json.decodeArray json)
+  | exception _ -> []

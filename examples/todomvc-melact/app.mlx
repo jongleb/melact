@@ -1,0 +1,89 @@
+external saved : string -> string option = "getItem" [@@mel.scope "localStorage"] [@@mel.return nullable]
+external save : string -> string -> unit = "setItem" [@@mel.scope "localStorage"]
+
+let[@react.component] make () =
+  let todos, dispatch = React.useReducer Todo.reduce (Todo.decode (Option.value ~default:"[]" (saved "todos-melact"))) in
+  let field, setField = React.useState (fun () -> "") in
+  let url = ReasonReactRouter.useUrl () in
+  React.useEffect1
+    (fun () ->
+      save "todos-melact" (Todo.encode todos);
+      None)
+    [| todos |];
+  let filter : Todo.filter =
+    match url.hash with "/active" -> Only Active | "/completed" -> Only Completed | _ -> All
+  in
+  let left = List.length (List.filter (fun (todo : Todo.t) -> todo.status = Active) todos) in
+  let link label target address =
+    <li>
+      <a
+        className=(match (filter, target) with
+          | Todo.All, Todo.All | Only Active, Only Active | Only Completed, Only Completed -> "selected"
+          | (All | Only _), _ -> "")
+        href=address>
+        (React.string label)
+      </a>
+    </li>
+  in
+  <section className="todoapp">
+    <header className="header">
+      <h1>(React.string "todos")</h1>
+      <input
+        className="new-todo"
+        placeholder="What needs to be done?"
+        autoFocus=true
+        value=field
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setField (fun _ -> value))
+        onKeyDown=(fun event ->
+          match (React.Event.Keyboard.key event, String.trim field) with
+          | "Enter", "" -> ()
+          | "Enter", title ->
+              dispatch (Todo.Add title);
+              setField (fun _ -> "")
+          | _, _ -> ()) />
+    </header>
+    (match todos with
+     | [] -> React.null
+     | _ ->
+         <section className="main">
+           <input
+             id="toggle-all"
+             className="toggle-all"
+             type_="checkbox"
+             checked=(left = 0)
+             onChange=(fun _ -> dispatch Todo.Toggle_all) />
+           <label htmlFor="toggle-all">(React.string "Mark all as complete")</label>
+           <ul className="todo-list">
+             (React.array
+                (Array.of_list
+                   (List.map
+                      (fun (todo : Todo.t) -> <Item key=(string_of_int todo.id) todo dispatch />)
+                      (List.filter
+                         (fun (todo : Todo.t) ->
+                           match filter with All -> true | Only status -> todo.status = status)
+                         todos))))
+           </ul>
+         </section>)
+    (match todos with
+     | [] -> React.null
+     | _ ->
+         <footer className="footer">
+           <span className="todo-count">
+             <strong>(React.int left)</strong>
+             (React.string (match left with 1 -> " item left" | _ -> " items left"))
+           </span>
+           <ul className="filters">
+             (link "All" All "#/")
+             (link "Active" (Only Active) "#/active")
+             (link "Completed" (Only Completed) "#/completed")
+           </ul>
+           (Option.fold ~none:React.null
+              ~some:(fun _ ->
+                <button className="clear-completed" onClick=(fun _ -> dispatch Todo.Clear_completed)>
+                  (React.string "Clear completed")
+                </button>)
+              (List.find_opt (fun (todo : Todo.t) -> todo.status = Completed) todos))
+         </footer>)
+  </section>
