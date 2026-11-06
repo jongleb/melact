@@ -508,8 +508,8 @@ def hooks(p):
 
 def surface(p):
     rows = [
-        ("<Counter label=\"a\" />", "Counter.make ~label:\"a\" ()", "a direct call: no props object, no element"),
-        ("React.createElement C.make (C.makeProps ~label ())", "C.make ~label ()", "makeProps is that call, with an optional key"),
+        ("<Counter label=\"a\" />", "Counter.make (Counter.makeProps ~label:\"a\" ())", "makeProps builds the element; make is the identity"),
+        ("React.createElement C.make (C.makeProps ~label ())", "the same element, with an optional key", "C.make : C.props React.component, as in reason-react"),
         ("onClick=(fun e -> React.Event.Mouse.clientX e)", "e.clientX, on the native event", "ofNative is the identity; delegated to document"),
         ("React.useState (fun () -> 0)", "React.useState k1 (fun () -> 0)", "a typed slot key per call site; Alert hook in an if"),
         ("a component that calls no use…", "Melhole.View.pure", "no instance: kept while its inputs are ==="),
@@ -527,7 +527,7 @@ def surface(p):
         body += box(466, y, 414, 40, p["accent_soft"], p["accent"], rx=9, width=1.2)
         body += text(480, y + 17, made, size=11.5, cls="mono accent", weight=600)
         body += text(480, y + 33, note, size=11, cls="muted")
-    return svg(p, 880, 414, "What melact-ppx and the Melact library make of unchanged reason-react code: a JSX component is a direct call to make; React.createElement with makeProps is the same call with a key; React.Event accessors read the native event, delegated to document; each hook call gets a typed slot key; a component without hooks is a pure view with no instance; ReactDOM.Client clones templates into the element; renderToString and hydrateRoot are Served.render and Served.hydrate; ReasonReactRouter.useUrl reads the location on popstate", body)
+    return svg(p, 880, 414, "What melact-ppx and the Melact library make of unchanged reason-react code: a JSX component is makeProps building the element, with make the identity; React.createElement with makeProps is the same element with a key; React.Event accessors read the native event, delegated to document; each hook call gets a typed slot key; a component without hooks is a pure view with no instance; ReactDOM.Client clones templates into the element; renderToString and hydrateRoot are Served.render and Served.hydrate; ReasonReactRouter.useUrl reads the location on popstate", body)
 
 
 def hydration(p):

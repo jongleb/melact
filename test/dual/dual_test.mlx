@@ -231,6 +231,40 @@ module Created_rows = struct
     </div>
 end
 
+module Jsx_rows = struct
+  let[@react.component] make ~labels =
+    <div>
+      (React.array
+         (Array.map (fun label -> React.jsxKeyed Counter.make (Counter.makeProps ~label ()) ~key:label ()) labels))
+    </div>
+end
+
+let bordered (inner : 'props React.component) : 'props React.component =
+ fun props -> <div className="border">(React.createElement inner props)</div>
+
+module Bordered_counter = struct
+  let make = bordered Counter.make
+  let makeProps ~label ?key () = Counter.makeProps ~label ?key ()
+end
+
+module Shout = struct
+  external makeProps : text:string -> ?key:string -> unit -> < text : string > Js.t = "" [@@mel.obj]
+
+  let make props = <b>(React.string (String.uppercase_ascii props##text))</b>
+end
+
+let remembered = React.memo Counter.make
+
+module Typed = struct
+  let[@react.component] make ~label ~text =
+    <section>
+      <Bordered_counter label />
+      <Shout text />
+      (React.createElement remembered (Counter.makeProps ~label ()))
+      (React.createElement (React.component (fun () -> <i>(React.string text)</i>)) ())
+    </section>
+end
+
 module Address = struct
   let[@react.component] make () =
     let url = ReasonReactRouter.useUrl () in
@@ -1397,7 +1431,7 @@ let () =
       expect (inner_html root) |. to_equal "<main><i>late</i></main>";
       finish ()));
   describe "lists and conditions" (fun () ->
-    test_async "React.createElement with makeProps keeps rows and their state exactly as JSX does" (fun () ->
+    test_async "React.createElement and React.jsxKeyed with makeProps keep rows and their state exactly as JSX does" (fun () ->
       check_async
         (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
              let tape = tape values in
@@ -1410,6 +1444,7 @@ let () =
              in
              let* written, written_client = mount <Rows labels=[| "a"; "b"; "c" |] /> in
              let* created, created_client = mount <Created_rows labels=[| "a"; "b"; "c" |] /> in
+             let* jsx, jsx_client = mount <Jsx_rows labels=[| "a"; "b"; "c" |] /> in
              let rec run remaining seen =
                match remaining with
                | [] -> Js.Promise.resolve (List.rev seen)
@@ -1419,7 +1454,8 @@ let () =
                          match step with
                          | `Show labels ->
                              ReactDOM.Client.render written_client <Rows labels />;
-                             ReactDOM.Client.render created_client <Created_rows labels />
+                             ReactDOM.Client.render created_client <Created_rows labels />;
+                             ReactDOM.Client.render jsx_client <Jsx_rows labels />
                          | `Click index ->
                              List.iter
                                (fun root ->
@@ -1428,20 +1464,60 @@ let () =
                                    (match Array.length buttons with
                                    | 0 -> None
                                    | count -> Some (element_of buttons.(index mod count))))
-                               [ written; created ])
+                               [ written; created; jsx ])
                    in
-                   run rest ((inner_html written, inner_html created) :: seen)
+                   run rest ((inner_html written, (inner_html created, inner_html jsx)) :: seen)
              in
              let* seen = run steps [] in
              let* () =
                act (fun () ->
                    ReactDOM.Client.unmount written_client ();
-                   ReactDOM.Client.unmount created_client ())
+                   ReactDOM.Client.unmount created_client ();
+                   ReactDOM.Client.unmount jsx_client ())
              in
              ignore (take ());
-             expect (List.map snd seen) |. to_equal (List.map fst seen);
+             expect (List.map snd seen) |. to_equal (List.map (fun (written, _) -> (written, written)) seen);
              finish ()))
         [%mel.obj { numRuns = 60 }]);
+    test_async "code typed against React.component: a wrapper, a hand-written module, memo and component" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let labels = [| "p"; "q" |] and texts = [| "hi"; "yo"; "" |] in
+             let* root, client = mount <Typed label="p" text="hi" /> in
+             let rec run remaining (label, text, bordered, remembered) =
+               match remaining with
+               | 0 -> Js.Promise.resolve ()
+               | _ ->
+                   let step = draw tape 4 in
+                   let next =
+                     match step with
+                     | 0 -> (label, text, bordered + 1, remembered)
+                     | 1 -> (label, text, bordered, remembered + 1)
+                     | 2 -> (labels.(draw tape 2), text, bordered, remembered)
+                     | _ -> (label, texts.(draw tape 3), bordered, remembered)
+                   in
+                   let label', text', _, _ = next in
+                   let* () =
+                     act (fun () ->
+                         match step with
+                         | 0 -> click (select root ".border button")
+                         | 1 -> click (select root "section > button")
+                         | _ -> ReactDOM.Client.render client <Typed label=label' text=text' />)
+                   in
+                   let _, _, bordered', remembered' = next in
+                   expect (inner_html root)
+                   |. to_equal
+                        ("<section><div class=\"border\"><button>" ^ label' ^ string_of_int bordered'
+                       ^ "</button></div><b>" ^ String.uppercase_ascii text' ^ "</b><button>" ^ label'
+                       ^ string_of_int remembered' ^ "</button><i>" ^ text' ^ "</i></section>");
+                   run (remaining - 1) next
+             in
+             let* () = run (1 + draw tape 10) ("p", "hi", 0, 0) in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             ignore (take ());
+             finish ()))
+        [%mel.obj { numRuns = 80 }]);
     test_async "keep component state with its key" (fun () ->
       let* root, client = mount <Rows labels=[| "a"; "b"; "c" |] /> in
       let* () = act (fun () -> click (select root "button")) in

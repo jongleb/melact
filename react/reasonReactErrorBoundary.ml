@@ -5,13 +5,17 @@ type 'error params = { error : 'error; info : info }
 
 external unchecked : Instance.caught -> 'error = "%identity"
 
-let make ~children ~fallback () =
+external makeProps :
+  children:React.element ->
+  fallback:('error params -> React.element) ->
+  ?key:string ->
+  unit ->
+  < children : React.element ; fallback : 'error params -> React.element > Js.t = ""
+[@@mel.obj]
+
+let make props =
+  let fallback = props##fallback in
   React.of_child
     (Instance.catch
        ~recover:(fun caught -> React.to_child (fallback { error = unchecked caught; info = { componentStack = "" } }))
-       (React.to_child children))
-
-let makeProps ~children ~fallback ?key () make =
-  Option.fold ~none:(make ~children ~fallback ())
-    ~some:(fun key -> React.of_child (Melhole.View.with_key key (React.to_child (make ~children ~fallback ()))))
-    key
+       (React.to_child props##children))

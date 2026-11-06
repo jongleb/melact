@@ -7,12 +7,12 @@ type info = { componentStack : string }
 (** What [fallback] receives: whatever the descendant threw, unchecked as in reason-react. *)
 type 'error params = { error : 'error; info : info }
 
-val make : children:React.element -> fallback:('error params -> React.element) -> unit -> React.element
-
-val makeProps :
+external makeProps :
   children:React.element ->
   fallback:('error params -> React.element) ->
   ?key:string ->
   unit ->
-  (children:React.element -> fallback:('error params -> React.element) -> unit -> React.element) ->
-  React.element
+  < children : React.element ; fallback : 'error params -> React.element > Js.t = ""
+[@@mel.obj]
+
+val make : < children : React.element ; fallback : 'error params -> React.element > Js.t React.component

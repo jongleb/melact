@@ -383,10 +383,14 @@ native event; React's own members map onto the native ones (`isDefaultPrevented`
 `defaultPrevented`, `isPropagationStopped` is `cancelBubble`, `persist` does nothing). Delegation
 sets `currentTarget` to the element whose handler runs, as React does, and removes it afterwards.
 
-melact-ppx writes `makeProps` next to every `[@react.component]`. It takes the component's labels,
-an optional `key` and `()`, and returns the call to `make` with them, so
-`React.createElement Foo.make (Foo.makeProps ~label ())` is `make ~label ()` with a key, checked
-by the type checker, and no props object exists at run time.
+A `[@react.component]` has reason-react's shape: `make : props -> React.element`, so `Foo.make` is a
+`Foo.props React.component` that wrappers, `React.memo` and `React.createElement` take as they do in
+reason-react, and `makeProps` takes the labels, an optional `key` and `()`. Here `props` is abstract
+and unboxed: `makeProps` builds the element itself (the component's instance or pure view, with the
+key), and `make` is `%identity`. JSX `<Foo label />` compiles to `Foo.make (Foo.makeProps ~label ())`,
+which is one call with no props object at run time. A module written by hand in reason-react's style,
+with a `[@mel.obj] external makeProps` and `let make = props => …props##label…`, goes through the same
+call and gets its props object, as under React.
 
 ## DOM elements built at run time
 
@@ -396,8 +400,8 @@ tag) (ReactDOM.domProps ~className ())`, `ReactDOM.createElement tag ~props chil
 for a tag the compiler does not know, so these elements are built by the runtime. `ReactDOM.domProps`
 takes every DOM prop as an optional label with reason-react's types, generated at build time from the
 same table `melact-ppx` uses (`Dom_props`), with an event's family (`Mouse`, `Form`, `UI`, …) taken
-from its DOM event; it returns the props as a function of the element to build, so that
-`React.createElement` applies it as it applies a component's `makeProps`. The generated table also
+from its DOM event; it returns the props object, and `stringToComponent tag` is a
+`domProps React.component` that `React.createElement` applies to it. The generated table also
 says how each prop reaches the element: an attribute (text, flag, `"true"`/`"false"`, number), a
 property, a controlled value, a delegated event, a style, a ref or inner HTML. A patch with the same
 tag keeps the element, writes only the props whose values changed (`===`), removes those that went

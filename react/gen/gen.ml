@@ -65,9 +65,6 @@ let () =
     match part with
     | "impl" ->
         [
-          "type domComponent = props_object -> React.element";
-          "type domProps = domComponent -> React.element";
-          "";
           "let domProps ?key ?children "
           ^ String.concat " " (List.map (fun (name, _) -> "?" ^ label name) props)
           ^ " () =";
@@ -77,7 +74,7 @@ let () =
         ]
         @ List.map (fun (name, _) -> Printf.sprintf "  Option.iter (put props %S) %s;" name (label name)) props
         @ [
-            "  fun render -> render props";
+            "  props";
             "";
             "let applying name =";
             "  match name with";
@@ -86,11 +83,8 @@ let () =
         @ [ "  | _ -> Skipped" ]
     | _ ->
         [
-          "(** A DOM element's component when its tag is known only at run time: what [stringToComponent] gives. *)";
-          "type domComponent";
-          "";
           "(** The props of a DOM element built at run time, as [domProps] makes them. *)";
-          "type domProps = domComponent -> React.element";
+          "type domProps";
           "";
           "val domProps :";
           "  ?key:string ->";

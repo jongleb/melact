@@ -48,7 +48,7 @@ let react_text expression =
       Option.map (fun kind -> Element.Text (kind, value)) (text name)
   | _ -> None
 
-let component ~loc ~name expression =
+let component ~loc ~name ~props_constructor expression =
   let rec gather forwarding expression =
     match expression.pexp_desc with
     | Pexp_apply
@@ -198,53 +198,36 @@ let component ~loc ~name expression =
     in
     marker#expression body
   in
-  let props =
-    let given =
-      List.mapi
-        (fun index label -> (label, Printf.sprintf "__melhole_given_%d" index))
-        (List.filter_map
-           (fun param ->
-             match param.pparam_desc with
-             | Pparam_val (((Labelled _ | Optional _) as label), _, _) -> Some label
-             | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
-           complete)
-    in
-    pexp_function ~loc
-      (List.map
-         (fun (label, name) -> { pparam_loc = loc; pparam_desc = Pparam_val (label, None, pvar ~loc name) })
-         given
-      @ [
-          { pparam_loc = loc; pparam_desc = Pparam_val (Optional "key", None, [%pat? __melhole_key]) };
-          { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) };
-          { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? __melhole_make]) };
-        ])
-      None
-      (Pfunction_body
-         [%expr
-           let __melhole_element =
-             [%e
-               pexp_apply ~loc [%expr __melhole_make]
-                 (List.map (fun (label, name) -> (label, evar ~loc name)) given @ [ (Nolabel, [%expr ()]) ])]
-           in
-           Option.fold ~none:__melhole_element
-             ~some:(fun key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element)))
-             __melhole_key])
+  let keyed =
+    match List.rev complete with
+    | last :: labelled ->
+        List.rev labelled
+        @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Optional "key", None, [%pat? __melhole_key]) }; last ]
+    | [] -> complete
   in
-  ( pexp_function ~loc complete None
+  let element =
+    match kind with
+    | `Stateful ->
+        [%expr
+          React.of_child
+            (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc checked]))]
+    | `Pure ->
+        [%expr React.of_child (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))]
+  in
+  pexp_function ~loc keyed None
     (Pfunction_body
-       (match kind with
-       | `Stateful ->
-           [%expr
-             React.of_child
-               (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () ->
-                    [%e unwrap ~loc checked]))]
-       | `Pure ->
-           [%expr
-             React.of_child
-               (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))])),
-    props )
+       [%expr
+         let __melhole_element = [%e element] in
+         [%e
+           pexp_construct ~loc { loc; txt = Lident props_constructor }
+             (Some
+                [%expr
+                  match __melhole_key with
+                  | None -> __melhole_element
+                  | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))])]])
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
+let props_type name = match name with "make" -> "props" | other -> other ^ "_props"
 
 let rec with_unit typ =
   match typ.ptyp_desc with
@@ -340,9 +323,19 @@ let mapper =
 
     method! structure_item item =
       match item.pstr_desc with
-      | Pstr_value (flag, bindings) ->
-          super#structure_item
-            { item with pstr_desc = Pstr_value (flag, List.concat_map self#component bindings) }
+      | Pstr_value (flag, bindings) -> (
+          let expanded = List.map self#component bindings in
+          match List.concat_map (fun (types, _, _) -> types) expanded with
+          | [] -> super#structure_item item
+          | types ->
+              let loc = item.pstr_loc in
+              super#structure_item
+                (pstr_include ~loc
+                   (include_infos ~loc
+                      (pmod_structure ~loc
+                         (types
+                         @ [ { item with pstr_desc = Pstr_value (flag, List.map (fun (_, value, _) -> value) expanded) } ]
+                         @ List.concat_map (fun (_, _, makes) -> makes) expanded)))))
       | _ -> super#structure_item item
 
     method! signature items =
@@ -352,28 +345,35 @@ let mapper =
           | Psig_value description ->
               Option.fold
                 ~none:[ super#signature_item item ]
-                ~some:(fun attributes ->
+                ~some:(fun _ ->
                   let loc = item.psig_loc in
-                  let make = with_unit description.pval_type in
+                  let name = description.pval_name.txt in
+                  let props = ptyp_constr ~loc { loc; txt = Lident (props_type name) } [] in
                   let rec given typ =
                     match typ.ptyp_desc with
                     | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) ->
                         ptyp_arrow ~loc label argument (given result)
-                    | _ -> [%type: ?key:string -> unit -> [%t make] -> React.element]
+                    | _ -> [%type: ?key:string -> unit -> [%t props]]
                   in
                   [
-                    { item with psig_desc = Psig_value { description with pval_type = make; pval_attributes = attributes } };
+                    psig_type ~loc Recursive
+                      [
+                        type_declaration ~loc ~name:{ loc; txt = props_type name } ~params:[] ~cstrs:[] ~kind:Ptype_abstract
+                          ~private_:Public ~manifest:None;
+                      ];
                     psig_value ~loc
-                      (value_description ~loc
-                         ~name:{ loc; txt = props_name description.pval_name.txt }
-                         ~type_:(given make) ~prim:[]);
+                      (value_description ~loc ~name:{ loc; txt = props_name name }
+                         ~type_:(given (with_unit description.pval_type)) ~prim:[]);
+                    psig_value ~loc
+                      (value_description ~loc ~name:{ loc; txt = name } ~type_:[%type: [%t props] -> React.element]
+                         ~prim:[ "%identity" ]);
                   ])
                 (without_component description.pval_attributes)
           | _ -> [ super#signature_item item ])
         items
 
     method private component binding =
-      Option.fold ~none:[ binding ]
+      Option.fold ~none:([], binding, [])
         ~some:(fun attributes ->
           let loc = binding.pvb_loc in
           let file =
@@ -389,15 +389,34 @@ let mapper =
                 Location.raise_errorf ~loc
                   "melact: [@react.component] needs a plain name, like make"
           in
-          let make, props = component ~loc ~name:(file ^ "." ^ name) binding.pvb_expr in
-          [
-            { binding with pvb_attributes = attributes; pvb_expr = make };
-            {
-              (value_binding ~loc ~pat:(pvar ~loc (props_name name)) ~expr:props) with
-              pvb_attributes =
-                [ attribute ~loc ~name:{ loc; txt = "warning" } ~payload:(PStr [ pstr_eval ~loc (estring ~loc "-32") [] ]) ];
-            };
-          ])
+          let type_name = props_type name in
+          let props_constructor = String.capitalize_ascii type_name in
+          let builder = component ~loc ~name:(file ^ "." ^ name) ~props_constructor binding.pvb_expr in
+          ( [
+              pstr_type ~loc Recursive
+                [
+                  {
+                    (type_declaration ~loc ~name:{ loc; txt = type_name } ~params:[] ~cstrs:[]
+                       ~kind:
+                         (Ptype_variant
+                            [
+                              constructor_declaration ~loc ~name:{ loc; txt = props_constructor }
+                                ~args:(Pcstr_tuple [ [%type: React.element] ])
+                                ~res:None;
+                            ])
+                       ~private_:Public ~manifest:None)
+                    with
+                    ptype_attributes = [ attribute ~loc ~name:{ loc; txt = "unboxed" } ~payload:(PStr []) ];
+                  };
+                ];
+            ],
+            { binding with pvb_pat = pvar ~loc (props_name name); pvb_attributes = attributes; pvb_expr = builder },
+            [
+              pstr_primitive ~loc
+                (value_description ~loc ~name:{ loc; txt = name }
+                   ~type_:[%type: [%t ptyp_constr ~loc { loc; txt = Lident type_name } []] -> React.element]
+                   ~prim:[ "%identity" ]);
+            ] ))
         (without_component binding.pvb_attributes)
 
     method! expression expression =
@@ -460,7 +479,12 @@ let mapper =
       let call =
         pexp_apply ~loc
           (pexp_ident ~loc { loc; txt = Ldot (path, name) })
-          (passed @ [ (Nolabel, [%expr ()]) ])
+          [
+            ( Nolabel,
+              pexp_apply ~loc
+                (pexp_ident ~loc { loc; txt = Ldot (path, props_name name) })
+                (passed @ [ (Nolabel, [%expr ()]) ]) );
+          ]
       in
       Option.fold ~none:call
         ~some:(fun key ->

@@ -6,11 +6,18 @@ type element = View.child
 external of_child : View.child -> element = "%identity"
 external to_child : element -> View.child = "%identity"
 type 'value ref = { mutable current : 'value }
+type ('props, 'return) componentLike = 'props -> 'return
+type 'props component = ('props, element) componentLike
+
+external component : ('props, element) componentLike -> 'props component = "%identity"
 
 module Context = struct
   type 'value t = Context of 'value Melact_runtime.Context.t [@@unboxed]
 
-  let provider (Context context) ~value ~children () = Instance.provide context value children
+  external makeProps : value:'value -> children:element -> unit -> < value : 'value ; children : element > Js.t = ""
+  [@@mel.obj]
+
+  let provider (Context context) props = Instance.provide context props##value props##children
 end
 
 type ('state, 'action) state = {
@@ -36,15 +43,24 @@ let float number = View.text (Js.Float.toString number)
 let list elements = View.list elements
 let array elements = list (Array.to_list elements)
 module Fragment = struct
-  let make ~children () = children
+  external makeProps : children:element -> ?key:string -> unit -> < children : element > Js.t = "" [@@mel.obj]
+
+  let make props = props##children
 end
 
 module StrictMode = struct
-  let make ~children () = children
+  external makeProps : children:element -> ?key:string -> unit -> < children : element > Js.t = "" [@@mel.obj]
+
+  let make props = props##children
 end
 
 module Suspense = struct
-  let make ?fallback:_ ~children () = children
+  external makeProps :
+    ?children:element -> ?fallback:element -> ?key:string -> unit -> < children : element option ; fallback : element option > Js.t
+    = ""
+  [@@mel.obj]
+
+  let make props = Option.value ~default:null props##children
 end
 
 module Children = struct
@@ -71,8 +87,16 @@ end
 let createRef () = { current = Js.Nullable.null }
 let isValidElement _ = true
 
-let createElement make props = props make
-let createElementVariadic make props children = Melact_runtime.Variadic.with_children children (fun () -> props make)
+let createElement make props = make props
+let createElementVariadic make props children = Melact_runtime.Variadic.with_children children (fun () -> make props)
+let jsx make props = make props
+let jsxs make props = make props
+
+let jsxKeyed make props ?key () =
+  Option.fold ~none:(make props) ~some:(fun key -> of_child (View.with_key key (to_child (make props)))) key
+
+let jsxsKeyed make props ?key () =
+  Option.fold ~none:(make props) ~some:(fun key -> of_child (View.with_key key (to_child (make props)))) key
 
 let cloneElement _ _ =
   Js.Exn.raiseError "melact: React.cloneElement is not supported; pass props to the component instead"
@@ -269,8 +293,8 @@ let actAsync run =
     (run ())
 
 let forwardRef render props = render props Js.Nullable.null
-let memo component props = component props
-let memoCustomCompareProps component _ props = component props
+let memo component = component
+let memoCustomCompareProps component _ = component
 
 module Event =
 struct

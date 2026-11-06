@@ -419,13 +419,13 @@ let flushSync run =
   run ();
   Melact_runtime.Instance.flush ()
 
-type props_object
+type domProps
 
-external new_props : unit -> props_object = "Object" [@@mel.new]
-external put : props_object -> string -> 'a -> unit = "" [@@mel.set_index]
-external read : props_object -> string -> 'a = "" [@@mel.get_index]
-external lookup : props_object -> string -> 'a Js.undefined = "" [@@mel.get_index]
-external keys : props_object -> string array = "keys" [@@mel.scope "Object"]
+external new_props : unit -> domProps = "Object" [@@mel.new]
+external put : domProps -> string -> 'a -> unit = "" [@@mel.set_index]
+external read : domProps -> string -> 'a = "" [@@mel.get_index]
+external lookup : domProps -> string -> 'a Js.undefined = "" [@@mel.get_index]
+external keys : domProps -> string array = "keys" [@@mel.scope "Object"]
 external create_element_ns : Dom.document -> string -> string -> Dom.element = "createElementNS" [@@mel.send]
 
 (** How a prop of a DOM element built at run time reaches the element. *)
@@ -449,7 +449,7 @@ type applying =
 type built = {
   tag : string;
   element : Dom.element;
-  mutable shown : props_object;
+  mutable shown : domProps;
   mutable inner : View.live;
   mutable events : (string * string) list;
   mutable cleanups : (unit -> unit) list;
@@ -585,11 +585,17 @@ let dom tag props children =
 
 let stringToComponent tag props = dom tag props (Array.map React.of_child (Melact_runtime.Variadic.take ()))
 
-let createElement tag ?props children =
-  (Option.value props ~default:(domProps ())) (fun given -> dom tag given children)
+let createElement tag ?props children = dom tag (Option.value props ~default:(domProps ())) children
+let createDOMElementVariadic tag ?props children = dom tag (Option.value props ~default:(domProps ())) children
+let jsx tag props = dom tag props [||]
+let jsxs tag props = dom tag props [||]
 
-let createDOMElementVariadic tag ?props children =
-  (Option.value props ~default:(domProps ())) (fun given -> dom tag given children)
+let jsxKeyed tag props ?key () =
+  Option.fold ~none:(dom tag props [||])
+    ~some:(fun key -> React.of_child (View.with_key key (React.to_child (dom tag props [||]))))
+    key
 
-let jsx tag props = props (fun given -> dom tag given [||])
-let jsxs tag props = props (fun given -> dom tag given [||])
+let jsxsKeyed tag props ?key () =
+  Option.fold ~none:(dom tag props [||])
+    ~some:(fun key -> React.of_child (View.with_key key (React.to_child (dom tag props [||]))))
+    key
