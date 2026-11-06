@@ -1,0 +1,56 @@
+external document : Dom.document = "document"
+
+external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
+[@@mel.send] [@@mel.return nullable]
+
+external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external focus : Dom.element -> unit = "focus" [@@mel.send]
+external offset_top : Dom.element -> int = "offsetTop" [@@mel.get]
+external offset_height : Dom.element -> int = "offsetHeight" [@@mel.get]
+external client_width : Dom.element -> int = "clientWidth" [@@mel.get]
+external scroll_top : Dom.element -> float = "scrollTop" [@@mel.get]
+
+(** The root an app is mounted on, while it is. *)
+type mounted = Unmounted | Mounted of ReactDOM.Client.root
+
+let start app =
+  match (element_by_id document "root", element_by_id document "mount", element_by_id document "unmount") with
+  | Some container, Some mount, Some unmount ->
+      let mounted = ref Unmounted in
+      add_event_listener mount "click" (fun _ ->
+          match !mounted with
+          | Unmounted ->
+              let root = ReactDOM.Client.createRoot container in
+              ReactDOM.Client.render root (app ());
+              mounted := Mounted root
+          | Mounted _ -> ());
+      add_event_listener unmount "click" (fun _ ->
+          match !mounted with
+          | Mounted root ->
+              ReactDOM.Client.unmount root ();
+              mounted := Unmounted
+          | Unmounted -> ())
+  | _ -> ()
+
+(** A deterministic pseudo-random sequence, so both builds see the same data. *)
+module Seed = struct
+  type t = { mutable state : int }
+
+  let make state = { state }
+
+  let next seed bound =
+    seed.state <- ((seed.state * 1103515245) + 12345) land 0x7fffffff;
+    seed.state mod bound
+
+  let pick seed words = words.(next seed (Array.length words))
+end
+
+let words =
+  [| "alpha"; "bravo"; "charlie"; "delta"; "echo"; "foxtrot"; "golf"; "hotel"; "india"; "juliet"; "kilo";
+     "lima"; "mike"; "november"; "oscar"; "papa"; "quebec"; "romeo"; "sierra"; "tango"; "uniform";
+     "victor"; "whiskey"; "xray"; "yankee"; "zulu"; "pretty"; "large"; "small"; "quaint"; "elegant";
+     "angry"; "helpful"; "odd"; "table"; "chair"; "house"; "desk"; "pony"; "cookie"; "keyboard"; "mouse" |]
+
+let sentence seed count = String.concat " " (List.init count (fun _ -> Seed.pick seed words))

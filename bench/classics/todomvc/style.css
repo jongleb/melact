@@ -1,0 +1,15 @@
+.todoapp { max-width: 550px; margin: 40px auto; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+.todoapp h1 { text-align: center; font-weight: 100; font-size: 64px; color: #b83f45; margin: 0; }
+.new-todo, .edit { width: 100%; padding: 16px 16px 16px 60px; font-size: 22px; border: 0; }
+.main { position: relative; border-top: 1px solid #e6e6e6; }
+.toggle-all { position: absolute; opacity: 0; }
+.todo-list li { position: relative; font-size: 22px; border-bottom: 1px solid #ededed; }
+.todo-list li .toggle { position: absolute; top: 0; bottom: 0; margin: auto 0; width: 40px; height: 40px; }
+.todo-list li label { display: block; padding: 15px 15px 15px 60px; word-break: break-all; }
+.todo-list li.completed label { color: #949494; text-decoration: line-through; }
+.todo-list li.editing .view { display: none; }
+.todo-list li .destroy { position: absolute; right: 10px; top: 0; bottom: 0; width: 40px; height: 40px; margin: auto 0; border: 0; background: none; }
+.todo-list li .destroy::after { content: "×"; }
+.footer { padding: 10px 15px; height: 40px; display: flex; justify-content: space-between; color: #111; }
+.filters { display: flex; gap: 8px; }
+.filters a.selected { border: 1px solid #ce4646; }

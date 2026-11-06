@@ -1,0 +1,6 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1f2933; background: #fff; }
+#bench-controls { position: fixed; right: 0; bottom: 0; opacity: 0.3; z-index: 1000; }
+button { font: inherit; }
+ul { margin: 0; padding: 0; list-style: none; }
+.hidden { display: none; }
