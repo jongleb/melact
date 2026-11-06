@@ -495,6 +495,13 @@ module Experimental : sig
   (** What [useActionState] gives for a form's action. *)
   type formAction
 
+  (** A promise as an element: it suspends until the promise settles. *)
+  val promise : element Js.Promise.t -> element
+
+  (** React's [use] of a promise: its value once it has settled; until then the nearest Suspense
+      boundary shows its fallback. *)
+  val usePromise : 'value Js.Promise.t -> 'value
+
   val useContext : 'value Context.t -> 'value
   [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 

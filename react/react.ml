@@ -60,7 +60,8 @@ module Suspense = struct
     = ""
   [@@mel.obj]
 
-  let make props = Option.value ~default:null props##children
+  let make props =
+    of_child (Instance.suspend ~fallback:(to_child (Option.value ~default:null props##fallback)) (to_child (Option.value ~default:null props##children)))
 end
 
 module Children = struct
@@ -311,6 +312,44 @@ module Experimental = struct
   let endings = ref []
 
   let useContext context = useContext context
+
+  external thenable : 'value Js.Promise.t -> Instance.thenable = "%identity"
+
+  let tracked : 'value Js.Promise.t -> [ `Fulfilled | `Rejected | `Pending ] =
+    [%mel.raw
+      {|function (promise) {
+  if (promise.status === "fulfilled") return "Fulfilled";
+  if (promise.status === "rejected") return "Rejected";
+  if (promise.status !== "pending") {
+    promise.status = "pending";
+    promise.then(
+      function (value) { if (promise.status === "pending") { promise.status = "fulfilled"; promise.value = value; } },
+      function (reason) { if (promise.status === "pending") { promise.status = "rejected"; promise.reason = reason; } });
+  }
+  return "Pending";
+}|}]
+
+  external value : 'value Js.Promise.t -> 'value = "value" [@@mel.get]
+  external reason : 'value Js.Promise.t -> Js.Exn.t = "reason" [@@mel.get]
+
+  let usePromise promise =
+    match tracked promise with
+    | `Fulfilled -> value promise
+    | `Rejected -> ([%mel.raw "function (reason) { throw reason }"] : Js.Exn.t -> 'value) (reason promise)
+    | `Pending -> raise (Instance.Suspended (thenable promise))
+
+  let awaited = ref None
+
+  let promise child =
+    let definition =
+      match !awaited with
+      | Some definition -> definition
+      | None ->
+          let made = Component.make ~name:"React.Experimental.promise" in
+          awaited := Some made;
+          made
+    in
+    Instance.component definition [| View.Input child |] (fun () -> usePromise child)
 
   let useTransitionAsync key () =
     let instance = Instance.current () in

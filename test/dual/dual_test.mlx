@@ -763,7 +763,11 @@ let machine values =
   step 12
 
 (** Where a bomb throws once its fuse burns down. *)
-type blast = Rendering | Laying_out | Painting
+type blast =
+  | Rendering
+  | Marking_up  (** While rendering, from inside its JSX. *)
+  | Laying_out
+  | Painting
 
 (** What burns a bomb's fuse: its own clicks, or the ticks of the whole field. *)
 type fuse = Clicks of int * blast | Ticks of int * blast
@@ -788,10 +792,16 @@ module Bomb = struct
     Hashtbl.replace bumps name (fun () -> setCount (fun count -> count + 1));
     let thrown blast () =
       match (fuse, blast) with
-      | (Clicks (at, Rendering), Rendering | Clicks (at, Laying_out), Laying_out | Clicks (at, Painting), Painting)
+      | ( Clicks (at, Rendering), Rendering
+        | Clicks (at, Marking_up), Marking_up
+        | Clicks (at, Laying_out), Laying_out
+        | Clicks (at, Painting), Painting )
         when count >= at ->
           Js.Exn.raiseError name
-      | (Ticks (at, Rendering), Rendering | Ticks (at, Laying_out), Laying_out | Ticks (at, Painting), Painting)
+      | ( Ticks (at, Rendering), Rendering
+        | Ticks (at, Marking_up), Marking_up
+        | Ticks (at, Laying_out), Laying_out
+        | Ticks (at, Painting), Painting )
         when tick >= at ->
           Js.Exn.raiseError name
       | (Clicks _ | Ticks _), _ -> None
@@ -799,7 +809,9 @@ module Bomb = struct
     ignore (thrown Rendering ());
     React.useLayoutEffect2 (thrown Laying_out) (count, tick);
     React.useEffect2 (thrown Painting) (count, tick);
-    <button>(React.string (name ^ " " ^ string_of_int count))</button>
+    <button>
+      (React.string (Option.fold ~none:"" ~some:(fun () -> "") (thrown Marking_up ()) ^ name ^ " " ^ string_of_int count))
+    </button>
 end
 
 module Dud = struct
@@ -851,12 +863,12 @@ let minefield values =
             let brittleness = match draw tape 4 with 0 -> Brittle | 1 -> Trapped | _ -> Sturdy in
             Guard { name; brittleness; mines = sown (depth + 1) }
         | _, _ ->
-            let blast = match draw tape 3 with 0 -> Rendering | 1 -> Laying_out | _ -> Painting in
+            let blast = match draw tape 4 with 0 -> Rendering | 1 -> Marking_up | 2 -> Laying_out | _ -> Painting in
             let fuse =
               match (draw tape 2, blast) with
-              | 0, Rendering -> Ticks (draw tape 4, Rendering)
+              | 0, ((Rendering | Marking_up) as blast) -> Ticks (draw tape 4, blast)
               | 0, (Laying_out | Painting) -> Ticks (0, blast)
-              | _, Rendering -> Clicks (draw tape 4, Rendering)
+              | _, ((Rendering | Marking_up) as blast) -> Clicks (draw tape 4, blast)
               | _, (Laying_out | Painting) -> Clicks (1 + draw tape 3, blast)
             in
             let arrival =
@@ -874,10 +886,14 @@ let minefield values =
     | Bomb { name; fuse; _ } -> (
         let count = Option.value ~default:0 (Hashtbl.find_opt counts name) in
         match (fuse, blast) with
-        | (Clicks (at, Rendering), Rendering | Clicks (at, Laying_out), Laying_out | Clicks (at, Painting), Painting)
+        | ( Clicks (at, (Rendering | Marking_up)), Rendering
+          | Clicks (at, Laying_out), Laying_out
+          | Clicks (at, Painting), Painting )
           when count >= at ->
             Hashtbl.replace caught nearest name
-        | (Ticks (at, Rendering), Rendering | Ticks (at, Laying_out), Laying_out | Ticks (at, Painting), Painting)
+        | ( Ticks (at, (Rendering | Marking_up)), Rendering
+          | Ticks (at, Laying_out), Laying_out
+          | Ticks (at, Painting), Painting )
           when !tick >= at ->
             Hashtbl.replace caught nearest name
         | (Clicks _ | Ticks _), _ -> ())

@@ -43,7 +43,86 @@ module Liker = struct
     </button>
 end
 
+let visible : Dom.element -> string =
+  [%mel.raw
+    {|function visible(node) {
+  let shown = "";
+  node.childNodes.forEach(function (child) {
+    if (child.nodeType === 3) shown += child.nodeValue;
+    else if (child.nodeType === 1 && child.style.display !== "none") shown += visible(child);
+  });
+  return shown;
+}|}]
+
+let resolved : string -> string Js.Promise.t = [%mel.raw {|function (value) { return Promise.resolve(value); }|}]
+
+let pending () : string Js.Promise.t * (string -> unit) =
+  ([%mel.raw {|function () { let release; const promise = new Promise((resolve) => { release = resolve; }); return [promise, release]; }|}] : unit -> string Js.Promise.t * (string -> unit)) ()
+
+module Reader = struct
+  let[@react.component] make ~promise = <b>(React.string (React.Experimental.usePromise promise))</b>
+end
+
+module Tally = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    <button onClick=(fun _ -> setCount (fun count -> count + 1))>(React.string (":" ^ string_of_int count))</button>
+end
+
+module Shelf = struct
+  let[@react.component] make ~promise =
+    <section>
+      <React.Suspense fallback=(<i>(React.string "wait")</i>)>
+        <Reader promise />
+        <Tally />
+      </React.Suspense>
+    </section>
+end
+
 let () =
+  describe "Suspense and use" (fun () ->
+    test_async "a boundary shows its fallback while a promise is pending and keeps hidden children's state, as React 19 does" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:30) (fun values ->
+             let tape = tape values in
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let fresh = ref 0 in
+             let next () = incr fresh; "v" ^ string_of_int !fresh in
+             let first, release = pending () in
+             let* () = act_async (fun () -> ReactDOM.Client.render client <Shelf promise=first />; settled ()) in
+             let rec run remaining (value, release, revealed, count) =
+               let shown =
+                 match (release, revealed) with
+                 | None, true -> value ^ ":" ^ string_of_int count
+                 | _ -> "wait"
+               in
+               expect (visible root) |. to_equal shown;
+               match (remaining, release, draw tape 4) with
+               | 0, _, _ -> Js.Promise.resolve ()
+               | _, Some release, 0 ->
+                   let* () = act_async (fun () -> release value; settled ()) in
+                   run (remaining - 1) (value, None, true, count)
+               | _, _, 1 ->
+                   let value = next () in
+                   let promise, release = pending () in
+                   let* () = act_async (fun () -> ReactDOM.Client.render client <Shelf promise />; settled ()) in
+                   run (remaining - 1) (value, Some release, revealed, count)
+               | _, _, 2 ->
+                   let value = next () in
+                   let* () = act_async (fun () -> ReactDOM.Client.render client <Shelf promise=(resolved value) />; settled ()) in
+                   run (remaining - 1) (value, None, true, count)
+               | _, None, _ ->
+                   let* () = act_async (fun () -> click (select root "button"); settled ()) in
+                   run (remaining - 1) (value, None, revealed, count + 1)
+               | _, Some release, _ ->
+                   let* () = act_async (fun () -> release value; settled ()) in
+                   run (remaining - 1) (value, None, true, count)
+             in
+             let* () = run (1 + draw tape 12) ("v0", Some release, false, 0) in
+             let* () = act_async (fun () -> ReactDOM.Client.unmount client (); Js.Promise.resolve ()) in
+             finish ()))
+        [%mel.obj { numRuns = 60 }]));
   describe "React 19's experimental hooks" (fun () ->
     test_async "useOptimistic shows an action's update until the action ends; useTransitionAsync is pending meanwhile" (fun () ->
       check_async

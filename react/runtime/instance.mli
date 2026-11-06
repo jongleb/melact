@@ -19,6 +19,16 @@ type caught
     [recover] of what it threw, as React's [componentDidCatch] does. *)
 val catch : recover:(caught -> Melhole.View.child) -> Melhole.View.child -> Melhole.View.child
 
+(** A promise a component waits on. *)
+type thenable
+
+(** What [use] throws for a promise that has not settled: the nearest Suspense boundary catches it. *)
+exception Suspended of thenable
+
+(** A Suspense boundary: [children] until a descendant suspends, then [fallback] until the promise
+    settles, with children already shown kept, hidden, as React keeps them. *)
+val suspend : fallback:Melhole.View.child -> Melhole.View.child -> Melhole.View.child
+
 val component : Component.t -> Melhole.View.input array -> (unit -> Melhole.View.child) -> Melhole.View.child
 val provide : 'value Context.t -> 'value -> Melhole.View.child -> Melhole.View.child
 val current : unit -> instance
