@@ -1,0 +1,10 @@
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact melact.runtime melhole testing shadow melange.dom)
+ (module_systems
+  (es6 mjs))
+ (compile_flags
+  (:standard -open Shadow))
+ (preprocess
+  (pps melange.ppx melact-ppx -hydratable)))

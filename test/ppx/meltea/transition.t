@@ -92,7 +92,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                        Melhole.View.set_content __melhole_hole_0
                          (Melhole.Transition.group ~name:"row" ~duration:200
                             (let _ = row in
-                             Melhole.View.rows (Array.of_list rows)
+                             Melhole.View.rows (Stdlib.Array.of_list rows)
                                __melhole_template_2 4
                                {
                                  Js.Fn.I3 =

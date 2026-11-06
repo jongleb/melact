@@ -1,0 +1,26 @@
+open Testing
+
+type model = { items : string list; picked : string option; size : int option }
+
+type message = Pick of string
+
+let update message model = match message with Pick item -> { model with picked = Some item }
+
+let view model =
+  let title = model.picked and tabIndex = model.size in
+  <section ?title ?tabIndex>
+    <ul>
+      (Html.list
+         (Stdlib.List.map (fun item -> <li key=item onClick=(Pick item)>(Html.text item)</li>) model.items))
+    </ul>
+    <p>(Html.text (Stdlib.Option.value ~default:"none" model.picked))</p>
+  </section>
+
+let () =
+  describe "Meltea's generated code under -open of modules named like the stdlib's" (fun () ->
+    test "a view with optional attributes, a keyed list and handlers works" (fun () ->
+      let root = create_element document "div" in
+      let program = Program.sandbox ~init:{ items = [ "a"; "b" ]; picked = None; size = Some 3 } ~update ~view root in
+      Program.dispatch program (Pick "b");
+      Program.flush program;
+      expect (inner_html (select root "p")) |. to_equal "b"))

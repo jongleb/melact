@@ -1,0 +1,38 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+
+module Every = struct
+  let[@react.component] make ?title ?tabIndex ?ratio ?width ?style ?dangerouslySetInnerHTML ?(tone : Tone.t = A) ~items () =
+    let loaded, setLoaded = React.useState (fun () -> "no") in
+    let field = React.useRef Js.Nullable.null in
+    <section ?title ?tabIndex ?style>
+      <p>(React.float (Stdlib.Option.value ~default:0.5 ratio))</p>
+      <i ?dangerouslySetInnerHTML />
+      <input ref=(ReactDOM.Ref.domRef field) ?width />
+      <img onLoad=(fun _ -> setLoaded (fun _ -> "yes")) />
+      <b>(React.string (match tone with A -> "A" | B -> "B"))</b>
+      <u>(React.string loaded)</u>
+      <ul>(React.array (Stdlib.Array.map (fun item -> <li key=item>(React.string item)</li>) items))</ul>
+      <ol>(React.list (Stdlib.List.map (fun item -> <li key=item>(React.string item)</li>) (Stdlib.Array.to_list items)))</ol>
+    </section>
+end
+
+
+
+let () =
+  describe "generated code under -open of modules named like the stdlib's" (fun () ->
+    test_async "a component with every kind of prop, a typed default and onLoad renders" (fun () ->
+      let root = attached () in
+      let client = ReactDOM.Client.createRoot root in
+      let* () =
+        React.act (fun () ->
+            ReactDOM.Client.render client
+              <Every title="t" tabIndex=2 ratio=1.5 dangerouslySetInnerHTML=[%mel.obj { __html = "<s>h</s>" }] items=[| "a"; "b" |] />)
+      in
+      let* () = React.act (fun () -> dispatch (select root "img") (event "load")) in
+      expect (inner_html (select root "b"), inner_html (select root "u"), inner_html (select root "i"), inner_html (select root "ul"))
+      |. to_equal ("A", "yes", "<s>h</s>", "<li>a</li><li>b</li>");
+      Js.Promise.resolve ()))

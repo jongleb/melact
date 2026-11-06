@@ -127,7 +127,13 @@ let component ~loc ~name ~props_constructor expression =
             {
               param with
               pparam_desc =
-                Pparam_val (label, default, ppat_alias ~loc pattern { loc; txt = name });
+                Pparam_val
+                  ( label,
+                    default,
+                    match pattern.ppat_desc with
+                    | Ppat_constraint (inner, type_) ->
+                        { pattern with ppat_desc = Ppat_constraint (ppat_alias ~loc inner { loc; txt = name }, type_) }
+                    | _ -> ppat_alias ~loc pattern { loc; txt = name } );
             }
         | Pparam_val ((Labelled _ | Optional _), _, _), []
         | Pparam_val (Nolabel, _, _), _
@@ -267,7 +273,7 @@ let mapper =
             | `Optional ->
                 [%expr
                   
-                    (fun __melhole_event -> Option.iter (fun handle -> handle [%e native]) [%e value])]);
+                    (fun __melhole_event -> Stdlib.Option.iter (fun handle -> handle [%e native]) [%e value])]);
         style =
           (fun loc requirement value ->
             match requirement with
@@ -275,7 +281,7 @@ let mapper =
             | `Optional ->
                 [%expr
                   
-                    (Option.fold ~none:[] ~some:ReactDOM.Style.declarations [%e value])]);
+                    (Stdlib.Option.fold ~none:[] ~some:ReactDOM.Style.declarations [%e value])]);
         reference =
           (fun loc requirement value ->
             match requirement with
@@ -283,7 +289,7 @@ let mapper =
             | `Optional ->
                 [%expr
                   
-                    (Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
+                    (Stdlib.Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
         classify = react_text;
         extra = (fun _ -> None);
         each =
@@ -295,7 +301,7 @@ let mapper =
                     [ (Nolabel, { pexp_desc = Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, arguments); _ }) ] )
                 -> (
                   match (txt, arguments) with
-                  | Ldot (Lident "Array", "map"), [ (Nolabel, row); (Nolabel, items) ]
+                  | (Ldot (Lident "Array", "map") | Ldot (Ldot (Lident "Stdlib", "Array"), "map")), [ (Nolabel, row); (Nolabel, items) ]
                   | Ldot (Ldot (Lident "Belt", "Array"), "map"), [ (Nolabel, items); (Nolabel, row) ] ->
                       Some (row, self#expression items)
                   | _ -> None)
@@ -306,12 +312,12 @@ let mapper =
                         {
                           pexp_desc =
                             Pexp_apply
-                              ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "List", "map"); _ }; _ },
+                              ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "List", "map") | Ldot (Ldot (Lident "Stdlib", "List"), "map"); _ }; _ },
                                 [ (Nolabel, row); (Nolabel, items) ] );
                           _;
                         } );
                     ] ) ->
-                  Some (row, [%expr Array.of_list [%e self#expression items]])
+                  Some (row, [%expr Stdlib.Array.of_list [%e self#expression items]])
               | _ -> None
             in
             Option.bind mapping (fun (row, items) ->

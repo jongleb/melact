@@ -212,7 +212,7 @@ Every kind of prop, static and dynamic, required and optional:
                        Melhole.View.put_handler __melhole_hole_10
                          __melhole_key_10
                          (fun __melhole_event ->
-                            Option.iter
+                            Stdlib.Option.iter
                               (fun handle ->
                                  handle (React.Event.ofNative __melhole_event))
                               None));
@@ -392,7 +392,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                                         __melhole_hole_0 "placeholder"
                                         (Some (label : string)));
                                  Melhole.View.set_reference __melhole_hole_1
-                                   (Option.fold ~none:ignore
+                                   (Stdlib.Option.fold ~none:ignore
                                       ~some:ReactDOM.Ref.attach
                                       (Option.map ReactDOM.Ref.domRef
                                          (Js.Nullable.toOption ref)));
