@@ -29,6 +29,13 @@ exception Suspended of thenable
     settles, with children already shown kept, hidden, as React keeps them. *)
 val suspend : fallback:Melhole.View.child -> Melhole.View.child -> Melhole.View.child
 
+(** Counts the positions of the next hydration from the root, as React's [useId] does. *)
+val number_from_root : unit -> unit
+
+(** The instance's next [useId]: while it takes over a server's nodes, React's id for its position,
+    as the server wrote it; else one of Melact's own. *)
+val id : instance -> string
+
 val component : Component.t -> Melhole.View.input array -> (unit -> Melhole.View.child) -> Melhole.View.child
 val provide : 'value Context.t -> 'value -> Melhole.View.child -> Melhole.View.child
 val current : unit -> instance

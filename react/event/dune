@@ -1,0 +1,8 @@
+(library
+ (name melact_event)
+ (public_name melact.event)
+ (wrapped false)
+ (modes melange)
+ (libraries melange.dom)
+ (preprocess
+  (pps melange.ppx)))

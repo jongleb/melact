@@ -110,7 +110,7 @@ everywhere (`adjectives[i % 25] colours[i % 11] nouns[i % 13]`).
 | build | server | client |
 |---|---|---|
 | [`meltea/`](ssr/meltea/page.mlx) | `Program.render` from `meltea.server` with `meltea-ppx -server`, natively ([`server/`](ssr/meltea/server/server.ml)) and under Melange in Node ([`node/`](ssr/meltea/node/ssr.ml)) | `Program.sandbox ~start:Program.hydrate`, `meltea-ppx -hydratable` |
-| [`melact/`](ssr/melact/page.mlx) | `ReactDOMServer.renderToString` in Node, with linkedom or jsdom as its DOM | `ReactDOM.Client.hydrateRoot`, `melact-ppx -hydratable` |
+| [`melact/`](ssr/melact/page.mlx) | `ReactDOMServer.renderToString` from `melact.server` with `melact-ppx -server`, natively ([`server/`](ssr/melact/server/server.ml), `melact.server.native`) and under Melange in Node ([`node/`](ssr/melact/node/ssr.mlx)) | `ReactDOM.Client.hydrateRoot`, `melact-ppx -hydratable` |
 | [`react/`](ssr/react/src/App.jsx) | React 18.3 `renderToString`, production | `hydrateRoot` |
 | [`svelte/`](ssr/svelte/src/App.svelte) | Svelte 5 `render` from `svelte/server`, compiled for the server by its own Vite | `hydrate` |
 
@@ -130,8 +130,8 @@ Options: `--suites=ssr,hydration`, `--rows=1000,10000`, `--warmups=N` (default 2
   string the renderer returns and with `Buffer.from(html)` added, since V8 defers flattening a string
   built by concatenation until something reads it. Every page's HTML is parsed and must hold the N
   rows with the right ids and labels, the same text, and the same normalised DOM (tags, attributes
-  with an empty `class` counted as none, texts) as the first renderer's; the Melange build of the
-  Meltea server must write the native one's bytes.
+  with an empty `class` counted as none, texts) as the first renderer's; the Melange builds of the
+  Meltea and Melact servers must write their native ones' bytes.
 - Hydration: each client is bundled for production with Vite; the page is its own server's HTML
   plus the rows as a `<script type="application/json">`. Every sample is a fresh tab, traced from
   navigation to 500 ms after the client sets `window.__hydrated` (after the hydrate call returns;

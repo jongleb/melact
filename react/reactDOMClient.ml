@@ -16,6 +16,7 @@ let render root element =
 
 let hydrateRoot container element =
   let root = createRoot container in
+  Melact_runtime.Instance.number_from_root ();
   root.content <- Showing (Served.hydrate (React.to_child element) ~parent:container);
   Melact_runtime.Instance.settle ();
   root

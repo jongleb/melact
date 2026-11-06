@@ -90,6 +90,21 @@ let target package name type_ attributes =
   | _ -> None
 
 let structure items =
+  let hook ~loc name =
+    pexp_ident ~loc
+      {
+        loc;
+        txt =
+          Ldot
+            ( Ldot
+                ( Lident
+                    (match !Melhole_compiler.Element.output with
+                    | Melhole_compiler.Element.Server -> "Melact_server"
+                    | Melhole_compiler.Element.Client_only | Melhole_compiler.Element.Hydratable -> "Melact_runtime"),
+                  "Hook" ),
+              name );
+      }
+  in
   let rewrite renames =
     object
       inherit Ast_traverse.map as super
@@ -123,7 +138,7 @@ let structure items =
                   | Plain -> pexp_ident ~loc { loc; txt = found }
                   | Keyed ->
                       pexp_apply ~loc (pexp_ident ~loc { loc; txt = found })
-                        [ (Nolabel, [%expr Melact_runtime.Hook.unchecked [%e evar ~loc ("melact_key_" ^ name)]]) ]
+                        [ (Nolabel, pexp_apply ~loc (hook ~loc "unchecked") [ (Nolabel, evar ~loc ("melact_key_" ^ name)) ]) ]
                 in
                 let argument index =
                   Option.fold ~none:[%expr Js.Obj.empty ()] ~some:(fun (_, argument) -> evar ~loc argument) (List.nth_opt arguments index)
@@ -137,7 +152,7 @@ let structure items =
                         (List.mapi
                            (fun index (label, argument) ->
                              match passing with
-                             | Listed at when at = index -> (label, [%expr Melact_runtime.Hook.listed [%e evar ~loc argument]])
+                             | Listed at when at = index -> (label, pexp_apply ~loc (hook ~loc "listed") [ (Nolabel, evar ~loc argument) ])
                              | Listed _ | As_given | Children_from _ | Children_spread _ | Key_at _ -> (label, evar ~loc argument))
                            arguments)
                   | Children_from from, _ ->
@@ -164,7 +179,7 @@ let structure items =
                 let defined =
                   (match keying with
                   | Plain -> []
-                  | Keyed -> [ [%stri let[@warning "-32"] [%p pvar ~loc ("melact_key_" ^ name)] = Melact_runtime.Hook.key ()] ])
+                  | Keyed -> [ [%stri let[@warning "-32"] [%p pvar ~loc ("melact_key_" ^ name)] = [%e hook ~loc "key"] ()] ])
                   @ [ [%stri let[@warning "-32"] [%p pvar ~loc name] = [%e wrapper]] ]
                 in
                 let renamed =

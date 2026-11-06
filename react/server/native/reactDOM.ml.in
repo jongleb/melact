@@ -1,0 +1,51 @@
+[@@@melact.style]
+
+type element
+
+type domRef =
+  | Current of element option React.ref
+  | Callback of (element option -> unit)
+
+module Ref = struct
+  type t = domRef
+  type currentDomRef = element option React.ref
+  type callbackDomRef = element option -> unit
+
+  let domRef target = Current target
+  let callbackDomRef apply = Callback apply
+
+  let attach reference element =
+    match reference with
+    | Current target -> target.current <- element
+    | Callback apply -> apply element
+
+  type identity = Identity : 'a -> identity
+
+  let identity reference = match reference with Current target -> Identity target | Callback apply -> Identity apply
+  let absent = Identity ()
+
+  let forwarded reference =
+    match reference with Some (Current target) -> Some target | Some (Callback _) | None -> None
+end
+
+let flushSync run = run ()
+let html_of html = html#__html
+
+[@@@melact.dom_props]
+
+let dom tag props children =
+  let content =
+    match children with
+    | [||] -> Option.fold ~none:Melhole_server.empty ~some:React.to_child props.children
+    | [| only |] -> React.to_child only
+    | many -> React.to_child (React.array many)
+  in
+  React.of_child (Melact_server.Dom.element tag props.props content)
+
+let stringToComponent tag props = dom tag props (Array.map React.of_child (Melact_server.Variadic.take ()))
+let createElement tag ?props children = dom tag (Option.value props ~default:(domProps ())) children
+let createDOMElementVariadic tag ?props children = dom tag (Option.value props ~default:(domProps ())) children
+let jsx tag props = dom tag props [||]
+let jsxs tag props = dom tag props [||]
+let jsxKeyed tag props ?key:_ () = dom tag props [||]
+let jsxsKeyed tag props ?key:_ () = dom tag props [||]

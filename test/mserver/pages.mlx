@@ -1,0 +1,280 @@
+(** A random page of reason-react components, written once and built for React 18, for Melact's
+    server under Melange and natively, and for Melact's client. *)
+
+type field =
+  | Check of bool * string
+  | Defaults of string * bool
+  | Area of string * int
+  | Area_default of string
+  | Choice of string
+  | Choice_default of string
+
+type node =
+  | Word of string
+  | Pair of node * node
+  | Trio of node * node * node
+  | Mixed of string * int * node
+  | Listed of string list
+  | Listed_too of string list
+  | Listed_ids of int
+  | Maybe of node option
+  | Counter of int * string
+  | Ids of node
+  | Id
+  | Themed of string * node
+  | Reader
+  | Field of field
+  | Styled of string * string * node
+  | Attributes of string * int * bool * string option
+  | Built of string * string option * int * bool
+  | Settles of int
+  | Waits of node
+  | Fails of node
+  | Html of string
+  | Pre of string
+  | Number of float
+  | Fragment of node * node
+  | Single_fragment of node
+  | Bounded of node
+  | Memo of string
+  | Picked of string
+
+let effects = ref 0
+let decode values =
+  let words = [| ""; "a"; "b c"; "<&>\"'"; " "; "x"; "\nnew"; "1" |] in
+  let floats = [| 0.; 1.; -1.5; 0.1; 1e21; 1e-7; 3.14159; 100.; 2.5 |] in
+  let styles = [| ""; "red"; " blue "; "1px solid"; "0" |] in
+  let tags = [| "div"; "span"; "p"; "button"; "textarea"; "select" |] in
+  let at = ref 0 in
+  let draw bound =
+    match !at < Array.length values with
+    | true ->
+        let value = values.(!at) in
+        incr at;
+        value mod bound
+    | false -> 0
+  in
+  let word () = words.(draw (Array.length words)) in
+  let rec node depth =
+    let two () =
+      let first = node (depth - 1) in
+      let second = node (depth - 1) in
+      (first, second)
+    in
+    let kind = match (depth, draw 5) with 0, _ | _, 0 -> draw 13 | _, _ -> 13 + draw 15 in
+    match kind with
+    | 0 -> Word (word ())
+    | 1 ->
+        let start = draw 50 in
+        Counter (start, word ())
+    | 2 -> Id
+    | 3 -> Reader
+    | 4 -> Listed (List.init (draw 4) (fun index -> string_of_int index ^ word ()))
+    | 5 ->
+        Field
+          (match draw 6 with
+          | 0 ->
+              let checked = draw 2 = 1 in
+              Check (checked, word ())
+          | 1 ->
+              let value = word () in
+              Defaults (value, draw 2 = 1)
+          | 2 ->
+              let value = word () in
+              Area (value, draw 4)
+          | 3 -> Area_default (word ())
+          | 4 -> Choice [| "a"; "b"; "c"; "z" |].(draw 4)
+          | _ -> Choice_default [| "a"; "b"; "c"; "z" |].(draw 4))
+    | 6 ->
+        let label = word () in
+        let index = draw 4 - 1 in
+        let flag = draw 2 = 1 in
+        Attributes (label, index, flag, match draw 2 with 0 -> None | _ -> Some (word ()))
+    | 7 ->
+        let tag = tags.(draw (Array.length tags)) in
+        let title = match draw 2 with 0 -> None | _ -> Some (word ()) in
+        let count = draw 4 in
+        Built (tag, title, count, draw 2 = 1)
+    | 8 -> Settles (draw 4)
+    | 9 -> Html (word ())
+    | 10 -> Pre (word ())
+    | 11 -> Number floats.(draw (Array.length floats))
+    | 12 -> Listed_ids (draw 4)
+    | 13 ->
+        let first, second = two () in
+        Pair (first, second)
+    | 14 ->
+        let first, second = two () in
+        Trio (first, second, node (depth - 1))
+    | 15 ->
+        let label = word () in
+        let count = draw 100 in
+        Mixed (label, count, node (depth - 1))
+    | 16 -> Maybe (match draw 2 with 0 -> None | _ -> Some (node (depth - 1)))
+    | 17 -> Ids (node (depth - 1))
+    | 18 ->
+        let value = word () in
+        Themed (value, node (depth - 1))
+    | 19 ->
+        let color = styles.(draw (Array.length styles)) in
+        let margin = styles.(draw (Array.length styles)) in
+        Styled (color, margin, node (depth - 1))
+    | 20 -> Waits (node (depth - 1))
+    | 21 ->
+        let first, second = two () in
+        Fragment (first, second)
+    | 22 -> Single_fragment (node (depth - 1))
+    | 23 -> Bounded (node (depth - 1))
+    | 24 -> Listed_too (List.init (draw 4) (fun index -> let label = word () in label ^ string_of_int index))
+    | 25 -> Memo (word ())
+    | 26 -> Fails (node (depth - 1))
+    | _ -> Picked [| "a"; "b"; "c" |].(draw 3)
+  in
+  node 5
+
+module Counter = struct
+  let[@react.component] make ~start ~label =
+    let count, _ = React.useState (fun () -> start) in
+    let total, dispatch = React.useReducer (fun total by -> total + by) (start * 2) in
+    let doubled = React.useMemo1 (fun () -> count * 2) [| count |] in
+    let held = React.useRef label in
+    let clicked = React.useCallback1 (fun _ -> dispatch 1) [| dispatch |] in
+    React.useEffect0 (fun () ->
+        incr effects;
+        None);
+    React.useLayoutEffect1
+      (fun () ->
+        incr effects;
+        None)
+      [| count |];
+    <button className="counter" title=held.current onClick=clicked>
+      (React.int count)(React.string "/")(React.int total)(React.string " ")(React.int doubled)
+    </button>
+end
+
+module Id = struct
+  let[@react.component] make () =
+    let id = React.useId () in
+    <i id />
+end
+
+module Ids = struct
+  let[@react.component] make ~children =
+    let first = React.useId () in
+    let second = React.useId () in
+    <label htmlFor=first id=second>children</label>
+end
+
+module Reader = struct
+  let[@react.component] make () =
+    let theme = React.useContext Shim.theme in
+    <em>(React.string theme)</em>
+end
+
+module Settles = struct
+  let[@react.component] make ~upto =
+    let count, setCount = React.useState (fun () -> 0) in
+    let renders = React.useRef 0 in
+    let first = React.useMemo0 (fun () -> renders.current) in
+    renders.current <- renders.current + 1;
+    if count < upto then setCount (fun count -> count + 1);
+    <b title=(string_of_int renders.current ^ "/" ^ string_of_int first)>(React.int count)</b>
+end
+
+module Bomb = struct
+  let[@react.component] make () = failwith "boom"
+end
+
+module Memo = struct
+  let[@react.component] make = React.memo (fun ~label -> <q>(React.string label)</q>)
+end
+
+module Picker = struct
+  let[@react.component] make ~picked =
+    <select value=picked onChange=(fun _ -> ())>
+      <option value="a">(React.string "A")</option>
+      <optgroup label="g"><option value="b">(React.string "B")</option></optgroup>
+      <option>(React.string "c")</option>
+    </select>
+end
+
+let field field =
+  match field with
+  | Check (checked, value) -> <input type_="checkbox" className="c" checked value onChange=(fun _ -> ()) />
+  | Defaults (value, checked) -> <input defaultValue=value defaultChecked=checked id="d" />
+  | Area (value, rows) -> <textarea value rows onChange=(fun _ -> ()) />
+  | Area_default value -> <textarea defaultValue=value className="t" />
+  | Choice picked -> <Picker picked />
+  | Choice_default picked ->
+      <select defaultValue=picked>
+        <option value="a">(React.string "A")</option>
+        <option value="z" selected=true>(React.string "Z")</option>
+      </select>
+
+let rec page node =
+  match node with
+  | Word word -> React.string word
+  | Pair (first, second) -> <div>(page first)(page second)</div>
+  | Trio (first, second, third) -> <div>(page first)(React.string "static")(page second)(React.null)(page third)</div>
+  | Mixed (label, count, inner) ->
+      <div className=label>
+        (React.string "static ")(React.string "too ")(React.string label)<b>(React.int count)</b>(page inner)
+      </div>
+  | Listed labels -> <ul>(React.array (Array.of_list (List.map (fun label -> <li key=label>(React.string label)</li>) labels)))</ul>
+  | Listed_ids count -> <div className="ids">(React.array (Array.init count (fun index -> <Id key=(string_of_int index) />)))</div>
+  | Listed_too labels -> <ol>(React.array (Array.map (fun label -> <Memo key=label label />) (Array.of_list labels)))</ol>
+  | Maybe inner -> <section>(Option.fold ~none:React.null ~some:page inner)</section>
+  | Counter (start, label) -> <Counter start label />
+  | Ids inner -> <Ids>(page inner)</Ids>
+  | Id -> <Id />
+  | Themed (value, inner) -> <Shim.Theme value>(page inner)<Reader /></Shim.Theme>
+  | Reader -> <Reader />
+  | Field form -> field form
+  | Styled (color, margin, inner) ->
+      <div style=(ReactDOM.Style.make ~color ~margin ~backgroundColor:"white" ())>(page inner)</div>
+  | Attributes (label, index, flag, title) ->
+      <p className=label tabIndex=index hidden=flag ariaHidden=flag draggable=flag ?title id="fixed" dir="ltr">
+        (React.string label)
+      </p>
+  | Built (tag, title, count, off) ->
+      <div className="built">
+        (React.createElement (ReactDOM.stringToComponent tag)
+           (ReactDOM.domProps ~className:tag ?title ~children:(React.string tag) ()))
+        (ReactDOM.createElement "button" ~props:(ReactDOM.domProps ~disabled:off ~className:"b" ())
+           [| React.string "go"; React.int count |])
+        (React.createElementVariadic (ReactDOM.stringToComponent "ul") (ReactDOM.domProps ~id:"list" ())
+           (Array.init count (fun index ->
+                ReactDOM.jsx "li" (ReactDOM.domProps ~key:(string_of_int index) ~children:(React.int index) ()))))
+        (ReactDOM.createElement "input" ~props:(ReactDOM.domProps ~value:tag ~checked:off ~readOnly:true ~rows:count ()) [||])
+      </div>
+  | Settles upto -> <Settles upto />
+  | Waits inner -> <React.Suspense fallback=(React.string "waiting")>(page inner)</React.Suspense>
+  | Fails inner ->
+      <React.Suspense fallback=(<i>(React.string "failed")</i>)>
+        <b>(page inner)</b>
+        <Bomb />
+      </React.Suspense>
+  | Html html -> <div dangerouslySetInnerHTML=(Shim.html ("<i>" ^ html ^ "</i>")) />
+  | Pre text -> <pre>(React.string text)</pre>
+  | Number value -> <span>(React.float value)(React.float (value *. 2.))</span>
+  | Fragment (first, second) -> ([ <b>(page first)</b>; page second ] [@JSX])
+  | Single_fragment inner -> <React.Fragment>(page inner)</React.Fragment>
+  | Bounded inner -> <ReasonReactErrorBoundary fallback=(fun _ -> React.string "failed")>(page inner)</ReasonReactErrorBoundary>
+  | Memo label -> <Memo label />
+  | Picked picked -> <Picker picked />
+
+let shown values = <main>(page (decode values))</main>
+
+let rec on_client node =
+  let either first second = match first with `Renders -> second | `Sets_state | `Throws -> first in
+  match node with
+  | Settles _ -> `Sets_state
+  | Fails _ -> `Throws
+  | Pair (first, second) | Fragment (first, second) -> either (on_client first) (on_client second)
+  | Trio (first, second, third) -> either (on_client first) (either (on_client second) (on_client third))
+  | Mixed (_, _, inner) | Ids inner | Themed (_, inner) | Styled (_, _, inner) | Waits inner | Single_fragment inner | Bounded inner
+  | Maybe (Some inner) ->
+      on_client inner
+  | Word _ | Listed _ | Listed_too _ | Listed_ids _ | Maybe None | Counter _ | Id | Reader | Field _ | Attributes _ | Built _
+  | Html _ | Pre _ | Number _ | Memo _ | Picked _ ->
+      `Renders

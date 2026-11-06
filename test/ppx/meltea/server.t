@@ -18,6 +18,7 @@ compile time where the previous node is known, handlers kept only for typing:
       (fun __melhole_dispatch ->
          Melhole_server.element
            (fun __melhole_writer ->
+              let __melhole_bound_0 = (label : string) in
               ignore (fun () __melhole_event -> __melhole_dispatch Decrement);
               Melhole_server.markup __melhole_writer
                 "<div class=\"counter\"><button>-</button><output";
@@ -30,13 +31,15 @@ compile time where the previous node is known, handlers kept only for typing:
               Melhole_server.dynamic_text __melhole_writer (label : string);
               Melhole_server.static_text __melhole_writer "tail";
               Melhole_server.markup __melhole_writer "<input";
-              Melhole_server.attribute __melhole_writer "value"
-                (Some (label : string));
-              Melhole_server.flag __melhole_writer "checked" (count = 0 : bool);
               Melhole_server.style __melhole_writer
                 ([("fontSize", "2px")] : (string * string) list);
+              Melhole_server.flag __melhole_writer "checked" (count = 0 : bool);
+              Melhole_server.attribute __melhole_writer "value"
+                (Some (label : string));
               Melhole_server.markup __melhole_writer "/><textarea>";
-              Melhole_server.dynamic_text __melhole_writer (label : string);
+              (Melhole_server.leading_newline __melhole_writer
+                 __melhole_bound_0;
+               Melhole_server.dynamic_text __melhole_writer __melhole_bound_0);
               Melhole_server.markup __melhole_writer "</textarea>";
               Melhole_server.write __melhole_writer
                 (Html.render

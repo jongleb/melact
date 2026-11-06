@@ -15,7 +15,7 @@ let reducer state action =
   | Increment -> { state with count = state.count + 1 }
   | Decrement -> { state with count = state.count - 1 }
   | Select id -> { state with selection = Selected id }
-  | Remove id -> { state with rows = Js.Array.filter ~f:(fun row -> row.id <> id) state.rows }
+  | Remove id -> { state with rows = Array.of_list (List.filter (fun row -> row.id <> id) (Array.to_list state.rows)) }
 
 module Row = struct
   let[@react.component] make =

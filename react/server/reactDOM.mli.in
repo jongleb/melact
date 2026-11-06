@@ -1,0 +1,48 @@
+(** reason-react's [ReactDOM] for Melact's server build: styles, refs, and DOM elements built at
+    run time, written as React's server writes them. *)
+
+[@@@melact.style]
+
+(** What a [ref] prop receives; never called on the server. *)
+type domRef =
+  | Current of Dom.element Js.nullable React.ref
+  | Callback of (Dom.element Js.nullable -> unit)
+
+module Ref : sig
+  (** reason-react's names for the two kinds of ref, kept for code typed against them. *)
+  type t = domRef
+
+  type currentDomRef = Dom.element Js.nullable React.ref
+  type callbackDomRef = Dom.element Js.nullable -> unit
+
+  val domRef : currentDomRef -> domRef
+  val callbackDomRef : callbackDomRef -> domRef
+  val attach : domRef -> Dom.element Js.nullable -> unit
+
+  (** What React compares to tell a ref from another: the ref object, or the function. *)
+  type identity = Identity : 'a -> identity [@@unboxed]
+
+  val identity : domRef -> identity
+  val absent : identity
+  val forwarded : domRef option -> Dom.element Js.nullable React.ref Js.Nullable.t
+end
+
+val flushSync : (unit -> unit) -> unit
+
+(** Fails, as React's server does: render portals on the client only. *)
+val createPortal : React.element -> Dom.element -> React.element
+
+(** The HTML of a [dangerouslySetInnerHTML] value, for compiled code. *)
+external html_of : < __html : string > Js.t -> string = "__html" [@@mel.get]
+
+[@@@melact.dom_props]
+
+(** A component for a DOM element whose tag is known only at run time, for [React.createElement]. *)
+val stringToComponent : string -> domProps React.component
+
+val createElement : string -> ?props:domProps -> React.element array -> React.element
+val createDOMElementVariadic : string -> ?props:domProps -> React.element array -> React.element
+val jsx : string -> domProps -> React.element
+val jsxs : string -> domProps -> React.element
+val jsxKeyed : string -> domProps -> ?key:string -> unit -> React.element
+val jsxsKeyed : string -> domProps -> ?key:string -> unit -> React.element

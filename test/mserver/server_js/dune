@@ -1,0 +1,11 @@
+(copy_files
+ (files ../{pages.mlx,shim.ml,rendered.ml}))
+
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact.server)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (pps melange.ppx melact-ppx -server)))

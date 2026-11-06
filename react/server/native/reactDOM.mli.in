@@ -1,0 +1,45 @@
+(** reason-react's [ReactDOM] for Melact's native server build: styles, refs, and DOM elements built
+    at run time, written as React's server writes them. *)
+
+[@@@melact.style]
+
+(** An element of the page; a server has none. *)
+type element
+
+(** What a [ref] prop receives; never called on the server. *)
+type domRef
+
+module Ref : sig
+  type t = domRef
+  type currentDomRef = element option React.ref
+  type callbackDomRef = element option -> unit
+
+  val domRef : currentDomRef -> domRef
+  val callbackDomRef : callbackDomRef -> domRef
+  val attach : domRef -> element option -> unit
+
+  (** What React compares to tell a ref from another. *)
+  type identity
+
+  val identity : domRef -> identity
+  val absent : identity
+  val forwarded : domRef option -> currentDomRef option
+end
+
+val flushSync : (unit -> unit) -> unit
+
+(** The HTML of a [dangerouslySetInnerHTML] value: an object with an [__html] method, where
+    reason-react has a JavaScript object. *)
+val html_of : < __html : string > -> string
+
+[@@@melact.dom_props]
+
+(** A component for a DOM element whose tag is known only at run time, for [React.createElement]. *)
+val stringToComponent : string -> domProps React.component
+
+val createElement : string -> ?props:domProps -> React.element array -> React.element
+val createDOMElementVariadic : string -> ?props:domProps -> React.element array -> React.element
+val jsx : string -> domProps -> React.element
+val jsxs : string -> domProps -> React.element
+val jsxKeyed : string -> domProps -> ?key:string -> unit -> React.element
+val jsxsKeyed : string -> domProps -> ?key:string -> unit -> React.element

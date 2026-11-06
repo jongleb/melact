@@ -1,0 +1,104 @@
+[@@@melact.style]
+
+type domRef =
+  | Current of Dom.element Js.nullable React.ref
+  | Callback of (Dom.element Js.nullable -> unit)
+
+module Ref = struct
+  type t = domRef
+  type currentDomRef = Dom.element Js.nullable React.ref
+  type callbackDomRef = Dom.element Js.nullable -> unit
+
+  let domRef target = Current target
+  let callbackDomRef apply = Callback apply
+
+  let attach reference element =
+    match reference with
+    | Current target -> target.current <- element
+    | Callback apply -> apply element
+
+  type identity = Identity : 'a -> identity [@@unboxed]
+
+  let identity reference = match reference with Current target -> Identity target | Callback apply -> Identity apply
+  let absent = Identity ()
+
+  let forwarded reference =
+    match reference with
+    | Some (Current target) -> Js.Nullable.return target
+    | Some (Callback _) | None -> Js.Nullable.null
+end
+
+let flushSync run = run ()
+
+let createPortal _ _ =
+  Js.Exn.raiseError
+    "Portals are not currently supported by the server renderer. Render them conditionally so that they only appear on the client render."
+
+external html_of : < __html : string > Js.t -> string = "__html" [@@mel.get]
+
+type domProps
+
+external read : domProps -> string -> 'a = "" [@@mel.get_index]
+external lookup : domProps -> string -> 'a Js.undefined = "" [@@mel.get_index]
+external keys : domProps -> string array = "keys" [@@mel.scope "Object"]
+
+(** How a prop of a DOM element built at run time is written. *)
+type applying =
+  | Text_attribute of string
+  | Flag_attribute of string
+  | Booleanish_attribute of string
+  | Integer_attribute of string
+  | Decimal_attribute of string
+  | Property_value of string
+  | Controlled_value of string
+  | Default_value_prop
+  | Default_checked_prop
+  | Event of string
+  | Style_value
+  | Ref_value
+  | Inner_html_value
+  | Skipped
+
+[@@@melact.dom_props]
+
+let dom tag props children =
+  let props_of props =
+    List.filter_map
+      (fun name ->
+        match applying name with
+        | Text_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, read props name))
+        | Flag_attribute attribute -> (
+            match (read props name : bool) with true -> Some (Melact_server.Dom.Present attribute) | false -> None)
+        | Booleanish_attribute attribute ->
+            Some (Melact_server.Dom.Attribute (attribute, match (read props name : bool) with true -> "true" | false -> "false"))
+        | Integer_attribute attribute -> Some (Melact_server.Dom.Number (attribute, read props name))
+        | Decimal_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, Melhole_server.float (read props name)))
+        | Property_value "value" | Controlled_value "value" -> Some (Melact_server.Dom.Value (read props name))
+        | Property_value "checked" | Controlled_value "checked" -> Some (Melact_server.Dom.Checked (match (read props name : bool) with true -> On | false -> Off))
+        | Property_value "selected" | Controlled_value "selected" -> Some (Melact_server.Dom.Selected (match (read props name : bool) with true -> On | false -> Off))
+        | Property_value property | Controlled_value property -> (
+            match (read props name : bool) with true -> Some (Melact_server.Dom.Present property) | false -> None)
+        | Default_value_prop -> Some (Melact_server.Dom.Default_value (read props name))
+        | Default_checked_prop -> Some (Melact_server.Dom.Default_checked (match (read props name : bool) with true -> On | false -> Off))
+        | Style_value -> Some (Melact_server.Dom.Style (Style.declarations (read props name)))
+        | Inner_html_value -> Some (Melact_server.Dom.Inner_html (html_of (read props name)))
+        | Event _ | Ref_value | Skipped -> None)
+      (List.filter
+         (fun name -> not (String.equal name "key" || String.equal name "children"))
+         (Array.to_list (keys props)))
+  in
+  let content =
+    match children with
+    | [||] -> Option.fold ~none:Melhole_server.empty ~some:React.to_child (Js.Undefined.toOption (lookup props "children"))
+    | [| only |] -> React.to_child only
+    | many -> React.to_child (React.array many)
+  in
+  React.of_child (Melact_server.Dom.element tag (props_of props) content)
+
+let stringToComponent tag props = dom tag props (Array.map React.of_child (Melact_server.Variadic.take ()))
+let createElement tag ?props children = dom tag (Option.value props ~default:(domProps ())) children
+let createDOMElementVariadic tag ?props children = dom tag (Option.value props ~default:(domProps ())) children
+let jsx tag props = dom tag props [||]
+let jsxs tag props = dom tag props [||]
+let jsxKeyed tag props ?key:_ () = dom tag props [||]
+let jsxsKeyed tag props ?key:_ () = dom tag props [||]

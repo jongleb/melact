@@ -1,0 +1,5 @@
+(library
+ (name melact_server)
+ (public_name melact.server.core)
+ (modes native melange)
+ (libraries melhole.server))

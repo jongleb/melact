@@ -1,0 +1,24 @@
+(library
+ (name melact_server_js)
+ (public_name melact.server)
+ (wrapped false)
+ (modes melange)
+ (libraries melact.server.core melhole.server melact.event melange.dom)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (targets reactDOM.ml)
+ (deps reactDOM.ml.in ../reactDOM.ml.in)
+ (action
+  (with-stdout-to
+   reactDOM.ml
+   (run ../gen/gen.exe reactDOM.ml.in server_impl ../reactDOM.ml.in))))
+
+(rule
+ (targets reactDOM.mli)
+ (deps reactDOM.mli.in ../reactDOM.mli.in)
+ (action
+  (with-stdout-to
+   reactDOM.mli
+   (run ../gen/gen.exe reactDOM.mli.in server_intf ../reactDOM.mli.in))))
