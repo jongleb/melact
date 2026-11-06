@@ -933,6 +933,32 @@ module Measured = struct
     </Opened_provider>
 end
 
+let mixed_toggles = Hashtbl.create 16
+let mixed_parent = ref (fun (_ : int -> int) -> ())
+
+module Mixed_row = struct
+  let[@react.component] make ~index ~generation =
+    let opened = React.useContext opened_context in
+    let folded, setFolded = React.useState (fun () -> false) in
+    Hashtbl.replace mixed_toggles index setFolded;
+    <li>
+      (React.string
+         (string_of_int index ^ ":" ^ string_of_int generation ^ (match opened with true -> "o" | false -> "c")
+        ^ match folded with true -> "+" | false -> "-"))
+    </li>
+end
+
+module Mixed = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    let generation, setGeneration = React.useState (fun () -> 0) in
+    opened_send := setOpened;
+    mixed_parent := setGeneration;
+    <Opened_provider value=opened>
+      <ul>(React.array (Array.init count (fun index -> <Mixed_row key=(string_of_int index) index generation />)))</ul>
+    </Opened_provider>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1755,6 +1781,48 @@ let () =
              in
              step 3 false))
         [%mel.obj { numRuns = 40 }]));
+  describe "local state, parent props and a context changed together" (fun () ->
+    test_async "every change shows, whatever the interleaving within and across batches" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let count = 2 + draw tape 25 in
+             Hashtbl.reset mixed_toggles;
+             let* root, client = mount <Mixed count /> in
+             let folds = Array.make count false in
+             let opened = ref false and generation = ref 0 in
+             let rec step remaining =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let actions =
+                     List.init (1 + draw tape 4) (fun _ ->
+                         match draw tape 3 with
+                         | 0 ->
+                             let index = draw tape count in
+                             folds.(index) <- not folds.(index);
+                             fun () -> (Hashtbl.find mixed_toggles index) (fun folded -> not folded)
+                         | 1 ->
+                             incr generation;
+                             fun () -> !mixed_parent (fun value -> value + 1)
+                         | _ ->
+                             opened := not !opened;
+                             fun () -> !opened_send (fun value -> not value))
+                   in
+                   let* () = act (fun () -> List.iter (fun run -> run ()) actions) in
+                   expect (text_content root)
+                   |. to_equal
+                        (String.concat ""
+                           (List.init count (fun index ->
+                                string_of_int index ^ ":" ^ string_of_int !generation
+                                ^ (match !opened with true -> "o" | false -> "c")
+                                ^ match folds.(index) with true -> "+" | false -> "-")));
+                   step (remaining - 1)
+             in
+             step 8))
+        [%mel.obj { numRuns = 150 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async
