@@ -337,3 +337,40 @@ let () =
                  View.unmount mounted;
                  expect (List.map fst seen) |. to_equal (List.map snd seen)))
             [%mel.obj { numRuns = 400 }]))
+
+let hashed_template =
+  View.template (Template.html "<li></li>")
+    (fun [@u] node -> (Template.element node, View.text_hole { parent = node; before = Template.first_or_end node }))
+    { placed = None; released = None; forgotten = None }
+
+let hashed items =
+  View.rows items hashed_template
+    (fun [@u] (root, _) -> root)
+    (fun [@u] (_, text) item -> View.set_text text ("#" ^ item.label))
+    (fun [@u] item -> item.key)
+    (fun [@u] _ _ _ _ -> ())
+    0 View.no_inputs
+
+let () =
+  describe "Compiled loops of two templates" (fun () ->
+      test "a hole that switches between two loops over the same rows shows what mounting the current one shows"
+        (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 let drawn (items, outer) = match draw tape 2 with 0 -> lines items outer | _ -> hashed items in
+                 let root = create_element document "ul" in
+                 let mounted = View.mount (drawn start) ~parent:root ~before:None in
+                 let rec run state remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let next, _ = step tape state in
+                       let child = drawn next in
+                       View.patch mounted child;
+                       (shapes (as_node root), shown child) :: run next (remaining - 1)
+                 in
+                 let seen = run start (2 + draw tape 12) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 400 }]))
