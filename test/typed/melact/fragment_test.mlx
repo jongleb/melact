@@ -1,0 +1,61 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+
+type fragment_props = < children : React.element > Js.t
+type fragment = fragment_props React.component
+type keyed_props = < children : React.element ; key : string > Js.t
+type keyed = keyed_props React.component
+type text = string -> React.element
+
+external npmFragment : fragment = "Fragment" [@@mel.module "react"]
+external keyedFragment : keyed = "Fragment" [@@mel.module "react"]
+external textFragment : text = "Fragment" [@@mel.module "react"]
+
+external npmCreateAny : 'kind -> 'props -> React.element array -> React.element = "createElement"
+[@@mel.module "react"] [@@mel.variadic]
+
+module Shown = struct
+  let[@react.component] make ~labels =
+    <section>
+      (React.array
+         (Array.map
+            (fun label ->
+              npmCreateAny keyedFragment
+                [%mel.obj
+                  {
+                    key = label;
+                    children = npmCreateAny npmFragment [%mel.obj { children = <b>(React.string label)</b> }] [||];
+                  }]
+                [||])
+            labels))
+    </section>
+end
+
+let () =
+  describe "bindings to Fragment typed through abbreviations" (fun () ->
+    test_async "a binding whose type expands to a component of children is Melact's fragment, any other stays npm's" (fun () ->
+      check_async
+        (async_property
+           (array_of (array_of (nat 9) [%mel.obj { minLength = 0; maxLength = 6 }]) [%mel.obj { minLength = 1; maxLength = 5 }])
+           (fun pages ->
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let rec show index =
+               match index = Array.length pages with
+               | true -> Js.Promise.resolve ()
+               | false ->
+                   let labels = Array.of_list (List.sort_uniq compare (Array.to_list (Array.map string_of_int pages.(index)))) in
+                   let* () = React.act (fun () -> ReactDOM.Client.render client <Shown labels />) in
+                   expect (inner_html root, Js.typeof textFragment)
+                   |. to_equal
+                        ( "<section>" ^ String.concat "" (Array.to_list (Array.map (fun label -> "<b>" ^ label ^ "</b>") labels)) ^ "</section>",
+                          "symbol" );
+                   show (index + 1)
+             in
+             let* () = show 0 in
+             let* () = React.act (fun () -> ReactDOM.Client.unmount client ()) in
+             Js.Promise.resolve ()))
+        [%mel.obj { numRuns = 60 }]))

@@ -1,0 +1,4 @@
+(test
+ (name laws)
+ (package melact-ppx)
+ (libraries qcheck-core qcheck-core.runner ppxlib compiler-libs.common melhole.typed melact-ppx))

@@ -6,4 +6,4 @@
 
 val created : 'kind -> 'props -> React.element array -> React.element
 val keyed : React.element -> string option -> React.element
-val fragment : < children : React.element > Js.t -> React.element
+val fragment : < children : React.element ; .. > Js.t -> React.element

@@ -174,9 +174,36 @@ let structure items =
                 in
                 let later, exported = go (renamed @ renames) rest in
                 (defined @ later, renamed @ exported)
-            | None ->
+            | None -> (
                 let later, exported = go renames rest in
-                ((rewrite renames)#structure_item item :: later, exported))
+                match (source description.pval_attributes, description.pval_prim) with
+                | Some ("react" | "react/jsx-runtime" | "react/jsx-dev-runtime"), [ "Fragment" ] ->
+                    let question, asked = Melhole_typed.Question.value description in
+                    ( Melhole_typed.Site.items
+                        [ { item with pstr_desc = Pstr_primitive asked } ]
+                        ~decide:(fun file items ->
+                          match Option.bind (Melhole_typed.File.answer file question) Typed.component with
+                          | Some (Typed.Of_props props) -> (
+                              match Melhole_typed.Answer.view props with
+                              | Melhole_typed.Answer.Js_object { fields; _ }
+                                when List.exists
+                                       (fun (name, field) -> String.equal name "children" && Typed.element field = `Element)
+                                       fields ->
+                                  let loc = description.pval_loc in
+                                  [
+                                    [%stri
+                                      let[@warning "-32"] [%p
+                                                            ppat_constraint ~loc (pvar ~loc description.pval_name.txt)
+                                                              description.pval_type] =
+                                        Melact_npm.fragment];
+                                  ]
+                              | Melhole_typed.Answer.Js_object _ | Melhole_typed.Answer.Named _
+                              | Melhole_typed.Answer.Function _ | Melhole_typed.Answer.Other ->
+                                  items)
+                          | Some Typed.Compiled | None -> items)
+                      @ later,
+                      exported )
+                | _ -> ((rewrite renames)#structure_item item :: later, exported)))
         | Pstr_module ({ pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ } as body; _ } as binding) ->
             let inner, found = go renames inner in
             let qualified = List.map (fun (local, target) -> (Ldot (Lident name, Longident.last_exn local), target)) found in

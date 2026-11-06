@@ -254,6 +254,32 @@ gives it: a view that reads a model field which can change in place (an array, `
 Meltea redraws only when the model value changes. It works on `.mlx` and `.ml` files alike; the law
 compiles TodoMVC both ways.
 
+`melact-ppx` takes the same flag, `(preprocess (staged_pps melange.ppx melact-ppx -- -typed))`, and
+both passes are built on one library, `melhole.typed`. The untyped rewrite runs first and is complete
+on its own. Where it wants an answer from types it asks a question, `[@melhole.ask n]` on an
+expression or an external, and leaves a site, `[@melhole.site n]` on an expression or on an
+`include struct … end` around items, together with the function that decides it. After every
+rewriter, a file that has a site is typed (an external that is not a function is typed as
+`let x : t = assert false`); each question gets the type of the one node that carries its mark, a mark
+found twice gets none, and the sites are decided innermost first. Without `-typed` nothing is marked;
+when the file does not type, every site stays as the untyped rewrite wrote it and the marks are
+removed, so the output is exactly the untyped one. Two readings are provided.
+`Melhole_typed.Mutability` says what `===` tells for a type, after expanding abbreviations and
+substituting parameters: `Immediate` (int, char, bool, unit, int32, constant constructors, string,
+float: JavaScript primitives), `Immutable_boxed`, `Mutable_inside` (an array, `bytes`, a `mutable` or
+atomic field, a ref, a `Js.dict`, a `Js.t` with a setter, a `Hashtbl.t`, or a type that holds one) or
+`Unknown` (type variables, abstract and open types, OCaml objects, modules, `lazy`). Meltea's alert is
+`Mutable_inside`. `Melact_ppx.Typed.component` says whether a type is a component: `Compiled`
+(`x_props -> React.element`, a `[@react.component]`) or `Of_props` (`props -> React.element`). The
+first site: a binding to npm's `Fragment` whose written type does not show a component, but expands
+to one of a `Js.t` with `children : React.element`, becomes `let fragment : t = Melact_npm.fragment`.
+The dual suite and the reported apps compile to the same JavaScript with and without `-typed`. The
+dual suite also runs with a test probe that asks the type of every variable passed to a function and
+checks that every question is answered and each variable typed `Immediate` is a JavaScript
+primitive. A native law checks the classifier and the component reading against their definitions on
+generated declarations; 33 mutants of them and of the sites are caught. Typing takes the compilation
+of the dual suite's 2170 lines from about 0.45 s to 0.6 s; a file without a site is not typed.
+
 ## The Rules of Hooks, checked by the type checker
 
 Every hook in `React` carries an alert, `[@@alert hook]`. `melact-ppx` turns the alert off for the

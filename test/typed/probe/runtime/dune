@@ -1,0 +1,5 @@
+(library
+ (name typed_probe_runtime)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx)))

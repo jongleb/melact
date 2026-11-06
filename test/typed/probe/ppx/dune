@@ -1,0 +1,6 @@
+(library
+ (name typed_probe)
+ (kind ppx_rewriter)
+ (libraries ppxlib compiler-libs.common melhole.typed)
+ (preprocess
+  (pps ppxlib.metaquot)))

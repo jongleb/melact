@@ -1,0 +1,8 @@
+(executable
+ (name pp)
+ (modules pp)
+ (libraries melact-ppx typed_probe ppxlib))
+
+(cram
+ (package melact-ppx)
+ (deps pp.exe))

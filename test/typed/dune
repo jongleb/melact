@@ -1,4 +1,6 @@
-; The typed pass only adds warnings: TodoMVC compiles to the same JavaScript with and without it.
+; The typed passes change only the sites they decide: TodoMVC (meltea-ppx), the dual suite and the reported apps
+; (melact-ppx, which have no site whose answer differs from the untyped one) compile to the same JavaScript with
+; and without -typed. melact/ holds sites that only types decide.
 
 (rule
  (alias runtest)
@@ -7,3 +9,30 @@
   (diff
    plain/output/test/typed/plain/todomvc.mjs
    typed/output/test/typed/typed/todomvc.mjs)))
+
+(rule
+ (alias runtest)
+ (package melact)
+ (action
+  (progn
+   (diff
+    %{dep:../dual/melact/output/test/dual/melact/dual_test.mjs}
+    %{dep:dual/output/test/typed/dual/dual_test.mjs})
+   (diff
+    %{dep:../dual/melact/output/test/dual/melact/npm_hooks.mjs}
+    %{dep:dual/output/test/typed/dual/npm_hooks.mjs})
+   (diff
+    %{dep:../regress/output/test/regress/Findings.mjs}
+    %{dep:regress/output/test/typed/regress/Findings.mjs})
+   (diff
+    %{dep:../regress/output/test/regress/Included.mjs}
+    %{dep:regress/output/test/typed/regress/Included.mjs})
+   (diff
+    %{dep:../regress/output/test/regress/MyHooks.mjs}
+    %{dep:regress/output/test/typed/regress/MyHooks.mjs})
+   (diff
+    %{dep:../regress/output/test/regress/Disambiguated.mjs}
+    %{dep:regress/output/test/typed/regress/Disambiguated.mjs})
+   (diff
+    %{dep:../regress/output/test/regress/Shapes.mjs}
+    %{dep:regress/output/test/typed/regress/Shapes.mjs}))))
