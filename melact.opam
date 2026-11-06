@@ -2,16 +2,20 @@
 opam-version: "2.0"
 synopsis:
   "The reason-react API for Melange, compiled to templates, without React or a virtual DOM"
-maintainer: ["Gleb"]
-authors: ["Gleb"]
+description:
+  "Melact keeps reason-react's API (components, hooks, ReactDOM, ReactDOMServer, ReasonReactRouter, error boundaries, Suspense) and compiles every view to DOM templates with melact-ppx: an app moves over by changing two lines of its dune file, and runs without React."
+maintainer: ["Gleb <jongleber@gmail.com>"]
+authors: ["Gleb <jongleber@gmail.com>"]
 license: "MIT"
-homepage: "https://github.com/jongleb/melact"
+homepage: "https://jongleb.github.io/melact-meltea-sites/melact/"
+doc: "https://github.com/jongleb/melact#readme"
 bug-reports: "https://github.com/jongleb/melact/issues"
 depends: [
   "ocaml" {>= "5.4"}
   "dune" {>= "3.16" & >= "3.16"}
-  "melange" {>= "5.1"}
-  "melhole"
+  "melange" {>= "7.0.0"}
+  "melhole" {= version}
+  "melact-ppx" {with-test & = version}
   "reason-react" {with-test}
   "reason-react-ppx" {with-test}
   "reason" {with-test}

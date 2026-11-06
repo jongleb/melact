@@ -2,6 +2,7 @@
 
 (rule
  (alias runtest)
+ (package meltea)
  (action
   (diff
    plain/output/test/typed/plain/todomvc.mjs

@@ -2,16 +2,19 @@
 opam-version: "2.0"
 synopsis:
   "The JSX and [@react.component] of reason-react, compiled to templates, for Melact"
-maintainer: ["Gleb"]
-authors: ["Gleb"]
+description:
+  "melact-ppx compiles reason-react's JSX, [@react.component] and hooks to melhole templates with typed hook keys, and rewrites bindings to npm's react into Melact's own functions."
+maintainer: ["Gleb <jongleber@gmail.com>"]
+authors: ["Gleb <jongleber@gmail.com>"]
 license: "MIT"
-homepage: "https://github.com/jongleb/melact"
+homepage: "https://jongleb.github.io/melact-meltea-sites/melact/"
+doc: "https://github.com/jongleb/melact#readme"
 bug-reports: "https://github.com/jongleb/melact/issues"
 depends: [
   "ocaml" {>= "5.4"}
   "dune" {>= "3.16" & >= "3.16"}
-  "ppxlib" {>= "0.34"}
-  "melhole"
+  "ppxlib" {>= "0.39.0"}
+  "melhole" {= version}
   "odoc" {with-doc}
 ]
 build: [
