@@ -713,6 +713,35 @@ module Versioned = struct
         </div>
 end
 
+(** What the context law's provider holds: its value, and which of its readers are mounted. *)
+type readers = { shade : string; shown : bool array }
+
+let readers_send = ref (fun (_ : readers -> readers) -> ())
+
+module Shade_reader = struct
+  let[@react.component] make ~label =
+    let shade = React.useContext theme in
+    let own, setOwn = React.useState (fun () -> 0) in
+    <li onClick=(fun _ -> setOwn (fun count -> count + 1))>(React.string (label ^ shade ^ string_of_int own))</li>
+end
+
+module Shaded = struct
+  let[@react.component] make () =
+    let readers, setReaders = React.useState (fun () -> { shade = "a"; shown = [| true; true; true |] }) in
+    readers_send := setReaders;
+    <Theme_provider value=readers.shade>
+      <ul>
+        (React.array
+           (Array.mapi
+              (fun index shown ->
+                match shown with
+                | true -> <Shade_reader key=(string_of_int index) label=(string_of_int index) />
+                | false -> React.null)
+              readers.shown))
+      </ul>
+    </Theme_provider>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1319,6 +1348,56 @@ let () =
                    step (remaining - 1)
              in
              step 5))
+        [%mel.obj { numRuns = 100 }]));
+  describe "readers of a context" (fun () ->
+    test_async "show its latest value after any changes, mounts, unmounts and renders of their own" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Shaded /> in
+             let own = Array.make 3 0 in
+             let rec step remaining (readers : readers) =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let* readers =
+                     match draw tape 3 with
+                     | 0 ->
+                         let next = { readers with shade = [| "a"; "b"; "c" |].(draw tape 3) } in
+                         let* () = act (fun () -> !readers_send (fun _ -> next)) in
+                         Js.Promise.resolve next
+                     | 1 ->
+                         let at = draw tape 3 in
+                         let shown = Array.mapi (fun index value -> match index = at with true -> not value | false -> value) readers.shown in
+                         if not shown.(at) then own.(at) <- 0;
+                         let next = { readers with shown } in
+                         let* () = act (fun () -> !readers_send (fun _ -> next)) in
+                         Js.Promise.resolve next
+                     | _ -> (
+                         let mounted = List.filter (fun index -> readers.shown.(index)) [ 0; 1; 2 ] in
+                         match mounted with
+                         | [] -> Js.Promise.resolve readers
+                         | _ ->
+                             let at = List.nth mounted (draw tape (List.length mounted)) in
+                             let position = List.length (List.filter (fun index -> index < at) mounted) in
+                             own.(at) <- own.(at) + 1;
+                             let* () = act (fun () -> click (element_of (nodes (select_all root "li")).(position))) in
+                             Js.Promise.resolve readers)
+                   in
+                   expect (text_content root)
+                   |. to_equal
+                        (String.concat ""
+                           (List.filter_map
+                              (fun index ->
+                                match readers.shown.(index) with
+                                | true -> Some (string_of_int index ^ readers.shade ^ string_of_int own.(index))
+                                | false -> None)
+                              [ 0; 1; 2 ]));
+                   step (remaining - 1) readers
+             in
+             step 14 { shade = "a"; shown = [| true; true; true |] }))
         [%mel.obj { numRuns = 100 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->

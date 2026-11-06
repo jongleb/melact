@@ -14,6 +14,9 @@ type caught
 external caught_of : 'a -> caught = "%identity"
 
 (** A mounted component: its hook slots, its output and its effects. *)
+(** A JavaScript [Set] of the instances that read a provider. *)
+type audience
+
 type instance = {
   parent : instance option;  (** The nearest enclosing instance. *)
   depth : int;
@@ -36,7 +39,8 @@ and kind =
       context : 'value Context.t;
       mutable value : 'value;
       mutable children : View.child;
-      mutable consumers : instance list;
+      consumers : audience;  (** The instances that read the value since it last changed. *)
+      known : audience;  (** The mounted instances that ever read it, each leaving once it unmounts. *)
     }
       -> kind
   | Catches of catching
@@ -123,6 +127,13 @@ type render_queue =
   | Unqueued
   | Next_task  (** For an update outside a discrete event: a task of its own, as React's default lane. *)
   | Next_microtask  (** For an update from a discrete event: before the browser paints, as React's sync lane. *)
+
+external audience : unit -> audience = "Set" [@@mel.new]
+external join : audience -> instance -> unit = "add" [@@mel.send]
+external member : audience -> instance -> bool = "has" [@@mel.send]
+external leave : audience -> instance -> unit = "delete" [@@mel.send]
+external each_member : audience -> ((instance -> unit)[@mel.uncurry]) -> unit = "forEach" [@@mel.send]
+external disband : audience -> unit = "clear" [@@mel.send]
 
 let thrown error =
   match error with
@@ -373,7 +384,7 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
  fun context value children ->
   View.host
     ~build:(fun [@u] position ->
-      mount_instance position (Provides { context; value; children; consumers = [] }))
+      mount_instance position (Provides { context; value; children; consumers = audience (); known = audience () }))
     ~patch:
       (fun [@u] position live ->
         match View.hosted live with
@@ -384,8 +395,8 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
                 | Some Equal ->
                     if not (Dom_api.same provision.value value) then (
                       provision.value <- value;
-                      List.iter mark_dirty provision.consumers;
-                      provision.consumers <- []);
+                      each_member provision.consumers mark_dirty;
+                      disband provision.consumers);
                     provision.children <- children;
                     refresh position instance;
                     Some live
@@ -452,8 +463,12 @@ let consume : type value. instance -> value Context.t -> value =
         | Provides provision -> (
             match Type.Id.provably_equal provision.context.witness context.witness with
             | Some Equal ->
-                if not (List.memq instance provision.consumers) then
-                  provision.consumers <- instance :: provision.consumers;
+                if not (member provision.known instance) then (
+                  join provision.known instance;
+                  on_unmount instance (fun () ->
+                      leave provision.consumers instance;
+                      leave provision.known instance));
+                join provision.consumers instance;
                 provision.value
             | None -> find above.parent)
         | Renders _ | Catches _ | Suspends _ -> find above.parent)
