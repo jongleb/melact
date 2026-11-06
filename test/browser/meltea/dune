@@ -1,0 +1,8 @@
+(melange.emit
+ (target output)
+ (alias browser)
+ (libraries meltea melhole melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (pps melange.ppx meltea-ppx)))

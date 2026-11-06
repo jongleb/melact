@@ -25,10 +25,12 @@ let key_of event =
       keys := (event, key) :: !keys;
       key
 
+let controlled = "$$melhole:controlled"
+
 let register element event =
   let key = key_of event in
   match event with
-    | "beforeinput" | "click" | "dblclick" | "contextmenu" | "focusin"
+    | "beforeinput" | "change" | "click" | "dblclick" | "contextmenu" | "focusin"
     | "focusout" | "input" | "keydown" | "keyup" | "mousedown" | "mousemove"
     | "mouseout" | "mouseover" | "mouseup" | "pointerdown" | "pointermove"
     | "pointerout" | "pointerover" | "pointerup" | "touchend" | "touchmove"
@@ -58,7 +60,13 @@ let register element event =
                 | false -> Option.iter bubble (Dom_api.parent_node node)
               in
               Option.iter bubble (Dom_api.target native);
-              Dom_api.release_current_target native
+              Dom_api.release_current_target native;
+              match event with
+              | "input" | "change" ->
+                  Option.iter
+                    (fun target -> Option.iter (fun restore -> restore native) (Dom_api.handler target controlled))
+                    (Dom_api.target native)
+              | _ -> ()
             in
             deliveries := (event, deliver) :: !deliveries;
             Dom_api.add_document_listener Dom_api.document event deliver);
@@ -70,7 +78,6 @@ let register element event =
         Dom_api.add_listener element event listener;
         Direct (fun () -> Dom_api.remove_listener element event listener)
 
-let controlled = "$$melhole:controlled"
 let set element key handler = Dom_api.set_handler element key handler
 
 external early : (unit -> (Dom.event * string Js.undefined * bool Js.undefined) array) Js.undefined

@@ -1,0 +1,21 @@
+external document : Dom.document = "document"
+external element_by_id : Dom.document -> string -> Dom.element = "getElementById" [@@mel.send]
+
+type model = { plain : string; upper : string; short : string }
+
+type message = Plain of string | Upper of string | Short of string
+
+let update message model =
+  match message with
+  | Plain text -> { model with plain = text }
+  | Upper text -> { model with upper = String.uppercase_ascii text }
+  | Short text -> { model with short = (if String.length text > 3 then String.sub text 0 3 else text) }
+
+let view model =
+  <div>
+    <input id="plain" value=model.plain onInput=(fun text -> Plain text) />
+    <input id="upper" value=model.upper onInput=(fun text -> Upper text) />
+    <input id="short" value=model.short onInput=(fun text -> Short text) />
+  </div>
+
+let () = ignore (Program.sandbox ~init:{ plain = ""; upper = ""; short = "" } ~update ~view (element_by_id document "root"))

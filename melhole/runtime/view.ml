@@ -995,8 +995,8 @@ let controlled_hole element name =
       :: !restores;
     Dom_api.queue_microtask (fun () -> Dom_api.queue_microtask restore_controlled)
   in
-  Dom_api.add_listener element "input" restore;
-  Dom_api.add_listener element "change" restore;
+  ignore (Events.register element "input");
+  ignore (Events.register element "change");
   Dom_api.set_handler element Events.controlled restore;
   hole
 

@@ -1,0 +1,17 @@
+external document : Dom.document = "document"
+external element_by_id : Dom.document -> string -> Dom.element = "getElementById" [@@mel.send]
+
+module Field = struct
+  let[@react.component] make ~id ~accept =
+    let value, setValue = React.useState (fun () -> "") in
+    <input id value onChange=(fun event -> let next = (React.Event.Form.target event)##value in setValue (fun _ -> accept next)) />
+end
+
+let () =
+  let root = ReactDOM.Client.createRoot (element_by_id document "root") in
+  ReactDOM.Client.render root
+    <div>
+      <Field id="plain" accept=(fun text -> text) />
+      <Field id="upper" accept=String.uppercase_ascii />
+      <Field id="short" accept=(fun text -> if String.length text > 3 then String.sub text 0 3 else text) />
+    </div>
