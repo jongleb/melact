@@ -1,0 +1,63 @@
+type row = { id : int; label : string }
+
+(** How a row is painted: [Danger] for the selected one. *)
+type tone = Danger | Plain
+
+(** The row whose label was clicked last. *)
+type selection = Unselected | Selected of int
+
+type state = { count : int; rows : row array; selection : selection }
+
+type action = Increment | Decrement | Select of int | Remove of int
+
+let reducer state action =
+  match action with
+  | Increment -> { state with count = state.count + 1 }
+  | Decrement -> { state with count = state.count - 1 }
+  | Select id -> { state with selection = Selected id }
+  | Remove id -> { state with rows = Js.Array.filter ~f:(fun row -> row.id <> id) state.rows }
+
+module Row = struct
+  let[@react.component] make =
+    React.memo (fun ~row ~tone ~dispatch ->
+        <tr className=(match tone with Danger -> "danger" | Plain -> "")>
+          <td className="col-md-1">(React.int row.id)</td>
+          <td className="col-md-4">
+            <a onClick=(fun _ -> dispatch (Select row.id))>(React.string row.label)</a>
+          </td>
+          <td className="col-md-1">
+            <a onClick=(fun _ -> dispatch (Remove row.id))>
+              <span className="glyphicon glyphicon-remove" ariaHidden=true />
+            </a>
+          </td>
+          <td className="col-md-6" />
+        </tr>)
+end
+
+module App = struct
+  let[@react.component] make ~rows =
+    let state, dispatch = React.useReducer reducer { count = 0; rows; selection = Unselected } in
+    <div className="container">
+      <div className="jumbotron">
+        <h1>(React.string "Server-rendered rows")</h1>
+        <div className="counter">
+          <button type_="button" id="decrement" onClick=(fun _ -> dispatch Decrement)>(React.string "-")</button>
+          <output id="count">(React.int state.count)</output>
+          <button type_="button" id="increment" onClick=(fun _ -> dispatch Increment)>(React.string "+")</button>
+        </div>
+      </div>
+      <table className="table table-hover table-striped test-data">
+        <tbody>
+          (React.array
+             (Array.map
+                (fun row ->
+                  <Row
+                    key=(string_of_int row.id)
+                    row
+                    tone=(match state.selection with Selected id when id = row.id -> Danger | _ -> Plain)
+                    dispatch />)
+                state.rows))
+        </tbody>
+      </table>
+    </div>
+end

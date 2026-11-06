@@ -1,0 +1,44 @@
+type row = { id : int; label : string }
+
+(** The row whose label was clicked last. *)
+type selection = Unselected | Selected of int
+
+type model = { count : int; rows : row list; selection : selection }
+
+type message = Increment | Decrement | Select of int | Remove of int
+
+let update message model =
+  match message with
+  | Increment -> { model with count = model.count + 1 }
+  | Decrement -> { model with count = model.count - 1 }
+  | Select id -> { model with selection = Selected id }
+  | Remove id -> { model with rows = List.filter (fun row -> row.id <> id) model.rows }
+
+let view { count; rows; selection } =
+  let row { id; label } =
+    <tr
+      key=(string_of_int id)
+      className=(match selection with Selected chosen when chosen = id -> "danger" | _ -> "")>
+      <td className="col-md-1">(Html.int id)</td>
+      <td className="col-md-4"><a onClick=(Select id)>(Html.text label)</a></td>
+      <td className="col-md-1">
+        <a onClick=(Remove id)>
+          <span className="glyphicon glyphicon-remove" ariaHidden=true />
+        </a>
+      </td>
+      <td className="col-md-6" />
+    </tr>
+  in
+  <div className="container">
+    <div className="jumbotron">
+      <h1>(Html.text "Server-rendered rows")</h1>
+      <div className="counter">
+        <button type_="button" id="decrement" onClick=Decrement>(Html.text "-")</button>
+        <output id="count">(Html.int count)</output>
+        <button type_="button" id="increment" onClick=Increment>(Html.text "+")</button>
+      </div>
+    </div>
+    <table className="table table-hover table-striped test-data">
+      <tbody>(Html.list (List.map row rows))</tbody>
+    </table>
+  </div>

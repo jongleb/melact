@@ -1,0 +1,11 @@
+{
+  "name": "melact-bench-ssr-svelte",
+  "private": true,
+  "description": "The SSR benchmark page in Svelte 5: render from svelte/server in Node, hydrate in the browser",
+  "type": "module",
+  "devDependencies": {
+    "svelte": "5.57.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "vite": "8.3.6"
+  }
+}

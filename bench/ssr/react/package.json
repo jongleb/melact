@@ -1,0 +1,14 @@
+{
+  "name": "melact-bench-ssr-react",
+  "private": true,
+  "description": "The SSR benchmark page in plain React 18 JSX: renderToString in Node, hydrateRoot in the browser",
+  "type": "module",
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.2.1",
+    "vite": "8.3.6"
+  }
+}

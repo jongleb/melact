@@ -1,0 +1,1 @@
+let render rows = ReactDOMServer.renderToString (<Page.App rows />)

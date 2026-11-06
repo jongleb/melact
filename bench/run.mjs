@@ -55,7 +55,7 @@ const build = async () => {
   }
 };
 
-const measureSizes = (names = frameworks, root = dist) => {
+export const measureSizes = (names = frameworks, root = dist) => {
   const sizes = {};
   for (const name of names) {
     const outDir = join(root, name);
@@ -72,7 +72,7 @@ const measureSizes = (names = frameworks, root = dist) => {
   return sizes;
 };
 
-const serve = (root = dist) =>
+export const serve = (root = dist) =>
   new Promise((done) => {
     const types = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css" };
     const server = createServer((request, response) => {
@@ -87,7 +87,7 @@ const serve = (root = dist) =>
     server.listen(0, "127.0.0.1", () => done(server));
   });
 
-const launch = async () => {
+export const launch = async () => {
   const profile = mkdtempSync(join(tmpdir(), "melbench-"));
   const chrome = spawn(chromePath, [
     "--headless=new",
@@ -188,7 +188,7 @@ const openPage = async (browser, url, ready = "#run") => {
   return { send, on, evaluate, click, close, exceptions };
 };
 
-const PAGE_HELPERS = `
+export const PAGE_HELPERS = `
 window.__frame = () => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
 window.__until = async (predicate, timeout = 20000) => {
   const start = performance.now();
@@ -381,7 +381,7 @@ const operations = [
   },
 ];
 
-const CATEGORIES = [
+export const CATEGORIES = [
   "devtools.timeline",
   "disabled-by-default-devtools.timeline",
   "disabled-by-default-devtools.timeline.frame",
@@ -390,12 +390,12 @@ const CATEGORIES = [
   "toplevel",
 ].join(",");
 
-const SCRIPT = new Set(["EventDispatch", "FunctionCall", "RunMicrotasks", "TimerFire", "FireAnimationFrame", "v8.run", "EvaluateScript"]);
-const STYLE = new Set(["UpdateLayoutTree", "Layout", "RecalculateStyles"]);
-const PAINT = new Set(["PrePaint", "Paint", "Layerize", "Commit", "UpdateLayer", "CompositeLayers"]);
-const TASK = new Set(["RunTask", "ThreadControllerImpl::RunTask"]);
+export const SCRIPT = new Set(["EventDispatch", "FunctionCall", "RunMicrotasks", "TimerFire", "FireAnimationFrame", "v8.run", "EvaluateScript"]);
+export const STYLE = new Set(["UpdateLayoutTree", "Layout", "RecalculateStyles"]);
+export const PAINT = new Set(["PrePaint", "Paint", "Layerize", "Commit", "UpdateLayer", "CompositeLayers"]);
+export const TASK = new Set(["RunTask", "ThreadControllerImpl::RunTask"]);
 
-const covered = (events, from, to) => {
+export const covered = (events, from, to) => {
   const spans = events
     .map((event) => [Math.max(event.ts, from), Math.min(event.ts + (event.dur ?? 0), to)])
     .filter(([start, stop]) => stop > start)
@@ -410,7 +410,7 @@ const covered = (events, from, to) => {
   return sum / 1000;
 };
 
-const analyse = (events) => {
+export const analyse = (events) => {
   const click = events.find((event) => event.name === "EventDispatch" && event.args?.data?.type === "click");
   if (!click) throw new Error("no click in trace");
   const main = events.filter((event) => event.pid === click.pid && event.tid === click.tid && event.ph === "X" && event.ts + (event.dur ?? 0) >= click.ts);
@@ -552,7 +552,7 @@ const memory = async (browser, url) => {
   }
 };
 
-const median = (values) => {
+export const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = sorted.length >> 1;
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
@@ -671,6 +671,9 @@ const report = (results) => {
 };
 
 // The app suite (bench/app) reuses the browser, page, trace and statistics code above.
-if (args.suite === "app")
-  await (await import("./app/suite.mjs")).run({ args, log, repo, launch, openPage, serve, measureSizes, covered, median, CATEGORIES, SCRIPT, STYLE, PAINT, TASK });
-else await main();
+// bench/ssr/run.mjs imports the helpers above without running a suite.
+if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+  if (args.suite === "app")
+    await (await import("./app/suite.mjs")).run({ args, log, repo, launch, openPage, serve, measureSizes, covered, median, CATEGORIES, SCRIPT, STYLE, PAINT, TASK });
+  else await main();
+}

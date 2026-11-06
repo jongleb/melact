@@ -99,3 +99,44 @@ the rows in order, which rows are expanded (with their details and toggle in agr
 selection, the cards and the totals. After each operation the normalised DOM of the four builds
 (tags, sorted attributes, text) must also be identical. The report gives the phases, the component
 renders per operation, the gzip size of the bundle, and the heap before and after mount.
+
+# Server rendering and hydration
+
+[`ssr/`](ssr) renders one page on the server and hydrates it in the browser, in every framework: a
+header, a counter and a table of N rows (1,000 and 10,000) shaped like js-framework-benchmark's
+(id, label link that selects, remove icon, `danger` on the selected row), with the same labels
+everywhere (`adjectives[i % 25] colours[i % 11] nouns[i % 13]`).
+
+| build | server | client |
+|---|---|---|
+| [`meltea/`](ssr/meltea/page.mlx) | `Program.render` from `meltea.server` with `meltea-ppx -server`, natively ([`server/`](ssr/meltea/server/server.ml)) and under Melange in Node ([`node/`](ssr/meltea/node/ssr.ml)) | `Program.sandbox ~start:Program.hydrate`, `meltea-ppx -hydratable` |
+| [`melact/`](ssr/melact/page.mlx) | `ReactDOMServer.renderToString` in Node, with linkedom or jsdom as its DOM | `ReactDOM.Client.hydrateRoot`, `melact-ppx -hydratable` |
+| [`react/`](ssr/react/src/App.jsx) | React 18.3 `renderToString`, production | `hydrateRoot` |
+| [`svelte/`](ssr/svelte/src/App.svelte) | Svelte 5 `render` from `svelte/server`, compiled for the server by its own Vite | `hydrate` |
+
+```console
+$ (cd bench/ssr && npm install) && (cd bench/ssr/react && npm install) && (cd bench/ssr/svelte && npm install)
+$ DYLD_LIBRARY_PATH=/opt/homebrew/Cellar/simdjson/4.6.4/lib node bench/ssr/run.mjs
+```
+
+Options: `--suites=ssr,hydration`, `--rows=1000,10000`, `--warmups=N` (default 20),
+`--iterations=N` (default 200 renders for 1,000 rows, 50 for 10,000), `--renderers=meltea-native,…`,
+`--frameworks=meltea,melact,react,svelte`, `--runs=N` (fresh tabs per hydration cell, default 10),
+`--throttles=1,4`, `--no-build`, `--out=file.json`, `--trace=dir`. Samples go to
+`bench/ssr/results.json`.
+
+- Server rendering: every Node renderer runs in its own fresh Node process (`NODE_ENV=production`),
+  the native one in its own executable; warmups, then the median and p95 of each call, both as the
+  string the renderer returns and with `Buffer.from(html)` added, since V8 defers flattening a string
+  built by concatenation until something reads it. Every page's HTML is parsed and must hold the N
+  rows with the right ids and labels, the same text, and the same normalised DOM (tags, attributes
+  with an empty `class` counted as none, texts) as the first renderer's; the Melange build of the
+  Meltea server must write the native one's bytes.
+- Hydration: each client is bundled for production with Vite; the page is its own server's HTML
+  plus the rows as a `<script type="application/json">`. Every sample is a fresh tab, traced from
+  navigation to 500 ms after the client sets `window.__hydrated` (after the hydrate call returns;
+  React's from a layout effect of its first commit). It reports the marks around the hydration, the
+  main thread's busy time from navigation start to hydrated with its script, layout and paint parts,
+  total blocking time, then the busy time of a first real click on a row label until the paint that
+  shows the row selected. Every page must keep the rows the parser built (the first and last row
+  elements are the same objects after hydration), and show exactly that row selected after the click.

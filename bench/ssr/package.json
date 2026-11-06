@@ -1,0 +1,9 @@
+{
+  "name": "melact-bench-ssr",
+  "private": true,
+  "description": "The server-rendering and hydration benchmark: linkedom gives Melact's DOM-based renderToString a DOM in Node",
+  "type": "module",
+  "devDependencies": {
+    "linkedom": "0.18.15"
+  }
+}
