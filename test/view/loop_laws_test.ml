@@ -374,3 +374,65 @@ let () =
                  View.unmount mounted;
                  expect (List.map fst seen) |. to_equal (List.map snd seen)))
             [%mel.obj { numRuns = 400 }]))
+
+let attached = Hashtbl.create 16
+
+let attach =
+  Array.map
+    (fun item ->
+      ( item.key,
+        fun element ->
+          Hashtbl.replace attached item.key
+            (Option.value ~default:0 (Hashtbl.find_opt attached item.key)
+            + match Js.Nullable.toOption element with Some _ -> 1 | None -> -1) ))
+    fresh_items
+
+let referring_template =
+  View.template (Template.html "<li></li>")
+    (fun [@u] node ->
+      ( Template.element node,
+        View.text_hole { parent = node; before = Template.first_or_end node },
+        View.reference_hole (Template.element node) ))
+    {
+      placed = Some (fun [@u] (_, _, reference) -> View.place_reference reference);
+      released = Some (fun [@u] (_, _, reference) -> View.release_reference reference);
+      forgotten = None;
+    }
+
+let referring items =
+  View.rows items referring_template
+    (fun [@u] (root, _, _) -> root)
+    (fun [@u] (_, text, reference) item ->
+      let callback = List.assoc item.key (Array.to_list attach) in
+      View.set_text text item.label;
+      View.set_reference reference callback callback)
+    (fun [@u] item -> item.key)
+    (fun [@u] _ _ _ _ -> ())
+    0 View.no_inputs
+
+let () =
+  describe "Compiled loops with refs" (fun () ->
+      test "every row's ref holds its element while the row is shown, and lets go when it goes" (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 Hashtbl.reset attached;
+                 let held () =
+                   List.filter (fun (_, count) -> count <> 0) (List.sort compare (List.of_seq (Hashtbl.to_seq attached)))
+                 in
+                 let expected items = List.sort compare (List.map (fun item -> (item.key, 1)) (Array.to_list items)) in
+                 let root = create_element document "ul" in
+                 let items, _ = start in
+                 let mounted = View.mount (referring items) ~parent:root ~before:None in
+                 let rec run state remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let ((items, _) as next), _ = step tape state in
+                       View.patch mounted (referring items);
+                       (held (), expected items) :: run next (remaining - 1)
+                 in
+                 let seen = run start (2 + draw tape 12) in
+                 View.unmount mounted;
+                 expect ((held (), []) :: seen) |. to_equal (([], []) :: List.map (fun (_, wanted) -> (wanted, wanted)) seen)))
+            [%mel.obj { numRuns = 300 }]))

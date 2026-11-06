@@ -148,6 +148,19 @@ clicks. With `Html.map` the dispatch changes and the site makes a new shared han
 render rather than per element. A benchmark row now allocates no closure: 1,000 rows take 1.23 MB,
 and creating them allocates half of what it did before compiled rows.
 
+A row is now its frame and nothing else: the root element, the holes the refresh writes and the
+values it remembers, in one record of the template's own type. The loop keeps the frames in one
+array and reaches a row's root through a function generated once per loop site; the template's
+witness, checked once per patch rather than per row, proves the frames' type, and a hole that
+switches to another loop builds that loop afresh. A text or attribute whose value is a local
+itself, `string_of_int` of it or `Some` of it changes exactly when the local does, so it keeps no
+value of its own. The benchmark row went from four JavaScript objects and two array stores (the
+row record, its scope, the dependency array and the holes tuple) to one object of nine fields: 1,000 rows
+take 1.07 MB instead of 1.19. Melact's rows gain more, because every mounted child lost its three
+closures and every content hole its cleanup closure and the child description it kept for an
+identity check (1.61 to 1.26 MB), and the app benchmark's 2,009 components take 2.82 MB after
+mount, where they took 4.93 and React takes 4.00.
+
 A dynamic text that is the only child of its element (`<td>(Html.int id)</td>`) is not a slot at a
 position but a hole on the element: the first write sets `textContent`, later writes go to
 `firstChild.data`. The template keeps the element empty, the walk stops at the element, and server
