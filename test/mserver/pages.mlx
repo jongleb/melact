@@ -29,6 +29,7 @@ type node =
   | Built of string * string option * int * bool
   | Settles of int
   | Waits of node
+  | Fails of node
   | Html of string
   | Pre of string
   | Number of float
@@ -60,7 +61,7 @@ let decode values =
       let second = node (depth - 1) in
       (first, second)
     in
-    let kind = match (depth, draw 5) with 0, _ | _, 0 -> draw 13 | _, _ -> 13 + draw 14 in
+    let kind = match (depth, draw 5) with 0, _ | _, 0 -> draw 13 | _, _ -> 13 + draw 15 in
     match kind with
     | 0 -> Word (word ())
     | 1 ->
@@ -126,6 +127,7 @@ let decode values =
     | 23 -> Bounded (node (depth - 1))
     | 24 -> Listed_too (List.init (draw 4) (fun index -> let label = word () in label ^ string_of_int index))
     | 25 -> Memo (word ())
+    | 26 -> Fails (node (depth - 1))
     | _ -> Picked [| "a"; "b"; "c" |].(draw 3)
   in
   node 5
@@ -177,6 +179,10 @@ module Settles = struct
     renders.current <- renders.current + 1;
     if count < upto then setCount (fun count -> count + 1);
     <b title=(string_of_int renders.current ^ "/" ^ string_of_int first)>(React.int count)</b>
+end
+
+module Bomb = struct
+  let[@react.component] make () = failwith "boom"
 end
 
 module Memo = struct
@@ -243,6 +249,11 @@ let rec page node =
       </div>
   | Settles upto -> <Settles upto />
   | Waits inner -> <React.Suspense fallback=(React.string "waiting")>(page inner)</React.Suspense>
+  | Fails inner ->
+      <React.Suspense fallback=(<i>(React.string "failed")</i>)>
+        <b>(page inner)</b>
+        <Bomb />
+      </React.Suspense>
   | Html html -> <div dangerouslySetInnerHTML=(Shim.html ("<i>" ^ html ^ "</i>")) />
   | Pre text -> <pre>(React.string text)</pre>
   | Number value -> <span>(React.float value)(React.float (value *. 2.))</span>
@@ -254,18 +265,16 @@ let rec page node =
 
 let shown values = <main>(page (decode values))</main>
 
-let rec render_phase node =
+let rec on_client node =
+  let either first second = match first with `Renders -> second | `Sets_state | `Throws -> first in
   match node with
   | Settles _ -> `Sets_state
-  | Pair (first, second) | Fragment (first, second) -> (
-      match render_phase first with `Sets_state -> `Sets_state | `Pure -> render_phase second)
-  | Trio (first, second, third) -> (
-      match (render_phase first, render_phase second) with
-      | `Sets_state, _ | _, `Sets_state -> `Sets_state
-      | `Pure, `Pure -> render_phase third)
+  | Fails _ -> `Throws
+  | Pair (first, second) | Fragment (first, second) -> either (on_client first) (on_client second)
+  | Trio (first, second, third) -> either (on_client first) (either (on_client second) (on_client third))
   | Mixed (_, _, inner) | Ids inner | Themed (_, inner) | Styled (_, _, inner) | Waits inner | Single_fragment inner | Bounded inner
   | Maybe (Some inner) ->
-      render_phase inner
-  | Word _ | Listed _ | Listed_too _ | Listed_ids _ | Maybe None | Counter _ | Id | Reader | Field _ | Attributes _ | Built _ | Html _ | Pre _
-  | Number _ | Memo _ | Picked _ ->
-      `Pure
+      on_client inner
+  | Word _ | Listed _ | Listed_too _ | Listed_ids _ | Maybe None | Counter _ | Id | Reader | Field _ | Attributes _ | Built _
+  | Html _ | Pre _ | Number _ | Memo _ | Picked _ ->
+      `Renders

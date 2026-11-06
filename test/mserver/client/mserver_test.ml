@@ -77,10 +77,15 @@ let observe root =
 let () =
   ([%mel.raw {|function () { console.error = function () {}; }|}] : unit -> unit) ();
   describe "Melact's server without a DOM" (fun () ->
-      test "writes what React 18's renderToString and renderToStaticMarkup write, byte for byte" (fun () ->
+      test "writes what React 18's renderToString (in production) and renderToStaticMarkup write, byte for byte" (fun () ->
+          let production html =
+            Js.String.replaceByRe ~regexp:[%re {|/<template data-msg="[^"]*"( data-stck="[^"]*")?><\/template>/g|}]
+              ~replacement:"<template></template>" html
+          in
           check
             (property (tapes ~shortest:0 ~longest:200) (fun values ->
-                 expect (melact_page values, melact_markup values) |. to_equal (react_page values, react_markup values)))
+                 expect (melact_page values, melact_markup values)
+                 |. to_equal (production (react_page values), react_markup values)))
             [%mel.obj { numRuns = 2000 }]);
       test "runs no effect, as React's server runs none" (fun () ->
           ignore (melact_page [| 1; 1 |]);
@@ -96,9 +101,9 @@ let () =
           let* () =
           check_async
             (async_property (tapes ~shortest:0 ~longest:200) (fun values ->
-                 match Pages.render_phase (Pages.decode values) with
-                 | `Sets_state -> Js.Promise.resolve ()
-                 | `Pure ->
+                 match Pages.on_client (Pages.decode values) with
+                 | `Sets_state | `Throws -> Js.Promise.resolve ()
+                 | `Renders ->
                  incr hydrated;
                  let tape = tape values in
                  let broken = attached () in
@@ -125,7 +130,7 @@ let () =
                  let first = (observe served, observe fresh) in
                  let next =
                    let drawn = Array.init (draw tape 60) (fun _ -> draw tape 1000) in
-                   match Pages.render_phase (Pages.decode drawn) with `Sets_state -> [||] | `Pure -> drawn
+                   match Pages.on_client (Pages.decode drawn) with `Sets_state | `Throws -> [||] | `Renders -> drawn
                  in
                  let* () =
                    act (fun () ->

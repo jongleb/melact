@@ -1293,7 +1293,7 @@ let loop frontend ~loc ~definitions ~view ~stable ~render ~numbering row items =
 let fragment frontend ~loc items =
   let children = List.map (fun item -> frontend.unwrap loc (frontend.map item)) items in
   match (!output, frontend.ids, children) with
-  | _, Tree_ids, [ only ] -> frontend.wrap loc only
+  | Server, Tree_ids, [ only ] -> frontend.wrap loc only
   | Server, Tree_ids, _ -> frontend.wrap loc [%expr Melhole_server.array [%e pexp_array ~loc children]]
   | Server, No_ids, _ -> frontend.wrap loc [%expr Melhole_server.list [%e elist ~loc children]]
   | (Client_only | Hydratable), _, _ -> frontend.wrap loc [%expr Melhole.View.list [%e elist ~loc children]]
