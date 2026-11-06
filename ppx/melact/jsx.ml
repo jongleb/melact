@@ -227,7 +227,13 @@ let component ~loc ~name ~props_constructor expression =
                   | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))])]])
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
-let props_type name = match name with "make" -> "props" | other -> other ^ "_props"
+let props_type name = name ^ "_props"
+
+(** Modules whose [use…] functions are React's hooks, from [-hook-modules]. *)
+let hook_modules = ref []
+
+(** Whether [open React] is in force, so that a bare [useState] is React's. *)
+type opened = Opened | Closed
 
 let rec with_unit typ =
   match typ.ptyp_desc with
@@ -319,10 +325,40 @@ let mapper =
                   row items));
       }
 
-    method! structure items = Hoist.structure self#structure_item items
+    val mutable react : opened = Closed
+    val mutable hooks : string list = []
+
+    method! structure items =
+      let saved = react and known = hooks in
+      let mapped = Hoist.structure self#structure_item items in
+      react <- saved;
+      hooks <- known;
+      mapped
 
     method! structure_item item =
       match item.pstr_desc with
+      | Pstr_open { popen_expr = { pmod_desc = Pmod_ident { txt = Lident "React"; _ }; _ }; _ } ->
+          react <- Opened;
+          item
+      | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr; _ }
+        when (match pmb_expr.pmod_desc with
+             | Pmod_ident { txt = Lident "React"; _ } -> true
+             | Pmod_structure items ->
+                 List.exists
+                   (fun inner ->
+                     match inner.pstr_desc with
+                     | Pstr_include { pincl_mod = { pmod_desc = Pmod_ident { txt = Lident "React"; _ }; _ }; _ } -> true
+                     | _ -> false)
+                   items
+             | _ -> false) ->
+          hooks <- name :: hooks;
+          super#structure_item item
+      | Pstr_primitive description
+        when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
+          Location.raise_errorf ~loc:item.pstr_loc
+            "melact: [@react.component] external binds a component of a JavaScript React library. It is React \
+             code and needs React itself to render; Melact cannot run it. Write the component in Reason or \
+             OCaml, or keep this part of the app on reason-react."
       | Pstr_value (flag, bindings) -> (
           let expanded = List.map self#component bindings in
           match List.concat_map (fun (types, _, _) -> types) expanded with
@@ -422,10 +458,23 @@ let mapper =
     method! expression expression =
       let loc = expression.pexp_loc in
       match expression.pexp_desc with
-      | Pexp_ident { txt = Ldot (Lident "React", name); _ }
-        when List.exists (String.equal name) keyed_hooks ->
-          pexp_apply ~loc expression
-            [ (Nolabel, Hoist.hoist ~loc "hook" [%expr Melact_runtime.Hook.key ()]) ]
+      | Pexp_ident { txt = Ldot (Lident "React", name) | Lident name; _ }
+        when List.exists (String.equal name) keyed_hooks
+             && (match (expression.pexp_desc, react) with
+                | Pexp_ident { txt = Ldot _; _ }, _ -> true
+                | Pexp_ident { txt = Lident _; _ }, Opened -> not (List.mem name self#locals)
+                | _ -> false) ->
+          self#keyed expression
+      | Pexp_ident { txt = Ldot (Lident owner, name); _ }
+        when List.exists (String.equal name) keyed_hooks
+             && (List.mem owner hooks || List.mem owner !hook_modules) ->
+          self#keyed expression
+      | Pexp_open ({ popen_expr = { pmod_desc = Pmod_ident { txt = Lident "React"; _ }; _ }; _ }, _) ->
+          let saved = react in
+          react <- Opened;
+          let mapped = super#expression expression in
+          react <- saved;
+          mapped
       | Pexp_apply (callee, arguments)
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed") expression.pexp_attributes ->
           {
@@ -450,6 +499,16 @@ let mapper =
                 (Option.value ~default:[] (Element.list_items expression))
           | None -> super#expression expression)
       | _ -> super#expression expression
+
+    method private keyed expression =
+      let loc = expression.pexp_loc in
+      pexp_apply ~loc expression
+        [
+          ( Nolabel,
+            [%expr
+              Melact_runtime.Hook.unchecked
+                [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)]]] );
+        ]
 
     method private uppercase ~loc path name arguments =
       let key =
@@ -499,9 +558,16 @@ let structure items =
   [%stri [@@@alert "-hook"]] :: mapper#structure items
 let signature items = mapper#signature items
 let () =
+  Driver.add_arg "-hook-modules"
+    (Arg.String (fun names -> hook_modules := String.split_on_char ',' names @ !hook_modules))
+    ~doc:" modules whose use… functions are React's hooks, like a module that includes React (comma separated)"
+
+let () =
   Driver.add_arg "-hydratable"
     (Arg.Unit (fun () -> Element.output := Element.Hydratable))
     ~doc:" compile templates that can take over server-rendered HTML"
 
 let () =
-  Driver.register_transformation "melact" ~preprocess_impl:Npm_react.structure ~impl:structure ~intf:signature
+  Driver.register_transformation "melact"
+    ~instrument:(Driver.Instrument.make Npm_react.structure ~position:Before)
+    ~impl:structure ~intf:signature

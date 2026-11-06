@@ -367,6 +367,10 @@ type domRef =
   | Callback of (Dom.element Js.nullable -> unit)
 
 module Ref = struct
+  type t = domRef
+  type currentDomRef = Dom.element Js.nullable React.ref
+  type callbackDomRef = Dom.element Js.nullable -> unit
+
   let domRef target = Current target
   let callbackDomRef apply = Callback apply
 

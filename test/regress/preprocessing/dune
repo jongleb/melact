@@ -1,0 +1,4 @@
+(library
+ (name preprocessing)
+ (kind ppx_rewriter)
+ (libraries ppxlib))

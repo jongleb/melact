@@ -70,8 +70,16 @@ let target package name type_ attributes =
       | false -> created (Children_from 2))
   | ("react/jsx-runtime" | "react/jsx-dev-runtime"), ("jsx" | "jsxs" | "jsxDEV") -> (
       match List.length (parameters type_) with 2 -> created (Children_from 2) | _ -> created (Key_at 2))
-  | ("react" | "react/jsx-runtime" | "react/jsx-dev-runtime"), "Fragment" ->
-      Some (Ldot (Lident "Melact_npm", "fragment"), Plain, As_given)
+  | ("react" | "react/jsx-runtime" | "react/jsx-dev-runtime"), "Fragment" -> (
+      let rec component type_ =
+        match type_.ptyp_desc with
+        | Ptyp_var _ | Ptyp_constr ({ txt = Ldot (Lident "React", "element"); _ }, [])
+        | Ptyp_constr ({ txt = Ldot (Lident "React", "component"); _ }, [ _ ]) ->
+            Some (Ldot (Lident "Melact_npm", "fragment"), Plain, As_given)
+        | Ptyp_arrow (_, _, rest) | Ptyp_poly (_, rest) -> component rest
+        | _ -> None
+      in
+      component type_)
   | _ -> None
 
 let structure items =

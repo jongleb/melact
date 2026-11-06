@@ -363,8 +363,14 @@ type domRef =
   | Callback of (Dom.element Js.nullable -> unit)  (** Called with the element once mounted. *)
 
 module Ref : sig
-  val domRef : Dom.element Js.nullable React.ref -> domRef
-  val callbackDomRef : (Dom.element Js.nullable -> unit) -> domRef
+  (** reason-react's names for the two kinds of ref, kept for code typed against them. *)
+  type t = domRef
+
+  type currentDomRef = Dom.element Js.nullable React.ref
+  type callbackDomRef = Dom.element Js.nullable -> unit
+
+  val domRef : currentDomRef -> domRef
+  val callbackDomRef : callbackDomRef -> domRef
   val attach : domRef -> Dom.element -> unit
   val forwarded : domRef option -> Dom.element Js.nullable React.ref Js.Nullable.t
 end
