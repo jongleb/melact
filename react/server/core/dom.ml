@@ -1,12 +1,14 @@
+type switch = On | Off
+
 type prop =
   | Attribute of string * string
   | Present of string
   | Number of string * int
   | Value of string
   | Default_value of string
-  | Checked of bool
-  | Default_checked of bool
-  | Selected of bool
+  | Checked of switch
+  | Default_checked of switch
+  | Selected of switch
   | Style of (string * string) list
   | Inner_html of string
 
@@ -14,8 +16,8 @@ type prop =
 type later = {
   value : string option;
   default_value : string option;
-  checked : bool option;
-  default_checked : bool option;
+  checked : switch option;
+  default_checked : switch option;
   selected : Melhole_server.marked;
   html : string option;
 }
@@ -46,15 +48,17 @@ let element tag props children =
                 later
             | Default_value value, _ -> { later with default_value = Some value }
             | Checked checked, "input" -> { later with checked = Some checked }
-            | Checked checked, _ ->
-                Melhole_server.flag writer "checked" checked;
+            | Checked On, _ ->
+                Melhole_server.attribute writer "checked" (Some "");
                 later
+            | Checked Off, _ -> later
             | Default_checked checked, _ -> { later with default_checked = Some checked }
-            | Selected true, "option" -> { later with selected = Melhole_server.Marked }
-            | Selected false, "option" -> { later with selected = Melhole_server.Unmarked }
-            | Selected selected, _ ->
-                Melhole_server.flag writer "selected" selected;
+            | Selected On, "option" -> { later with selected = Melhole_server.Marked }
+            | Selected Off, "option" -> { later with selected = Melhole_server.Unmarked }
+            | Selected On, _ ->
+                Melhole_server.attribute writer "selected" (Some "");
                 later
+            | Selected Off, _ -> later
             | Style declarations, _ ->
                 Melhole_server.style writer declarations;
                 later
@@ -65,7 +69,8 @@ let element tag props children =
       let given = match later.value with Some _ -> later.value | None -> later.default_value in
       (match tag with
       | "input" ->
-          Option.iter (Melhole_server.flag writer "checked")
+          Option.iter
+            (fun checked -> match checked with On -> Melhole_server.attribute writer "checked" (Some "") | Off -> ())
             (match later.checked with Some _ -> later.checked | None -> later.default_checked);
           Melhole_server.attribute writer "value" given
       | "option" ->

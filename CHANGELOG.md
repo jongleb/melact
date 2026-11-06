@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Melact renders on a server without a DOM: `melact-ppx -server` with `melact.server` (Melange, in
+  Node) or `melact.server.native` (native OCaml) writes byte for byte what React 18's
+  `renderToString` and `renderToStaticMarkup` write, `useId` and Suspense included, and Melact's
+  client hydrates it with the same ids. A 1,000-row page takes 0.26 ms natively and 0.15 ms in Node,
+  React 1.1 ms.
+
 ## 0.1.0
 
 The first release.

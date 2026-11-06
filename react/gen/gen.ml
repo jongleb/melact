@@ -82,7 +82,7 @@ let native_prop name (kind : Melhole_compiler.Dom_props.kind) variable =
   let mapped constructor = Printf.sprintf "Option.map (fun value -> Melact_server.Dom.%s) %s" constructor variable in
   match (name, kind) with
   | "defaultValue", _ -> Some (mapped "Default_value value")
-  | "defaultChecked", _ -> Some (mapped "Default_checked value")
+  | "defaultChecked", _ -> Some (mapped "Default_checked (match value with true -> On | false -> Off)")
   | _, Attribute (attribute, Text) -> Some (mapped (Printf.sprintf "Attribute (%S, value)" (Melhole_compiler.Dom_props.react_name attribute)))
   | _, Attribute (attribute, Flag) ->
       Some
@@ -94,8 +94,8 @@ let native_prop name (kind : Melhole_compiler.Dom_props.kind) variable =
   | _, Attribute (attribute, Integer) -> Some (mapped (Printf.sprintf "Number (%S, value)" (Melhole_compiler.Dom_props.react_name attribute)))
   | _, Attribute (attribute, Decimal) -> Some (mapped (Printf.sprintf "Attribute (%S, Melhole_server.float value)" (Melhole_compiler.Dom_props.react_name attribute)))
   | _, (Property ("value", _) | Controlled ("value", _)) -> Some (mapped "Value value")
-  | _, (Property ("checked", _) | Controlled ("checked", _)) -> Some (mapped "Checked value")
-  | _, (Property ("selected", _) | Controlled ("selected", _)) -> Some (mapped "Selected value")
+  | _, (Property ("checked", _) | Controlled ("checked", _)) -> Some (mapped "Checked (match value with true -> On | false -> Off)")
+  | _, (Property ("selected", _) | Controlled ("selected", _)) -> Some (mapped "Selected (match value with true -> On | false -> Off)")
   | _, (Property (property, _) | Controlled (property, _)) ->
       Some
         (Printf.sprintf "Option.bind %s (fun value -> match value with true -> Some (Melact_server.Dom.Present %S) | false -> None)"

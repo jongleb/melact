@@ -61,32 +61,32 @@ type applying =
 
 [@@@melact.dom_props]
 
-let props_of props =
-  List.filter_map
-    (fun name ->
-      match applying name with
-      | Text_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, read props name))
-      | Flag_attribute attribute -> (
-          match (read props name : bool) with true -> Some (Melact_server.Dom.Present attribute) | false -> None)
-      | Booleanish_attribute attribute ->
-          Some (Melact_server.Dom.Attribute (attribute, match (read props name : bool) with true -> "true" | false -> "false"))
-      | Integer_attribute attribute -> Some (Melact_server.Dom.Number (attribute, read props name))
-      | Decimal_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, Melhole_server.float (read props name)))
-      | Property_value "value" | Controlled_value "value" -> Some (Melact_server.Dom.Value (read props name))
-      | Property_value "checked" | Controlled_value "checked" -> Some (Melact_server.Dom.Checked (read props name))
-      | Property_value "selected" | Controlled_value "selected" -> Some (Melact_server.Dom.Selected (read props name))
-      | Property_value property | Controlled_value property -> (
-          match (read props name : bool) with true -> Some (Melact_server.Dom.Present property) | false -> None)
-      | Default_value_prop -> Some (Melact_server.Dom.Default_value (read props name))
-      | Default_checked_prop -> Some (Melact_server.Dom.Default_checked (read props name))
-      | Style_value -> Some (Melact_server.Dom.Style (Style.declarations (read props name)))
-      | Inner_html_value -> Some (Melact_server.Dom.Inner_html (html_of (read props name)))
-      | Event _ | Ref_value | Skipped -> None)
-    (List.filter
-       (fun name -> not (String.equal name "key" || String.equal name "children"))
-       (Array.to_list (keys props)))
-
 let dom tag props children =
+  let props_of props =
+    List.filter_map
+      (fun name ->
+        match applying name with
+        | Text_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, read props name))
+        | Flag_attribute attribute -> (
+            match (read props name : bool) with true -> Some (Melact_server.Dom.Present attribute) | false -> None)
+        | Booleanish_attribute attribute ->
+            Some (Melact_server.Dom.Attribute (attribute, match (read props name : bool) with true -> "true" | false -> "false"))
+        | Integer_attribute attribute -> Some (Melact_server.Dom.Number (attribute, read props name))
+        | Decimal_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, Melhole_server.float (read props name)))
+        | Property_value "value" | Controlled_value "value" -> Some (Melact_server.Dom.Value (read props name))
+        | Property_value "checked" | Controlled_value "checked" -> Some (Melact_server.Dom.Checked (match (read props name : bool) with true -> On | false -> Off))
+        | Property_value "selected" | Controlled_value "selected" -> Some (Melact_server.Dom.Selected (match (read props name : bool) with true -> On | false -> Off))
+        | Property_value property | Controlled_value property -> (
+            match (read props name : bool) with true -> Some (Melact_server.Dom.Present property) | false -> None)
+        | Default_value_prop -> Some (Melact_server.Dom.Default_value (read props name))
+        | Default_checked_prop -> Some (Melact_server.Dom.Default_checked (match (read props name : bool) with true -> On | false -> Off))
+        | Style_value -> Some (Melact_server.Dom.Style (Style.declarations (read props name)))
+        | Inner_html_value -> Some (Melact_server.Dom.Inner_html (html_of (read props name)))
+        | Event _ | Ref_value | Skipped -> None)
+      (List.filter
+         (fun name -> not (String.equal name "key" || String.equal name "children"))
+         (Array.to_list (keys props)))
+  in
   let content =
     match children with
     | [||] -> Option.fold ~none:Melhole_server.empty ~some:React.to_child (Js.Undefined.toOption (lookup props "children"))
