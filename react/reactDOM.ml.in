@@ -550,14 +550,15 @@ let clear built name =
   | Skipped -> ()
 
 let dom_built =
-  View.hosting
+  lazy
+  (View.hosting
     ~visit:(fun [@u] built visit -> visit (Dom_api.to_node built.element) [@u])
     ~first:(fun [@u] built _ -> Js.Null.return (Dom_api.to_node built.element))
     ~let_go:(fun [@u] built ->
       View.release built.inner;
       List.iter (fun stop -> stop ()) built.cleanups;
       built.life <- Released;
-      clear built "ref")
+      clear built "ref"))
 
 let given props = Js.Array.filter ~f:(fun name -> not (String.equal name "key" || String.equal name "children")) (keys props)
 
@@ -591,9 +592,9 @@ let dom tag props children =
         in
         Array.iter (apply built props) (given props);
         (match !View.medium.adoption with Fresh_nodes -> View.insert position (Dom_api.to_node element) | Server_nodes -> ());
-        View.live dom_built built)
+        View.live (Lazy.force dom_built) built)
       ~patch:(fun [@u] _ live ->
-        match View.hosted dom_built live with
+        match View.hosted (Lazy.force dom_built) live with
         | Some built when String.equal built.tag tag ->
             let old = built.shown in
             Array.iter
