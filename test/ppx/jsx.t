@@ -1223,8 +1223,14 @@ reads its index is numbered, one that ignores it is not:
   > let js_numbered items = ((ul ~children:[ items |. Js.Array.mapi ~f:(fun x i -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
   > let unused items = ((ul ~children:[ Array.mapi (fun _ x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) items |. React.array ] ()) [@JSX])
   > EOF
-  $ ./pp.exe -impl forms.ml | grep -o "Melhole.View.each Melhole.View.[A-Za-z]*"
-  [1]
+  $ ./pp.exe -impl forms.ml | grep -o "Melhole.View.Items\\|Melhole.View.Numbered"
+  Melhole.View.Items
+  Melhole.View.Items
+  Melhole.View.Items
+  Melhole.View.Numbered
+  Melhole.View.Numbered
+  Melhole.View.Numbered
+  Melhole.View.Items
 
 A row function bound by a let in a component is cached and still compiles to a loop:
 
@@ -1247,8 +1253,10 @@ index:
   > [@@react.component]
   > let plain ~items ~chosen = ((ul ~children:[ items |. Belt.Array.map (fun x -> ((Row.createElement ~key:x ~tone:(if x = chosen then "on" else "") ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
   > EOF
-  $ ./pp.exe -impl selected.ml | tr -s ' \n' ' ' | grep -o "Melhole.View.each Melhole.View.[A-Za-z]*\|Melhole.View.selector Melhole.View.[A-Za-z]*\|Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let [^}]*"
+  $ ./pp.exe -impl selected.ml | tr -s ' \n' ' ' | grep -o "Melhole.View.each __melhole_site_[0-9]* Melhole.View.[A-Za-z]*\|Melhole.View.selector Melhole.View.[A-Za-z]*\|Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let [^}]*"
+  Melhole.View.each __melhole_site_3 Melhole.View.Numbered
   Melhole.View.selector Melhole.View.Structural
   Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let i = __melhole_index in let x = __melhole_item in i) [@ocaml.warning "-26-27"])) 
+  Melhole.View.each __melhole_site_7 Melhole.View.Items
   Melhole.View.selector Melhole.View.Structural
   Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let x = __melhole_item in x) [@ocaml.warning "-26-27"])) 
