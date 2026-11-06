@@ -22,6 +22,7 @@ end
 
 type ('state, 'action) state = {
   mutable value : 'state;
+  mutable rendered : 'state;  (** The value the last render read. *)
   mutable reduce : 'state -> 'action -> 'state;
   dispatch : 'action -> unit;
 }
@@ -117,18 +118,20 @@ let reducer key reduce initial =
         let rec cell =
           {
             value = initial;
+            rendered = initial;
             reduce;
             dispatch =
               (fun action ->
                 let next = cell.reduce cell.value action in
                 if not (next == cell.value) then (
-                  Instance.invalidate instance;
+                  Instance.invalidate_state instance check;
                   cell.value <- next));
           }
-        in
+        and check () = match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed in
         cell)
   in
   cell.reduce <- reduce;
+  cell.rendered <- cell.value;
   (cell.value, cell.dispatch)
 
 let useState key init = reducer key (fun state update -> update state) init

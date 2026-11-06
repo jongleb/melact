@@ -742,6 +742,30 @@ module Shaded = struct
     </Theme_provider>
 end
 
+let held_renders = ref 0
+let flip_send = ref (fun (_ : int -> int) -> ())
+
+module Holds_its_element = struct
+  let[@react.component] make () =
+    incr held_renders;
+    let element, setElement = React.useState (fun () -> None) in
+    <div ref=(ReactDOM.Ref.callbackDomRef (fun node -> if !held_renders < 50 then setElement (fun _ -> Js.Nullable.toOption node)))>
+      (React.string (match element with Some held -> tag_name held | None -> "none"))
+    </div>
+end
+
+module Flipped = struct
+  let[@react.component] make () =
+    let value, setValue = React.useState (fun () -> 0) in
+    flip_send := setValue;
+    React.useEffect1
+      (fun () ->
+        log ("effect " ^ string_of_int value);
+        None)
+      [| value |];
+    <p>(React.int value)</p>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1399,6 +1423,34 @@ let () =
              in
              step 14 { shade = "a"; shown = [| true; true; true |] }))
         [%mel.obj { numRuns = 100 }]));
+  describe "state that ends where it started" (fun () ->
+    test_async "an inline callback ref that keeps its element in state settles, holding the element" (fun () ->
+      held_renders := 0;
+      let* root, client = mount <Holds_its_element /> in
+      let* () = act (fun () -> ()) in
+      expect (text_content root, !held_renders <= 3) |. to_equal ("DIV", true);
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      finish ());
+    test_async "set and set back in one batch commits nothing and runs no effect" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:12) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Flipped /> in
+             let rec step remaining value =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let other = value + 1 + draw tape 3 in
+                   let back = match draw tape 2 with 0 -> value | _ -> other in
+                   let* () = act (fun () -> !flip_send (fun _ -> other); !flip_send (fun _ -> back)) in
+                   expect (text_content root, take ())
+                   |. to_equal (string_of_int back, match back = value with true -> [] | false -> [ "effect " ^ string_of_int back ]);
+                   step (remaining - 1) back
+             in
+             step (Array.length values) 0))
+        [%mel.obj { numRuns = 60 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async

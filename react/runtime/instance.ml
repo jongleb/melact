@@ -91,7 +91,13 @@ and failure =
   | Struck of caught  (** Caught in an effect: the children go on the next pass. *)
   | Failed of caught  (** Shows the fallback. *)
 
-and status = Clean | Dirty | Unmounted
+and status = Clean | Dirty of dirt | Unmounted
+
+(** Why an instance is to render again. *)
+and dirt =
+  | Forced  (** Its parent, a context or a boundary asks for it. *)
+  | Stated of (unit -> View.change) list
+      (** Only its own state changed: each check tells whether a value differs from the one it last rendered with. *)
 
 (** Where an instance sits in the DOM when its output has no nodes. *)
 and region =
@@ -178,20 +184,18 @@ let within cell value run =
       cell := saved;
       raise error
 
+let visit_nodes instance visit =
+  instance.output.each visit [@u];
+  match instance.region with Marker node -> visit (Dom_api.to_node node) [@u] | Nodes -> ()
+
+let front_node instance after =
+  instance.output.front
+    (match instance.region with Marker node -> Js.Null.return (Dom_api.to_node node) | Nodes -> after) [@u]
+
 let instance_live instance =
   View.live (Instance instance)
-    ~each:
-      (fun [@u] visit ->
-        instance.output.each visit [@u];
-        match instance.region with
-        | Marker node -> visit (Dom_api.to_node node) [@u]
-        | Nodes -> ())
-    ~front:
-      (fun [@u] after ->
-        instance.output.front
-          (match instance.region with
-          | Marker node -> Js.Null.return (Dom_api.to_node node)
-          | Nodes -> after) [@u])
+    ~each:(fun [@u] visit -> visit_nodes instance visit)
+    ~front:(fun [@u] after -> front_node instance after)
     ~release:
       (fun [@u] () ->
         instance.output.release () [@u];
@@ -201,9 +205,10 @@ let instance_live instance =
 let mark_dirty instance =
   match instance.status with
   | Clean ->
-      instance.status <- Dirty;
+      instance.status <- Dirty Forced;
       dirty := instance :: !dirty
-  | Dirty | Unmounted -> ()
+  | Dirty (Stated _) -> instance.status <- Dirty Forced
+  | Dirty Forced | Unmounted -> ()
 
 let run_phases cleanups runs =
   let run_jobs jobs =
@@ -211,7 +216,7 @@ let run_phases cleanups runs =
       (fun (instance, job) ->
         match instance.status with
         | Unmounted -> ()
-        | Clean | Dirty -> ( try job () with error -> !suspension.rescue In_effect instance error [@u]))
+        | Clean | Dirty _ -> ( try job () with error -> !suspension.rescue In_effect instance error [@u]))
       (List.rev jobs)
   in
   let pending_cleanups = !cleanups and pending_runs = !runs in
@@ -272,10 +277,9 @@ let refresh (position : Template.position) instance =
 
 let rec settle () =
   let position_of instance =
-    let live = instance_live instance in
     let last = ref None in
-    live.each (fun [@u] node -> last := Some node) [@u];
-    match (Option.bind (Js.Null.toOption (live.front Js.null [@u])) Dom_api.parent_node, !last) with
+    visit_nodes instance (fun [@u] node -> last := Some node);
+    match (Option.bind (Js.Null.toOption (front_node instance Js.null)) Dom_api.parent_node, !last) with
     | Some parent, Some last ->
         { Template.parent; before = Js.Null.fromOption (Dom_api.next_sibling last) }
     | None, _ | _, None -> Js.Exn.raiseError "melact: a mounted component is not in the DOM"
@@ -289,20 +293,20 @@ let rec settle () =
         let pending = !dirty in
         dirty := [];
         List.iter
-          (fun instance ->
+          (fun (_, instance) ->
             match instance.status with
-            | Dirty -> refresh (position_of instance) instance
+            | Dirty (Stated checks)
+              when List.for_all (fun check -> match check () with View.Unchanged -> true | View.Changed -> false) checks ->
+                instance.status <- Clean
+            | Dirty (Forced | Stated _) -> refresh (position_of instance) instance
             | Clean | Unmounted -> ())
           (List.stable_sort
-             (fun a b ->
-               match
-                 ( Js.Null.toOption ((instance_live a).front Js.null [@u]),
-                   Js.Null.toOption ((instance_live b).front Js.null [@u]) )
-               with
+             (fun (front_a, a) (front_b, b) ->
+               match (front_a, front_b) with
                | Some first, Some second when not (Dom_api.same first second) ->
                    if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
                | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
-             pending);
+             (List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending));
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
         run_phases layout_cleanups layout_runs;
@@ -372,7 +376,7 @@ let component definition inputs render =
             | Renders rendered when Dom_api.same rendered.component definition ->
                 (match (instance.status, View.compare_inputs rendered.inputs inputs) with
                 | Clean, View.Unchanged -> ()
-                | (Clean | Dirty | Unmounted), _ ->
+                | (Clean | Dirty _ | Unmounted), _ ->
                     rendered.inputs <- inputs;
                     rendered.render <- render;
                     refresh position instance);
@@ -448,6 +452,19 @@ let invalidate instance =
       mark_dirty instance;
       queue_render ()
 
+let invalidate_state instance check =
+  match !rendering with
+  | Some _ ->
+      Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
+  | None ->
+      (match instance.status with
+      | Clean ->
+          instance.status <- Dirty (Stated [ check ]);
+          dirty := instance :: !dirty
+      | Dirty (Stated checks) -> instance.status <- Dirty (Stated (check :: checks))
+      | Dirty Forced | Unmounted -> ());
+      queue_render ()
+
 let after_commit instance timing phase job =
   instance.pending <- (timing, phase, job) :: instance.pending
 
@@ -494,7 +511,7 @@ let catch =
                 match instance.kind with
                 | Catches { start; _ } -> Some (Dom_api.to_node start)
                 | Suspends { opening; _ } -> Some (Dom_api.to_node opening)
-                | Renders _ | Provides _ -> Js.Null.toOption ((instance_live instance).front Js.null [@u])
+                | Renders _ | Provides _ -> Js.Null.toOption (front_node instance Js.null)
               in
               match (front thrower, front instance) with
               | Some kept, Some thrown when Dom_api.compare_document_position kept thrown land 4 = 0 -> ()
@@ -535,7 +552,7 @@ let catch =
           List.iter
             (fun boundary ->
               match boundary with
-              | { status = Clean | Dirty; kind = Catches ({ failure = Struck error; _ } as catching); _ } ->
+              | { status = Clean | Dirty _; kind = Catches ({ failure = Struck error; _ } as catching); _ } ->
                   blank boundary catching;
                   catching.failure <- Caught { error; thrower = boundary };
                   caught_boundaries := boundary :: !caught_boundaries
@@ -544,7 +561,7 @@ let catch =
           List.iter
             (fun boundary ->
               match boundary with
-              | { status = Clean | Dirty; kind = Catches ({ failure = Failed _; _ } as catching); _ } -> (
+              | { status = Clean | Dirty _; kind = Catches ({ failure = Failed _; _ } as catching); _ } -> (
                   let finish = Dom_api.to_node catching.finish in
                   blank boundary catching;
                   let inside = { Template.parent = Option.get (Dom_api.parent_node finish); before = Js.Null.return finish } in
@@ -558,7 +575,7 @@ let catch =
           List.iter
             (fun boundary ->
               match boundary with
-              | { status = Clean | Dirty; kind = Catches ({ failure = Caught { error; _ }; _ } as catching); _ } ->
+              | { status = Clean | Dirty _; kind = Catches ({ failure = Caught { error; _ }; _ } as catching); _ } ->
                   blank boundary catching;
                   catching.failure <- Failed error;
                   fallen_boundaries := boundary :: !fallen_boundaries
@@ -685,7 +702,7 @@ let suspend =
           List.iter
             (fun boundary ->
               match boundary with
-              | { status = Clean | Dirty; kind = Suspends ({ waiting = Retrying { content; throwers }; _ } as suspending); _ }
+              | { status = Clean | Dirty _; kind = Suspends ({ waiting = Retrying { content; throwers }; _ } as suspending); _ }
                 -> (
                   removed suspending.backup;
                   suspending.backup <- View.nothing;
@@ -711,7 +728,7 @@ let suspend =
           List.iter
             (fun boundary ->
               match boundary with
-              | { status = Clean | Dirty; kind = Suspends ({ waiting = Suspending { promise; throwers }; _ } as suspending); _ }
+              | { status = Clean | Dirty _; kind = Suspends ({ waiting = Suspending { promise; throwers }; _ } as suspending); _ }
                 ->
                   let content =
                     match List.memq boundary built with
