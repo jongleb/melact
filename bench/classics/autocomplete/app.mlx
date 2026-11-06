@@ -1,0 +1,254 @@
+external scroll_into_view : Dom.element -> < block : string > Js.t -> unit = "scrollIntoView" [@@mel.send]
+
+type item = { id : int; name : string; folded : string; category : string }
+
+(** Whether the suggestion list is shown. *)
+type listing = Listing_open | Listing_closed
+
+(** What the results panel lists. *)
+type panel = Browsing of item array | Matching of item array
+
+(** Whether a suggestion is the one the keyboard points at. *)
+type pointer = Pointed | Unpointed
+
+let categories =
+  [| "Artists"; "Books"; "Cities"; "Courses"; "Devices"; "Foods"; "Games"; "Movies"; "Plants"; "Songs"; "Sports"; "Tools" |]
+
+let items =
+  let seed = Classic.Seed.make 20000 in
+  Array.init 20000 (fun index ->
+      let name = Classic.sentence seed 2 ^ " " ^ string_of_int (Classic.Seed.next seed 1000) in
+      { id = index + 1; name; folded = String.lowercase_ascii name; category = categories.(Classic.Seed.next seed 12000 / 1000) })
+
+module Highlight = struct
+  let[@react.component] make ~text ~query =
+    let at =
+      match query with
+      | "" -> None
+      | _ -> (
+          match Js.String.indexOf ~search:(String.lowercase_ascii query) (String.lowercase_ascii text) with
+          | -1 -> None
+          | at -> Some at)
+    in
+    Option.fold ~none:(React.string text)
+      ~some:(fun at ->
+        let stop = at + String.length query in
+        <React.Fragment>
+          (React.string (String.sub text 0 at))
+          <mark>(React.string (String.sub text at (String.length query)))</mark>
+          (React.string (String.sub text stop (String.length text - stop)))
+        </React.Fragment>)
+      at
+end
+
+module Suggestion = struct
+  let[@react.component] make =
+    React.memo (fun ~item ~query ~pointer ~onChoose ~onPoint ->
+        let element = React.useRef Js.Nullable.null in
+        React.useLayoutEffect1
+          (fun () ->
+            (match pointer with
+             | Pointed -> Js.Nullable.toOption element.current |> Option.iter (fun element -> scroll_into_view element [%mel.obj { block = "nearest" }])
+             | Unpointed -> ());
+            None)
+          [| pointer |];
+        <li
+          ref=(ReactDOM.Ref.domRef element)
+          role="option"
+          ariaSelected=(match pointer with Pointed -> true | Unpointed -> false)
+          className=(match pointer with Pointed -> "suggestion active" | Unpointed -> "suggestion")
+          onMouseDown=(fun event ->
+            React.Event.Mouse.preventDefault event;
+            onChoose item)
+          onMouseEnter=(fun _ -> onPoint item.id)>
+          <span className="suggestion-name"><Highlight text=item.name query /></span>
+          <span className="suggestion-category">(React.string item.category)</span>
+        </li>)
+end
+
+module Suggestion_list = struct
+  let[@react.component] make ~suggestions ~total ~query ~active ~onChoose ~onPoint =
+    <div className="suggestions">
+      <ul id="suggestion-list" role="listbox">
+        (React.array
+           (Array.mapi
+              (fun index item ->
+                <Suggestion
+                  key=(string_of_int item.id)
+                  item
+                  query
+                  pointer=(match index = active with true -> Pointed | false -> Unpointed)
+                  onChoose
+                  onPoint />)
+              suggestions))
+      </ul>
+      (match total > Array.length suggestions with
+       | true ->
+           <p className="more">(React.string ("Showing " ^ string_of_int (Array.length suggestions) ^ " of " ^ string_of_int total))</p>
+       | false -> React.null)
+      (match total with 0 -> <p id="no-results">(React.string ("No results for \"" ^ query ^ "\""))</p> | _ -> React.null)
+    </div>
+end
+
+module Chip = struct
+  let[@react.component] make ~item ~onRemove =
+    <span className="chip">
+      (React.string item.name)
+      <button className="remove" ariaLabel=("Remove " ^ item.name) onClick=(fun _ -> onRemove item.id)>(React.string "\xc3\x97")</button>
+    </span>
+end
+
+module Chip_list = struct
+  let[@react.component] make ~chosen ~onRemove =
+    <div className="chips">
+      (chosen |> Array.of_list |> Array.map (fun item -> <Chip key=(string_of_int item.id) item onRemove />) |> React.array)
+    </div>
+end
+
+module Recent_searches = struct
+  let[@react.component] make ~recent ~onPick =
+    match recent with
+    | [] -> React.null
+    | _ :: _ ->
+        <div className="recent">
+          <span className="recent-title">(React.string "Recent:")</span>
+          (recent |> Array.of_list
+          |> Array.map (fun query ->
+                 <button key=query className="recent-search" onClick=(fun _ -> onPick query)>(React.string query)</button>)
+          |> React.array)
+        </div>
+end
+
+module Result_item = struct
+  let[@react.component] make ~item =
+    <li className="result">
+      <span className="result-name">(React.string item.name)</span>
+      <span className="result-id">(React.string ("#" ^ string_of_int item.id))</span>
+    </li>
+end
+
+module Result_group = struct
+  let[@react.component] make =
+    React.memo (fun ~category ~found ->
+        <section className="result-group">
+          <h3>(React.string (category ^ " (" ^ string_of_int (Array.length found) ^ ")"))</h3>
+          <ul>(React.array (Array.map (fun item -> <Result_item key=(string_of_int item.id) item />) found))</ul>
+        </section>)
+end
+
+module Results_panel = struct
+  let[@react.component] make ~panel =
+    let matches = match panel with Browsing found | Matching found -> found in
+    let groups =
+      React.useMemo1
+        (fun () ->
+          Js.Array.filter ~f:(fun (_, found) -> Array.length found > 0)
+            (Array.map (fun category -> (category, Js.Array.filter ~f:(fun item -> item.category = category) matches)) categories))
+        [| matches |]
+    in
+    <div className="results-panel">
+      <p id="result-count">
+        (React.string
+           (match panel with
+            | Browsing _ -> "Browse the catalogue"
+            | Matching found -> string_of_int (Array.length found) ^ " matches"))
+      </p>
+      (React.array (Array.map (fun (category, found) -> <Result_group key=category category found />) groups))
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let query, setQuery = React.useState (fun () -> "") in
+    let listing, setListing = React.useState (fun () -> Listing_closed) in
+    let active, setActive = React.useState (fun () -> 0) in
+    let chosen, setChosen = React.useState (fun () -> []) in
+    let recent, setRecent = React.useState (fun () -> []) in
+    let matches =
+      React.useMemo2
+        (fun () ->
+          match String.trim query with
+          | "" -> [||]
+          | text ->
+              let needle = String.lowercase_ascii text in
+              Js.Array.filter
+                ~f:(fun item ->
+                  Js.String.includes ~search:needle item.folded
+                  && not (List.exists (fun picked -> picked.id = item.id) chosen))
+                items)
+        (query, chosen)
+    in
+    let browse =
+      React.useMemo0 (fun () ->
+          Array.concat
+            (Array.to_list
+               (Array.map
+                  (fun category -> Js.Array.slice ~start:0 ~end_:100 (Js.Array.filter ~f:(fun item -> item.category = category) items))
+                  categories)))
+    in
+    let suggestions = React.useMemo1 (fun () -> Js.Array.slice ~start:0 ~end_:500 matches) [| matches |] in
+    let choose =
+      React.useCallback1
+        (fun item ->
+          setChosen (fun chosen -> chosen @ [ item ]);
+          setRecent (fun recent -> List.filteri (fun index _ -> index < 8) (query :: List.filter (fun other -> other <> query) recent));
+          setQuery (fun _ -> "");
+          setActive (fun _ -> 0);
+          setListing (fun _ -> Listing_closed))
+        [| query |]
+    in
+    let point =
+      React.useCallback1
+        (fun id ->
+          let index = Js.Array.findIndex ~f:(fun item -> item.id = id) suggestions in
+          setActive (fun _ -> index))
+        [| suggestions |]
+    in
+    let remove = React.useCallback0 (fun id -> setChosen (fun chosen -> List.filter (fun item -> item.id <> id) chosen)) in
+    <div className="autocomplete">
+      <Chip_list chosen onRemove=remove />
+      <div className="combobox">
+        <input
+          id="search"
+          role="combobox"
+          ariaExpanded=(match listing with Listing_open -> true | Listing_closed -> false)
+          ariaControls="suggestion-list"
+          autoComplete="off"
+          placeholder="Search 20,000 things"
+          value=query
+          onChange=(fun event ->
+            let value = (React.Event.Form.target event)##value in
+            setQuery (fun _ -> value);
+            setActive (fun _ -> 0);
+            setListing (fun _ -> Listing_open))
+          onKeyDown=(fun event ->
+            match React.Event.Keyboard.key event with
+            | "ArrowDown" ->
+                React.Event.Keyboard.preventDefault event;
+                setListing (fun _ -> Listing_open);
+                setActive (fun active -> min (Array.length suggestions - 1) (active + 1))
+            | "ArrowUp" ->
+                React.Event.Keyboard.preventDefault event;
+                setActive (fun active -> max 0 (active - 1))
+            | "Enter" -> (
+                match (listing, Belt.Array.get suggestions active) with
+                | Listing_open, Some item -> choose item
+                | Listing_open, None | Listing_closed, _ -> ())
+            | "Escape" -> setListing (fun _ -> Listing_closed)
+            | _ -> ()) />
+        (match (listing, String.trim query) with
+         | Listing_closed, _ | Listing_open, "" -> React.null
+         | Listing_open, _ ->
+             <Suggestion_list suggestions total=(Array.length matches) query active onChoose=choose onPoint=point />)
+      </div>
+      <Recent_searches
+        recent
+        onPick=(fun text ->
+          setQuery (fun _ -> text);
+          setActive (fun _ -> 0);
+          setListing (fun _ -> Listing_open)) />
+      <Results_panel panel=(match String.trim query with "" -> Browsing browse | _ -> Matching matches) />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

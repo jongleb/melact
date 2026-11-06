@@ -1,0 +1,213 @@
+external window : Dom.window = "window"
+external expose_layout : Dom.window -> (int -> int array) -> unit = "__mines" [@@mel.set]
+
+(** What lies under a cell. *)
+type content = Mine | Clear of int  (** [Clear n]: no mine, [n] mines around. *)
+
+(** What the player sees of a cell. *)
+type cover = Covered | Flagged | Uncovered
+
+type cell = { content : content; cover : cover }
+
+(** How the game stands. *)
+type game = Playing | Won | Lost of int  (** [Lost i]: the mine at [i] went off. *)
+
+(** Whether a cell holds the mine that went off. *)
+type fuse = Exploded | Intact
+
+(** Whether the clock counts. *)
+type clock = Waiting | Running
+
+type state = { number : int; cells : cell array; game : game; clock : clock; seconds : int }
+
+(** What the player can do. *)
+type action = Reveal of int | Flag of int | Chord of int | Tick | Reset
+
+let size = 50
+
+let mines = 400
+
+let neighbours index =
+  let row = index / size and column = index mod size in
+  List.concat_map
+    (fun (down, across) ->
+      let row = row + down and column = column + across in
+      match row >= 0 && row < size && column >= 0 && column < size with
+      | true -> [ (row * size) + column ]
+      | false -> [])
+    [ (-1, -1); (-1, 0); (-1, 1); (0, -1); (0, 1); (1, -1); (1, 0); (1, 1) ]
+
+let layout number =
+  let seed = Classic.Seed.make (5 + (number * 7919)) in
+  let content = Array.make (size * size) (Clear 0) in
+  let placed = ref 0 in
+  while !placed < mines do
+    let index = Classic.Seed.next seed (size * size) in
+    match content.(index) with
+    | Mine -> ()
+    | Clear _ ->
+        content.(index) <- Mine;
+        incr placed
+  done;
+  Array.mapi
+    (fun index here ->
+      match here with
+      | Mine -> Mine
+      | Clear _ -> Clear (List.length (List.filter (fun near -> content.(near) = Mine) (neighbours index))))
+    content
+
+let fresh number = { number; cells = Array.map (fun content -> { content; cover = Covered }) (layout number); game = Playing; clock = Waiting; seconds = 0 }
+
+let () =
+  expose_layout window (fun number ->
+      layout number |> Array.to_list
+      |> List.mapi (fun index content -> (index, content))
+      |> List.filter_map (fun (index, content) -> match content with Mine -> Some index | Clear _ -> None)
+      |> Array.of_list)
+
+let reduce state action =
+  let uncover cells starts =
+    let cells = Array.copy cells in
+    let rec visit stack =
+      match stack with
+      | [] -> ()
+      | index :: rest -> (
+          let cell = cells.(index) in
+          match (cell.cover, cell.content) with
+          | Covered, Clear 0 ->
+              cells.(index) <- { cell with cover = Uncovered };
+              visit (neighbours index @ rest)
+          | Covered, (Clear _ | Mine) ->
+              cells.(index) <- { cell with cover = Uncovered };
+              visit rest
+          | (Flagged | Uncovered), _ -> visit rest)
+    in
+    visit starts;
+    cells
+  in
+  let settle cells =
+    let exploded =
+      List.find_opt
+        (fun index -> match cells.(index) with { content = Mine; cover = Uncovered } -> true | _ -> false)
+        (List.init (size * size) (fun index -> index))
+    in
+    match exploded with
+    | Some index ->
+        {
+          state with
+          cells = Array.map (fun cell -> match cell.content with Mine -> { cell with cover = Uncovered } | Clear _ -> cell) cells;
+          game = Lost index;
+          clock = Running;
+        }
+    | None -> (
+        match Array.exists (fun cell -> match cell with { content = Clear _; cover = Covered | Flagged } -> true | _ -> false) cells with
+        | true -> { state with cells; clock = Running }
+        | false -> { state with cells; game = Won; clock = Running })
+  in
+  match (state.game, action) with
+  | _, Reset -> fresh (state.number + 1)
+  | Playing, Reveal index -> (
+      match state.cells.(index).cover with Covered -> settle (uncover state.cells [ index ]) | Flagged | Uncovered -> state)
+  | Playing, Flag index -> (
+      let cell = state.cells.(index) in
+      let flip cover = { state with cells = Array.mapi (fun at cell -> match at = index with true -> { cell with cover } | false -> cell) state.cells } in
+      match cell.cover with Covered -> flip Flagged | Flagged -> flip Covered | Uncovered -> state)
+  | Playing, Chord index -> (
+      match state.cells.(index) with
+      | { cover = Uncovered; content = Clear count } when count > 0 ->
+          let around = neighbours index in
+          let flagged = List.length (List.filter (fun near -> state.cells.(near).cover = Flagged) around) in
+          (match flagged = count with true -> settle (uncover state.cells around) | false -> state)
+      | _ -> state)
+  | Playing, Tick -> (match state.clock with Running -> { state with seconds = state.seconds + 1 } | Waiting -> state)
+  | (Won | Lost _), (Reveal _ | Flag _ | Chord _ | Tick) -> state
+
+module Cell = struct
+  let[@react.component] make =
+    React.memo (fun ~index ~cell ~fuse ~onReveal ~onFlag ~onChord ->
+        let className, label, colour =
+          match (cell.cover, cell.content) with
+          | Covered, _ -> ("cell covered", "", "")
+          | Flagged, _ -> ("cell flagged", "⚑", "")
+          | Uncovered, Mine -> ((match fuse with Exploded -> "cell mine exploded" | Intact -> "cell mine"), "✹", "")
+          | Uncovered, Clear 0 -> ("cell open", "", "")
+          | Uncovered, Clear count -> ("cell open", string_of_int count, [| ""; "#1d4ed8"; "#15803d"; "#dc2626"; "#1e3a8a"; "#7f1d1d"; "#0e7490"; "#111827"; "#6b7280" |].(count))
+        in
+        <div
+          className
+          style=(ReactDOM.Style.make ~color:colour ())
+          onClick=(fun _ -> match cell.cover with Uncovered -> onChord index | Covered | Flagged -> onReveal index)
+          onContextMenu=(fun event ->
+            React.Event.Mouse.preventDefault event;
+            onFlag index)>
+          (React.string label)
+        </div>)
+end
+
+module Counter = struct
+  let[@react.component] make ~id ~value =
+    let text = string_of_int (abs value) in
+    <span id className="counter">
+      (React.string ((match value < 0 with true -> "-" | false -> "") ^ String.make (max 0 (3 - String.length text)) '0' ^ text))
+    </span>
+end
+
+module Smiley = struct
+  let[@react.component] make ~game ~onReset =
+    <button id="reset" className="smiley" onClick=(fun _ -> onReset ())>
+      (React.string (match game with Playing -> "🙂" | Won -> "😎" | Lost _ -> "😵"))
+    </button>
+end
+
+module Header = struct
+  let[@react.component] make ~state ~dispatch =
+    let flags = Array.fold_left (fun count cell -> match cell.cover with Flagged -> count + 1 | Covered | Uncovered -> count) 0 state.cells in
+    <header className="mines-header">
+      <Counter id="mine-counter" value=(mines - flags) />
+      <Smiley game=state.game onReset=(fun () -> dispatch Reset) />
+      <Counter id="timer" value=state.seconds />
+      <button id="tick" onClick=(fun _ -> dispatch Tick)>(React.string "Tick")</button>
+      <span id="game-number">(React.int state.number)</span>
+    </header>
+end
+
+module Board = struct
+  let[@react.component] make ~cells ~game ~dispatch =
+    let onReveal = React.useCallback1 (fun index -> dispatch (Reveal index)) [| dispatch |] in
+    let onFlag = React.useCallback1 (fun index -> dispatch (Flag index)) [| dispatch |] in
+    let onChord = React.useCallback1 (fun index -> dispatch (Chord index)) [| dispatch |] in
+    <div className="board">
+      (React.array
+         (Array.init size (fun row ->
+              <div key=(string_of_int row) className="board-row">
+                (React.array
+                   (Array.mapi
+                      (fun column cell ->
+                        let index = (row * size) + column in
+                        <Cell
+                          key=(string_of_int index)
+                          index
+                          cell
+                          fuse=(match game with Lost at when at = index -> Exploded | Lost _ | Playing | Won -> Intact)
+                          onReveal
+                          onFlag
+                          onChord />)
+                      (Array.sub cells (row * size) size)))
+              </div>)))
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce (fresh 0) in
+    <div className="minesweeper">
+      <Header state dispatch />
+      <Board cells=state.cells game=state.game dispatch />
+      (match state.game with
+       | Won -> <p className="verdict">(React.string "You won!")</p>
+       | Lost _ -> <p className="verdict">(React.string "Boom.")</p>
+       | Playing -> React.null)
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

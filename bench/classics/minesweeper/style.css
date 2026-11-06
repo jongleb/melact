@@ -1,0 +1,12 @@
+.minesweeper { padding: 12px; display: inline-block; background: #c0c0c0; }
+.mines-header { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.counter { font-family: monospace; font-size: 20px; background: #000; color: #f00; padding: 0 4px; }
+.smiley { font-size: 18px; }
+.board { display: flex; flex-direction: column; border: 3px inset #808080; }
+.board-row { display: flex; }
+.cell { width: 16px; height: 16px; font: bold 11px/16px monospace; text-align: center; user-select: none; }
+.cell.covered, .cell.flagged { background: #bdbdbd; border: 2px outset #fff; line-height: 12px; }
+.cell.open { background: #d9d9d9; border: 1px solid #a0a0a0; }
+.cell.mine { background: #d9d9d9; }
+.cell.exploded { background: #f00; }
+.verdict { font-weight: 600; }

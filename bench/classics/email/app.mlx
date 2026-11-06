@@ -1,0 +1,398 @@
+external set_indeterminate : Dom.element -> bool -> unit = "indeterminate" [@@mel.set]
+external scroll_into_view : Dom.element -> < block : string > Js.t -> unit = "scrollIntoView" [@@mel.send]
+external add_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener" [@@mel.send]
+external remove_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "removeEventListener" [@@mel.send]
+external key : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+type contact = { name : string; address : string; hue : int }
+
+(** Whether a mail is starred. *)
+type star = Starred | Unstarred
+
+(** Whether a mail was read. *)
+type seen = Read | Unread
+
+(** Where a mail lives. *)
+type place = In_inbox | In_sent | Archived | Trashed
+
+(** One block of a mail's body. *)
+type block = Paragraph of string | Quote of string | Bullets of string array | Link of string
+
+type mail = {
+  id : int;
+  from : contact;
+  subject : string;
+  snippet : string;
+  body : block array;
+  day : int;
+  star : star;
+  seen : seen;
+  place : place;
+  labels : string array;
+}
+
+(** A folder of the tree on the left. *)
+type folder = Inbox | Starred_folder | Sent | Archive | Trash | Label of string
+
+(** The mail in the reading pane. *)
+type opened = Nothing_open | Open_mail of int
+
+(** Whether a row's checkbox is ticked. *)
+type check = Checked | Unchecked
+
+(** Row height, shared through context. *)
+type density = Comfortable | Compact
+
+type state = { mails : mail array; folder : folder; selected : Belt.Set.Int.t; opened : opened; query : string }
+
+(** What the app's reducer does. *)
+type action =
+  | Open of int
+  | Toggle_star of int
+  | Toggle_check of int
+  | Select of int array
+  | Clear_selection
+  | Mark_read
+  | Archive_selected
+  | Delete_selected
+  | Show_folder of folder
+  | Search of string
+
+let labels = [| "Work"; "Personal"; "Travel"; "Finance"; "Receipts"; "Family" |]
+
+let initial =
+  let seed = Classic.Seed.make 2024 in
+  let contacts =
+    Array.init 80 (fun index ->
+        let first = Classic.Seed.pick seed Classic.words and last = Classic.Seed.pick seed Classic.words in
+        { name = String.capitalize_ascii first ^ " " ^ String.capitalize_ascii last; address = first ^ "." ^ last ^ "@example.com"; hue = index * 23 mod 360 })
+  in
+  let mails =
+    Array.init 6000 (fun index ->
+        let from = Classic.Seed.pick seed contacts in
+        let subject = String.capitalize_ascii (Classic.sentence seed (3 + Classic.Seed.next seed 6)) in
+        let snippet = Classic.sentence seed 14 in
+        let body =
+          Array.init (4 + Classic.Seed.next seed 6) (fun _ ->
+              match Classic.Seed.next seed 6 with
+              | 0 -> Quote (Classic.sentence seed 20)
+              | 1 -> Bullets (Array.init (2 + Classic.Seed.next seed 4) (fun _ -> Classic.sentence seed 6))
+              | 2 -> Link ("https://example.com/" ^ Classic.Seed.pick seed Classic.words)
+              | _ -> Paragraph (String.capitalize_ascii (Classic.sentence seed (20 + Classic.Seed.next seed 40)) ^ "."))
+        in
+        let star = match Classic.Seed.next seed 9 with 0 -> Starred | _ -> Unstarred in
+        let seen = match Classic.Seed.next seed 3 with 0 -> Unread | _ -> Read in
+        let first_label = Classic.Seed.next seed 12 in
+        {
+          id = index + 1;
+          from;
+          subject;
+          snippet;
+          body;
+          day = 760 - (index / 8);
+          star;
+          seen;
+          place = (match index mod 12 with 0 -> In_sent | 1 -> Archived | _ -> In_inbox);
+          labels =
+            (match first_label with
+             | 0 | 1 | 2 | 3 | 4 | 5 -> [| labels.(first_label) |]
+             | 6 -> [| labels.(0); labels.(3) |]
+             | _ -> [||]);
+        })
+  in
+  { mails; folder = Inbox; selected = Belt.Set.Int.empty; opened = Nothing_open; query = "" }
+
+let in_folder folder mail =
+  match (folder, mail.place, mail.star) with
+  | Inbox, In_inbox, _ | Sent, In_sent, _ | Archive, Archived, _ | Trash, Trashed, _ -> true
+  | Starred_folder, (In_inbox | In_sent | Archived), Starred -> true
+  | Label label, (In_inbox | In_sent | Archived), _ -> Js.Array.includes ~value:label mail.labels
+  | (Inbox | Sent | Archive | Trash | Starred_folder | Label _), _, _ -> false
+
+let reduce state action =
+  let change ids update = Array.map (fun mail -> match Belt.Set.Int.has ids mail.id with true -> update mail | false -> mail) state.mails in
+  match action with
+  | Open id -> { state with opened = Open_mail id; mails = change (Belt.Set.Int.fromArray [| id |]) (fun mail -> { mail with seen = Read }) }
+  | Toggle_star id ->
+      {
+        state with
+        mails = change (Belt.Set.Int.fromArray [| id |]) (fun mail -> { mail with star = (match mail.star with Starred -> Unstarred | Unstarred -> Starred) });
+      }
+  | Toggle_check id ->
+      { state with selected = (match Belt.Set.Int.has state.selected id with true -> Belt.Set.Int.remove state.selected id | false -> Belt.Set.Int.add state.selected id) }
+  | Select ids -> { state with selected = Belt.Set.Int.fromArray ids }
+  | Clear_selection -> { state with selected = Belt.Set.Int.empty }
+  | Mark_read -> { state with mails = change state.selected (fun mail -> { mail with seen = Read }) }
+  | Archive_selected -> { state with mails = change state.selected (fun mail -> { mail with place = Archived }); selected = Belt.Set.Int.empty }
+  | Delete_selected -> { state with mails = change state.selected (fun mail -> { mail with place = Trashed }); selected = Belt.Set.Int.empty }
+  | Show_folder folder -> { state with folder; selected = Belt.Set.Int.empty; opened = Nothing_open }
+  | Search query -> { state with query; selected = Belt.Set.Int.empty }
+
+let short_date day =
+  let months = [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"; "Oct"; "Nov"; "Dec" |] in
+  months.(day / 30 mod 12) ^ " " ^ string_of_int ((day mod 30) + 1)
+
+let density_context = React.createContext Comfortable
+
+module Density_provider = struct
+  let make = React.Context.provider density_context
+
+  external makeProps : value:density -> children:React.element -> unit -> < value : density ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Folder_item = struct
+  let[@react.component] make ~label ~icon ~count ~active ~onPick =
+    <li className=(match active with `Active -> "folder-item active" | `Inactive -> "folder-item") onClick=(fun _ -> onPick ())>
+      <span className="folder-icon">(React.string icon)</span>
+      <span className="folder-label">(React.string label)</span>
+      (match count with 0 -> React.null | count -> <span className="folder-count">(React.int count)</span>)
+    </li>
+end
+
+module Folder_tree = struct
+  let[@react.component] make ~mails ~folder ~dispatch =
+    let fold, setFold = React.useState (fun () -> `Labels_open) in
+    let unread =
+      React.useMemo1
+        (fun () ->
+          let count target = Array.fold_left (fun total mail -> match (in_folder target mail, mail.seen) with true, Unread -> total + 1 | _ -> total) 0 mails in
+          (count Inbox, Array.map (fun label -> count (Label label)) labels, count Starred_folder))
+        [| mails |]
+    in
+    let inbox, by_label, starred = unread in
+    let item target label icon count =
+      <Folder_item
+        key=label
+        label
+        icon
+        count
+        active=(match target = folder with true -> `Active | false -> `Inactive)
+        onPick=(fun () -> dispatch (Show_folder target)) />
+    in
+    <nav className="folders">
+      <button className="compose">(React.string "\u{270E} Compose")</button>
+      <ul>
+        (item Inbox "Inbox" "\u{1F4E5}" inbox)
+        (item Starred_folder "Starred" "\u{2605}" starred)
+        (item Sent "Sent" "\u{27A4}" 0)
+        (item Archive "Archive" "\u{1F5C3}" 0)
+        (item Trash "Trash" "\u{1F5D1}" 0)
+      </ul>
+      <div className="labels-heading" onClick=(fun _ -> setFold (fun fold -> match fold with `Labels_open -> `Labels_closed | `Labels_closed -> `Labels_open))>
+        (React.string (match fold with `Labels_open -> "\u{25BE} Labels" | `Labels_closed -> "\u{25B8} Labels"))
+      </div>
+      (match fold with
+       | `Labels_closed -> React.null
+       | `Labels_open -> <ul className="labels">(labels |> Array.mapi (fun index label -> item (Label label) label "\u{1F3F7}" by_label.(index)) |> React.array)</ul>)
+    </nav>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~shown ~selected ~dispatch ~query =
+    let box = React.useRef Js.Nullable.null in
+    let ticked = Js.Array.filter ~f:(fun mail -> Belt.Set.Int.has selected mail.id) shown |> Array.length in
+    let state =
+      match (ticked, Array.length shown) with
+      | 0, _ -> `Empty
+      | ticked, total when ticked = total -> `Full
+      | _ -> `Partial
+    in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption box.current |> Option.iter (fun element -> set_indeterminate element (state = `Partial));
+        None)
+      [| state |];
+    <div className="toolbar">
+      <input
+        id="select-all"
+        ref=(ReactDOM.Ref.domRef box)
+        type_="checkbox"
+        checked=(state = `Full)
+        onChange=(fun _ ->
+          match state with
+          | `Full -> dispatch Clear_selection
+          | `Empty | `Partial -> dispatch (Select (Array.map (fun mail -> mail.id) shown))) />
+      <button id="mark-read" disabled=(ticked = 0) onClick=(fun _ -> dispatch Mark_read)>(React.string "Mark as read")</button>
+      <button id="archive" disabled=(ticked = 0) onClick=(fun _ -> dispatch Archive_selected)>(React.string "Archive")</button>
+      <button id="delete" disabled=(ticked = 0) onClick=(fun _ -> dispatch Delete_selected)>(React.string "Delete")</button>
+      <input
+        className="search"
+        type_="search"
+        placeholder="Search mail"
+        value=query
+        onChange=(fun event -> dispatch (Search (React.Event.Form.target event)##value)) />
+      <span className="range">
+        (React.string
+           (match Array.length shown with 0 -> "No mail" | total -> "1\u{2013}" ^ string_of_int total ^ " of " ^ string_of_int total))
+      </span>
+    </div>
+end
+
+module Mail_row = struct
+  let[@react.component] make =
+    React.memo (fun ~mail ~check ~opened ~dispatch ->
+        let density = React.useContext density_context in
+        let row = React.useRef Js.Nullable.null in
+        React.useEffect1
+          (fun () ->
+            (match opened with
+             | `Shown -> Js.Nullable.toOption row.current |> Option.iter (fun element -> scroll_into_view element [%mel.obj { block = "nearest" }])
+             | `Not_shown -> ());
+            None)
+          [| opened |];
+        <div
+          ref=(ReactDOM.Ref.domRef row)
+          onClick=(fun _ -> dispatch (Open mail.id))
+          className=
+            (String.concat " "
+               [
+                 "mail-row";
+                 (match mail.seen with Unread -> "unread" | Read -> "read");
+                 (match check with Checked -> "checked" | Unchecked -> "");
+                 (match opened with `Shown -> "opened" | `Not_shown -> "");
+                 (match density with Comfortable -> "comfortable" | Compact -> "compact");
+               ])>
+          <input
+            className="row-check"
+            type_="checkbox"
+            checked=(check = Checked)
+            onClick=(fun event -> React.Event.Mouse.stopPropagation event)
+            onChange=(fun _ -> dispatch (Toggle_check mail.id)) />
+          <button
+            className=(match mail.star with Starred -> "star on" | Unstarred -> "star")
+            onClick=(fun event ->
+              React.Event.Mouse.stopPropagation event;
+              dispatch (Toggle_star mail.id))>
+            (React.string (match mail.star with Starred -> "\u{2605}" | Unstarred -> "\u{2606}"))
+          </button>
+          <span className="sender">(React.string mail.from.name)</span>
+          <span className="subject-line">
+            <b className="subject">(React.string mail.subject)</b>
+            <span className="snippet">(React.string (" \u{2014} " ^ mail.snippet))</span>
+          </span>
+          (match mail.labels with
+           | [||] -> React.null
+           | labels -> <span className="row-labels">(labels |> Array.map (fun label -> <span key=label className="chip">(React.string label)</span>) |> React.array)</span>)
+          <span className="date">(React.string (short_date mail.day))</span>
+        </div>)
+end
+
+module Mail_list = struct
+  let[@react.component] make ~shown ~selected ~opened ~dispatch =
+    <div className="mail-list">
+      (shown
+      |> Array.map (fun mail ->
+             <Mail_row
+               key=(string_of_int mail.id)
+               mail
+               check=(match Belt.Set.Int.has selected mail.id with true -> Checked | false -> Unchecked)
+               opened=(match opened with Open_mail id when id = mail.id -> `Shown | Open_mail _ | Nothing_open -> `Not_shown)
+               dispatch />)
+      |> React.array)
+    </div>
+end
+
+module Mail_body = struct
+  let[@react.component] make ~body =
+    <div className="mail-body">
+      (body
+      |> Array.mapi (fun index block ->
+             let key = string_of_int index in
+             match block with
+             | Paragraph text -> <p key>(React.string text)</p>
+             | Quote text -> <blockquote key>(React.string text)</blockquote>
+             | Bullets items -> <ul key>(items |> Array.mapi (fun index item -> <li key=(string_of_int index)>(React.string item)</li>) |> React.array)</ul>
+             | Link href -> <p key><a href>(React.string href)</a></p>)
+      |> React.array)
+    </div>
+end
+
+module Reading_pane = struct
+  let[@react.component] make ~mail ~dispatch =
+    <article className="reading-pane">
+      <header>
+        <h2 className="reading-subject">(React.string mail.subject)</h2>
+        <div className="reading-meta">
+          <span className="avatar" style=(ReactDOM.Style.make ~backgroundColor:("hsl(" ^ string_of_int mail.from.hue ^ ", 50%, 50%)") ())>
+            (React.string (String.sub mail.from.name 0 1))
+          </span>
+          <div className="who">
+            <strong>(React.string mail.from.name)</strong>
+            <span className="address">(React.string ("<" ^ mail.from.address ^ ">"))</span>
+            <span className="to">(React.string "to me")</span>
+          </div>
+          <span className="date">(React.string (short_date mail.day))</span>
+          <button className="pane-star" onClick=(fun _ -> dispatch (Toggle_star mail.id))>
+            (React.string (match mail.star with Starred -> "\u{2605}" | Unstarred -> "\u{2606}"))
+          </button>
+        </div>
+        <div className="reading-labels">(mail.labels |> Array.map (fun label -> <span key=label className="chip">(React.string label)</span>) |> React.array)</div>
+      </header>
+      <Mail_body body=mail.body />
+      <footer className="reading-actions">
+        <button className="reply">(React.string "Reply")</button>
+        <button className="forward">(React.string "Forward")</button>
+      </footer>
+    </article>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    let density, setDensity = React.useState (fun () -> Comfortable) in
+    let shown =
+      React.useMemo3
+        (fun () ->
+          let query = String.lowercase_ascii state.query in
+          Js.Array.filter
+            ~f:(fun mail ->
+              in_folder state.folder mail
+              && (query = ""
+                 || Js.String.includes ~search:query (String.lowercase_ascii mail.subject)
+                 || Js.String.includes ~search:query (String.lowercase_ascii mail.from.name)
+                 || Js.String.includes ~search:query mail.snippet))
+            state.mails)
+        (state.mails, state.folder, state.query)
+    in
+    React.useEffect2
+      (fun () ->
+        let step offset =
+          let at =
+            match state.opened with
+            | Nothing_open -> -1
+            | Open_mail id -> Js.Array.findIndex ~f:(fun mail -> mail.id = id) shown
+          in
+          let next = max 0 (min (Array.length shown - 1) (at + offset)) in
+          match next < Array.length shown with true -> dispatch (Open shown.(next).id) | false -> ()
+        in
+        let listener event = match key event with "j" -> step 1 | "k" -> step (-1) | _ -> () in
+        add_key_listener Classic.document "keydown" listener;
+        Some (fun () -> remove_key_listener Classic.document "keydown" listener))
+      (shown, state.opened);
+    <Density_provider value=density>
+      <div className="mail-app">
+        <header className="mail-header">
+          <span className="logo">(React.string "Mailbox")</span>
+          <button id="density" onClick=(fun _ -> setDensity (fun density -> match density with Comfortable -> Compact | Compact -> Comfortable))>
+            (React.string (match density with Comfortable -> "Compact view" | Compact -> "Comfortable view"))
+          </button>
+        </header>
+        <div className="mail-main">
+          <Folder_tree mails=state.mails folder=state.folder dispatch />
+          <section className="mail-column">
+            <Toolbar shown selected=state.selected dispatch query=state.query />
+            <Mail_list shown selected=state.selected opened=state.opened dispatch />
+          </section>
+          (match state.opened with
+           | Nothing_open -> <div className="reading-pane empty">(React.string "No conversation selected")</div>
+           | Open_mail id ->
+               Js.Array.find ~f:(fun mail -> mail.id = id) state.mails
+               |> Option.map (fun mail -> <Reading_pane mail dispatch />)
+               |> Option.value ~default:React.null)
+        </div>
+      </div>
+    </Density_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

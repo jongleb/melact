@@ -1,0 +1,37 @@
+.chat-app { display: flex; height: 880px; font-size: 15px; }
+.sidebar { width: 240px; background: #3f0e40; color: #cfc3cf; overflow-y: auto; flex: none; }
+.workspace { color: #fff; font-size: 18px; padding: 12px 16px; margin: 0; border-bottom: 1px solid #522653; }
+.sidebar h3 { font-size: 14px; padding: 8px 16px; margin: 0; }
+.channel { padding: 3px 16px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.channel.unread { color: #fff; font-weight: bold; }
+.channel.active { background: #1164a3; color: #fff; }
+.badge { margin-left: auto; background: #cd2553; color: #fff; border-radius: 9px; padding: 0 7px; font-size: 12px; }
+main.channel { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 0; cursor: auto; align-items: stretch; gap: 0; }
+.top-bar { display: flex; justify-content: center; gap: 12px; background: #350d36; padding: 6px; }
+.search { width: 50%; border-radius: 6px; border: 0; padding: 4px 10px; background: #5d3b5e; color: #fff; }
+.channel-header { padding: 10px 20px; border-bottom: 1px solid #ddd; display: flex; gap: 12px; align-items: baseline; }
+.topic { color: #616061; font-size: 13px; }
+.message-list { flex: 1; overflow-y: auto; }
+.day-divider { text-align: center; border-top: 1px solid #ddd; margin: 16px 0 4px; }
+.day-divider span { position: relative; top: -11px; background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 2px 12px; font-size: 13px; }
+.message { display: flex; gap: 8px; padding: 6px 20px 2px; position: relative; }
+.message.continued { padding-top: 0; }
+.message:hover { background: #f8f8f8; }
+.avatar { width: 36px; height: 36px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex: none; }
+.gutter-time { width: 36px; font-size: 10px; color: transparent; flex: none; }
+.message-body { flex: 1; min-width: 0; }
+.sender { font-weight: bold; margin-right: 8px; }
+.time { color: #616061; font-size: 12px; }
+.reactions { display: flex; gap: 4px; margin-top: 4px; }
+.reaction { border: 1px solid #ddd; border-radius: 12px; background: #f6f6f6; font-size: 12px; }
+.reaction.mine { border-color: #1d9bd1; background: #e8f5fa; }
+.reply-count { color: #1264a3; font-size: 13px; font-weight: bold; cursor: pointer; }
+.message-actions { position: absolute; right: 20px; top: 0; display: flex; gap: 2px; }
+.message-actions button { border: 1px solid #ddd; background: #fff; border-radius: 4px; font-size: 12px; }
+.composer { display: flex; gap: 8px; padding: 8px 20px; }
+.composer textarea { flex: 1; border: 1px solid #aaa; border-radius: 6px; padding: 8px; font: inherit; }
+.typing { font-size: 12px; color: #616061; padding: 0 20px 6px; }
+.thread-panel { width: 380px; border-left: 1px solid #ddd; display: flex; flex-direction: column; flex: none; }
+.thread-header { display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #ddd; }
+.thread-messages { flex: 1; overflow-y: auto; }
+.thread-count { padding: 4px 20px; color: #616061; border-bottom: 1px solid #eee; }

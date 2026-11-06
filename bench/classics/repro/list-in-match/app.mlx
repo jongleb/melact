@@ -1,0 +1,51 @@
+(** Whether a row is the selected one. *)
+type mark = Marked | Unmarked
+
+(** How the list is drawn. *)
+type layout = Narrow | Wide
+
+let items = Array.init 3000 (fun index -> "item " ^ string_of_int index)
+
+module Row = struct
+  let[@react.component] make =
+    React.memo (fun ~item ~mark ->
+        <li className=(match mark with Marked -> "row marked" | Unmarked -> "row")>(React.string item)</li>)
+end
+
+module Direct = struct
+  let[@react.component] make () =
+    let selected, setSelected = React.useState (fun () -> 0) in
+    <div>
+      <button id="direct" onClick=(fun _ -> setSelected (fun selected -> selected + 97))>(React.string "next")</button>
+      <ul>
+        (items
+        |> Array.mapi (fun index item ->
+               <Row key=item item mark=(match index = selected with true -> Marked | false -> Unmarked) />)
+        |> React.array)
+      </ul>
+    </div>
+end
+
+module In_match = struct
+  let[@react.component] make () =
+    let selected, setSelected = React.useState (fun () -> 0) in
+    let layout, _ = React.useState (fun () -> Narrow) in
+    <div>
+      <button id="in-match" onClick=(fun _ -> setSelected (fun selected -> selected + 97))>(React.string "next")</button>
+      <ul>
+        (match layout with
+         | Narrow ->
+             items
+             |> Array.mapi (fun index item ->
+                    <Row key=item item mark=(match index = selected with true -> Marked | false -> Unmarked) />)
+             |> React.array
+         | Wide -> React.null)
+      </ul>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () = <div><Direct /><In_match /></div>
+end
+
+let () = Classic.start (fun () -> <App />)

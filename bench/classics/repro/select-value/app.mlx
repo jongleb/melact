@@ -1,0 +1,23 @@
+module App = struct
+  let[@react.component] make () =
+    let size, setSize = React.useState (fun () -> "m") in
+    let pick event =
+      let value = (React.Event.Form.target event)##value in
+      setSize (fun _ -> value)
+    in
+    <div>
+      <select id="literal" value=size onChange=pick>
+        <option value="s">(React.string "Small")</option>
+        <option value="m">(React.string "Medium")</option>
+        <option value="l">(React.string "Large")</option>
+      </select>
+      <select id="mapped" value=size onChange=pick>
+        (React.array
+           (Array.map (fun (value, label) -> <option key=value value>(React.string label)</option>)
+              [| ("s", "Small"); ("m", "Medium"); ("l", "Large") |]))
+      </select>
+      <button id="large" onClick=(fun _ -> setSize (fun _ -> "l"))>(React.string "Large")</button>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

@@ -1,0 +1,479 @@
+(** A box on the page, as [getBoundingClientRect] gives it. *)
+type rect = { left : float; top : float; width : float; height : float }
+
+external bounding_rect : Dom.element -> rect = "getBoundingClientRect" [@@mel.send]
+
+(** How much history the charts show. *)
+type range = Hour | Six_hours | Day
+
+(** Whether ticks arrive on their own. *)
+type live = Live | Paused
+
+(** The colour scheme, shared through context. *)
+type theme = Light | Dark
+
+(** Where the pointer is over a chart: the index of the nearest point. *)
+type hover = Away | Over of int
+
+(** Which way a value moved since the previous tick. *)
+type trend = Rising | Falling | Flat
+
+(** One measured quantity and its history, oldest first. *)
+type series = { id : int; name : string; color : string; values : float array }
+
+type state = { ticks : int; charts : series array; hosts : series array; kpis : series array; hidden : int list }
+
+(** What the dashboard can be asked to do. *)
+type action = Tick | Toggle_series of int
+
+(** A value's place on a chart. *)
+type point = { x : float; y : float }
+
+let sample id tick =
+  let wave = sin (float_of_int tick /. (9. +. float_of_int (id mod 11))) in
+  let noise = (((tick * 7919) + (id * 104729)) land 4095) mod 97 in
+  60. +. (35. *. wave) +. (float_of_int noise /. 4.)
+
+let chart_capacity = 1440
+
+let initial =
+  let seed = Classic.Seed.make 11 in
+  let ticks = chart_capacity in
+  let palette = [| "#4e79a7"; "#f28e2b"; "#e15759"; "#76b7b2"; "#59a14f"; "#edc948"; "#b07aa1"; "#ff9da7"; "#9c755f"; "#bab0ac"; "#17becf"; "#bcbd22" |] in
+  let history id capacity = Array.init capacity (fun index -> sample id (ticks - capacity + index)) in
+  {
+    ticks;
+    charts =
+      Array.init 12 (fun index ->
+          { id = index; name = Classic.sentence seed 2; color = palette.(index); values = history index chart_capacity });
+    hosts =
+      Array.init 50 (fun index ->
+          { id = 100 + index; name = "host-" ^ string_of_int (index + 1); color = palette.(index mod 12); values = history (100 + index) 24 });
+    kpis =
+      Array.init 200 (fun index ->
+          {
+            id = 200 + index;
+            name = Classic.sentence seed 3;
+            color = palette.(index mod 12);
+            values = history (200 + index) 40;
+          });
+    hidden = [];
+  }
+
+let reduce state action =
+  match action with
+  | Tick ->
+      let ticks = state.ticks + 1 in
+      let advance capacity series =
+        let next = sample series.id ticks in
+        let values =
+          match Array.length series.values < capacity with
+          | true -> Array.append series.values [| next |]
+          | false -> Array.append (Array.sub series.values 1 (capacity - 1)) [| next |]
+        in
+        { series with values }
+      in
+      {
+        state with
+        ticks;
+        charts = Array.map (advance chart_capacity) state.charts;
+        hosts = Array.map (advance 24) state.hosts;
+        kpis = Array.map (advance 40) state.kpis;
+      }
+  | Toggle_series id -> (
+      match List.mem id state.hidden with
+      | true -> { state with hidden = List.filter (fun hidden -> hidden <> id) state.hidden }
+      | false -> { state with hidden = id :: state.hidden })
+
+let bounds arrays =
+  Array.fold_left
+    (fun (low, high) values -> Array.fold_left (fun (low, high) value -> (min low value, max high value)) (low, high) values)
+    (infinity, neg_infinity) arrays
+
+let plot ~width ~height ~low ~high values =
+  let count = Array.length values in
+  let span = match high -. low with 0. -> 1. | span -> span in
+  Array.mapi
+    (fun index value ->
+      {
+        x = (match count with 1 -> 0. | _ -> width *. float_of_int index /. float_of_int (count - 1));
+        y = height -. (height *. (value -. low) /. span);
+      })
+    values
+
+let path points =
+  points
+  |> Array.mapi (fun index point ->
+         (match index with 0 -> "M" | _ -> "L") ^ Js.Float.toFixed ~digits:1 point.x ^ "," ^ Js.Float.toFixed ~digits:1 point.y)
+  |> Array.to_list |> String.concat " "
+
+let trend values =
+  let count = Array.length values in
+  match count < 2 with
+  | true -> Flat
+  | false -> (
+      match compare values.(count - 1) values.(count - 2) with 1 -> Rising | -1 -> Falling | _ -> Flat)
+
+let theme_context = React.createContext Light
+
+let theme_class theme = match theme with Light -> "light" | Dark -> "dark"
+
+let grid_colour theme = match theme with Light -> "#e4e7eb" | Dark -> "#3e4c59"
+
+module Theme_provider = struct
+  let make = React.Context.provider theme_context
+
+  external makeProps :
+    value:theme -> children:React.element -> unit -> < value : theme ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Toolbar = struct
+  let[@react.component] make ~ticks ~range ~onRange ~live ~onLive ~onStep ~onTheme =
+    let theme = React.useContext theme_context in
+    <header className=("toolbar " ^ theme_class theme)>
+      <h1>(React.string "Operations")</h1>
+      <div className="range">
+        (React.array
+           (Array.map
+              (fun (target, label) ->
+                <button
+                  key=label
+                  className=(match target = range with true -> "active" | false -> "")
+                  onClick=(fun _ -> onRange target)>
+                  (React.string label)
+                </button>)
+              [| (Hour, "1h"); (Six_hours, "6h"); (Day, "24h") |]))
+      </div>
+      (match live with
+       | Paused -> <button id="live" onClick=(fun _ -> onLive Live)>(React.string "Live")</button>
+       | Live -> <button id="pause" onClick=(fun _ -> onLive Paused)>(React.string "Pause")</button>)
+      <button id="step" onClick=(fun _ -> onStep ())>(React.string "Step")</button>
+      <button id="theme" onClick=(fun _ -> onTheme ())>(React.string "Theme")</button>
+      <span id="tick-count">(React.int ticks)</span>
+    </header>
+end
+
+module Legend = struct
+  let[@react.component] make ~series ~hidden ~onToggle =
+    <ul className="legend">
+      (React.array
+         (Array.map
+            (fun item ->
+              <li key=(string_of_int item.id)>
+                <button
+                  className=(match List.mem item.id hidden with true -> "legend-item off" | false -> "legend-item")
+                  onClick=(fun _ -> onToggle item.id)>
+                  <span className="swatch" style=(ReactDOM.Style.make ~background:item.color ()) />
+                  (React.string item.name)
+                </button>
+              </li>)
+            series))
+    </ul>
+end
+
+module Series_line = struct
+  let[@react.component] make =
+    React.memo (fun ~color ~points ->
+        <g className="series">
+          <path d=(path points) fill="none" stroke=color strokeWidth="1.5" />
+          (React.array
+             (Array.mapi
+                (fun index point ->
+                  <circle
+                    key=(string_of_int index)
+                    cx=(Js.Float.toFixed ~digits:1 point.x)
+                    cy=(Js.Float.toFixed ~digits:1 point.y)
+                    r="1.6"
+                    fill=color />)
+                points))
+        </g>)
+end
+
+module Tooltip = struct
+  let[@react.component] make ~ticks ~range ~index ~count ~rows =
+    let minutes =
+      (count - 1 - index) * (match range with Hour -> 60 | Six_hours -> 360 | Day -> 1440) / count
+    in
+    <div className="tooltip" style=(ReactDOM.Style.make ~left:(string_of_int (index * 100 / count) ^ "%") ())>
+      <div className="tooltip-time">
+        (React.string ("t=" ^ string_of_int (ticks - minutes) ^ " (" ^ string_of_int minutes ^ " min ago)"))
+      </div>
+      (React.array
+         (Array.map
+            (fun (item, value) ->
+              <div key=(string_of_int item.id) className="tooltip-row">
+                <span className="swatch" style=(ReactDOM.Style.make ~background:item.color ()) />
+                (React.string (item.name ^ ": " ^ Js.Float.toFixed ~digits:2 value))
+              </div>)
+            rows))
+    </div>
+end
+
+module Line_chart = struct
+  let[@react.component] make ~title ~series ~ticks ~range ~hidden ~onToggle =
+    let theme = React.useContext theme_context in
+    let hover, setHover = React.useState (fun () -> Away) in
+    let svg = React.useRef Js.Nullable.null in
+    let window range values =
+      let span = match range with Hour -> 60 | Six_hours -> 360 | Day -> 1440 in
+      let start = Array.length values - span in
+      let count = min span 300 in
+      Array.init count (fun index -> values.(start + (index * span / count)))
+    in
+    let shown = React.useMemo2 (fun () -> Js.Array.filter ~f:(fun item -> not (List.mem item.id hidden)) series) (series, hidden) in
+    let windows = React.useMemo2 (fun () -> Array.map (fun item -> (item, window range item.values)) shown) (shown, range) in
+    let low, high = bounds (Array.map snd windows) in
+    let count = window range (series.(0)).values |> Array.length in
+    <div className=("widget line-chart " ^ theme_class theme)>
+      <div className="widget-title">(React.string title)</div>
+      <div className="plot">
+        <svg
+          ref=(ReactDOM.Ref.domRef svg)
+          viewBox="0 0 600 200"
+          preserveAspectRatio="none"
+          onMouseMove=(fun event ->
+            Js.Nullable.toOption svg.current
+            |> Option.iter (fun element ->
+                   let box = bounding_rect element in
+                   let ratio = (float_of_int (React.Event.Mouse.clientX event) -. box.left) /. box.width in
+                   let index = max 0 (min (count - 1) (int_of_float (ratio *. float_of_int count))) in
+                   setHover (fun _ -> Over index)))
+          onMouseLeave=(fun _ -> setHover (fun _ -> Away))>
+          <g className="grid">
+            (React.array
+               (Array.map
+                  (fun row ->
+                    let y = string_of_int (row * 40) in
+                    <line key=y x1="0" x2="600" y1=y y2=y stroke=(grid_colour theme) strokeWidth="0.5" />)
+                  [| 1; 2; 3; 4 |]))
+          </g>
+          (React.array
+             (Array.map
+                (fun (item, values) ->
+                  <Series_line key=(string_of_int item.id) color=item.color points=(plot ~width:600. ~height:200. ~low ~high values) />)
+                windows))
+          (match hover with
+           | Over index ->
+               let x = Js.Float.toFixed ~digits:1 (600. *. float_of_int index /. float_of_int (max 1 (count - 1))) in
+               <line className="crosshair" x1=x x2=x y1="0" y2="200" stroke="#7b8794" strokeDasharray="4 3" />
+           | Away -> React.null)
+        </svg>
+        (match hover with
+         | Over index ->
+             <Tooltip
+               ticks
+               range
+               index
+               count
+               rows=(Array.map (fun (item, values) -> (item, values.(min index (Array.length values - 1)))) windows) />
+         | Away -> React.null)
+      </div>
+      <Legend series hidden onToggle />
+    </div>
+end
+
+module Bar_chart = struct
+  let[@react.component] make ~title ~series =
+    let theme = React.useContext theme_context in
+    let bars = Array.sub series.values (Array.length series.values - 60) 60 in
+    let _, high = bounds [| bars |] in
+    <div className=("widget bar-chart " ^ theme_class theme)>
+      <div className="widget-title">(React.string title)</div>
+      <svg viewBox="0 0 600 160" preserveAspectRatio="none">
+        <line x1="0" x2="600" y1="159.5" y2="159.5" stroke=(grid_colour theme) />
+        (React.array
+           (Array.mapi
+              (fun index value ->
+                let height = 150. *. value /. high in
+                <rect
+                  key=(string_of_int index)
+                  x=(string_of_int (index * 10))
+                  y=(Js.Float.toFixed ~digits:1 (160. -. height))
+                  width="8"
+                  height=(Js.Float.toFixed ~digits:1 height)
+                  fill=series.color />)
+              bars))
+      </svg>
+    </div>
+end
+
+module Donut = struct
+  let[@react.component] make ~series =
+    let latest = Array.map (fun item -> (item, item.values.(Array.length item.values - 1))) series in
+    let total = Array.fold_left (fun sum (_, value) -> sum +. value) 0. latest in
+    let slices, _ =
+      Array.fold_left
+        (fun (slices, start) (item, value) ->
+          let sweep = 2. *. Float.pi *. value /. total in
+          let finish = start +. sweep in
+          let at angle radius =
+            Js.Float.toFixed ~digits:2 (100. +. (radius *. cos angle)) ^ " " ^ Js.Float.toFixed ~digits:2 (100. +. (radius *. sin angle))
+          in
+          let large = match sweep > Float.pi with true -> "1" | false -> "0" in
+          let d =
+            "M " ^ at start 90. ^ " A 90 90 0 " ^ large ^ " 1 " ^ at finish 90. ^ " L " ^ at finish 55. ^ " A 55 55 0 " ^ large
+            ^ " 0 " ^ at start 55. ^ " Z"
+          in
+          (Array.append slices [| (item, value, d) |], finish))
+        ([||], -.Float.pi /. 2.)
+        latest
+    in
+    <div className="widget donut">
+      <div className="widget-title">(React.string "Traffic share")</div>
+      <svg viewBox="0 0 200 200" width="200" height="200">
+        (React.array (Array.map (fun (item, _, d) -> <path key=(string_of_int item.id) d fill=item.color />) slices))
+        <text x="100" y="105" textAnchor="middle">(React.string (Js.Float.toFixed ~digits:0 total))</text>
+      </svg>
+      <ul className="donut-legend">
+        (React.array
+           (Array.map
+              (fun (item, value, _) ->
+                <li key=(string_of_int item.id)>
+                  (React.string (item.name ^ " " ^ Js.Float.toFixed ~digits:1 (100. *. value /. total) ^ "%"))
+                </li>)
+              slices))
+      </ul>
+    </div>
+end
+
+module Heat_row = struct
+  let[@react.component] make =
+    React.memo (fun ~host ~row ->
+        <g transform=("translate(0," ^ string_of_int (row * 8) ^ ")")>
+          (React.array
+             (Array.mapi
+                (fun column value ->
+                  <rect
+                    key=(string_of_int column)
+                    x=(string_of_int (column * 25))
+                    width="24"
+                    height="7"
+                    fill=("hsl(" ^ string_of_int (220 - int_of_float (value *. 1.6)) ^ ",70%,55%)") />)
+                host.values))
+        </g>)
+end
+
+module Heatmap = struct
+  let[@react.component] make ~hosts =
+    <div className="widget heatmap">
+      <div className="widget-title">(React.string "Load by host")</div>
+      <svg viewBox="0 0 600 400" preserveAspectRatio="none">
+        (React.array (Array.mapi (fun row host -> <Heat_row key=host.name host row />) hosts))
+      </svg>
+    </div>
+end
+
+module Sparkline = struct
+  let[@react.component] make ~values ~color =
+    let theme = React.useContext theme_context in
+    let low, high = bounds [| values |] in
+    <svg className="sparkline" viewBox="0 0 120 24" width="120" height="24">
+      <rect width="120" height="24" fill=(match theme with Light -> "#f5f7fa" | Dark -> "#1f2933") />
+      <path d=(path (plot ~width:120. ~height:24. ~low ~high values)) fill="none" stroke=color strokeWidth="1" />
+    </svg>
+end
+
+module Stat_tile = struct
+  let[@react.component] make ~label ~values ~unit_ ~color =
+    let latest = values.(Array.length values - 1) in
+    <div className="widget stat-tile">
+      <div className="widget-title">(React.string label)</div>
+      <div className="stat-value">(React.string (Js.Float.toFixed ~digits:1 latest ^ unit_))</div>
+      <div className=(match trend values with Rising -> "stat-trend up" | Falling -> "stat-trend down" | Flat -> "stat-trend")>
+        (React.string (match trend values with Rising -> "▲" | Falling -> "▼" | Flat -> "■"))
+      </div>
+      <Sparkline values=(Array.sub values (Array.length values - 40) 40) color />
+    </div>
+end
+
+module Kpi_row = struct
+  let[@react.component] make =
+    React.memo (fun ~kpi ->
+        let count = Array.length kpi.values in
+        let latest = kpi.values.(count - 1) in
+        let delta = latest -. kpi.values.(count - 2) in
+        <tr>
+          <td className="kpi-name">(React.string kpi.name)</td>
+          <td className="kpi-value">(React.string (Js.Float.toFixed ~digits:2 latest))</td>
+          <td className=(match trend kpi.values with Rising -> "kpi-delta up" | Falling -> "kpi-delta down" | Flat -> "kpi-delta")>
+            (React.string (Js.Float.toFixed ~digits:2 delta))
+          </td>
+          <td><Sparkline values=kpi.values color=kpi.color /></td>
+        </tr>)
+end
+
+module Kpi_table = struct
+  let[@react.component] make ~kpis =
+    <div className="widget kpi-table">
+      <table>
+        <thead>
+          <tr>
+            <th>(React.string "Metric")</th>
+            <th>(React.string "Value")</th>
+            <th>(React.string "Δ")</th>
+            <th>(React.string "Last 40")</th>
+          </tr>
+        </thead>
+        <tbody>(React.array (Array.map (fun kpi -> <Kpi_row key=(string_of_int kpi.id) kpi />) kpis))</tbody>
+      </table>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    let range, setRange = React.useState (fun () -> Day) in
+    let live, setLive = React.useState (fun () -> Paused) in
+    let theme, setTheme = React.useState (fun () -> Light) in
+    React.useEffect1
+      (fun () ->
+        match live with
+        | Live ->
+            let interval = Js.Global.setInterval ~f:(fun () -> dispatch Tick) 100 in
+            Some (fun () -> Js.Global.clearInterval interval)
+        | Paused -> None)
+      [| live |];
+    let onToggle = React.useCallback1 (fun id -> dispatch (Toggle_series id)) [| dispatch |] in
+    let column index = state.charts.(index) in
+    <Theme_provider value=theme>
+      <div className=("dashboard " ^ theme_class theme)>
+        <Toolbar
+          ticks=state.ticks
+          range
+          onRange=(fun next -> setRange (fun _ -> next))
+          live
+          onLive=(fun next -> setLive (fun _ -> next))
+          onStep=(fun () -> dispatch Tick)
+          onTheme=(fun () -> setTheme (fun theme -> match theme with Light -> Dark | Dark -> Light)) />
+        <section className="tiles">
+          <Stat_tile label="Requests" values=(column 0).values unit_=" rps" color=(column 0).color />
+          <Stat_tile label="Latency p95" values=(column 3).values unit_=" ms" color=(column 3).color />
+          <Stat_tile label="Errors" values=(column 6).values unit_=" /min" color=(column 6).color />
+          <Stat_tile label="Saturation" values=(column 9).values unit_=" %" color=(column 9).color />
+        </section>
+        <section className="charts">
+          (React.array
+             (Array.map
+                (fun (chart, title) ->
+                  <Line_chart
+                    key=title
+                    title
+                    series=(Array.sub state.charts (chart * 3) 3)
+                    ticks=state.ticks
+                    range
+                    hidden=state.hidden
+                    onToggle />)
+                [| (0, "Throughput"); (1, "Latency"); (2, "Errors"); (3, "Saturation") |]))
+          <Bar_chart title="Requests per minute" series=(column 1) />
+          <Bar_chart title="Queue depth" series=(column 7) />
+          <Donut series=(Array.sub state.charts 0 6) />
+          <Heatmap hosts=state.hosts />
+        </section>
+        <Kpi_table kpis=state.kpis />
+      </div>
+    </Theme_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

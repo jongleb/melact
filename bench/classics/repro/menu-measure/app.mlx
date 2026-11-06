@@ -1,0 +1,60 @@
+type rect
+
+external bounding_rect : Dom.element -> rect = "getBoundingClientRect" [@@mel.send]
+external rect_bottom : rect -> float = "bottom" [@@mel.get]
+
+(** Where the menu is drawn. *)
+type place = In_portal | Inline
+
+(** Whether a row's menu is open. *)
+type menu = Menu_closed | Menu_open
+
+(** Where an open menu sits, once its layout effect measured the anchor. *)
+type placement = Unplaced | Placed of float
+
+module Menu = struct
+  let[@react.component] make ~anchor ~place ~onClose =
+    let placement, setPlacement = React.useState (fun () -> Unplaced) in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption anchor.React.current
+        |> Option.iter (fun element -> setPlacement (fun _ -> Placed (rect_bottom (bounding_rect element))));
+        None)
+      [| anchor |];
+    match placement with
+    | Unplaced -> React.null
+    | Placed top -> (
+        let menu =
+          <div className="menu" style=(ReactDOM.Style.make ~top:(Js.Float.toString top ^ "px") ())>
+            <button className="menu-close" onClick=(fun _ -> onClose ())>(React.string "close")</button>
+          </div>
+        in
+        match (place, Classic.element_by_id Classic.document "portal") with
+        | In_portal, Some target -> ReactDOM.createPortal menu target
+        | In_portal, None | Inline, _ -> menu)
+end
+
+module Row = struct
+  let[@react.component] make ~label ~place =
+    let menu, setMenu = React.useState (fun () -> Menu_closed) in
+    let anchor = React.useRef Js.Nullable.null in
+    <li className=label>
+      <button ref=(ReactDOM.Ref.domRef anchor) className="open" onClick=(fun _ -> setMenu (fun _ -> Menu_open))>(React.string label)</button>
+      (match menu with
+       | Menu_open -> <Menu anchor place onClose=(fun () -> setMenu (fun _ -> Menu_closed)) />
+       | Menu_closed -> React.null)
+    </li>
+end
+
+module App = struct
+  let[@react.component] make () =
+    <ul>
+      (Array.init 200 (fun index ->
+           match index mod 2 with
+           | 0 -> <Row key=(string_of_int index) label="portal" place=In_portal />
+           | _ -> <Row key=(string_of_int index) label="inline" place=Inline />)
+      |> React.array)
+    </ul>
+end
+
+let () = Classic.start (fun () -> <App />)

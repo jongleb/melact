@@ -1,0 +1,295 @@
+(** A box on the page, as a [ResizeObserver] entry gives it. *)
+type rect = { width : float; height : float }
+
+type resize_observer
+type resize_entry
+
+external resize_observer : (resize_entry array -> resize_observer -> unit) -> resize_observer = "ResizeObserver" [@@mel.new]
+external observe : resize_observer -> Dom.element -> unit = "observe" [@@mel.send]
+external disconnect : resize_observer -> unit = "disconnect" [@@mel.send]
+external content_rect : resize_entry -> rect = "contentRect" [@@mel.get]
+external window : Dom.window = "window"
+external add_window_listener : Dom.window -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener" [@@mel.send]
+external remove_window_listener : Dom.window -> string -> (Dom.keyboardEvent -> unit) -> unit = "removeEventListener" [@@mel.send]
+external event_key : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+(** The album a photo was filed under. *)
+type album = Everything | Nature | City | People | Food
+
+(** Whether a photo is marked as a favourite. *)
+type favourite = Favourite | Ordinary
+
+(** What clicking a photo does: open it, or pick it for a bulk action. *)
+type mode = Browsing | Selecting
+
+(** Whether a photo is picked in select mode. *)
+type pick = Picked | Unpicked
+
+(** The photo shown large, if any. *)
+type lightbox = Closed | Open of int
+
+(** Whether a thumbnail is the photo the lightbox shows. *)
+type place = Current | Elsewhere
+
+type photo = { id : int; album : album; colour : string; ratio : float; caption : string; taken : string }
+
+type state = { photos : photo array; favourites : Belt.Set.Int.t; picked : Belt.Set.Int.t; mode : mode }
+
+(** What the gallery can be asked to do. *)
+type action = Toggle_favourite of int | Toggle_pick of int | Set_mode of mode | Delete_picked
+
+let albums = [| (Everything, "All"); (Nature, "Nature"); (City, "City"); (People, "People"); (Food, "Food") |]
+
+let initial =
+  let seed = Classic.Seed.make 23 in
+  {
+    photos =
+      Array.init 2000 (fun index ->
+          let hue = Classic.Seed.next seed 360 and light = 35 + Classic.Seed.next seed 40 in
+          {
+            id = index + 1;
+            album = (match Classic.Seed.next seed 4 with 0 -> Nature | 1 -> City | 2 -> People | _ -> Food);
+            colour = "hsl(" ^ string_of_int hue ^ ",55%," ^ string_of_int light ^ "%)";
+            ratio = [| 0.66; 0.75; 1.0; 1.33; 1.5 |].(Classic.Seed.next seed 5);
+            caption = Classic.sentence seed 5;
+            taken = "2026-" ^ string_of_int (1 + Classic.Seed.next seed 12) ^ "-" ^ string_of_int (1 + Classic.Seed.next seed 28);
+          });
+    favourites = Belt.Set.Int.empty;
+    picked = Belt.Set.Int.empty;
+    mode = Browsing;
+  }
+
+let reduce state action =
+  let toggle set id = match Belt.Set.Int.has set id with true -> Belt.Set.Int.remove set id | false -> Belt.Set.Int.add set id in
+  match action with
+  | Toggle_favourite id -> { state with favourites = toggle state.favourites id }
+  | Toggle_pick id -> { state with picked = toggle state.picked id }
+  | Set_mode Browsing -> { state with mode = Browsing; picked = Belt.Set.Int.empty }
+  | Set_mode Selecting -> { state with mode = Selecting }
+  | Delete_picked ->
+      {
+        state with
+        photos = Js.Array.filter ~f:(fun photo -> not (Belt.Set.Int.has state.picked photo.id)) state.photos;
+        favourites = Belt.Set.Int.diff state.favourites state.picked;
+        picked = Belt.Set.Int.empty;
+      }
+
+let favourite_of favourites id = match Belt.Set.Int.has favourites id with true -> Favourite | false -> Ordinary
+
+module Album_tabs = struct
+  let[@react.component] make ~album ~counts ~onAlbum =
+    <nav className="album-tabs">
+      (React.array
+         (Array.mapi
+            (fun index (target, label) ->
+              <button
+                key=label
+                className=(match target = album with true -> "tab active" | false -> "tab")
+                onClick=(fun _ -> onAlbum target)>
+                (React.string label)
+                <span className="count">(React.int counts.(index))</span>
+              </button>)
+            albums))
+    </nav>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~mode ~picked ~onMode ~onDelete =
+    <div className="gallery-toolbar">
+      (match mode with
+       | Browsing -> <button id="select-mode" onClick=(fun _ -> onMode Selecting)>(React.string "Select")</button>
+       | Selecting ->
+           <span className="selection">
+             <button id="select-mode" onClick=(fun _ -> onMode Browsing)>(React.string "Done")</button>
+             <span className="picked-count">(React.string (string_of_int picked ^ " selected"))</span>
+             <button id="delete-picked" disabled=(picked = 0) onClick=(fun _ -> onDelete ())>(React.string "Delete")</button>
+           </span>)
+    </div>
+end
+
+module Photo = struct
+  let[@react.component] make =
+    React.memo (fun ~photo ~favourite ~mode ~pick ~onOpen ~onFavourite ~onPick ->
+        <figure className=(match pick with Picked -> "photo picked" | Unpicked -> "photo")>
+          <div
+            className="frame"
+            style=(ReactDOM.Style.make ~backgroundColor:photo.colour ~paddingBottom:(Js.Float.toString (photo.ratio *. 100.) ^ "%") ())
+            onClick=(fun _ -> match mode with Browsing -> onOpen photo.id | Selecting -> onPick photo.id) />
+          (match mode with
+           | Selecting ->
+               <input className="pick" type_="checkbox" checked=(pick = Picked) onChange=(fun _ -> onPick photo.id) />
+           | Browsing -> React.null)
+          <figcaption>
+            <span className="caption">(React.string photo.caption)</span>
+            <button
+              className=(match favourite with Favourite -> "heart on" | Ordinary -> "heart")
+              onClick=(fun _ -> onFavourite photo.id)>
+              (React.string (match favourite with Favourite -> "♥" | Ordinary -> "♡"))
+            </button>
+          </figcaption>
+        </figure>)
+end
+
+module Masonry = struct
+  let[@react.component] make ~photos ~favourites ~picked ~mode ~onOpen ~onFavourite ~onPick =
+    let container = React.useRef Js.Nullable.null in
+    let width, setWidth = React.useState (fun () -> 0.) in
+    React.useEffect0 (fun () ->
+        let observer =
+          resize_observer (fun entries _ ->
+              Array.iter (fun entry -> setWidth (fun _ -> (content_rect entry).width)) entries)
+        in
+        Js.Nullable.toOption container.current |> Option.iter (observe observer);
+        Some (fun () -> disconnect observer));
+    let count = max 1 (int_of_float width / 220) in
+    let columns =
+      React.useMemo2
+        (fun () ->
+          let heights = Array.make count 0. and columns = Array.make count [] in
+          Array.iter
+            (fun photo ->
+              let shortest = ref 0 in
+              Array.iteri (fun index height -> match height < heights.(!shortest) with true -> shortest := index | false -> ()) heights;
+              heights.(!shortest) <- heights.(!shortest) +. photo.ratio +. 0.3;
+              columns.(!shortest) <- photo :: columns.(!shortest))
+            photos;
+          Array.map (fun column -> Array.of_list (List.rev column)) columns)
+        (photos, count)
+    in
+    <div className="masonry" ref=(ReactDOM.Ref.domRef container)>
+      (React.array
+         (Array.mapi
+            (fun index column ->
+              <div key=(string_of_int index) className="column">
+                (React.array
+                   (Array.map
+                      (fun photo ->
+                        <Photo
+                          key=(string_of_int photo.id)
+                          photo
+                          favourite=(favourite_of favourites photo.id)
+                          mode
+                          pick=(match Belt.Set.Int.has picked photo.id with true -> Picked | false -> Unpicked)
+                          onOpen
+                          onFavourite
+                          onPick />)
+                      column))
+              </div>)
+            columns))
+    </div>
+end
+
+module Thumbnail = struct
+  let[@react.component] make ~photo ~current ~onShow =
+    <button
+      className=(match current with Current -> "thumb current" | Elsewhere -> "thumb")
+      style=(ReactDOM.Style.make ~backgroundColor:photo.colour ())
+      onClick=(fun _ -> onShow photo.id) />
+end
+
+module Lightbox = struct
+  let[@react.component] make ~photos ~id ~favourites ~onShow ~onClose ~onFavourite =
+    let zoom, setZoom = React.useState (fun () -> 1) in
+    let index = max 0 (Js.Array.findIndex ~f:(fun photo -> photo.id = id) photos) in
+    let count = Array.length photos in
+    let step offset = onShow photos.((index + offset + count) mod count).id in
+    React.useEffect2
+      (fun () ->
+        let listener event =
+          match event_key event with
+          | "ArrowRight" -> step 1
+          | "ArrowLeft" -> step (-1)
+          | "Escape" -> onClose ()
+          | _ -> ()
+        in
+        add_window_listener window "keydown" listener;
+        Some (fun () -> remove_window_listener window "keydown" listener))
+      (index, photos);
+    let photo = photos.(index) in
+    let strip = Array.sub photos (max 0 (min (count - 31) (index - 15))) (min count 31) in
+    Classic.element_by_id Classic.document "portal"
+    |> Option.fold ~none:React.null ~some:(fun target ->
+           ReactDOM.createPortal
+             <div className="lightbox">
+               <div className="lightbox-bar">
+                 <span className="position">(React.string (string_of_int (index + 1) ^ " / " ^ string_of_int count))</span>
+                 <button id="zoom-out" onClick=(fun _ -> setZoom (fun zoom -> max 1 (zoom - 1)))>(React.string "−")</button>
+                 <span className="zoom">(React.string (string_of_int (zoom * 100) ^ "%"))</span>
+                 <button id="zoom-in" onClick=(fun _ -> setZoom (fun zoom -> min 4 (zoom + 1)))>(React.string "+")</button>
+                 <button
+                   id="lightbox-favourite"
+                   className=(match favourite_of favourites photo.id with Favourite -> "heart on" | Ordinary -> "heart")
+                   onClick=(fun _ -> onFavourite photo.id)>
+                   (React.string "♥")
+                 </button>
+                 <button id="close" onClick=(fun _ -> onClose ())>(React.string "×")</button>
+               </div>
+               <div className="stage">
+                 <button id="prev" onClick=(fun _ -> step (-1))>(React.string "‹")</button>
+                 <div
+                   className="large"
+                   style=(ReactDOM.Style.make
+                            ~backgroundColor:photo.colour
+                            ~width:(string_of_int (300 * zoom) ^ "px")
+                            ~height:(Js.Float.toString (300. *. float_of_int zoom *. photo.ratio) ^ "px")
+                            ())
+                 />
+                 <button id="next" onClick=(fun _ -> step 1)>(React.string "›")</button>
+               </div>
+               <p className="lightbox-caption">(React.string (photo.caption ^ " · " ^ photo.taken))</p>
+               <div className="strip">
+                 (React.array
+                    (Array.map
+                       (fun thumb -> <Thumbnail key=(string_of_int thumb.id) photo=thumb current=(match thumb.id = photo.id with true -> Current | false -> Elsewhere) onShow />)
+                       strip))
+               </div>
+             </div>
+             target)
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    let album, setAlbum = React.useState (fun () -> Everything) in
+    let lightbox, setLightbox = React.useState (fun () -> Closed) in
+    let shown =
+      React.useMemo2
+        (fun () -> match album with Everything -> state.photos | _ -> Js.Array.filter ~f:(fun photo -> photo.album = album) state.photos)
+        (state.photos, album)
+    in
+    let counts =
+      React.useMemo1
+        (fun () ->
+          Array.map
+            (fun (target, _) ->
+              match target with
+              | Everything -> Array.length state.photos
+              | _ -> Array.length (Js.Array.filter ~f:(fun photo -> photo.album = target) state.photos))
+            albums)
+        [| state.photos |]
+    in
+    let onOpen = React.useCallback0 (fun id -> setLightbox (fun _ -> Open id)) in
+    let onFavourite = React.useCallback0 (fun id -> dispatch (Toggle_favourite id)) in
+    let onPick = React.useCallback0 (fun id -> dispatch (Toggle_pick id)) in
+    <div className="gallery">
+      <Album_tabs album counts onAlbum=(fun next -> setAlbum (fun _ -> next)) />
+      <Toolbar
+        mode=state.mode
+        picked=(Belt.Set.Int.size state.picked)
+        onMode=(fun mode -> dispatch (Set_mode mode))
+        onDelete=(fun () -> dispatch Delete_picked) />
+      <Masonry photos=shown favourites=state.favourites picked=state.picked mode=state.mode onOpen onFavourite onPick />
+      (match lightbox with
+       | Open id ->
+           <Lightbox
+             photos=shown
+             id
+             favourites=state.favourites
+             onShow=onOpen
+             onClose=(fun () -> setLightbox (fun _ -> Closed))
+             onFavourite />
+       | Closed -> React.null)
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

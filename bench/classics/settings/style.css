@@ -1,0 +1,33 @@
+.settings-app { display: flex; flex-direction: column; height: 100vh; }
+.settings-header { display: flex; align-items: center; gap: 16px; padding: 8px 16px; border-bottom: 1px solid #d0d7de; }
+.settings-header h1 { font-size: 18px; margin: 0; }
+.search-box { flex: 1; display: flex; gap: 6px; }
+#search { flex: 1; padding: 5px 8px; }
+.settings-body { flex: 1; display: flex; min-height: 0; }
+.tab-list { width: 200px; display: flex; flex-direction: column; border-right: 1px solid #d0d7de; padding: 8px 0; }
+.tab { text-align: left; border: 0; background: none; padding: 6px 16px; display: flex; justify-content: space-between; }
+.tab.active { background: #ddf4ff; font-weight: 600; }
+.tab-badge { background: #0969da; color: #fff; border-radius: 8px; padding: 0 6px; font-size: 11px; }
+.panels { flex: 1; overflow: auto; padding: 12px 24px; }
+.panel-actions { display: flex; align-items: center; gap: 8px; }
+.panel-actions h2 { flex: 1; margin: 6px 0; }
+.accordion { border: 1px solid #d0d7de; border-radius: 6px; margin-bottom: 8px; }
+.accordion-header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f6f8fa; }
+.accordion-toggle { flex: 1; text-align: left; border: 0; background: none; font-weight: 600; display: flex; gap: 6px; }
+.setting-count { color: #57606a; font-weight: 400; }
+.section-modified { color: #0969da; font-size: 12px; }
+.accordion-body { padding: 4px 10px; }
+.setting { display: flex; gap: 16px; padding: 8px 0 8px 10px; border-left: 2px solid transparent; border-bottom: 1px solid #eaeef2; }
+.setting.modified { border-left-color: #0969da; }
+.setting-text { flex: 1; }
+.setting-title { font-weight: 600; }
+.modified-badge { margin-left: 6px; font-size: 11px; color: #0969da; font-weight: 400; }
+.setting-description { margin: 2px 0 0; color: #57606a; font-size: 12px; }
+.setting-control { width: 240px; display: flex; align-items: center; }
+.switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+.switch .toggle-input { opacity: 0; width: 36px; height: 20px; margin: 0; position: absolute; }
+.slider { position: absolute; inset: 0; background: #d0d7de; border-radius: 10px; pointer-events: none; }
+.toggle-input:checked + .slider { background: #1f883d; }
+.radio-row { display: flex; gap: 8px; }
+mark { background: #fff8c5; }
+.result-group h3 { font-size: 13px; color: #57606a; }

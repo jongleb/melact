@@ -1,0 +1,22 @@
+.gallery { padding: 12px; }
+.album-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.album-tabs .tab.active { background: #2680c2; color: #fff; }
+.album-tabs .count { margin-left: 6px; font-size: 11px; opacity: .7; }
+.gallery-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; min-height: 28px; }
+.masonry { display: flex; gap: 10px; align-items: flex-start; }
+.column { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.photo { margin: 0; position: relative; border-radius: 4px; overflow: hidden; background: #f5f7fa; }
+.photo.picked { outline: 3px solid #2680c2; }
+.photo .frame { cursor: zoom-in; }
+.photo .pick { position: absolute; top: 6px; left: 6px; }
+.photo figcaption { display: flex; justify-content: space-between; padding: 4px 6px; font-size: 12px; }
+.photo .caption { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.heart { border: 0; background: none; color: #9aa5b1; cursor: pointer; }
+.heart.on { color: #e12d39; }
+.lightbox { position: fixed; inset: 0; background: rgba(15,20,25,.92); color: #fff; display: flex; flex-direction: column; align-items: center; z-index: 10; }
+.lightbox-bar { display: flex; gap: 8px; padding: 8px; align-items: center; }
+.stage { flex: 1; display: flex; align-items: center; gap: 12px; overflow: hidden; }
+.large { transition: none; }
+.strip { display: flex; gap: 4px; padding: 8px; }
+.thumb { width: 36px; height: 36px; border: 2px solid transparent; padding: 0; }
+.thumb.current { border-color: #fff; }

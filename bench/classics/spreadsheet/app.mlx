@@ -1,0 +1,569 @@
+external scroll_into_view : Dom.element -> < block : string ; inline : string > Js.t -> unit = "scrollIntoView"
+[@@mel.send]
+
+let rows = 100
+let columns = 50
+
+let column_name col =
+  let letter index = String.make 1 (Char.chr (Char.code 'A' + index)) in
+  match col < 26 with true -> letter col | false -> letter ((col / 26) - 1) ^ letter (col mod 26)
+
+let address row col = column_name col ^ string_of_int (row + 1)
+
+(** Formulas: tokens, the syntax tree, evaluation of a whole sheet. *)
+module Formula = struct
+  type token = Number of float | Cell of int * int | Name of string | Symbol of char
+
+  (** A parsed formula. *)
+  type expr =
+    | Literal of float
+    | Reference of int * int
+    | Aggregate of string * (int * int) * (int * int)
+    | Binary of char * expr * expr
+    | Negate of expr
+
+  (** Why a cell shows an error instead of a value. *)
+  type failure = Malformed | Cyclic | Division_by_zero | Out_of_range | Not_a_number
+
+  (** What a cell holds once its formula, if any, is computed. *)
+  type value = Blank | Amount of float | Text of string | Failure of failure
+
+  exception Failed of failure
+
+  let tokens text =
+    let length = String.length text in
+    let rec scan index found =
+      let span accept =
+        let rec stop at = match at < length && accept text.[at] with true -> stop (at + 1) | false -> at in
+        stop index
+      in
+      let is_digit c = c >= '0' && c <= '9' in
+      let is_letter c = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') in
+      match index >= length with
+      | true -> List.rev found
+      | false -> (
+          match text.[index] with
+          | ' ' -> scan (index + 1) found
+          | c when is_digit c || c = '.' ->
+              let stop = span (fun c -> is_digit c || c = '.') in
+              let number =
+                Option.value ~default:0. (float_of_string_opt (String.sub text index (stop - index)))
+              in
+              scan stop (Number number :: found)
+          | c when is_letter c ->
+              let letters_end = span is_letter in
+              let letters = String.uppercase_ascii (String.sub text index (letters_end - index)) in
+              let digits_end =
+                let rec stop at = match at < length && is_digit text.[at] with true -> stop (at + 1) | false -> at in
+                stop letters_end
+              in
+              (match digits_end > letters_end with
+               | true ->
+                   let col = String.fold_left (fun acc c -> (acc * 26) + (Char.code c - Char.code 'A' + 1)) 0 letters - 1 in
+                   let row = int_of_string (String.sub text letters_end (digits_end - letters_end)) - 1 in
+                   scan digits_end (Cell (col, row) :: found)
+               | false -> scan letters_end (Name letters :: found))
+          | ('+' | '-' | '*' | '/' | '(' | ')' | ':' | ',') as c -> scan (index + 1) (Symbol c :: found)
+          | _ -> raise (Failed Malformed))
+    in
+    scan 0 []
+
+  let parse text =
+    let rest = ref (tokens text) in
+    let peek () = match !rest with token :: _ -> Some token | [] -> None in
+    let advance () = match !rest with _ :: tail -> rest := tail | [] -> () in
+    let expect symbol =
+      match peek () with Some (Symbol c) when c = symbol -> advance () | _ -> raise (Failed Malformed)
+    in
+    let rec sum () =
+      let rec more left =
+        match peek () with
+        | Some (Symbol (('+' | '-') as op)) ->
+            advance ();
+            more (Binary (op, left, product ()))
+        | _ -> left
+      in
+      more (product ())
+    and product () =
+      let rec more left =
+        match peek () with
+        | Some (Symbol (('*' | '/') as op)) ->
+            advance ();
+            more (Binary (op, left, factor ()))
+        | _ -> left
+      in
+      more (factor ())
+    and factor () =
+      match peek () with
+      | Some (Number number) ->
+          advance ();
+          Literal number
+      | Some (Cell (col, row)) ->
+          advance ();
+          Reference (col, row)
+      | Some (Symbol '-') ->
+          advance ();
+          Negate (factor ())
+      | Some (Symbol '(') ->
+          advance ();
+          let inner = sum () in
+          expect ')';
+          inner
+      | Some (Name name) -> (
+          advance ();
+          expect '(';
+          match !rest with
+          | Cell (c1, r1) :: Symbol ':' :: Cell (c2, r2) :: Symbol ')' :: tail ->
+              rest := tail;
+              Aggregate (name, (min c1 c2, min r1 r2), (max c1 c2, max r1 r2))
+          | _ -> raise (Failed Malformed))
+      | Some (Symbol _) | None -> raise (Failed Malformed)
+    in
+    let tree = sum () in
+    match !rest with [] -> tree | _ :: _ -> raise (Failed Malformed)
+
+  let shift raw offset =
+    match String.length raw > 0 && raw.[0] = '=' with
+    | false -> raw
+    | true -> (
+        match tokens (String.sub raw 1 (String.length raw - 1)) with
+        | found ->
+            "="
+            ^ String.concat ""
+                (List.map
+                   (fun token ->
+                     match token with
+                     | Number number -> Js.Float.toString number
+                     | Cell (col, row) -> address (row + offset) col
+                     | Name name -> name
+                     | Symbol c -> String.make 1 c)
+                   found)
+        | exception Failed _ -> raw)
+
+  (** How far a cell's evaluation has got. *)
+  type progress = Pending | Visiting | Known of value
+
+  let evaluate raws =
+    let states = Array.make (Array.length raws) Pending in
+    let rec cell row col =
+      match row >= 0 && row < rows && col >= 0 && col < columns with
+      | false -> Failure Out_of_range
+      | true -> (
+          let index = (row * columns) + col in
+          match states.(index) with
+          | Known value -> value
+          | Visiting -> Failure Cyclic
+          | Pending ->
+              states.(index) <- Visiting;
+              let value = compute raws.(index) in
+              states.(index) <- Known value;
+              value)
+    and compute raw =
+      match String.trim raw with
+      | "" -> Blank
+      | text when text.[0] = '=' -> (
+          match number (parse (String.sub text 1 (String.length text - 1))) with
+          | result -> Amount result
+          | exception Failed failure -> Failure failure)
+      | text -> Option.fold ~none:(Text text) ~some:(fun number -> Amount number) (float_of_string_opt text)
+    and amount row col =
+      match cell row col with
+      | Amount number -> number
+      | Blank -> 0.
+      | Text _ -> raise (Failed Not_a_number)
+      | Failure failure -> raise (Failed failure)
+    and number expr =
+      match expr with
+      | Literal value -> value
+      | Reference (col, row) -> amount row col
+      | Negate inner -> -.number inner
+      | Binary (op, left, right) -> (
+          let left = number left and right = number right in
+          match op with
+          | '+' -> left +. right
+          | '-' -> left -. right
+          | '*' -> left *. right
+          | _ -> ( match right = 0. with true -> raise (Failed Division_by_zero) | false -> left /. right))
+      | Aggregate (name, (c1, r1), (c2, r2)) -> (
+          let found = ref [] in
+          for row = r1 to r2 do
+            for col = c1 to c2 do
+              match cell row col with
+              | Amount value -> found := value :: !found
+              | Blank | Text _ -> ()
+              | Failure failure -> raise (Failed failure)
+            done
+          done;
+          let values = !found in
+          let count = float_of_int (List.length values) in
+          match (name, values) with
+          | "SUM", _ -> List.fold_left ( +. ) 0. values
+          | "COUNT", _ -> count
+          | "AVG", _ :: _ -> List.fold_left ( +. ) 0. values /. count
+          | "MIN", first :: others -> List.fold_left Float.min first others
+          | "MAX", first :: others -> List.fold_left Float.max first others
+          | ("AVG" | "MIN" | "MAX"), [] -> 0.
+          | _ -> raise (Failed Malformed))
+    in
+    Array.init (Array.length raws) (fun index -> cell (index / columns) (index mod columns))
+
+  let display value =
+    match value with
+    | Blank -> ""
+    | Text text -> text
+    | Amount number -> (
+        match Float.is_integer number with
+        | true -> Js.Float.toString number
+        | false -> Js.Float.toFixed ~digits:2 number)
+    | Failure Malformed -> "#ERR"
+    | Failure Cyclic -> "#CYCLE"
+    | Failure Division_by_zero -> "#DIV/0!"
+    | Failure Out_of_range -> "#REF!"
+    | Failure Not_a_number -> "#VALUE!"
+end
+
+let initial =
+  let seed = Classic.Seed.make 11 in
+  Array.init (rows * columns) (fun index ->
+      let row = index / columns and col = index mod columns in
+      let line = string_of_int (row + 1) in
+      match col with
+      | 40 -> "=SUM(A" ^ line ^ ":J" ^ line ^ ")"
+      | 41 -> "=AVG(K" ^ line ^ ":T" ^ line ^ ")"
+      | 42 -> "=MAX(U" ^ line ^ ":AD" ^ line ^ ")"
+      | 43 -> "=MIN(AE" ^ line ^ ":AN" ^ line ^ ")"
+      | 44 -> "=AO" ^ line ^ "+AP" ^ line ^ "*2"
+      | 45 -> "=AS" ^ line ^ "/(AQ" ^ line ^ "-AR" ^ line ^ "+1)"
+      | 46 -> "=AT" ^ line ^ "*A1"
+      | 47 when row = 0 -> "=AU1"
+      | 47 -> "=AV" ^ string_of_int row ^ "+AU" ^ line
+      | 48 -> "=SUM(AO1:AO" ^ line ^ ")"
+      | 49 -> "=AV" ^ line ^ "-AW" ^ line
+      | _ -> (
+          match Classic.Seed.next seed 9 with
+          | 0 -> Classic.Seed.pick seed Classic.words
+          | 1 -> ""
+          | _ -> string_of_int (Classic.Seed.next seed 1000)))
+
+type position = { row : int; col : int }
+
+(** Whether the selected cell shows its editor. *)
+type mode = Navigating | Editing of string
+
+type direction = Up | Down | Left | Right
+
+type state = { raws : string array; past : string array list; selection : position; mode : mode }
+
+type action =
+  | Select of position
+  | Move of direction
+  | Begin_edit of string
+  | Cancel_edit
+  | Commit of position * string
+  | Fill_down
+  | Clear_selected
+  | Undo
+
+(** How one cell is drawn. *)
+type look = Plain | Focused | Typing of string
+
+(** Whether a header belongs to the selected cell's row or column. *)
+type mark = Current | Other
+
+let reduce state action =
+  let index { row; col } = (row * columns) + col in
+  let change raws = { state with raws; past = state.raws :: List.filteri (fun at _ -> at < 99) state.past } in
+  let moved { row; col } direction =
+    match direction with
+    | Up -> { row = max 0 (row - 1); col }
+    | Down -> { row = min (rows - 1) (row + 1); col }
+    | Left -> { row; col = max 0 (col - 1) }
+    | Right -> { row; col = min (columns - 1) (col + 1) }
+  in
+  match action with
+  | Select selection -> { state with selection; mode = Navigating }
+  | Move direction -> { state with selection = moved state.selection direction; mode = Navigating }
+  | Begin_edit text -> { state with mode = Editing text }
+  | Cancel_edit -> { state with mode = Navigating }
+  | Commit (target, text) -> (
+      let next = { state with mode = Navigating; selection = moved target Down } in
+      match state.raws.(index target) = text with
+      | true -> next
+      | false ->
+          let raws = Array.copy state.raws in
+          raws.(index target) <- text;
+          { (change raws) with mode = Navigating; selection = moved target Down })
+  | Fill_down ->
+      let { row; col } = state.selection in
+      let source = state.raws.(index state.selection) in
+      let raws = Array.copy state.raws in
+      for below = row + 1 to rows - 1 do
+        raws.((below * columns) + col) <- Formula.shift source (below - row)
+      done;
+      change raws
+  | Clear_selected ->
+      let raws = Array.copy state.raws in
+      raws.(index state.selection) <- "";
+      change raws
+  | Undo -> (
+      match state.past with
+      | previous :: older -> { state with raws = previous; past = older; mode = Navigating }
+      | [] -> state)
+
+let dispatch_context = React.createContext (fun (_ : action) -> ())
+
+module Dispatch_provider = struct
+  let make = React.Context.provider dispatch_context
+
+  external makeProps :
+    value:(action -> unit) ->
+    children:React.element ->
+    unit ->
+    < value : action -> unit ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Cell_editor = struct
+  let[@react.component] make ~initial ~row ~col =
+    let dispatch = React.useContext dispatch_context in
+    let draft, setDraft = React.useState (fun () -> initial) in
+    let field = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption field.current |> Option.iter Classic.focus;
+        None);
+    <input
+      ref=(ReactDOM.Ref.domRef field)
+      className="cell-editor"
+      value=draft
+      onChange=(fun event ->
+        let value = (React.Event.Form.target event)##value in
+        setDraft (fun _ -> value))
+      onKeyDown=(fun event ->
+        match React.Event.Keyboard.key event with
+        | "Enter" -> dispatch (Commit ({ row; col }, draft))
+        | "Escape" -> dispatch Cancel_edit
+        | _ -> ()) />
+end
+
+module Cell = struct
+  let[@react.component] make =
+    React.memo (fun ~row ~col ~raw ~shown ~look ->
+        let dispatch = React.useContext dispatch_context in
+        let cell = React.useRef Js.Nullable.null in
+        React.useLayoutEffect1
+          (fun () ->
+            (match look with
+             | Focused ->
+                 Js.Nullable.toOption cell.current
+                 |> Option.iter (fun element -> scroll_into_view element [%mel.obj { block = "nearest"; inline = "nearest" }])
+             | Plain | Typing _ -> ());
+            None)
+          [| look |];
+        <td
+          ref=(ReactDOM.Ref.domRef cell)
+          className=
+            (String.concat " "
+               [ "cell";
+                 (match look with Plain -> "" | Focused -> "focused" | Typing _ -> "typing");
+                 (match String.length raw > 0 && raw.[0] = '=' with true -> "formula" | false -> "") ])
+          onClick=(fun _ -> dispatch (Select { row; col }))
+          onDoubleClick=(fun _ ->
+            dispatch (Select { row; col });
+            dispatch (Begin_edit raw))>
+          (match look with Typing initial -> <Cell_editor initial row col /> | Plain | Focused -> React.string shown)
+        </td>)
+end
+
+module Column_header = struct
+  let[@react.component] make =
+    React.memo (fun ~label ~mark ->
+        <th className=(match mark with Current -> "column-header current" | Other -> "column-header")>
+          (React.string label)
+        </th>)
+end
+
+module Row_header = struct
+  let[@react.component] make =
+    React.memo (fun ~row ~mark ->
+        <th className=(match mark with Current -> "row-header current" | Other -> "row-header")>(React.int (row + 1))</th>)
+end
+
+module Sheet = struct
+  let[@react.component] make ~raws ~shown ~selection ~mode =
+    let dispatch = React.useContext dispatch_context in
+    let container = React.useRef Js.Nullable.null in
+    let editing = match mode with Editing _ -> `Editing | Navigating -> `Navigating in
+    React.useEffect1
+      (fun () ->
+        (match editing with
+         | `Navigating -> Js.Nullable.toOption container.current |> Option.iter Classic.focus
+         | `Editing -> ());
+        None)
+      [| editing |];
+    let column_indices = React.useMemo0 (fun () -> Array.init columns (fun col -> col)) in
+    let row_indices = React.useMemo0 (fun () -> Array.init rows (fun row -> row)) in
+    <div
+      ref=(ReactDOM.Ref.domRef container)
+      className="sheet"
+      tabIndex=0
+      onKeyDown=(fun event ->
+        match (mode, React.Event.Keyboard.key event) with
+        | Editing _, _ -> ()
+        | Navigating, "ArrowUp" ->
+            React.Event.Keyboard.preventDefault event;
+            dispatch (Move Up)
+        | Navigating, "ArrowDown" ->
+            React.Event.Keyboard.preventDefault event;
+            dispatch (Move Down)
+        | Navigating, "ArrowLeft" ->
+            React.Event.Keyboard.preventDefault event;
+            dispatch (Move Left)
+        | Navigating, "ArrowRight" ->
+            React.Event.Keyboard.preventDefault event;
+            dispatch (Move Right)
+        | Navigating, "Enter" -> dispatch (Begin_edit raws.((selection.row * columns) + selection.col))
+        | Navigating, ("Delete" | "Backspace") -> dispatch Clear_selected
+        | Navigating, "z" when React.Event.Keyboard.ctrlKey event || React.Event.Keyboard.metaKey event ->
+            dispatch Undo
+        | Navigating, key when String.length key = 1 && not (React.Event.Keyboard.ctrlKey event) ->
+            React.Event.Keyboard.preventDefault event;
+            dispatch (Begin_edit key)
+        | Navigating, _ -> ())>
+      <table className="grid">
+        <thead>
+          <tr>
+            <th className="corner" />
+            (React.array
+               (Array.map
+                  (fun col ->
+                    <Column_header
+                      key=(string_of_int col)
+                      label=(column_name col)
+                      mark=(match selection.col = col with true -> Current | false -> Other) />)
+                  column_indices))
+          </tr>
+        </thead>
+        <tbody>
+          (React.array
+             (Array.map
+                (fun row ->
+                  <tr key=(string_of_int row)>
+                    <Row_header row mark=(match selection.row = row with true -> Current | false -> Other) />
+                    (React.array
+                       (Array.map
+                          (fun col ->
+                            let index = (row * columns) + col in
+                            <Cell
+                              key=(string_of_int col)
+                              row
+                              col
+                              raw=raws.(index)
+                              shown=shown.(index)
+                              look=
+                                (match mode with
+                                 | Editing text when selection.row = row && selection.col = col -> Typing text
+                                 | Navigating when selection.row = row && selection.col = col -> Focused
+                                 | Editing _ | Navigating -> Plain) />)
+                          column_indices))
+                  </tr>)
+                row_indices))
+        </tbody>
+      </table>
+    </div>
+end
+
+module Formula_bar = struct
+  let[@react.component] make ~selection ~raw =
+    let dispatch = React.useContext dispatch_context in
+    let draft, setDraft = React.useState (fun () -> raw) in
+    React.useEffect2
+      (fun () ->
+        setDraft (fun _ -> raw);
+        None)
+      (selection, raw);
+    <div className="formula-bar">
+      <span className="address">(React.string (address selection.row selection.col))</span>
+      <span className="fx">(React.string "fx")</span>
+      <input
+        id="formula"
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value))
+        onKeyDown=(fun event ->
+          match React.Event.Keyboard.key event with
+          | "Enter" -> dispatch (Commit (selection, draft))
+          | "Escape" -> setDraft (fun _ -> raw)
+          | _ -> ()) />
+    </div>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~history =
+    let dispatch = React.useContext dispatch_context in
+    <div className="toolbar">
+      <button id="undo" disabled=(match history with `Empty -> true | `Some -> false) onClick=(fun _ -> dispatch Undo)>
+        (React.string "Undo")
+      </button>
+      <button id="fill-down" onClick=(fun _ -> dispatch Fill_down)>(React.string "Fill down")</button>
+      <button id="clear-cell" onClick=(fun _ -> dispatch Clear_selected)>(React.string "Clear")</button>
+    </div>
+end
+
+module Status_bar = struct
+  let[@react.component] make ~raws ~values ~selection =
+    let summary =
+      React.useMemo2
+        (fun () ->
+          Array.fold_left
+            (fun (formulas, errors, total) (raw, value) ->
+              ( (match String.length raw > 0 && raw.[0] = '=' with true -> formulas + 1 | false -> formulas),
+                (match value with Formula.Failure _ -> errors + 1 | Blank | Amount _ | Text _ -> errors),
+                match value with Formula.Amount number -> total +. number | Blank | Text _ | Failure _ -> total ))
+            (0, 0, 0.)
+            (Array.map2 (fun raw value -> (raw, value)) raws values))
+        (raws, values)
+    in
+    let formulas, errors, total = summary in
+    let column_sum =
+      React.useMemo2
+        (fun () ->
+          let sum = ref 0. in
+          for row = 0 to rows - 1 do
+            match values.((row * columns) + selection.col) with
+            | Formula.Amount number -> sum := !sum +. number
+            | Blank | Text _ | Failure _ -> ()
+          done;
+          !sum)
+        (values, selection.col)
+    in
+    <footer className="status-bar">
+      <span id="formula-count">(React.string (string_of_int formulas ^ " formulas"))</span>
+      <span id="error-count">(React.string (string_of_int errors ^ " errors"))</span>
+      <span id="sheet-total">(React.string ("Total " ^ Formula.display (Amount total)))</span>
+      <span id="column-sum">
+        (React.string ("Sum of " ^ column_name selection.col ^ ": " ^ Formula.display (Amount column_sum)))
+      </span>
+    </footer>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch =
+      React.useReducer reduce { raws = initial; past = []; selection = { row = 0; col = 0 }; mode = Navigating }
+    in
+    let values = React.useMemo1 (fun () -> Formula.evaluate state.raws) [| state.raws |] in
+    let shown = React.useMemo1 (fun () -> Array.map Formula.display values) [| values |] in
+    <Dispatch_provider value=dispatch>
+      <div className="spreadsheet">
+        <Toolbar history=(match state.past with [] -> `Empty | _ :: _ -> `Some) />
+        <Formula_bar
+          selection=state.selection
+          raw=state.raws.((state.selection.row * columns) + state.selection.col) />
+        <Sheet raws=state.raws shown selection=state.selection mode=state.mode />
+        <Status_bar raws=state.raws values selection=state.selection />
+      </div>
+    </Dispatch_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

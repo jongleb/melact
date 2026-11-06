@@ -1,0 +1,392 @@
+type product = {
+  id : int;
+  title : string;
+  category : string;
+  brand : string;
+  price : float;
+  rating : int;
+  reviews : int;
+  hue : int;
+}
+
+type order = Relevance | Price_low_first | Price_high_first | Best_rated
+
+(** Whether a checkbox in the sidebar is ticked. *)
+type tick = Ticked | Unticked
+
+(** Whether the cart drawer is open. *)
+type drawer = Drawer_open | Drawer_closed
+
+type filters = {
+  categories : string list;
+  brands : string list;
+  min_price : string;
+  max_price : string;
+  min_rating : int;
+  order : order;
+}
+
+type line = { product : product; quantity : int }
+
+type cart_action = Add of product | Set_quantity of int * int | Remove of int | Clear_cart | Show_cart | Hide_cart
+
+type cart = { lines : line list; drawer : drawer; act : cart_action -> unit }
+
+let categories = [| "Audio"; "Books"; "Cameras"; "Garden"; "Kitchen"; "Laptops"; "Outdoor"; "Phones"; "Toys"; "Watches" |]
+
+let brands =
+  [| "Acme"; "Borealis"; "Cobalt"; "Dynamo"; "Evergreen"; "Fjord"; "Granite"; "Helix"; "Ion"; "Juniper"; "Krypton";
+     "Lumen"; "Monarch"; "Nimbus"; "Orbit" |]
+
+let money amount = "$" ^ Js.Float.toFixed ~digits:2 amount
+
+let products =
+  let seed = Classic.Seed.make 3000 in
+  Array.init 3000 (fun index ->
+      {
+        id = index + 1;
+        title = String.capitalize_ascii (Classic.sentence seed 3);
+        category = Classic.Seed.pick seed categories;
+        brand = Classic.Seed.pick seed brands;
+        price = float_of_int (Classic.Seed.next seed 50000 + 199) /. 100.;
+        rating = Classic.Seed.next seed 5 + 1;
+        reviews = Classic.Seed.next seed 2000;
+        hue = Classic.Seed.next seed 360;
+      })
+
+let no_filters = { categories = []; brands = []; min_price = ""; max_price = ""; min_rating = 0; order = Relevance }
+
+let cart_context = React.createContext { lines = []; drawer = Drawer_closed; act = (fun _ -> ()) }
+
+module Cart_context_provider = struct
+  let make = React.Context.provider cart_context
+
+  external makeProps : value:cart -> children:React.element -> unit -> < value : cart ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Cart_provider = struct
+  let[@react.component] make ~children =
+    let (lines, drawer), act =
+      React.useReducer
+        (fun (lines, drawer) action ->
+          match action with
+          | Add product -> (
+              match List.exists (fun line -> line.product.id = product.id) lines with
+              | true ->
+                  ( List.map
+                      (fun line ->
+                        match line.product.id = product.id with
+                        | true -> { line with quantity = line.quantity + 1 }
+                        | false -> line)
+                      lines,
+                    drawer )
+              | false -> (lines @ [ { product; quantity = 1 } ], drawer))
+          | Set_quantity (id, quantity) when quantity <= 0 ->
+              (List.filter (fun line -> line.product.id <> id) lines, drawer)
+          | Set_quantity (id, quantity) ->
+              (List.map (fun line -> match line.product.id = id with true -> { line with quantity } | false -> line) lines, drawer)
+          | Remove id -> (List.filter (fun line -> line.product.id <> id) lines, drawer)
+          | Clear_cart -> ([], drawer)
+          | Show_cart -> (lines, Drawer_open)
+          | Hide_cart -> (lines, Drawer_closed))
+        ([], Drawer_closed)
+    in
+    let value = React.useMemo3 (fun () -> { lines; drawer; act }) (lines, drawer, act) in
+    <Cart_context_provider value>children</Cart_context_provider>
+end
+
+module Stars = struct
+  let[@react.component] make ~rating ~reviews =
+    <div className="stars" ariaLabel=(string_of_int rating ^ " out of 5")>
+      (React.array
+         (Array.map
+            (fun place ->
+              <span key=(string_of_int place) className=(match place <= rating with true -> "star full" | false -> "star")>
+                (React.string (match place <= rating with true -> "\xe2\x98\x85" | false -> "\xe2\x98\x86"))
+              </span>)
+            [| 1; 2; 3; 4; 5 |]))
+      <span className="reviews">(React.string ("(" ^ string_of_int reviews ^ ")"))</span>
+    </div>
+end
+
+module Product_card = struct
+  let[@react.component] make =
+    React.memo (fun ~product ~quantity ~onAdd ->
+        <article className="product-card">
+          <div className="thumb" style=(ReactDOM.Style.make ~background:("hsl(" ^ string_of_int product.hue ^ ", 55%, 82%)") ())>
+            (React.string (String.sub product.category 0 1))
+          </div>
+          <h3 className="product-title">(React.string product.title)</h3>
+          <p className="product-brand">(React.string (product.brand ^ " \xc2\xb7 " ^ product.category))</p>
+          <Stars rating=product.rating reviews=product.reviews />
+          <div className="product-foot">
+            <span className="price">(React.string (money product.price))</span>
+            <button className="add-to-cart" onClick=(fun _ -> onAdd product)>
+              (React.string (match quantity with 0 -> "Add to cart" | count -> "In cart (" ^ string_of_int count ^ ")"))
+            </button>
+          </div>
+        </article>)
+end
+
+module Check_list = struct
+  let[@react.component] make ~name ~options ~onToggle =
+    <fieldset className=("check-list " ^ name)>
+      <legend>(React.string (String.capitalize_ascii name))</legend>
+      (React.array
+         (Array.map
+            (fun (label, count, tick) ->
+              <label key=label className=(match count with 0 -> "option empty" | _ -> "option")>
+                <input
+                  type_="checkbox"
+                  className=(name ^ "-filter")
+                  checked=(match tick with Ticked -> true | Unticked -> false)
+                  onChange=(fun _ -> onToggle label) />
+                (React.string (" " ^ label))
+                <span className="count">(React.int count)</span>
+              </label>)
+            options))
+    </fieldset>
+end
+
+module Price_filter = struct
+  let[@react.component] make ~low ~high ~onLow ~onHigh =
+    <fieldset className="price-filter">
+      <legend>(React.string "Price")</legend>
+      <input id="price-min" type_="number" placeholder="Min" value=low onChange=(fun event -> onLow (React.Event.Form.target event)##value) />
+      <span>(React.string " \xe2\x80\x93 ")</span>
+      <input id="price-max" type_="number" placeholder="Max" value=high onChange=(fun event -> onHigh (React.Event.Form.target event)##value) />
+    </fieldset>
+end
+
+module Rating_filter = struct
+  let[@react.component] make ~rating ~onRating =
+    <fieldset className="rating-filter">
+      <legend>(React.string "Rating")</legend>
+      (React.array
+         (Array.map
+            (fun floor ->
+              <label key=(string_of_int floor)>
+                <input
+                  type_="radio"
+                  name="rating"
+                  className="rating-option"
+                  checked=(rating = floor)
+                  onChange=(fun _ -> onRating floor) />
+                (React.string (match floor with 0 -> " Any" | _ -> " " ^ string_of_int floor ^ "+ stars"))
+              </label>)
+            [| 0; 4; 3; 2 |]))
+    </fieldset>
+end
+
+module Sidebar = struct
+  let[@react.component] make ~filters ~setFilters ~categoryCounts ~brandCounts =
+    let toggle chosen label =
+      match List.mem label chosen with true -> List.filter (fun other -> other <> label) chosen | false -> label :: chosen
+    in
+    let options names counts chosen =
+      Array.map
+        (fun label ->
+          ( label,
+            Option.value ~default:0 (Js.Dict.get counts label),
+            match List.mem label chosen with true -> Ticked | false -> Unticked ))
+        names
+    in
+    <aside className="sidebar">
+      <Check_list
+        name="category"
+        options=(options categories categoryCounts filters.categories)
+        onToggle=(fun label -> setFilters (fun filters -> { filters with categories = toggle filters.categories label })) />
+      <Price_filter
+        low=filters.min_price
+        high=filters.max_price
+        onLow=(fun min_price -> setFilters (fun filters -> { filters with min_price }))
+        onHigh=(fun max_price -> setFilters (fun filters -> { filters with max_price })) />
+      <Rating_filter rating=filters.min_rating onRating=(fun min_rating -> setFilters (fun filters -> { filters with min_rating })) />
+      <Check_list
+        name="brand"
+        options=(options brands brandCounts filters.brands)
+        onToggle=(fun label -> setFilters (fun filters -> { filters with brands = toggle filters.brands label })) />
+      <button id="clear-filters" onClick=(fun _ -> setFilters (fun _ -> no_filters))>(React.string "Clear all filters")</button>
+    </aside>
+end
+
+module Sort_bar = struct
+  let[@react.component] make ~count ~order ~onOrder =
+    let name order =
+      match order with
+      | Relevance -> "relevance"
+      | Price_low_first -> "price-asc"
+      | Price_high_first -> "price-desc"
+      | Best_rated -> "rating"
+    in
+    <div className="sort-bar">
+      <span id="product-count">(React.string (string_of_int count ^ " products"))</span>
+      <select
+        id="sort"
+        value=(name order)
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          Array.iter (fun order -> match name order = value with true -> onOrder order | false -> ()) [| Relevance; Price_low_first; Price_high_first; Best_rated |])>
+        <option value="relevance">(React.string "Relevance")</option>
+        <option value="price-asc">(React.string "Price: low to high")</option>
+        <option value="price-desc">(React.string "Price: high to low")</option>
+        <option value="rating">(React.string "Best rated")</option>
+      </select>
+    </div>
+end
+
+module Quantity_stepper = struct
+  let[@react.component] make ~quantity ~onQuantity =
+    <div className="stepper">
+      <button className="qty-dec" onClick=(fun _ -> onQuantity (quantity - 1))>(React.string "\xe2\x88\x92")</button>
+      <span className="qty">(React.int quantity)</span>
+      <button className="qty-inc" onClick=(fun _ -> onQuantity (quantity + 1))>(React.string "+")</button>
+    </div>
+end
+
+module Cart_line = struct
+  let[@react.component] make ~line ~act =
+    <li className="cart-line">
+      <div className="thumb small" style=(ReactDOM.Style.make ~background:("hsl(" ^ string_of_int line.product.hue ^ ", 55%, 82%)") ()) />
+      <div className="line-info">
+        <div className="line-title">(React.string line.product.title)</div>
+        <div className="line-price">(React.string (money line.product.price))</div>
+      </div>
+      <Quantity_stepper quantity=line.quantity onQuantity=(fun quantity -> act (Set_quantity (line.product.id, quantity))) />
+      <span className="line-total">(React.string (money (line.product.price *. float_of_int line.quantity)))</span>
+      <button className="remove" onClick=(fun _ -> act (Remove line.product.id))>(React.string "Remove")</button>
+    </li>
+end
+
+module Cart_drawer = struct
+  let[@react.component] make () =
+    let { lines; drawer; act } = React.useContext cart_context in
+    let subtotal = List.fold_left (fun sum line -> sum +. (line.product.price *. float_of_int line.quantity)) 0. lines in
+    let shipping = match subtotal > 100. || lines = [] with true -> 0. | false -> 9.99 in
+    let tax = subtotal *. 0.08 in
+    match (drawer, Classic.element_by_id Classic.document "portal") with
+    | Drawer_open, Some target ->
+        ReactDOM.createPortal
+          <div className="cart-backdrop" onClick=(fun _ -> act Hide_cart)>
+            <aside className="cart" onClick=(fun event -> React.Event.Mouse.stopPropagation event)>
+              <header>
+                <h2>(React.string "Your cart")</h2>
+                <button id="close-cart" onClick=(fun _ -> act Hide_cart)>(React.string "Close")</button>
+              </header>
+              (match lines with
+               | [] -> <p className="empty">(React.string "Your cart is empty")</p>
+               | _ :: _ ->
+                   <ul className="cart-lines">
+                     (lines |> Array.of_list
+                     |> Array.map (fun line -> <Cart_line key=(string_of_int line.product.id) line act />)
+                     |> React.array)
+                   </ul>)
+              <dl className="totals">
+                <dt>(React.string "Subtotal")</dt>
+                <dd id="subtotal">(React.string (money subtotal))</dd>
+                <dt>(React.string "Shipping")</dt>
+                <dd>(React.string (match shipping with 0. -> "Free" | _ -> money shipping))</dd>
+                <dt>(React.string "Tax")</dt>
+                <dd>(React.string (money tax))</dd>
+                <dt>(React.string "Total")</dt>
+                <dd id="total">(React.string (money (subtotal +. shipping +. tax)))</dd>
+              </dl>
+              <button id="clear-cart" onClick=(fun _ -> act Clear_cart)>(React.string "Empty cart")</button>
+            </aside>
+          </div>
+          target
+    | Drawer_open, None | Drawer_closed, _ -> React.null
+end
+
+module Shop_header = struct
+  let[@react.component] make () =
+    let { lines; act; _ } = React.useContext cart_context in
+    let count = List.fold_left (fun sum line -> sum + line.quantity) 0 lines in
+    <header className="shop-header">
+      <h1>(React.string "Mercato")</h1>
+      <button id="open-cart" onClick=(fun _ -> act Show_cart)>
+        (React.string "Cart")
+        (match count with 0 -> React.null | _ -> <span className="cart-badge">(React.int count)</span>)
+      </button>
+    </header>
+end
+
+module Catalog = struct
+  let[@react.component] make () =
+    let { lines; act; _ } = React.useContext cart_context in
+    let filters, setFilters = React.useState (fun () -> no_filters) in
+    let low = float_of_string_opt filters.min_price and high = float_of_string_opt filters.max_price in
+    let passes ~skip product =
+      (skip = `Category || filters.categories = [] || List.mem product.category filters.categories)
+      && (skip = `Brand || filters.brands = [] || List.mem product.brand filters.brands)
+      && Option.fold ~none:true ~some:(fun low -> product.price >= low) low
+      && Option.fold ~none:true ~some:(fun high -> product.price <= high) high
+      && product.rating >= filters.min_rating
+    in
+    let counts skip field =
+      let dict = Js.Dict.empty () in
+      Array.iter
+        (fun product ->
+          match passes ~skip product with
+          | true -> Js.Dict.set dict (field product) (Option.value ~default:0 (Js.Dict.get dict (field product)) + 1)
+          | false -> ())
+        products;
+      dict
+    in
+    let categoryCounts = React.useMemo1 (fun () -> counts `Category (fun product -> product.category)) [| filters |] in
+    let brandCounts = React.useMemo1 (fun () -> counts `Brand (fun product -> product.brand)) [| filters |] in
+    let visible =
+      React.useMemo1
+        (fun () ->
+          let found = Js.Array.filter ~f:(passes ~skip:`Nothing) products in
+          let by compare_products = Array.stable_sort compare_products found in
+          (match filters.order with
+           | Relevance -> ()
+           | Price_low_first -> by (fun left right -> compare left.price right.price)
+           | Price_high_first -> by (fun left right -> compare right.price left.price)
+           | Best_rated -> by (fun left right -> compare (right.rating, right.reviews) (left.rating, left.reviews)));
+          found)
+        [| filters |]
+    in
+    let quantities =
+      React.useMemo1
+        (fun () -> List.fold_left (fun map line -> Belt.Map.Int.set map line.product.id line.quantity) Belt.Map.Int.empty lines)
+        [| lines |]
+    in
+    let onAdd = React.useCallback1 (fun product -> act (Add product)) [| act |] in
+    <div className="catalog">
+      <Sidebar filters setFilters categoryCounts brandCounts />
+      <main className="results">
+        <Sort_bar
+          count=(Array.length visible)
+          order=filters.order
+          onOrder=(fun order -> setFilters (fun filters -> { filters with order })) />
+        <div className="product-grid">
+          (React.array
+             (Array.map
+                (fun product ->
+                  <Product_card
+                    key=(string_of_int product.id)
+                    product
+                    quantity=(Belt.Map.Int.getWithDefault quantities product.id 0)
+                    onAdd />)
+                visible))
+        </div>
+      </main>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    <Cart_provider>
+      <div className="shop">
+        <Shop_header />
+        <Catalog />
+        <Cart_drawer />
+      </div>
+    </Cart_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

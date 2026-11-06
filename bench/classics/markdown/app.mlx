@@ -1,0 +1,551 @@
+external selection_start : Dom.element -> int = "selectionStart" [@@mel.get]
+external selection_end : Dom.element -> int = "selectionEnd" [@@mel.get]
+external set_selection_range : Dom.element -> int -> int -> unit = "setSelectionRange" [@@mel.send]
+external set_scroll_top : Dom.element -> float -> unit = "scrollTop" [@@mel.set]
+external scroll_height : Dom.element -> float = "scrollHeight" [@@mel.get]
+external client_height : Dom.element -> float = "clientHeight" [@@mel.get]
+
+(** A run of text inside a block. *)
+type inline =
+  | Text of string
+  | Strong of string
+  | Emphasis of string
+  | Code_span of string
+  | Link of { label : string; href : string }
+
+(** A block of the document, as the preview draws it. *)
+type block =
+  | Heading of { level : int; parts : inline list; anchor : string }
+  | Paragraph of inline list
+  | Bullets of inline list list
+  | Numbered of inline list list
+  | Code of { language : string; lines : string list }
+  | Quote of inline list list
+  | Table of { header : inline list list; rows : inline list list list }
+  | Rule
+
+(** A highlighted piece of a code line. *)
+type token = Keyword of string | Literal of string | Number of string | Plain of string
+
+(** Which panes are on screen. *)
+type mode = Split | Preview_only | Editor_only
+
+(** A selection to restore in the editor after the next render. *)
+type caret = Caret_free | Caret_at of int * int
+
+(** The table of contents entry the user jumped to last. *)
+type current = No_heading | Heading_at of string
+
+(** Whether a table of contents entry is the current one. *)
+type highlight = Current | Other
+
+type outline = { level : int; title : string; anchor : string }
+
+type stats = { words : int; characters : int; lines : int }
+
+let initial_document =
+  let seed = Classic.Seed.make 11 in
+  let words count = Classic.sentence seed count in
+  let word () = Classic.Seed.pick seed Classic.words in
+  let inline () =
+    match Classic.Seed.next seed 7 with
+    | 0 -> "**" ^ words 2 ^ "**"
+    | 1 -> "*" ^ words 2 ^ "*"
+    | 2 -> "`" ^ word () ^ "`"
+    | 3 -> "[" ^ words 2 ^ "](https://example.com/" ^ word () ^ ")"
+    | _ -> words 3
+  in
+  let sentence () = String.capitalize_ascii (String.concat " " (List.init 4 (fun _ -> inline ()))) ^ "." in
+  let paragraph count = List.init count (fun _ -> sentence ()) @ [ "" ] in
+  let section index =
+    let title = [ "## " ^ String.capitalize_ascii (words 3); "" ] in
+    let body =
+      match index mod 6 with
+      | 0 -> paragraph 3 @ List.init 5 (fun _ -> "- " ^ sentence ()) @ [ "" ]
+      | 1 ->
+          paragraph 2
+          @ [ "```ocaml" ]
+          @ List.init 8 (fun line ->
+                match line mod 4 with
+                | 0 -> "let " ^ word () ^ " = " ^ string_of_int (Classic.Seed.next seed 1000)
+                | 1 -> "  match " ^ word () ^ " with"
+                | 2 -> "  | Some value -> \"" ^ word () ^ "\""
+                | _ -> "  | None -> fun () -> " ^ word ())
+          @ [ "```"; "" ]
+      | 2 ->
+          paragraph 1
+          @ [ "| Name | Owner | Points | Status |"; "| --- | --- | ---: | --- |" ]
+          @ List.init 6 (fun _ ->
+                "| " ^ word () ^ " | **" ^ word () ^ "** | " ^ string_of_int (Classic.Seed.next seed 100) ^ " | `" ^ word ()
+                ^ "` |")
+          @ [ "" ]
+      | 3 ->
+          List.init 3 (fun _ -> "> " ^ sentence ())
+          @ [ "" ]
+          @ List.init 4 (fun item -> string_of_int (item + 1) ^ ". " ^ sentence ())
+          @ [ "" ]
+      | 4 -> [ "### " ^ String.capitalize_ascii (words 2); "" ] @ paragraph 4
+      | _ -> paragraph 2 @ [ "---"; "" ]
+    in
+    title @ body
+  in
+  String.concat "\n" ([ "# " ^ String.capitalize_ascii (words 4); "" ] @ List.concat (List.init 44 section))
+
+(** The hand-written markdown parser. *)
+module Markdown = struct
+  (** One source line, classified. *)
+  type line =
+    | Blank
+    | Heading_line of int * string
+    | Fence of string
+    | Bullet_line of string
+    | Numbered_line of string
+    | Quote_line of string
+    | Table_line of string list
+    | Rule_line
+    | Text_line of string
+
+  let parse text =
+    let parse_inline text =
+      let length = String.length text in
+      let find marker from =
+        let size = String.length marker in
+        let rec look position =
+          match position + size > length with
+          | true -> None
+          | false -> (
+              match String.sub text position size = marker with true -> Some position | false -> look (position + 1))
+        in
+        look from
+      in
+      let rec scan start position parts =
+        let flushed () =
+          match position > start with
+          | true -> Text (String.sub text start (position - start)) :: parts
+          | false -> parts
+        in
+        let enclosed opening closing make =
+          Option.map
+            (fun close ->
+              let inner = String.sub text (position + opening) (close - position - opening) in
+              (close + closing, make inner :: flushed ()))
+            (find (String.sub text position closing) (position + opening))
+        in
+        match position >= length with
+        | true -> List.rev (flushed ())
+        | false -> (
+            let found =
+              match text.[position] with
+              | '*' when position + 1 < length && text.[position + 1] = '*' -> enclosed 2 2 (fun inner -> Strong inner)
+              | '*' -> enclosed 1 1 (fun inner -> Emphasis inner)
+              | '`' -> enclosed 1 1 (fun inner -> Code_span inner)
+              | '[' ->
+                  Option.bind (find "](" position) (fun middle ->
+                      Option.map
+                        (fun close ->
+                          ( close + 1,
+                            Link
+                              {
+                                label = String.sub text (position + 1) (middle - position - 1);
+                                href = String.sub text (middle + 2) (close - middle - 2);
+                              }
+                            :: flushed () ))
+                        (find ")" middle))
+              | _ -> None
+            in
+            match found with
+            | Some (next, parts) -> scan next next parts
+            | None -> scan start (position + 1) parts)
+      in
+      scan 0 0 []
+    in
+    let classify line =
+      let trimmed = String.trim line in
+      let strip prefix =
+        let size = String.length prefix in
+        match String.length trimmed >= size && String.sub trimmed 0 size = prefix with
+        | true -> Some (String.trim (String.sub trimmed size (String.length trimmed - size)))
+        | false -> None
+      in
+      let heading () =
+        let level = ref 0 in
+        while !level < String.length trimmed && trimmed.[!level] = '#' do
+          incr level
+        done;
+        match !level with
+        | 0 -> None
+        | level -> Some (Heading_line (level, String.trim (String.sub trimmed level (String.length trimmed - level))))
+      in
+      let numbered () =
+        Option.bind (String.index_opt trimmed '.') (fun dot ->
+            match dot > 0 && dot < 4 && String.for_all (fun c -> c >= '0' && c <= '9') (String.sub trimmed 0 dot) with
+            | true -> Some (Numbered_line (String.trim (String.sub trimmed (dot + 1) (String.length trimmed - dot - 1))))
+            | false -> None)
+      in
+      let table () =
+        Option.map
+          (fun _ ->
+            let cells = String.split_on_char '|' trimmed |> List.map String.trim in
+            Table_line (List.filteri (fun index _ -> index > 0 && index < List.length cells - 1) cells))
+          (strip "|")
+      in
+      match trimmed with
+      | "" -> Blank
+      | "---" | "***" -> Rule_line
+      | _ ->
+          [
+            (fun () -> Option.map (fun language -> Fence language) (strip "```"));
+            heading;
+            (fun () -> Option.map (fun item -> Bullet_line item) (strip "- "));
+            (fun () -> Option.map (fun item -> Bullet_line item) (strip "* "));
+            (fun () -> Option.map (fun quote -> Quote_line quote) (strip ">"));
+            table;
+            numbered;
+          ]
+          |> List.find_map (fun parser -> parser ())
+          |> Option.value ~default:(Text_line trimmed)
+    in
+    let rec gather pick lines items =
+      match lines with
+      | line :: rest -> (
+          match pick (classify line) with
+          | Some item -> gather pick rest (item :: items)
+          | None -> (List.rev items, lines))
+      | [] -> (List.rev items, [])
+    in
+    let rec fenced lines body =
+      match lines with
+      | [] -> (List.rev body, [])
+      | line :: rest -> (
+          match classify line with Fence _ -> (List.rev body, rest) | _ -> fenced rest (line :: body))
+    in
+    let rec blocks lines headings parsed =
+      match lines with
+      | [] -> List.rev parsed
+      | line :: rest -> (
+          match classify line with
+          | Blank -> blocks rest headings parsed
+          | Rule_line -> blocks rest headings (Rule :: parsed)
+          | Heading_line (level, title) ->
+              blocks rest (headings + 1)
+                (Heading { level; parts = parse_inline title; anchor = "heading-" ^ string_of_int headings } :: parsed)
+          | Fence language ->
+              let body, rest = fenced rest [] in
+              blocks rest headings (Code { language; lines = body } :: parsed)
+          | Bullet_line _ ->
+              let items, rest = gather (function Bullet_line item -> Some item | _ -> None) lines [] in
+              blocks rest headings (Bullets (List.map parse_inline items) :: parsed)
+          | Numbered_line _ ->
+              let items, rest = gather (function Numbered_line item -> Some item | _ -> None) lines [] in
+              blocks rest headings (Numbered (List.map parse_inline items) :: parsed)
+          | Quote_line _ ->
+              let items, rest = gather (function Quote_line item -> Some item | _ -> None) lines [] in
+              blocks rest headings (Quote (List.map parse_inline items) :: parsed)
+          | Table_line _ ->
+              let rows, rest = gather (function Table_line cells -> Some cells | _ -> None) lines [] in
+              let rows =
+                List.filter
+                  (fun row -> not (List.for_all (fun cell -> String.for_all (fun c -> c = '-' || c = ':') cell) row))
+                  rows
+                |> List.map (List.map parse_inline)
+              in
+              let header, rows = match rows with header :: rows -> (header, rows) | [] -> ([], []) in
+              blocks rest headings (Table { header; rows } :: parsed)
+          | Text_line _ ->
+              let items, rest = gather (function Text_line text -> Some text | _ -> None) lines [] in
+              blocks rest headings (Paragraph (parse_inline (String.concat " " items)) :: parsed))
+    in
+    Array.of_list (blocks (String.split_on_char '\n' text) 0 [])
+end
+
+module Rich = struct
+  let[@react.component] make ~parts =
+    parts
+    |> List.mapi (fun index part ->
+           let key = string_of_int index in
+           match part with
+           | Text text -> <span key>(React.string text)</span>
+           | Strong text -> <strong key>(React.string text)</strong>
+           | Emphasis text -> <em key>(React.string text)</em>
+           | Code_span text -> <code key className="inline-code">(React.string text)</code>
+           | Link { label; href } -> <a key href className="link">(React.string label)</a>)
+    |> Array.of_list |> React.array
+end
+
+module Code_block = struct
+  let[@react.component] make ~language ~lines =
+    let tokenized =
+      React.useMemo1
+        (fun () ->
+          Array.of_list
+            (List.map
+               (fun line ->
+                 String.split_on_char ' ' line
+                 |> List.map (fun word ->
+                        match word with
+                        | "let" | "match" | "with" | "fun" | "in" | "if" | "then" | "else" | "type" | "module" ->
+                            Keyword word
+                        | _ when String.length word > 0 && word.[0] = '"' -> Literal word
+                        | _ when String.length word > 0 && word.[0] >= '0' && word.[0] <= '9' -> Number word
+                        | _ -> Plain word)
+                 |> Array.of_list)
+               lines))
+        [| lines |]
+    in
+    <pre className=("code language-" ^ language)>
+      (tokenized
+      |> Array.mapi (fun number tokens ->
+             <div key=(string_of_int number) className="code-line">
+               <span className="line-number">(React.int (number + 1))</span>
+               (tokens
+               |> Array.mapi (fun index token ->
+                      let key = string_of_int index in
+                      match token with
+                      | Keyword word -> <span key className="tok-keyword">(React.string (word ^ " "))</span>
+                      | Literal word -> <span key className="tok-string">(React.string (word ^ " "))</span>
+                      | Number word -> <span key className="tok-number">(React.string (word ^ " "))</span>
+                      | Plain word -> <span key className="tok-plain">(React.string (word ^ " "))</span>)
+               |> React.array)
+             </div>)
+      |> React.array)
+    </pre>
+end
+
+module Block = struct
+  let[@react.component] make ~block =
+    match block with
+    | Heading { level = 1; parts; anchor } -> <h1 id=anchor><Rich parts /></h1>
+    | Heading { level = 2; parts; anchor } -> <h2 id=anchor><Rich parts /></h2>
+    | Heading { parts; anchor; _ } -> <h3 id=anchor><Rich parts /></h3>
+    | Paragraph parts -> <p><Rich parts /></p>
+    | Bullets items ->
+        <ul className="bullets">
+          (items |> Array.of_list |> Array.mapi (fun index parts -> <li key=(string_of_int index)><Rich parts /></li>) |> React.array)
+        </ul>
+    | Numbered items ->
+        <ol>
+          (items |> Array.of_list |> Array.mapi (fun index parts -> <li key=(string_of_int index)><Rich parts /></li>) |> React.array)
+        </ol>
+    | Quote items ->
+        <blockquote>
+          (items |> Array.of_list |> Array.mapi (fun index parts -> <p key=(string_of_int index)><Rich parts /></p>) |> React.array)
+        </blockquote>
+    | Code { language; lines } -> <Code_block language lines />
+    | Table { header; rows } ->
+        <table className="md-table">
+          <thead>
+            <tr>
+              (header |> Array.of_list |> Array.mapi (fun index parts -> <th key=(string_of_int index)><Rich parts /></th>) |> React.array)
+            </tr>
+          </thead>
+          <tbody>
+            (rows
+            |> Array.of_list
+            |> Array.mapi (fun index cells ->
+                   <tr key=(string_of_int index)>
+                     (cells
+                     |> Array.of_list
+                     |> Array.mapi (fun column parts -> <td key=(string_of_int column)><Rich parts /></td>)
+                     |> React.array)
+                   </tr>)
+            |> React.array)
+          </tbody>
+        </table>
+    | Rule -> <hr />
+end
+
+module Preview = struct
+  let[@react.component] make ~blocks ~previewRef =
+    <div id="preview" className="preview" ref=(ReactDOM.Ref.domRef previewRef)>
+      (blocks |> Array.mapi (fun index block -> <Block key=(string_of_int index) block />) |> React.array)
+    </div>
+end
+
+module Editor = struct
+  let[@react.component] make ~text ~onText ~editorRef ~onScroll =
+    <div className="editor-pane">
+      <textarea
+        id="editor"
+        ref=(ReactDOM.Ref.domRef editorRef)
+        className="editor"
+        spellCheck=false
+        value=text
+        onChange=(fun event -> onText (React.Event.Form.target event)##value)
+        onScroll=(fun _ -> onScroll ()) />
+    </div>
+end
+
+module Tool_button = struct
+  let[@react.component] make ~id ~label ~onClick =
+    <button id className="tool" onClick=(fun _ -> onClick ())>(React.string label)</button>
+end
+
+module Mode_button = struct
+  let[@react.component] make ~id ~label ~target ~mode ~onMode =
+    <button
+      id
+      className=(match mode = target with true -> "mode active" | false -> "mode")
+      onClick=(fun _ -> onMode target)>
+      (React.string label)
+    </button>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~onWrap ~onHeading ~mode ~onMode =
+    <div className="md-toolbar">
+      <Tool_button id="tool-bold" label="B" onClick=(fun () -> onWrap "**" "**") />
+      <Tool_button id="tool-italic" label="I" onClick=(fun () -> onWrap "*" "*") />
+      <Tool_button id="tool-code" label="<>" onClick=(fun () -> onWrap "`" "`") />
+      <Tool_button id="tool-link" label="Link" onClick=(fun () -> onWrap "[" "](https://example.com)") />
+      <Tool_button id="tool-heading" label="H" onClick=onHeading />
+      <span className="spacer" />
+      <Mode_button id="mode-split" label="Split" target=Split mode onMode />
+      <Mode_button id="mode-preview" label="Preview" target=Preview_only mode onMode />
+      <Mode_button id="mode-editor" label="Editor" target=Editor_only mode onMode />
+    </div>
+end
+
+module Toc = struct
+  let[@react.component] make ~outline ~current ~onJump =
+    <nav className="toc">
+      <h4>(React.string "Contents")</h4>
+      <ul>
+        (outline
+        |> Array.map (fun entry ->
+               let highlight = match current with Heading_at anchor when anchor = entry.anchor -> Current | _ -> Other in
+               <li
+                 key=entry.anchor
+                 className=
+                   ("toc-entry level-" ^ string_of_int entry.level
+                   ^ match highlight with Current -> " current" | Other -> "")>
+                 <a href=("#" ^ entry.anchor) onClick=(fun event ->
+                   React.Event.Mouse.preventDefault event;
+                   onJump entry.anchor)>
+                   (React.string entry.title)
+                 </a>
+               </li>)
+        |> React.array)
+      </ul>
+    </nav>
+end
+
+module Status_bar = struct
+  let[@react.component] make ~stats ~blocks =
+    <footer className="status">
+      <span id="word-count">(React.string (string_of_int stats.words ^ " words"))</span>
+      <span>(React.string (string_of_int stats.characters ^ " characters"))</span>
+      <span>(React.string (string_of_int stats.lines ^ " lines"))</span>
+      <span>(React.string (string_of_int blocks ^ " blocks"))</span>
+    </footer>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let text, setText = React.useState (fun () -> initial_document) in
+    let mode, setMode = React.useState (fun () -> Split) in
+    let current, setCurrent = React.useState (fun () -> No_heading) in
+    let caret = React.useRef Caret_free in
+    let editor = React.useRef Js.Nullable.null in
+    let preview = React.useRef Js.Nullable.null in
+    let blocks = React.useMemo1 (fun () -> Markdown.parse text) [| text |] in
+    let outline =
+      React.useMemo1
+        (fun () ->
+          blocks
+          |> Array.to_list
+          |> List.filter_map (fun block ->
+                 match block with
+                 | Heading { level; parts; anchor } ->
+                     let title =
+                       String.concat ""
+                         (List.map
+                            (fun part ->
+                              match part with
+                              | Text text | Strong text | Emphasis text | Code_span text -> text
+                              | Link { label; _ } -> label)
+                            parts)
+                     in
+                     Some { level; title; anchor }
+                 | _ -> None)
+          |> Array.of_list)
+        [| blocks |]
+    in
+    let stats =
+      React.useMemo1
+        (fun () ->
+          {
+            words =
+              String.split_on_char '\n' text
+              |> List.concat_map (String.split_on_char ' ')
+              |> List.filter (fun word -> word <> "")
+              |> List.length;
+            characters = String.length text;
+            lines = List.length (String.split_on_char '\n' text);
+          })
+        [| text |]
+    in
+    React.useLayoutEffect1
+      (fun () ->
+        (match caret.current with
+         | Caret_at (start, finish) ->
+             Js.Nullable.toOption editor.current
+             |> Option.iter (fun element ->
+                    Classic.focus element;
+                    set_selection_range element start finish);
+             caret.current <- Caret_free
+         | Caret_free -> ());
+        None)
+      [| text |];
+    let edit change =
+      Js.Nullable.toOption editor.current
+      |> Option.iter (fun element ->
+             let start = selection_start element and finish = selection_end element in
+             let next, selection = change start finish in
+             caret.current <- selection;
+             setText (fun _ -> next))
+    in
+    let onWrap before after =
+      edit (fun start finish ->
+          let selected = String.sub text start (finish - start) in
+          ( String.sub text 0 start ^ before ^ selected ^ after ^ String.sub text finish (String.length text - finish),
+            Caret_at (start + String.length before, finish + String.length before) ))
+    in
+    let onHeading () =
+      edit (fun start finish ->
+          let line_start =
+            match start with
+            | 0 -> 0
+            | _ -> Option.fold ~none:0 ~some:(fun index -> index + 1) (String.rindex_from_opt text (start - 1) '\n')
+          in
+          ( String.sub text 0 line_start ^ "## " ^ String.sub text line_start (String.length text - line_start),
+            Caret_at (start + 3, finish + 3) ))
+    in
+    let onScroll () =
+      match (Js.Nullable.toOption editor.current, Js.Nullable.toOption preview.current) with
+      | Some source, Some target ->
+          let range = scroll_height source -. client_height source in
+          let ratio = match range > 0. with true -> Classic.scroll_top source /. range | false -> 0. in
+          set_scroll_top target (ratio *. (scroll_height target -. client_height target))
+      | _ -> ()
+    in
+    let onJump anchor =
+      setCurrent (fun _ -> Heading_at anchor);
+      match (Js.Nullable.toOption preview.current, Classic.element_by_id Classic.document anchor) with
+      | Some container, Some heading ->
+          set_scroll_top container (float_of_int (Classic.offset_top heading - Classic.offset_top container))
+      | _ -> ()
+    in
+    <div className=(match mode with Split -> "md-app split" | Preview_only -> "md-app preview-only" | Editor_only -> "md-app editor-only")>
+      <Toolbar onWrap onHeading mode onMode=(fun next -> setMode (fun _ -> next)) />
+      <div className="md-body">
+        <Toc outline current onJump />
+        (match mode with
+         | Preview_only -> React.null
+         | Split | Editor_only -> <Editor text onText=(fun next -> setText (fun _ -> next)) editorRef=editor onScroll />)
+        (match mode with Editor_only -> React.null | Split | Preview_only -> <Preview blocks previewRef=preview />)
+      </div>
+      <Status_bar stats blocks=(Array.length blocks) />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

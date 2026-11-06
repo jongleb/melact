@@ -1,0 +1,32 @@
+(** Whether the second copy of the radio group is on the page. *)
+type copy = Shown | Absent
+
+module Group = struct
+  let[@react.component] make ~choice ~onChoice =
+    <div className="group">
+      (React.array
+         (Array.map
+            (fun option ->
+              <label key=option>
+                <input type_="radio" name="size" value=option checked=(choice = option) onChange=(fun _ -> onChoice option) />
+                (React.string option)
+              </label>)
+            [| "small"; "large" |]))
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let choice, setChoice = React.useState (fun () -> "large") in
+    let copy, setCopy = React.useState (fun () -> Absent) in
+    let onChoice option = setChoice (fun _ -> option) in
+    <div>
+      <Group choice onChoice />
+      (match copy with Shown -> <Group choice onChoice /> | Absent -> React.null)
+      <button id="copy" onClick=(fun _ -> setCopy (fun copy -> match copy with Shown -> Absent | Absent -> Shown))>
+        (React.string "Toggle copy")
+      </button>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

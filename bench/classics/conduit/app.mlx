@@ -1,0 +1,438 @@
+external scroll_to : float -> float -> unit = "window.scrollTo"
+
+(** Whether the signed-in user favorited an article. *)
+type favorite = Favorited | Not_favorited
+
+(** Whether the signed-in user follows an author. *)
+type follow = Following | Not_following
+
+type author = { username : string; bio : string; hue : int }
+
+type article = {
+  slug : int;
+  title : string;
+  description : string;
+  body : string array;
+  tags : string array;
+  author : author;
+  created : string;
+  favorites : int;
+  favorite : favorite;
+}
+
+type comment = { id : int; writer : author; text : string; posted : string }
+
+(** Who is using the app. *)
+type session = Guest | Signed_in of author
+
+(** Which articles the home page lists. *)
+type feed = Your_feed | Global_feed | Tag_feed of string
+
+(** The page the app shows. *)
+type route = Home | Reading of int
+
+type state = { articles : article array; feed : feed; page : int; route : route; following : string list }
+
+(** What the app's reducer does. *)
+type action =
+  | Toggle_favorite of int
+  | Show_feed of feed
+  | Go_to_page of int
+  | Open of int
+  | Go_home
+  | Toggle_follow of string
+
+(** What the comment section's reducer does. *)
+type comment_action = Post of string | Remove of int
+
+(** How much a favorite button says. *)
+type size = Compact | Full
+
+let authors =
+  let seed = Classic.Seed.make 11 in
+  Array.init 40 (fun index ->
+      {
+        username = Classic.Seed.pick seed Classic.words ^ "_" ^ Classic.Seed.pick seed Classic.words ^ string_of_int index;
+        bio = Classic.sentence seed 8;
+        hue = index * 37 mod 360;
+      })
+
+let date day =
+  let months = [| "January"; "February"; "March"; "April"; "May"; "June"; "July"; "August"; "September"; "October"; "November"; "December" |] in
+  months.(day / 28 mod 12) ^ " " ^ string_of_int ((day mod 28) + 1) ^ ", 2026"
+
+let initial =
+  let seed = Classic.Seed.make 42 in
+  let tags =
+    [| "welcome"; "implementations"; "codebaseShow"; "introduction"; "ocaml"; "melange"; "reactjs"; "dragons"; "training";
+       "elm"; "svelte"; "vue"; "rust"; "node"; "rails"; "deno"; "css"; "testing"; "design"; "performance" |]
+  in
+  {
+    articles =
+      Array.init 1500 (fun index ->
+          let start = Classic.Seed.next seed 20 in
+          {
+            slug = index + 1;
+            title = String.capitalize_ascii (Classic.sentence seed 5);
+            description = Classic.sentence seed 12;
+            body = Array.init 6 (fun _ -> Classic.sentence seed 40);
+            tags = Array.init (1 + Classic.Seed.next seed 4) (fun step -> tags.((start + (step * 3)) mod 20));
+            author = Classic.Seed.pick seed authors;
+            created = date (400 - (index / 4));
+            favorites = Classic.Seed.next seed 300;
+            favorite = (match Classic.Seed.next seed 10 with 0 -> Favorited | _ -> Not_favorited);
+          });
+    feed = Global_feed;
+    page = 0;
+    route = Home;
+    following = Array.to_list (Array.map (fun author -> author.username) (Js.Array.filteri ~f:(fun _ index -> index mod 5 = 0) authors));
+  }
+
+let reduce state action =
+  match action with
+  | Toggle_favorite slug ->
+      {
+        state with
+        articles =
+          Array.map
+            (fun article ->
+              match (article.slug = slug, article.favorite) with
+              | true, Favorited -> { article with favorite = Not_favorited; favorites = article.favorites - 1 }
+              | true, Not_favorited -> { article with favorite = Favorited; favorites = article.favorites + 1 }
+              | false, _ -> article)
+            state.articles;
+      }
+  | Show_feed feed -> { state with feed; page = 0; route = Home }
+  | Go_to_page page -> { state with page }
+  | Open slug -> { state with route = Reading slug }
+  | Go_home -> { state with route = Home }
+  | Toggle_follow username -> (
+      match List.mem username state.following with
+      | true -> { state with following = List.filter (fun name -> name <> username) state.following }
+      | false -> { state with following = username :: state.following })
+
+let session_context = React.createContext Guest
+
+module Session_provider = struct
+  let make = React.Context.provider session_context
+
+  external makeProps :
+    value:session -> children:React.element -> unit -> < value : session ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Header = struct
+  let[@react.component] make ~route ~dispatch =
+    let session = React.useContext session_context in
+    <nav className="navbar">
+      <a className="navbar-brand" onClick=(fun _ -> dispatch Go_home)>(React.string "conduit")</a>
+      <ul className="nav">
+        <li><a className=(match route with Home -> "nav-home active" | Reading _ -> "nav-home") onClick=(fun _ -> dispatch Go_home)>(React.string "Home")</a></li>
+        (match session with
+         | Signed_in user ->
+             <React.Fragment>
+               <li><a className="nav-link">(React.string "New Article")</a></li>
+               <li><a className="nav-link">(React.string "Settings")</a></li>
+               <li><a className="nav-link nav-user">(React.string user.username)</a></li>
+             </React.Fragment>
+         | Guest -> <li><a className="nav-link">(React.string "Sign in")</a></li>)
+      </ul>
+    </nav>
+end
+
+module Avatar = struct
+  let[@react.component] make ~author =
+    <span
+      className="avatar"
+      style=(ReactDOM.Style.make ~backgroundColor:("hsl(" ^ string_of_int author.hue ^ ", 55%, 60%)") ())>
+      (React.string (String.uppercase_ascii (String.sub author.username 0 1)))
+    </span>
+end
+
+module Article_meta = struct
+  let[@react.component] make ~author ~created ~children =
+    <div className="article-meta">
+      <Avatar author />
+      <div className="info">
+        <a className="author">(React.string author.username)</a>
+        <span className="date">(React.string created)</span>
+      </div>
+      children
+    </div>
+end
+
+module Favorite_button = struct
+  let[@react.component] make ~article ~size ~dispatch =
+    let session = React.useContext session_context in
+    <button
+      className=(match article.favorite with Favorited -> "btn-favorite btn-primary" | Not_favorited -> "btn-favorite btn-outline")
+      disabled=(match session with Guest -> true | Signed_in _ -> false)
+      onClick=(fun _ -> dispatch (Toggle_favorite article.slug))>
+      (React.string "\u{2665} ")
+      (match size with
+       | Compact -> React.int article.favorites
+       | Full ->
+           React.string
+             ((match article.favorite with Favorited -> "Unfavorite Article (" | Not_favorited -> "Favorite Article (")
+             ^ string_of_int article.favorites ^ ")"))
+    </button>
+end
+
+module Follow_button = struct
+  let[@react.component] make ~author ~follow ~dispatch =
+    <button
+      className=(match follow with Following -> "btn-follow btn-secondary" | Not_following -> "btn-follow btn-outline")
+      onClick=(fun _ -> dispatch (Toggle_follow author.username))>
+      (React.string ((match follow with Following -> "Unfollow " | Not_following -> "Follow ") ^ author.username))
+    </button>
+end
+
+module Tag_list = struct
+  let[@react.component] make ~tags =
+    <ul className="tag-list">
+      (tags |> Array.map (fun tag -> <li key=tag className="tag-pill tag-outline">(React.string tag)</li>) |> React.array)
+    </ul>
+end
+
+module Article_preview = struct
+  let[@react.component] make =
+    React.memo (fun ~article ~dispatch ->
+        <div className="article-preview">
+          <Article_meta author=article.author created=article.created>
+            <Favorite_button article size=Compact dispatch />
+          </Article_meta>
+          <a className="preview-link" onClick=(fun _ -> dispatch (Open article.slug))>
+            <h1>(React.string article.title)</h1>
+            <p>(React.string article.description)</p>
+            <span>(React.string "Read more...")</span>
+            <Tag_list tags=article.tags />
+          </a>
+        </div>)
+end
+
+module Feed_toggle = struct
+  let[@react.component] make ~feed ~dispatch =
+    let session = React.useContext session_context in
+    let tab label target =
+      <li className="nav-item">
+        <a
+          className=(match feed = target with true -> "nav-link active" | false -> "nav-link")
+          onClick=(fun _ -> dispatch (Show_feed target))>
+          (React.string label)
+        </a>
+      </li>
+    in
+    <div className="feed-toggle">
+      <ul className="nav-pills">
+        (match session with Signed_in _ -> tab "Your Feed" Your_feed | Guest -> React.null)
+        (tab "Global Feed" Global_feed)
+        (match feed with Tag_feed tag -> tab ("# " ^ tag) (Tag_feed tag) | Your_feed | Global_feed -> React.null)
+      </ul>
+    </div>
+end
+
+module Pagination = struct
+  let[@react.component] make ~pages ~page ~dispatch =
+    <ul className="pagination">
+      (Array.init pages (fun index -> index)
+      |> Array.map (fun index ->
+             <li key=(string_of_int index) className=(match index = page with true -> "page-item active" | false -> "page-item")>
+               <a className="page-link" onClick=(fun _ -> dispatch (Go_to_page index))>(React.int (index + 1))</a>
+             </li>)
+      |> React.array)
+    </ul>
+end
+
+module Popular_tags = struct
+  let[@react.component] make ~articles ~dispatch =
+    let popular =
+      React.useMemo1
+        (fun () ->
+          let counts = Js.Dict.empty () in
+          Array.iter
+            (fun article ->
+              Array.iter
+                (fun tag -> Js.Dict.set counts tag (Option.value ~default:0 (Js.Dict.get counts tag) + 1))
+                article.tags)
+            articles;
+          let entries = Js.Dict.entries counts in
+          Array.sort (fun (left, one) (right, other) -> match compare other one with 0 -> compare left right | order -> order) entries;
+          Array.map fst entries)
+        [| articles |]
+    in
+    <div className="sidebar">
+      <p>(React.string "Popular Tags")</p>
+      <div className="tag-list-popular">
+        (popular
+        |> Array.map (fun tag ->
+               <a key=tag className="tag-pill tag-default" onClick=(fun _ -> dispatch (Show_feed (Tag_feed tag)))>(React.string tag)</a>)
+        |> React.array)
+      </div>
+    </div>
+end
+
+module Home_page = struct
+  let[@react.component] make ~state ~dispatch =
+    let shown =
+      React.useMemo3
+        (fun () ->
+          Js.Array.filter
+            ~f:(fun article ->
+              match state.feed with
+              | Global_feed -> true
+              | Your_feed -> List.mem article.author.username state.following
+              | Tag_feed tag -> Js.Array.includes ~value:tag article.tags)
+            state.articles)
+        (state.articles, state.feed, state.following)
+    in
+    let page_size = 500 in
+    let pages = (Array.length shown + page_size - 1) / page_size in
+    let visible = Js.Array.slice ~start:(state.page * page_size) ~end_:((state.page + 1) * page_size) shown in
+    <div className="home-page">
+      <div className="banner">
+        <h1 className="logo-font">(React.string "conduit")</h1>
+        <p>(React.string "A place to share your knowledge.")</p>
+      </div>
+      <div className="container page">
+        <div className="col-main">
+          <Feed_toggle feed=state.feed dispatch />
+          (match visible with
+           | [||] -> <div className="article-preview empty">(React.string "No articles are here... yet.")</div>
+           | _ -> React.array (Array.map (fun article -> <Article_preview key=(string_of_int article.slug) article dispatch />) visible))
+          <Pagination pages page=state.page dispatch />
+        </div>
+        <Popular_tags articles=state.articles dispatch />
+      </div>
+    </div>
+end
+
+module Comment_form = struct
+  let[@react.component] make ~onPost =
+    let session = React.useContext session_context in
+    let draft, setDraft = React.useState (fun () -> "") in
+    match session with
+    | Guest -> <p className="sign-in-hint">(React.string "Sign in to add comments on this article.")</p>
+    | Signed_in user ->
+        <form
+          className="comment-form"
+          onSubmit=(fun event ->
+            React.Event.Form.preventDefault event;
+            match String.trim draft with
+            | "" -> ()
+            | text ->
+                onPost text;
+                setDraft (fun _ -> ""))>
+          <textarea
+            className="comment-input"
+            placeholder="Write a comment..."
+            rows=3
+            value=draft
+            onChange=(fun event ->
+              let value = (React.Event.Form.target event)##value in
+              setDraft (fun _ -> value)) />
+          <div className="card-footer">
+            <Avatar author=user />
+            <button className="btn-post" type_="submit">(React.string "Post Comment")</button>
+          </div>
+        </form>
+end
+
+module Comment_card = struct
+  let[@react.component] make ~comment ~onDelete =
+    let session = React.useContext session_context in
+    <div className="card">
+      <div className="card-block"><p className="card-text">(React.string comment.text)</p></div>
+      <div className="card-footer">
+        <Avatar author=comment.writer />
+        <a className="comment-author">(React.string comment.writer.username)</a>
+        <span className="date-posted">(React.string comment.posted)</span>
+        (match session with
+         | Signed_in user when user.username = comment.writer.username ->
+             <button className="comment-delete" onClick=(fun _ -> onDelete comment.id)>(React.string "\u{1F5D1}")</button>
+         | Signed_in _ | Guest -> React.null)
+      </div>
+    </div>
+end
+
+module Article_page = struct
+  let[@react.component] make ~article ~follow ~dispatch =
+    let session = React.useContext session_context in
+    let comments, dispatchComment =
+      React.useReducerWithMapState
+        (fun comments action ->
+          match action with
+          | Post text -> (
+              match session with
+              | Signed_in user ->
+                  let id = Array.fold_left (fun top comment -> max top comment.id) 0 comments + 1 in
+                  Array.append [| { id; writer = user; text; posted = date 401 } |] comments
+              | Guest -> comments)
+          | Remove id -> Js.Array.filter ~f:(fun comment -> comment.id <> id) comments)
+        article.slug
+        (fun slug ->
+          let seed = Classic.Seed.make (slug * 7919) in
+          Array.init 300 (fun index ->
+              {
+                id = index + 1;
+                writer = (match Classic.Seed.next seed 6 with 0 -> authors.(0) | _ -> Classic.Seed.pick seed authors);
+                text = Classic.sentence seed (6 + Classic.Seed.next seed 30);
+                posted = date (400 - (index / 3));
+              }))
+    in
+    let actions =
+      <Article_meta author=article.author created=article.created>
+        <Follow_button author=article.author follow dispatch />
+        <Favorite_button article size=Full dispatch />
+      </Article_meta>
+    in
+    <div className="article-page">
+      <div className="banner">
+        <h1>(React.string article.title)</h1>
+        actions
+      </div>
+      <div className="container page">
+        <div className="article-content">
+          (article.body |> Array.mapi (fun index paragraph -> <p key=(string_of_int index)>(React.string paragraph)</p>) |> React.array)
+          <Tag_list tags=article.tags />
+        </div>
+        <hr />
+        <div className="article-actions">actions</div>
+        <div className="comments">
+          <Comment_form onPost=(fun text -> dispatchComment (Post text)) />
+          (comments
+          |> Array.map (fun comment ->
+                 <Comment_card key=(string_of_int comment.id) comment onDelete=(fun id -> dispatchComment (Remove id)) />)
+          |> React.array)
+        </div>
+      </div>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    React.useEffect1
+      (fun () ->
+        scroll_to 0. 0.;
+        None)
+      [| state.route |];
+    <Session_provider value=(Signed_in authors.(0))>
+      <div className="conduit">
+        <Header route=state.route dispatch />
+        (match state.route with
+         | Home -> <Home_page state dispatch />
+         | Reading slug ->
+             Js.Array.find ~f:(fun article -> article.slug = slug) state.articles
+             |> Option.map (fun article ->
+                    <Article_page
+                      key=(string_of_int slug)
+                      article
+                      follow=(match List.mem article.author.username state.following with true -> Following | false -> Not_following)
+                      dispatch />)
+             |> Option.value ~default:<div className="not-found">(React.string "Article not found")</div>)
+        <footer><span className="attribution">(React.string "An interactive learning project from Thinkster.")</span></footer>
+      </div>
+    </Session_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

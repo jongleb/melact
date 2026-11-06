@@ -1,0 +1,15 @@
+export default [
+  { name: "open 20 mails one by one", run: () => __h.repeat(20, (count) => __h.click(".mail-row .subject-line", count * 3)) },
+  { name: "next mail with j x20", run: () => __h.repeat(20, () => __h.key("body", "j")) },
+  { name: "previous mail with k x5", run: () => __h.repeat(5, () => __h.key("body", "k")) },
+  { name: "star 30 mails", run: () => __h.repeat(30, (count) => __h.click(".mail-row .star", count * 13)) },
+  { name: "select all", run: () => __h.click("#select-all") },
+  { name: "mark read", run: () => __h.click("#mark-read") },
+  { name: "switch folder x4 and back", run: () => __h.repeat(5, (count) => __h.click(".folder-item", [1, 2, 3, 6, 0][count])) },
+  { name: "search typing", run: () => __h.type(".search", "alpha") },
+  { name: "select results and archive", run: async () => { __h.click("#select-all"); await __h.frame(); __h.click("#archive"); } },
+  { name: "clear search", run: () => __h.erase(".search", 5) },
+  { name: "tick 15 and delete", run: async () => { await __h.repeat(15, (count) => __h.click(".mail-row .row-check", count * 4)); __h.click("#delete"); } },
+  { name: "toggle density", run: () => __h.click("#density") },
+  { name: "collapse labels", run: () => __h.click(".labels-heading") },
+];

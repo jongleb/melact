@@ -1,0 +1,18 @@
+.spreadsheet { display: flex; flex-direction: column; height: 860px; font-size: 13px; }
+.toolbar { display: flex; gap: 6px; padding: 6px; border-bottom: 1px solid #d0d7de; }
+.formula-bar { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid #d0d7de; }
+.formula-bar .address { width: 60px; font-weight: 600; }
+.formula-bar .fx { color: #888; font-style: italic; }
+.formula-bar input { flex: 1; font: inherit; padding: 2px 4px; }
+.sheet { flex: 1; overflow: auto; outline: none; }
+.grid { border-collapse: collapse; table-layout: fixed; }
+.grid th, .grid td { border: 1px solid #e1e4e8; height: 22px; padding: 0 4px; white-space: nowrap; overflow: hidden; }
+.grid td { width: 72px; max-width: 72px; text-align: right; }
+.grid .corner, .grid .row-header { width: 40px; background: #f6f8fa; position: sticky; left: 0; }
+.grid .column-header { background: #f6f8fa; position: sticky; top: 0; font-weight: 500; }
+.grid th.current { background: #d3e3fd; }
+.grid td.formula { color: #0b5394; }
+.grid td.focused { outline: 2px solid #1a73e8; outline-offset: -2px; }
+.grid td.typing { padding: 0; }
+.cell-editor { width: 100%; height: 100%; border: 2px solid #1a73e8; font: inherit; }
+.status-bar { display: flex; gap: 16px; padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa; }
