@@ -1,0 +1,84 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+
+let act_async run = adopt (React.actAsync run)
+let finish () = Js.Promise.resolve ()
+
+(** The server's answers the test has not released yet, oldest first. *)
+let waiting : (unit -> unit) list ref = ref []
+
+let deferred : unit -> unit Js.Promise.t * (unit -> unit) =
+  [%mel.raw {|function () { let release; const promise = new Promise((resolve) => { release = () => resolve(); }); return [promise, release]; }|}]
+
+let settled : unit -> unit Js.Promise.t =
+  [%mel.raw {|function () { return new Promise((resolve) => setTimeout(resolve, 0)); }|}]
+
+let server () =
+  let promise, release = deferred () in
+  waiting := !waiting @ [ release ];
+  promise
+
+let theme = React.createContext "plain"
+
+module Liker = struct
+  let[@react.component] make () =
+    let likes, setLikes = React.useState (fun () -> 0) in
+    let shown, addLike = React.Experimental.useOptimistic likes (fun likes delta -> likes + delta) in
+    let pending, start = React.Experimental.useTransitionAsync () in
+    let tone = React.Experimental.useContext theme in
+    <button
+      onClick=(fun _ ->
+        ignore
+          (start (fun () ->
+               addLike 2;
+               let* () = server () in
+               setLikes (fun likes -> likes + 1);
+               Js.Promise.resolve ())))>
+      (React.string (tone ^ " " ^ string_of_int shown ^ "/" ^ string_of_int likes ^ "/" ^ string_of_bool pending))
+    </button>
+end
+
+let () =
+  describe "React 19's experimental hooks" (fun () ->
+    test_async "useOptimistic shows an action's update until the action ends; useTransitionAsync is pending meanwhile" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:20) (fun values ->
+             let tape = tape values in
+             waiting := [];
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let* () = act_async (fun () -> ReactDOM.Client.render client <Liker />; Js.Promise.resolve ()) in
+             let release () =
+               act_async (fun () ->
+                   match !waiting with
+                   | release :: rest ->
+                       waiting := rest;
+                       release ();
+                       settled ()
+                   | [] -> settled ())
+             in
+             let rec run remaining (likes, started, flying) =
+               expect (text_content (select root "button"))
+               |. to_equal
+                    ("plain " ^ string_of_int (likes + (2 * started)) ^ "/" ^ string_of_int likes ^ "/"
+                   ^ string_of_bool (flying > 0));
+               match (remaining, flying, draw tape 2) with
+               | 0, _, _ -> Js.Promise.resolve ()
+               | _, 0, _ | _, _, 0 ->
+                   let* () = act_async (fun () -> click (select root "button"); Js.Promise.resolve ()) in
+                   run (remaining - 1) (likes, started + 1, flying + 1)
+               | _, _, _ ->
+                   let* () = release () in
+                   run (remaining - 1) (likes + 1, (match flying with 1 -> 0 | _ -> started), flying - 1)
+             in
+             let* () = run (1 + draw tape 10) (0, 0, 0) in
+             let rec drained () = match !waiting with [] -> Js.Promise.resolve () | _ :: _ -> let* () = release () in drained () in
+             let* () = drained () in
+             let* () = act_async (fun () -> ReactDOM.Client.unmount client (); Js.Promise.resolve ()) in
+             finish ()))
+        [%mel.obj { numRuns = 40 }]))

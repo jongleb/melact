@@ -1,0 +1,9 @@
+{
+  "name": "melact-dual19-env",
+  "private": true,
+  "description": "React 19 for the dual tests of React 19's APIs; the rest of the dual suite runs on React 18",
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}

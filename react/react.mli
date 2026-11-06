@@ -480,6 +480,51 @@ val useTransition : unit -> bool * ((unit -> unit) -> unit)
 
 val useTransitionAsync : unit -> bool * ((unit -> unit) -> unit Js.Promise.t)
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+(** The slot of [Experimental.useTransitionAsync]. *)
+type transitions
+
+(** The slot of [Experimental.useOptimistic]. *)
+type ('state, 'update) optimistic
+
+(** The slot of [Experimental.useActionState]. *)
+type ('state, 'data) action_state
+
+(** React 19's APIs, as reason-react 0.17 declares them. *)
+module Experimental : sig
+  (** What [useActionState] gives for a form's action. *)
+  type formAction
+
+  val useContext : 'value Context.t -> 'value
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  (** [start] keeps [isPending] true until the promise its function returns settles; as in React 19,
+      async actions are entangled, so every one stays pending until all of them have settled. *)
+  val useTransitionAsync :
+    transitions Melact_runtime.Hook.key -> unit -> bool * ((unit -> unit Js.Promise.t) -> unit Js.Promise.t)
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  (** The state with the updates made during async actions; they go when every running action has
+      settled, as in React 19. *)
+  val useOptimistic :
+    ('state, 'update) optimistic Melact_runtime.Hook.key ->
+    'state ->
+    ('state -> 'update -> 'state) ->
+    'state * ('update -> unit)
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  (** As reason-react declares it, the action returns nothing and [formAction] cannot be given to a
+      [form]: the state stays the initial one. *)
+  val useActionState :
+    ('state, Js.FormData.t) action_state Melact_runtime.Hook.key ->
+    ('state -> Js.FormData.t -> unit) ->
+    'state ->
+    ?permalink:bool ->
+    unit ->
+    'state * formAction * bool
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+end
+
 val startTransition : (unit -> unit) -> unit
 val act : (unit -> unit) -> unit Js.Promise.t
 val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t

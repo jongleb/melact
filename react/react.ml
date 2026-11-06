@@ -289,6 +289,78 @@ let[@warning "-16"] useDeferredValue value ?initialValue:_ = value
 let startTransition run = run ()
 let useTransition () = (false, startTransition)
 
+(** Whether an async action's synchronous part is running, so that an optimistic update belongs to it. *)
+type acting = Acting | Idle
+
+(** The pending flag of an async transition hook. *)
+type transitions = { mutable pending : bool }
+
+(** An optimistic state: the updates made during async actions still running. *)
+type ('state, 'update) optimistic = { mutable updates : 'update list; mutable apply : 'state -> 'update -> 'state }
+
+(** What an action state hook keeps: the state and the action that makes the next one. *)
+type ('state, 'data) action_state = { current : 'state; mutable act : 'state -> 'data -> unit }
+
+module Experimental = struct
+  type formAction
+
+  external form_action : ('data -> unit) -> formAction = "%identity"
+
+  let in_flight = ref 0
+  let acting = ref Idle
+  let endings = ref []
+
+  let useContext context = useContext context
+
+  let useTransitionAsync key () =
+    let instance = Instance.current () in
+    let cell = Instance.slot instance key (fun () -> { pending = false }) in
+    ( cell.pending,
+      fun run ->
+        incr in_flight;
+        (match cell.pending with
+        | true -> ()
+        | false ->
+            cell.pending <- true;
+            endings := (fun () -> cell.pending <- false; Instance.invalidate instance) :: !endings);
+        Instance.invalidate instance;
+        let saved = !acting in
+        acting := Acting;
+        let promise = match run () with promise -> acting := saved; promise | exception error -> acting := saved; raise error in
+        Js.Promise.then_
+          (fun () ->
+            decr in_flight;
+            (match !in_flight with
+            | 0 ->
+                let ended = !endings in
+                endings := [];
+                List.iter (fun ending -> ending ()) ended
+            | _ -> ());
+            Js.Promise.resolve ())
+          promise )
+
+  let useOptimistic key state apply =
+    let instance = Instance.current () in
+    let cell = Instance.slot instance key (fun () -> { updates = []; apply }) in
+    cell.apply <- apply;
+    ( List.fold_left cell.apply state cell.updates,
+      fun update ->
+        match !acting with
+        | Idle -> ()
+        | Acting ->
+            (match cell.updates with
+            | [] -> endings := (fun () -> cell.updates <- []; Instance.invalidate instance) :: !endings
+            | _ :: _ -> ());
+            cell.updates <- cell.updates @ [ update ];
+            Instance.invalidate instance )
+
+  let useActionState key act initial ?permalink:_ () =
+    let instance = Instance.current () in
+    let cell = Instance.slot instance key (fun () -> { current = initial; act }) in
+    cell.act <- act;
+    (cell.current, form_action (fun data -> cell.act cell.current data), false)
+end
+
 let useTransitionAsync () =
   ( false,
     fun run ->

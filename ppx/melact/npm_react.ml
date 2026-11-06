@@ -62,6 +62,13 @@ let target package name type_ attributes =
   | "react", ("useEffect" | "useLayoutEffect" | "useMemo" | "useCallback" | "useInsertionEffect") -> with_deps name 1
   | "react", "useImperativeHandle" -> with_deps name 2
   | "react-dom", ("createPortal" | "flushSync") -> dom name
+  | "react", ("useOptimistic" | "useActionState") ->
+      Some (Ldot (Ldot (Lident "React", "Experimental"), name), Keyed, As_given)
+  | "react", "use" -> (
+      match parameters type_ with
+      | (_, { ptyp_desc = Ptyp_constr ({ txt = Ldot (Ldot (Lident "React", "Context"), "t"); _ }, _); _ }) :: _ ->
+          Some (Ldot (Ldot (Lident "React", "Experimental"), "useContext"), Plain, As_given)
+      | _ -> None)
   | "react", "createElement" -> (
       match
         List.exists (fun attribute -> String.equal attribute.attr_name.txt "mel.variadic" || String.equal attribute.attr_name.txt "bs.splice") attributes
