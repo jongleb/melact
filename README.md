@@ -268,7 +268,7 @@ server and the client that hydrates its page.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/updates-dark.svg">
-  <img src="assets/updates.svg" alt="A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows whose props are physically equal are skipped" width="100%">
+  <img src="assets/updates.svg" alt="A state update in TodoList re-renders TodoList only. The setter marks it dirty, and state set back to its rendered value renders nothing; after a click one microtask flushes, while timers and observers batch into one task, as in React; App and Header are not visited; each Row is kept while each of its inputs is physically equal, and values written inline in its props are cached by what they capture" width="100%">
 </picture>
 
 Each `[@react.component]` gets an identity at module level. Its props are compared one by one
@@ -278,8 +278,26 @@ one microtask renders the dirty instances parents first and then runs their pass
 React's sync lane does; any other update (a timer, a promise, a `ResizeObserver`) waits for a task of
 its own, as React's default lane, so updates from many callbacks of one task render once, and its
 passive effects run once the browser has painted. Layout effects run right after their instance's
-patch, and cleanups go children before parents. A ref is set to null when its element goes. A
-component that renders nothing keeps its place with an empty text node.
+patch, and cleanups go children before parents. A ref is set to null when its element goes; a
+callback ref replaced by another is called with null, then the new one with the element. If the
+state a component was dirtied for ends where it started, as when a callback ref stores its element,
+the render is skipped, as React bails out. A component that renders nothing keeps its place with an
+empty text node.
+
+### Values are kept between renders
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/cached-dark.svg">
+  <img src="assets/cached.svg" alt="Values kept between renders in Melact: a badge update renders the parent of a list. As written, reason-react code makes a new filtered array, a new onPick closure and a new style on every render, so every Row's props differ and 1,000 rows render. melact-ppx keeps each let and each value written in props, keyed by what it captures with ===: query and items are the same, so the old array comes back; item.id and pick are the same, so the same closure; so the props are equal and the rows are not rendered. A let changed in place afterwards, like a ref followed by :=, is made on every render, and state set and set back in one batch does not render" width="100%">
+</picture>
+
+reason-react code writes closures, style records, arrays and child elements straight into props, and
+derives data in `let`s; each render makes them again, so children see new props. `melact-ppx` keeps
+each such value, as React Compiler does, keyed by the variables it captures, compared with `===`. A
+`let` is kept only when the rest of the body just reads it, so a `ref` changed with `:=` is made
+again on every render. Lists written with `Array.map`, `Belt.Array.map`, `Js.Array.map` or their
+`mapi` forms, piped or not, compile to keyed loops whose rows render only when their item, index
+or what they read outside changed.
 
 ### Hooks are typed by their call site
 

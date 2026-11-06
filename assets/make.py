@@ -433,10 +433,10 @@ def updates(p):
     body += text(350, 288, "an input changed", size=11, cls="accent", anchor="middle")
 
     steps = [
-        ("1", "The setter marks TodoList dirty", "nothing renders yet"),
-        ("2", "One microtask flushes", "dirty instances, parents first"),
+        ("1", "The setter marks TodoList dirty", "state set back to where it was: no render"),
+        ("2", "A click flushes in one microtask", "timers, observers: one task, as in React"),
         ("3", "TodoList renders again", "App and Header are not visited"),
-        ("4", "A Row without hooks is a pure view", "no instance; its inputs, one === each, keep it"),
+        ("4", "Each Row with equal props is kept", "inputs one === each; inline props are cached"),
     ]
     for i, (n, head, note) in enumerate(steps):
         y = 54 + i * 60
@@ -444,7 +444,7 @@ def updates(p):
         body += text(594, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
         body += text(616, y, head, size=13.5, weight=600)
         body += text(616, y + 18, note, size=12, cls="muted")
-    return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only; App and Header are not visited; Rows without hooks are pure views with no instance, kept while each of their inputs is physically equal", body)
+    return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only. The setter marks it dirty, and state set back to its rendered value renders nothing; after a click one microtask flushes, while timers and observers batch into one task, as React's lanes do; App and Header are not visited; each Row is kept while each of its inputs is physically equal, and values written inline in its props are cached by what they capture", body)
 
 
 def hooks(p):
@@ -1215,6 +1215,46 @@ def remember(p):
     return svg(p, 880, 290, "Remembered values in a Meltea view: Type m changes only the draft field. Without remembering, let shown = List.filter over model.items builds a new list on every call, so the list hole sees a different value and checks all 1,000 rows. meltea-ppx compiles the let to View.remember keyed by model.filter and model.items; both are the same objects, so the old list comes back, the hole is skipped, and only the draft hole is written", body)
 
 
+def cached(p):
+    def column(x, title, subtitle, color, lines, verdict):
+        body = box(x, 52, 420, 262, p["card"], p[color], rx=14, width=1.4, lift=True)
+        body += text(x + 18, 80, title, size=13.5, cls=color, weight=700)
+        body += text(x + 18, 99, subtitle, size=11.5, cls="muted")
+        for i, parts in enumerate(lines):
+            line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+            body += text(x + 18, 132 + i * 21, line, size=11.5, cls="mono", raw=True)
+        body += box(x + 18, 258, 384, 40, p[color + "_soft"], p[color], rx=10, width=1.1)
+        body += text(x + 32, 283, verdict, size=12, cls=color, weight=700)
+        return body
+
+    body = text(0, 20, "notify", size=14, cls="mono accent", weight=700)
+    body += text(62, 20, "changes a badge; the list's parent renders, its rows' props did not change", size=12.5, cls="muted")
+    before = [
+        [("let visible = Js.Array.filter … items", "")],
+        [("  → a new array, every render", "orange")],
+        [("<Row item onPick=(fun () -> pick item.id)", "")],
+        [("     style=(Style.make ~color ()) />", "")],
+        [("  → a new closure and style, every render", "orange")],
+        [("  props !== last props → every Row renders", "orange")],
+    ]
+    after = [
+        [("let visible = kept [| query; items |] …", "")],
+        [("  query === · items === → the old array", "green")],
+        [("onPick = kept [| item.id; pick |] (fun …)", "")],
+        [("style = kept [| color |] (Style.make …)", "")],
+        [("  captures === → the same values", "green")],
+        [("  props === last props → Row skipped", "green")],
+    ]
+    body += column(0, "reason-react as written", "values made again on every render", "orange", before, "1,000 rows render for one badge")
+    body += column(460, "kept by what they capture", "melact-ppx caches each let and prop value", "green", after, "the rows are not rendered")
+    body += arrow(p, 424, 183, 456, 183, "green", flow=True, width=1.8)
+    body += text(0, 340, "let total = ref 0 … total := …", size=11.5, cls="mono")
+    body += text(228, 340, "is changed in place afterwards, so it is made on every render;", size=11.5, cls="muted")
+    body += text(0, 360, "set n, then set it back in the same batch", size=11.5, cls="mono")
+    body += text(298, 360, "ends where it started, so the component does not render at all.", size=11.5, cls="muted")
+    return svg(p, 880, 370, "Values kept between renders in Melact: a badge update renders the parent of a list. As written, reason-react code makes a new filtered array, a new onPick closure and a new style on every render, so every Row's props differ and 1,000 rows render. melact-ppx keeps each let and each value written in props, keyed by what it captures with ===: query and items are the same, so the old array comes back; item.id and pick are the same, so the same closure; so the props are equal and the rows are not rendered. A let changed in place afterwards, like a ref followed by :=, is made on every render, and state set and set back in one batch does not render", body)
+
+
 def hot(p):
     body = box(0, 0, 250, 150, p["card"], p["line"], rx=14, width=1.3, lift=True)
     body += text(18, 28, "running on #root", size=13.5, weight=700)
@@ -1295,7 +1335,7 @@ def speed(p):
 
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, hot=hot, speed=speed)
+               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed)
 
 HEADERS = dict(
     overview=("Melact in one picture", "Your reason-react code, compiled: no React underneath",
@@ -1338,6 +1378,8 @@ HEADERS = dict(
             "From the event to the message, the fields it writes and the lists that read them, with no annotations."),
     remember=("Remembered values", "Derived data is computed again only when its fields change",
               "A filtered list stays the same object while its inputs do, so its hole is skipped."),
+    cached=("Values kept between renders", "Inline props and lets are cached by what they capture",
+            "As React Compiler does, at build time: equal props keep a child from rendering."),
     hot=("Hot reload", "Edit the code, keep the state",
          "New code takes over the running model when the module's types are the same."),
     transition=("Transitions", "Enter, leave and move: CSS classes or View Transitions",
