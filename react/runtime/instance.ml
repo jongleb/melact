@@ -177,6 +177,13 @@ external found_set : starts -> Dom.node -> instance list -> unit = "set" [@@mel.
 external found_delete : starts -> Dom.node -> unit = "delete" [@@mel.send]
 external node_contains : Dom.node -> Dom.node -> bool = "contains" [@@mel.send]
 
+(** A JavaScript [Map] from a DOM node to its place in document order. *)
+type ranks
+
+external nodes_ranked : unit -> ranks = "Map" [@@mel.new]
+external rank_get : ranks -> Dom.node -> int Js.undefined = "get" [@@mel.send]
+external rank_set : ranks -> Dom.node -> int -> unit = "set" [@@mel.send]
+
 (** A DOM [TreeWalker]: it visits a subtree's nodes in document order. *)
 type walker
 
@@ -525,48 +532,78 @@ let rec settle () =
         | None_put_off -> ()
         | Some_put_off ->
             let host job = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
-            let rec lifted instance depth =
-              match instance.depth > depth with
-              | true -> Option.fold ~none:instance ~some:(fun parent -> lifted parent depth) instance.parent
-              | false -> instance
-            in
-            let rec siblings first second =
-              match (first.parent, second.parent) with
-              | Some above, Some other when not (above == other) -> siblings above other
-              | (Some _ | None), (Some _ | None) -> (first, second)
-            in
-            let earlier first second =
-              let first = host first and second = host second in
-              match first == second with
-              | true -> 0
-              | false -> (
-                  let depth = min first.depth second.depth in
-                  let first_up = lifted first depth and second_up = lifted second depth in
-                  match first_up == second_up with
-                  | true -> Int.compare second.depth first.depth
-                  | false -> (
-                      let first_side, second_side = siblings first_up second_up in
-                      match
-                        ( Js.Null.toOption (front_node first_side Js.null),
-                          Js.Null.toOption (front_node second_side Js.null) )
-                      with
-                      | Some first_node, Some second_node ->
-                          if Dom_api.compare_document_position first_node second_node land 4 <> 0 then -1 else 1
-                      | None, _ | _, None -> 0))
-            in
-            let sorted queue old =
+            let ranks = nodes_ranked () in
+            let placed = ref None in
+            let keyed queue old =
               let rec fresh list oldest_first =
                 match list == old with
                 | true -> oldest_first
                 | false -> ( match list with job :: rest -> fresh rest (job :: oldest_first) | [] -> oldest_first)
               in
-              queue := List.rev_append (List.stable_sort earlier (fresh !queue [])) old
+              List.map
+                (fun job ->
+                  let owner = host job in
+                  let last = ref None in
+                  visit_nodes owner (fun [@u] node -> last := Some node);
+                  let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
+                  let ending = Option.map deepest !last in
+                  Option.iter
+                    (fun node ->
+                      rank_set ranks node (-1);
+                      placed := Some node)
+                    ending;
+                  (job, owner, ending))
+                (fresh !queue [])
             in
             let old_layout_cleanups, old_layout_runs, old_passive_cleanups, old_passive_runs = queued in
-            sorted layout_cleanups old_layout_cleanups;
-            sorted layout_runs old_layout_runs;
-            sorted passive_cleanups old_passive_cleanups;
-            sorted passive_runs old_passive_runs);
+            let batches =
+              [
+                (layout_cleanups, old_layout_cleanups, keyed layout_cleanups old_layout_cleanups);
+                (layout_runs, old_layout_runs, keyed layout_runs old_layout_runs);
+                (passive_cleanups, old_passive_cleanups, keyed passive_cleanups old_passive_cleanups);
+                (passive_runs, old_passive_runs, keyed passive_runs old_passive_runs);
+              ]
+            in
+            Option.iter
+              (fun node ->
+                let rec top node = Option.fold ~none:node ~some:top (Dom_api.parent_node node) in
+                let root = top node in
+                let count = ref 0 in
+                let mark node =
+                  Option.iter (fun _ -> rank_set ranks node !count) (Js.Undefined.toOption (rank_get ranks node));
+                  incr count
+                in
+                mark root;
+                let walker = tree_walker Dom_api.document root (-1) in
+                let rec next () =
+                  match Js.Null.toOption (next_node walker) with
+                  | Some node ->
+                      mark node;
+                      next ()
+                  | None -> ()
+                in
+                next ())
+              !placed;
+            let rank last =
+              Option.fold ~none:max_int
+                ~some:(fun node ->
+                  Option.fold ~none:max_int
+                    ~some:(fun rank -> match rank < 0 with true -> max_int | false -> rank)
+                    (Js.Undefined.toOption (rank_get ranks node)))
+                last
+            in
+            List.iter
+              (fun (queue, old, jobs) ->
+                let ordered =
+                  List.stable_sort
+                    (fun (_, first_rank, first_depth) (_, second_rank, second_depth) ->
+                      match Int.compare first_rank second_rank with
+                      | 0 -> Int.compare second_depth first_depth
+                      | order -> order)
+                    (List.map (fun (job, owner, last) -> (job, rank last, owner.depth)) jobs)
+                in
+                queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)
+              batches);
         View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
