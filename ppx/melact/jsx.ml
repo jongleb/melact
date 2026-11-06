@@ -117,24 +117,26 @@ let component ~loc ~name ~props_constructor expression =
          params)
   in
   let next = ref names in
+  let defaulted = ref [] in
   let aliased =
     List.map
       (fun param ->
         match (param.pparam_desc, !next) with
         | Pparam_val (((Labelled _ | Optional _) as label), default, pattern), name :: rest
-          ->
+          -> (
             next := rest;
-            {
-              param with
-              pparam_desc =
-                Pparam_val
-                  ( label,
-                    default,
-                    match pattern.ppat_desc with
-                    | Ppat_constraint (inner, type_) ->
-                        { pattern with ppat_desc = Ppat_constraint (ppat_alias ~loc inner { loc; txt = name }, type_) }
-                    | _ -> ppat_alias ~loc pattern { loc; txt = name } );
-            }
+            let named =
+              match pattern.ppat_desc with
+              | Ppat_constraint (inner, type_) ->
+                  { pattern with ppat_desc = Ppat_constraint (ppat_alias ~loc inner { loc; txt = name }, type_) }
+              | _ -> ppat_alias ~loc pattern { loc; txt = name }
+            in
+            match (label, default) with
+            | Optional _, Some default ->
+                let given = name ^ "_given" in
+                defaulted := (named, given, default) :: !defaulted;
+                { param with pparam_desc = Pparam_val (label, None, pvar ~loc given) }
+            | (Labelled _ | Optional _ | Nolabel), _ -> { param with pparam_desc = Pparam_val (label, default, named) })
         | Pparam_val ((Labelled _ | Optional _), _, _), []
         | Pparam_val (Nolabel, _, _), _
         | Pparam_newtype _, _ ->
@@ -390,9 +392,21 @@ let component ~loc ~name ~props_constructor expression =
     | `Pure ->
         [%expr React.of_child (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))]
   in
+  let with_defaults body =
+    List.fold_left
+      (fun body (named, given, default) ->
+        [%expr
+          let [%p named] =
+            match [%e evar ~loc given] with
+            | Some __melhole_value when not (Js.Undefined.testAny __melhole_value) -> __melhole_value
+            | Some _ | None -> [%e default]
+          in
+          [%e body]])
+      body !defaulted
+  in
   pexp_function ~loc keyed None
     (Pfunction_body
-       [%expr
+       (with_defaults [%expr
          let __melhole_element = [%e element] in
          [%e
            pexp_construct ~loc { loc; txt = Lident props_constructor }
@@ -400,7 +414,7 @@ let component ~loc ~name ~props_constructor expression =
                 [%expr
                   match __melhole_key with
                   | None -> __melhole_element
-                  | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))])]])
+                  | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))])]]))
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
 let props_type name = name ^ "_props"

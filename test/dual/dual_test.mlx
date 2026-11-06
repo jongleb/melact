@@ -766,6 +766,11 @@ module Flipped = struct
     <p>(React.int value)</p>
 end
 
+module Defaulted = struct
+  let[@react.component] make ?(label = "default") ?(choice = Some 5) () =
+    <p>(React.string (label ^ ":" ^ Option.fold ~none:"none" ~some:string_of_int choice))</p>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1451,6 +1456,12 @@ let () =
              in
              step (Array.length values) 0))
         [%mel.obj { numRuns = 60 }]));
+  describe "props with defaults" (fun () ->
+    test_async "take the default when given None, as reason-react's props object leaves it undefined" (fun () ->
+      let* root, client = mount <div><Defaulted /><Defaulted choice=None /><Defaulted label="given" choice=(Some 1) /></div> in
+      expect (text_content root) |. to_equal "default:5default:5given:1";
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      finish ()));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async

@@ -273,9 +273,13 @@ A component with optional, defaulted and children props, and its signature:
                       })))
           }
       let makeProps ~title:(title as __melhole_prop_0)
-        ?size:((size as __melhole_prop_1)= 1)
-        ?subtitle:(subtitle as __melhole_prop_2)
+        ?size:__melhole_prop_1_given ?subtitle:(subtitle as __melhole_prop_2)
         ~children:(children as __melhole_prop_3) ?key:__melhole_key () =
+        let size as __melhole_prop_1 =
+          match __melhole_prop_1_given with
+          | Some __melhole_value when
+              not (Js.Undefined.testAny __melhole_value) -> __melhole_value
+          | Some _ | None -> 1 in
         let __melhole_element =
           React.of_child
             (Melhole.View.pure __melhole_component_1
