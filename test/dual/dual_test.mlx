@@ -901,14 +901,14 @@ let dom_writes : unit -> int =
           globalThis.__domWrites = { count: 0 };
           var counted = function (owner, name) {
             var fn = owner[name];
-            owner[name] = function () { globalThis.__domWrites.count++; return fn.apply(this, arguments); };
+            owner[name] = function () { if (this.isConnected) globalThis.__domWrites.count++; return fn.apply(this, arguments); };
           };
           ["insertBefore", "appendChild", "removeChild", "replaceChild"].forEach(function (name) { counted(Node.prototype, name); });
           ["setAttribute", "removeAttribute"].forEach(function (name) { counted(Element.prototype, name); });
           var setter = function (proto, name) {
             var described = Object.getOwnPropertyDescriptor(proto, name);
             Object.defineProperty(proto, name, Object.assign({}, described, {
-              set: function (value) { globalThis.__domWrites.count++; described.set.call(this, value); }
+              set: function (value) { if (this.isConnected) globalThis.__domWrites.count++; described.set.call(this, value); }
             }));
           };
           setter(CharacterData.prototype, "data");
@@ -931,6 +931,24 @@ module Measured = struct
     <Opened_provider value=opened>
       <ul>(React.array (Array.init count (fun index -> <Measured_row key=(string_of_int index) label=(string_of_int index) />)))</ul>
     </Opened_provider>
+end
+
+module Propped_row = struct
+  let[@react.component] make ~label ~opened =
+    let row = React.useRef Js.Nullable.null in
+    log (string_of_int (dom_writes ()));
+    React.array
+      [|
+        <li key="row" ref=(ReactDOM.Ref.domRef row)>(React.string label)</li>;
+        (match opened with true -> <li key="detail">(React.string (label ^ "!"))</li> | false -> React.null);
+      |]
+end
+
+module Propped = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    opened_send := setOpened;
+    <ul>(React.array (Array.init count (fun index -> <Propped_row key=(string_of_int index) label=(string_of_int index) opened />)))</ul>
 end
 
 let mixed_toggles = Hashtbl.create 16
@@ -983,6 +1001,56 @@ module Nested = struct
     let opened, setOpened = React.useState (fun () -> false) in
     opened_send := setOpened;
     <Opened_provider value=opened><Nested_between count /></Opened_provider>
+end
+
+let effect_top = ref (fun (_ : int -> int) -> ())
+
+module Effect_leaf = struct
+  let[@react.component] make ~name ~n =
+    React.useLayoutEffect (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)));
+    React.useEffect (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)));
+    <i>(React.string (name ^ "=" ^ string_of_int n))</i>
+end
+
+module Effect_mid = struct
+  let[@react.component] make ~name ~n ~leaves =
+    React.useLayoutEffect (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)));
+    React.useEffect (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)));
+    <p>
+      (React.string (name ^ "=" ^ string_of_int n))
+      (React.array
+         (Array.init leaves (fun index ->
+              let leaf = name ^ "." ^ string_of_int index in
+              <Effect_leaf key=leaf name=leaf n />)))
+    </p>
+end
+
+module Effect_top = struct
+  let[@react.component] make ~shape =
+    let n, setN = React.useState (fun () -> 0) in
+    effect_top := setN;
+    React.useLayoutEffect (fun () ->
+        log "layout top";
+        Some (fun () -> log "unlayout top"));
+    React.useEffect (fun () ->
+        log "passive top";
+        Some (fun () -> log "unpassive top"));
+    <div>
+      (React.array
+         (Array.mapi
+            (fun index leaves ->
+              let mid = string_of_int index in
+              <Effect_mid key=mid name=mid n leaves />)
+            shape))
+    </div>
 end
 
 module Served = struct
@@ -1807,6 +1875,34 @@ let () =
              in
              step 3 false))
         [%mel.obj { numRuns = 40 }]));
+  describe "children given new props by their parent" (fun () ->
+    test_async "all render before any of them writes the DOM, whether rows appear or go" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+             let tape = tape values in
+             let count = 2 + draw tape 40 in
+             ignore (dom_writes ());
+             let* root, client = mount <Propped count /> in
+             let rec step remaining opened =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = not opened in
+                   let* () = act (fun () -> !opened_send (fun _ -> next)) in
+                   let seen = take () in
+                   expect (List.length seen, List.length (List.sort_uniq compare seen), text_content root)
+                   |. to_equal
+                        ( count,
+                          1,
+                          String.concat ""
+                            (List.init count (fun index ->
+                                 string_of_int index ^ match next with true -> string_of_int index ^ "!" | false -> "")) );
+                   step (remaining - 1) next
+             in
+             step 4 false))
+        [%mel.obj { numRuns = 40 }]));
   describe "local state, parent props and a context changed together" (fun () ->
     test_async "every change shows, whatever the interleaving within and across batches" (fun () ->
       check_async
@@ -1885,6 +1981,42 @@ let () =
              in
              step 8))
         [%mel.obj { numRuns = 150 }]));
+  describe "effects of a parent and the children it passes new props" (fun () ->
+    test_async "run children first, in the order of the page, cleanups before runs, as in React" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:12) (fun values ->
+             let tape = tape values in
+             let shape = Array.init (1 + draw tape 4) (fun _ -> draw tape 4) in
+             let order =
+               List.concat
+                 (Array.to_list
+                    (Array.mapi
+                       (fun index leaves ->
+                         let mid = string_of_int index in
+                         List.init leaves (fun leaf -> mid ^ "." ^ string_of_int leaf) @ [ mid ])
+                       shape))
+               @ [ "top" ]
+             in
+             let phase name = List.map (fun component -> name ^ " " ^ component) order in
+             ignore (take ());
+             let* _, client = mount <Effect_top shape /> in
+             let rec step remaining seen =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   ignore (take ());
+                   expect (String.concat "\n" (List.map (fun events -> String.concat ", " events) seen))
+                   |. to_equal
+                        (String.concat "\n"
+                           (List.init 3 (fun _ ->
+                                String.concat ", " (phase "unlayout" @ phase "layout" @ phase "unpassive" @ phase "passive"))));
+                   finish ()
+               | _ ->
+                   let* () = act (fun () -> !effect_top (fun n -> n + 1)) in
+                   step (remaining - 1) (seen @ [ take () ])
+             in
+             step 3 []))
+        [%mel.obj { numRuns = 60 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async

@@ -138,6 +138,12 @@ type stage =
 (** Whether an error boundary still has a step to take in this flush. *)
 type outstanding = Quiet | Busy
 
+(** Whether a component given new props renders at once or in the next round, after its siblings. *)
+type patching = At_once | Next_round
+
+(** Whether a pass put off any component, so its effects need sorting into the order of the tree. *)
+type putting_off = None_put_off | Some_put_off
+
 (** What error boundaries add to a flush: nothing until the first boundary mounts. *)
 type recovery = {
   rescue : (stage -> instance -> exn -> unit[@u]);  (** Hands an error to the nearest boundary that can take it. *)
@@ -231,6 +237,10 @@ let visit_nodes instance visit =
 let front_node instance after =
   View.front instance.output
     (match instance.region with Marker node -> Js.Null.return (Dom_api.to_node node) | Nodes -> after)
+
+let patching = ref At_once
+
+let put_off = ref None_put_off
 
 let instances =
   View.hosting
@@ -442,6 +452,8 @@ let rec settle () =
                  (Option.bind first common);
                let missed = List.filter (fun (node, _) -> Js.Undefined.testAny (found_get starts node) |> not) placed in
                List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced) in
+        let queued = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
+        put_off := None_put_off;
         let waiting = ref [] in
         let rec rendering round =
           let pending =
@@ -493,12 +505,13 @@ let rec settle () =
                     | Clean | Unmounted -> None)
                   roots
               in
-              List.iter
-                (fun (instance, result) ->
-                  match instance.status with
-                  | Unmounted -> ()
-                  | Clean | Dirty _ -> wrote (position_of instance) instance result)
-                rendered;
+              within patching Next_round (fun () ->
+                  List.iter
+                    (fun (instance, result) ->
+                      match instance.status with
+                      | Unmounted -> ()
+                      | Clean | Dirty _ -> wrote (position_of instance) instance result)
+                    rendered);
               dirty :=
                 List.filter_map
                   (fun (_, instance) -> match instance.status with Dirty _ -> Some instance | Clean | Unmounted -> None)
@@ -508,6 +521,52 @@ let rec settle () =
         in
         rendering `First;
         dirty := !waiting @ !dirty;
+        (match !put_off with
+        | None_put_off -> ()
+        | Some_put_off ->
+            let host job = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
+            let rec lifted instance depth =
+              match instance.depth > depth with
+              | true -> Option.fold ~none:instance ~some:(fun parent -> lifted parent depth) instance.parent
+              | false -> instance
+            in
+            let rec siblings first second =
+              match (first.parent, second.parent) with
+              | Some above, Some other when not (above == other) -> siblings above other
+              | (Some _ | None), (Some _ | None) -> (first, second)
+            in
+            let earlier first second =
+              let first = host first and second = host second in
+              match first == second with
+              | true -> 0
+              | false -> (
+                  let depth = min first.depth second.depth in
+                  let first_up = lifted first depth and second_up = lifted second depth in
+                  match first_up == second_up with
+                  | true -> Int.compare second.depth first.depth
+                  | false -> (
+                      let first_side, second_side = siblings first_up second_up in
+                      match
+                        ( Js.Null.toOption (front_node first_side Js.null),
+                          Js.Null.toOption (front_node second_side Js.null) )
+                      with
+                      | Some first_node, Some second_node ->
+                          if Dom_api.compare_document_position first_node second_node land 4 <> 0 then -1 else 1
+                      | None, _ | _, None -> 0))
+            in
+            let sorted queue old =
+              let rec fresh list oldest_first =
+                match list == old with
+                | true -> oldest_first
+                | false -> ( match list with job :: rest -> fresh rest (job :: oldest_first) | [] -> oldest_first)
+              in
+              queue := List.rev_append (List.stable_sort earlier (fresh !queue [])) old
+            in
+            let old_layout_cleanups, old_layout_runs, old_passive_cleanups, old_passive_runs = queued in
+            sorted layout_cleanups old_layout_cleanups;
+            sorted layout_runs old_layout_runs;
+            sorted passive_cleanups old_passive_cleanups;
+            sorted passive_runs old_passive_runs);
         View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
@@ -578,10 +637,14 @@ let component definition inputs render =
             | Renders rendered when Dom_api.same rendered.component definition ->
                 (match (instance.status, View.compare_inputs rendered.inputs inputs) with
                 | Clean, View.Unchanged -> ()
-                | (Clean | Dirty _ | Unmounted), _ ->
+                | (Clean | Dirty _ | Unmounted), _ -> (
                     rendered.inputs <- inputs;
                     rendered.render <- render;
-                    refresh position instance);
+                    match (!patching, instance.status) with
+                    | Next_round, (Clean | Dirty _) ->
+                        put_off := Some_put_off;
+                        mark_dirty instance
+                    | (At_once | Next_round), _ -> refresh position instance));
                 Some live
             | Renders _ | Provides _ | Catches _ | Suspends _ -> None)
         | None -> None)

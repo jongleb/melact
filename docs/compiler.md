@@ -515,8 +515,11 @@ state set during the writes (a ref called with null) waits for the next pass, as
 So the user team's rows, which read `offsetTop` and re-render through a context, now cost one
 layout. A dual law counts DOM writes from inside each row's render and finds the same count in all
 of them under React 18 and under Melact; a mutant that writes each instance right after rendering it
-breaks it. A component that re-renders because its parent passed new props still renders during the
-parent's write. Only instances of the same round count as dirty ancestors: a component whose own
+breaks it. A component that re-renders because its parent passed new props is put off to the next
+round too, so rows given new props by their parent also all render before any of them writes; a
+pass that put any off sorts its effects into the order of the tree, children first, as React runs
+them. Two dual laws check both, and a mutant without either fails one. A component without hooks
+has no instance and still renders inside its parent's write. Only instances of the same round count as dirty ancestors: a component whose own
 state waits for the next pass, hidden from its dirty parent by a memoized one in between, must not
 hold back the context consumers under it, or the rounds never end. A dual law sets the state of
 such a component together with the context above it.
