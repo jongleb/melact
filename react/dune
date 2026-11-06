@@ -3,7 +3,7 @@
  (public_name melact)
  (wrapped false)
  (modes melange)
- (libraries melhole melact_runtime melange.dom)
+ (libraries melhole melact_runtime melact.event melange.dom)
  (preprocess
   (pps melange.ppx)))
 

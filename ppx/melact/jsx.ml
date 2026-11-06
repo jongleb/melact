@@ -150,7 +150,7 @@ let component ~loc ~name ~props_constructor expression =
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
   let definition =
-    Hoist.hoist ~loc "component" [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]
+    lazy (Hoist.hoist ~loc "component" [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]])
   in
   let inputs =
     pexp_array ~loc
@@ -176,9 +176,9 @@ let component ~loc ~name ~props_constructor expression =
   in
   let kind = stateful body in
   let body =
-    match kind with
-    | `Pure -> body
-    | `Stateful -> (
+    match (kind, !Element.output) with
+    | `Pure, _ | `Stateful, Element.Server -> body
+    | `Stateful, (Element.Client_only | Element.Hydratable) -> (
         let sites = ref 0 in
         let untagged =
           object
@@ -380,41 +380,71 @@ let component ~loc ~name ~props_constructor expression =
     match List.rev complete with
     | last :: labelled ->
         List.rev labelled
-        @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Optional "key", None, [%pat? __melhole_key]) }; last ]
+        @ [
+            {
+              pparam_loc = loc;
+              pparam_desc =
+                Pparam_val
+                  ( Optional "key",
+                    None,
+                    match !Element.output with
+                    | Element.Server -> [%pat? (_ : string option)]
+                    | Element.Client_only | Element.Hydratable -> [%pat? __melhole_key] );
+            };
+            last;
+          ]
     | [] -> complete
   in
   let element =
-    match kind with
-    | `Stateful ->
+    match (kind, !Element.output) with
+    | `Stateful, Element.Server ->
+        [%expr React.of_child (Melact_server.Component.render (fun () -> [%e unwrap ~loc checked]))]
+    | `Pure, Element.Server ->
         [%expr
           React.of_child
-            (Melact_runtime.Instance.component [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc checked]))]
-    | `Pure ->
-        [%expr React.of_child (Melhole.View.pure [%e definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))]
+            (Melhole_server.element (fun __melhole_writer ->
+                 Melhole_server.write __melhole_writer [%e unwrap ~loc body]))]
+    | `Stateful, (Element.Client_only | Element.Hydratable) ->
+        [%expr
+          React.of_child
+            (Melact_runtime.Instance.component [%e Lazy.force definition] [%e inputs] (fun () -> [%e unwrap ~loc checked]))]
+    | `Pure, (Element.Client_only | Element.Hydratable) ->
+        [%expr React.of_child (Melhole.View.pure [%e Lazy.force definition] [%e inputs] (fun () -> [%e unwrap ~loc body]))]
   in
   let with_defaults body =
     List.fold_left
       (fun body (named, given, default) ->
-        [%expr
-          let [%p named] =
-            match [%e evar ~loc given] with
-            | Some __melhole_value when not (Js.Undefined.testAny __melhole_value) -> __melhole_value
-            | Some _ | None -> [%e default]
-          in
-          [%e body]])
+        match !Element.output with
+        | Element.Server ->
+            [%expr
+              let [%p named] = match [%e evar ~loc given] with Some __melhole_value -> __melhole_value | None -> [%e default] in
+              [%e body]]
+        | Element.Client_only | Element.Hydratable ->
+            [%expr
+              let [%p named] =
+                match [%e evar ~loc given] with
+                | Some __melhole_value when not (Js.Undefined.testAny __melhole_value) -> __melhole_value
+                | Some _ | None -> [%e default]
+              in
+              [%e body]])
       body !defaulted
+  in
+  let constructed =
+    pexp_construct ~loc { loc; txt = Lident props_constructor }
+      (Some
+         (match !Element.output with
+         | Element.Server -> [%expr __melhole_element]
+         | Element.Client_only | Element.Hydratable ->
+             [%expr
+               match __melhole_key with
+               | None -> __melhole_element
+               | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))]))
   in
   pexp_function ~loc keyed None
     (Pfunction_body
        (with_defaults [%expr
          let __melhole_element = [%e element] in
-         [%e
-           pexp_construct ~loc { loc; txt = Lident props_constructor }
-             (Some
-                [%expr
-                  match __melhole_key with
-                  | None -> __melhole_element
-                  | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))])]]))
+         [%e constructed]]))
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
 let props_type name = name ^ "_props"
@@ -473,6 +503,12 @@ let mapper =
                 [%expr
                   ( Stdlib.Option.fold ~none:ReactDOM.Ref.absent ~some:ReactDOM.Ref.identity [%e value],
                     Stdlib.Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value] )]);
+        inner_html =
+          (fun loc value ->
+            match !Element.output with
+            | Element.Server -> [%expr ReactDOM.html_of [%e value]]
+            | Element.Client_only | Element.Hydratable -> [%expr Melhole.View.html_of [%e value]]);
+        ids = Element.Tree_ids;
         classify = react_text;
         extra = (fun _ -> None);
         each =
@@ -766,9 +802,15 @@ let mapper =
       pexp_apply ~loc expression
         [
           ( Nolabel,
-            [%expr
-              Melact_runtime.Hook.unchecked
-                [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)]]] );
+            match !Element.output with
+            | Element.Server ->
+                [%expr
+                  Melact_server.Hook.unchecked
+                    [%e Hoist.hoist ~loc "hook" [%expr (Melact_server.Hook.key () : unit Melact_server.Hook.key)]]]
+            | Element.Client_only | Element.Hydratable ->
+                [%expr
+                  Melact_runtime.Hook.unchecked
+                    [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)]]] );
         ]
 
     method private uppercase ~loc path name arguments =
@@ -808,9 +850,12 @@ let mapper =
       in
       Option.fold ~none:call
         ~some:(fun key ->
-          [%expr
-            React.of_child
-              (Melhole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
+          match !Element.output with
+          | Element.Server -> [%expr ignore ([%e key] : string); [%e call]]
+          | Element.Client_only | Element.Hydratable ->
+              [%expr
+                React.of_child
+                  (Melhole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
         key
   end
 
@@ -828,6 +873,11 @@ let () =
   Driver.add_arg "-hydratable"
     (Arg.Unit (fun () -> Element.output := Element.Hydratable))
     ~doc:" compile templates that can take over server-rendered HTML"
+
+let () =
+  Driver.add_arg "-server"
+    (Arg.Unit (fun () -> Element.output := Element.Server))
+    ~doc:" compile components to code that writes their HTML, for melact.server, natively or under Melange"
 
 let () =
   Driver.register_transformation "melact"
