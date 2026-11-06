@@ -198,14 +198,6 @@ const ssr = async (results) => {
   }
 };
 
-const page = (count, html) => {
-  const data = `<script type="application/json" id="model">${JSON.stringify(rowsOf(count)).replaceAll("<", "\\u003c")}</script>`;
-  return (template) => {
-    if (!template.includes("<!--app-->") || !template.includes("<!--data-->")) throw new Error("template lost its placeholders");
-    return template.replace("<!--data-->", () => data).replace("<!--app-->", () => html);
-  };
-};
-
 // Installed before any page script: a promise for the client's `window.__hydrated = true`, and the
 // first row and row count the parser built, taken before deferred and module scripts run.
 const INSTRUMENT = `(() => {
@@ -370,7 +362,9 @@ const hydrate = async (results) => {
     for (const count of sizes) {
       const { html } = renderWith(CLIENTS[name].server, count, 0, 0);
       if (digestOf(parseHTML, html).rows !== count) throw new Error(`${CLIENTS[name].server} rendered the wrong rows`);
-      writeFileSync(join(dist, name, "bench/ssr", name, `index-${count}.html`), page(count, html)(template));
+      if (!template.includes("<!--app-->") || !template.includes("<!--data-->")) throw new Error(`${name}: the built page lost its placeholders`);
+      const data = `<script type="application/json" id="model">${JSON.stringify(rowsOf(count)).replaceAll("<", "\\u003c")}</script>`;
+      writeFileSync(join(dist, name, "bench/ssr", name, `index-${count}.html`), template.replace("<!--data-->", () => data).replace("<!--app-->", () => html));
     }
   }
   results.sizes = measureSizes(frameworks, dist);
