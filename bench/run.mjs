@@ -34,6 +34,17 @@ const build = async () => {
   for (const name of frameworks) {
     log("vite build", name);
     const outDir = join(dist, name);
+    // Svelte and Vue Vapor build with their own Vite and plugins, from their own folder.
+    const own = join(bench, name, "vite.config.mjs");
+    if (existsSync(own)) {
+      const built = spawnSync(
+        process.execPath,
+        [join(bench, name, "node_modules/vite/bin/vite.js"), "build", "--config", own, "--outDir", outDir],
+        { cwd: repo, stdio: "inherit", env: { ...process.env, ...(args.profile ? { BENCH_PROFILE: "1" } : {}) } },
+      );
+      if (built.status !== 0) throw new Error(`vite build ${name} failed`);
+      continue;
+    }
     await viteBuild({
       configFile: join(repo, "vite.config.js"),
       root: repo,

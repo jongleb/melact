@@ -1,0 +1,13 @@
+{
+  "name": "melact-bench-vue-vapor",
+  "private": true,
+  "description": "js-framework-benchmark's keyed Vue Vapor app (src/ copied unchanged from krausest/js-framework-benchmark@5ae2459), for comparison on the same machine",
+  "type": "module",
+  "dependencies": {
+    "vue": "3.6.0-rc.14"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.10",
+    "vite": "8.3.6"
+  }
+}
