@@ -3,6 +3,11 @@
  (modules pp)
  (libraries melact-ppx ppxlib))
 
+(executable
+ (name frozen)
+ (modules frozen)
+ (libraries melact-ppx ppxlib))
+
 (cram
  (package melact-ppx)
- (deps pp.exe))
+ (deps pp.exe frozen.exe))

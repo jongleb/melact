@@ -6,4 +6,6 @@ class mapper : object
 
   method locals : string list
   method definitions : (string * Ppxlib.expression) list
+  (** The local [let]s in scope, by name; a definition a frontend cached, an application marked
+      [[@melhole.cached]] whose last argument is [fun () -> value], is recorded as its [value]. *)
 end
