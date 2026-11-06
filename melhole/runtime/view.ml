@@ -181,21 +181,37 @@ let remove (position : Template.position) live =
 (** Whether a live child's nodes are all the children of its parent. *)
 type extent = Whole | Part
 
-let extent (position : Template.position) live =
-  let last = ref Js.null in
-  live.each (fun [@u] node -> last := Js.Null.return node) [@u];
+let extent (position : Template.position) first last =
   match
-    ( Dom_api.same (live.front Js.null [@u]) (Template.first_or_end position.parent),
-      Dom_api.same !last (Dom_api.last_child position.parent) )
+    ( Dom_api.same first (Template.first_or_end position.parent),
+      Dom_api.same last (Dom_api.last_child position.parent) )
   with
   | true, true -> Whole
   | true, false | false, _ -> Part
+
+let last_of live =
+  let last = ref Js.null in
+  live.each (fun [@u] node -> last := Js.Null.return node) [@u];
+  !last
+
+let rec last_among lives index =
+  match index < 0 with
+  | true -> Js.null
+  | false ->
+      let found = last_of (Array.unsafe_get lives index) in
+      if Dom_api.same found Js.null then last_among lives (index - 1) else found
+
+let spanned position live lives dropped =
+  let count = Array.length lives in
+  match Array.length dropped - count with
+  | 0 when count > 0 -> extent position (live.front Js.null [@u]) (last_among lives (count - 1))
+  | _ -> Part
 
 let update position live child =
   match child.patch position live [@u] with
   | Some next -> next
   | None -> (
-      match extent position live with
+      match extent position (live.front Js.null [@u]) (last_of live) with
       | Whole ->
           Dom_api.set_text_content position.parent "";
           live.release () [@u];
@@ -341,11 +357,11 @@ let keyed entries =
         match live.state with
         | Keyed_state (old_keys, items) ->
             let plan = Reconcile.plan ~old:old_keys ~next:keys in
-            (match (Array.length plan.dropped - Array.length items, extent position live) with
-            | 0, Whole ->
+            (match spanned position live items plan.dropped with
+            | Whole ->
                 Dom_api.set_text_content position.parent "";
                 live.release () [@u]
-            | _, (Whole | Part) -> Array.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped);
+            | Part -> Array.iter (fun i -> remove position (Array.unsafe_get items i)) plan.dropped);
             let items =
               backwards (Array.length children) position (fun [@u] j at ->
                   let step = Array.unsafe_get plan.steps j in
@@ -577,12 +593,11 @@ let each items render project pieces outer =
                 Some (group (Each_state { items; keys; outer; projections; lives }) lives)
             | _, (`Same | `Moved) ->
                 let plan = Reconcile.plan ~old:old.keys ~next:keys in
-                (match (Array.length plan.dropped - old_count, extent position live) with
-                | 0, Whole ->
+                (match spanned position live old.lives plan.dropped with
+                | Whole ->
                     Dom_api.set_text_content position.parent "";
                     live.release () [@u]
-                | _, (Whole | Part) ->
-                    Array.iter (fun i -> remove position (Array.unsafe_get old.lives i)) plan.dropped);
+                | Part -> Array.iter (fun i -> remove position (Array.unsafe_get old.lives i)) plan.dropped);
                 let carried at i j =
                   match Origin.kept_from (Array.unsafe_get origins j) with
                   | Some from when from = i -> Array.unsafe_get old.lives i
