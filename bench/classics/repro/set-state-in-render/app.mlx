@@ -1,0 +1,29 @@
+(** Which way the count moved at the last change. *)
+type trend = Steady | Rising | Falling
+
+module Trend = struct
+  let[@react.component] make ~count =
+    let previous, setPrevious = React.useState (fun () -> count) in
+    let trend, setTrend = React.useState (fun () -> Steady) in
+    (match previous = count with
+     | true -> ()
+     | false ->
+         setPrevious (fun _ -> count);
+         setTrend (fun _ -> match count > previous with true -> Rising | false -> Falling));
+    <p className="trend">
+      (React.string
+         (string_of_int count ^ " " ^ match trend with Steady -> "steady" | Rising -> "rising" | Falling -> "falling"))
+    </p>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    <div>
+      <button id="up" onClick=(fun _ -> setCount (fun count -> count + 1))>(React.string "+")</button>
+      <button id="down" onClick=(fun _ -> setCount (fun count -> count - 1))>(React.string "-")</button>
+      <Trend count />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)
