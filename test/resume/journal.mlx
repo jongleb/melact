@@ -1,0 +1,40 @@
+(** What reached the program, in the order it came. *)
+type entry = Pressed of int | Typed of string | Ticked of bool | Keyed of string | Routed of string | Answered of int
+
+type model = { entries : entry list; field : string; ticked : bool }
+
+type message = Press of int | Type of string | Tick of bool | Key of string | Route of string | Answer of int
+
+let update message model =
+  let entries = model.entries in
+  match message with
+  | Press 0 ->
+      ( { model with entries = entries @ [ Pressed 0 ] },
+        Cmd.perform (fun () -> Js.Promise.resolve (List.length entries)) (fun count -> Answer count) )
+  | Press button -> ({ model with entries = entries @ [ Pressed button ] }, Cmd.none)
+  | Type field -> ({ model with entries = entries @ [ Typed field ]; field }, Cmd.none)
+  | Tick ticked -> ({ model with entries = entries @ [ Ticked ticked ]; ticked }, Cmd.none)
+  | Key key -> ({ model with entries = entries @ [ Keyed key ] }, Cmd.none)
+  | Route hash -> ({ model with entries = entries @ [ Routed hash ] }, Cmd.none)
+  | Answer count -> ({ model with entries = entries @ [ Answered count ] }, Cmd.none)
+
+let subscriptions _ = Sub.hash (fun hash -> Route hash)
+
+let line entry =
+  match entry with
+  | Pressed button -> "pressed " ^ string_of_int button
+  | Typed text -> "typed " ^ text
+  | Ticked true -> "ticked"
+  | Ticked false -> "unticked"
+  | Keyed key -> "key " ^ key
+  | Routed hash -> "routed " ^ hash
+  | Answered count -> "answered " ^ string_of_int count
+
+let view { entries; field; ticked } =
+  <div className="journal">
+    <button className="first" onClick=(Press 0)>(Html.text "first")</button>
+    <button className="second" onClick=(Press 1)>(Html.text "second")</button>
+    <input className="field" value=field onInput=(fun text -> Type text) onKeyDown=(fun key -> Key key) />
+    <input className="tick" type_="checkbox" checked=ticked onCheck=(fun on -> Tick on) />
+    <ol>(Html.list (List.mapi (fun index entry -> <li key=(string_of_int index)>(Html.text (line entry))</li>) entries))</ol>
+  </div>

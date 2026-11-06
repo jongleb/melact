@@ -238,6 +238,28 @@ script; it is a string in `melhole.server`, which builds natively and under Mela
 TodoMVC's server page before hydration, and the page must then match a mounted page that got the
 same actions, and keep matching through later ones.
 
+`Program.resume` starts a served Meltea program without taking its page over: it runs no view and
+touches no node, and listens on `window`, in the capture phase, for the first click, double click,
+input, change, key, submit or pointer press inside its root. That input takes the page over at once,
+as `Program.hydrate` does at startup, and then goes on to the handlers it just attached, its target's
+value and checked state as the user left them; a message from a command or a subscription takes the
+page over at its draw, and events the capture script kept take it over at the next microtask and are
+replayed, as with `hydrate`. It moves the work rather than removing it. On a served TodoMVC
+([`bench/resume`](../bench/resume/run.mjs), headless Chrome, a click pressed for 80 ms) the main
+thread's work over the load falls from 84 to 67 ms with 1,000 rows and from 228 to 158 ms with 5,000,
+and at 4× CPU throttling from 266 to 200 ms and from 899 to 634 ms, with 134 ms of blocking time
+gone; the first click pays the takeover instead (its longest task 5 → 33 ms and 15 → 98 ms at 4×),
+mostly hidden because the pointer press starts it, so that the time from the press to the paint after
+the click stays 89 ms with 1,000 rows and grows from 106 to 125 ms with 5,000. Taking over in an idle
+callback after the first paint saves nothing: it is the same single long task. `hydrate` stays the
+default; `resume` is for long pages that are mostly read. Laws, on a page whose model records every
+message in order: after random inputs before and after the code arrives, route changes and command
+replies, a resumed page shows what an eagerly hydrated page and a mounted page show; with no early
+input it runs no view and changes no node until its first input; that input runs the view once,
+keeps every element the server sent and creates none. Skipping the replay, taking over twice, losing
+the first input, replaying before taking over, taking over at startup, dropping the typed value and
+taking over with the current model each break one of them.
+
 ### Without a DOM: the server renderer
 
 `Served.render` needs a DOM, so on a server it needs jsdom or linkedom, and it cannot run in native

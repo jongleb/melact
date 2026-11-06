@@ -140,3 +140,19 @@ Options: `--suites=ssr,hydration`, `--rows=1000,10000`, `--warmups=N` (default 2
   total blocking time, then the busy time of a first real click on a row label until the paint that
   shows the row selected. Every page must keep the rows the parser built (the first and last row
   elements are the same objects after hydration), and show exactly that row selected after the click.
+
+# Resuming a served page
+
+[`resume/`](resume/run.mjs) compares `Program.hydrate` with `Program.resume` on a served TodoMVC of
+1,000 and 5,000 rows: a native server ([`resume/server`](resume/server/server.ml)) writes the page,
+the capture script and the model, and the client takes it over at startup (`?hydrate`) or at the
+first input (`?resume`). For each page load it reports the main thread's busy time and Total
+Blocking Time from navigation to the first click, then presses a row's checkbox for 80 ms and reports
+the longest task after it and the time from the press to the paint after the click.
+
+```console
+$ DYLD_LIBRARY_PATH=/opt/homebrew/Cellar/simdjson/4.6.4/lib node bench/resume/run.mjs --runs=9
+```
+
+Options: `--runs=N`, `--sizes=1000,5000`, `--rates=1,4` (CPU throttling), `--press=ms`,
+`--variants=hydrate,resume`, `--no-build`, `--breakdown` (main-thread time per trace event).
