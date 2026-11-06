@@ -1200,11 +1200,11 @@ let put_attr scope slot element name value =
     Array.unsafe_set scope.deps slot (Input value))
 
 let listen scope element event =
-  let key = Events.key_of event in
-  (match Events.register element event with
+  match Events.register element event with
   | Events.Delegated -> ()
-  | Events.Direct remove -> scope.cleanups <- (fun [@u] () -> remove ()) :: scope.cleanups);
-  key
+  | Events.Direct remove -> scope.cleanups <- (fun [@u] () -> remove ()) :: scope.cleanups
+
+let event_key event = Events.key_of event
 
 let put_handler element key next = Events.set element key next
 

@@ -178,7 +178,10 @@ val text_at : Template.position -> Dom.text
 val put_text : scope -> int -> Dom.text -> string -> unit
 val put_sole_text : scope -> int -> Dom.element -> string -> unit
 val put_attr : scope -> int -> Dom.element -> string -> string option -> unit
-val listen : scope -> Dom.element -> string -> string
+val listen : scope -> Dom.element -> string -> unit
+
+(** The property a delegated handler for an event is kept in, the same for every element. *)
+val event_key : string -> string
 val put_handler : Dom.element -> string -> (Dom.event -> unit) -> unit
 
 (** A handler site compiled once, shared by every element that uses it. *)

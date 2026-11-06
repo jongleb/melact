@@ -100,16 +100,19 @@ Every kind of prop, static and dynamic, required and optional:
   $ ./pp.exe -impl props.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_template_1 =
+  let __melhole_event_1 = Melhole.View.event_key "input"
+  let __melhole_event_2 = Melhole.View.event_key "keydown"
+  let __melhole_template_3 =
     Melhole.View.template
       (Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">")
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
+             Melhole.View.listen __melhole_scope
+               (Melhole.Template.element __melhole_node) "input";
+             Melhole.View.listen __melhole_scope
+               (Melhole.Template.element __melhole_node) "keydown";
              ((Melhole.Template.element __melhole_node),
-               (Melhole.Template.element __melhole_node),
-               (Melhole.Template.element __melhole_node),
-               (Melhole.Template.element __melhole_node),
                (Melhole.View.controlled_hole
                   (Melhole.Template.element __melhole_node) "value"),
                (Melhole.View.controlled_hole
@@ -117,16 +120,9 @@ Every kind of prop, static and dynamic, required and optional:
                (Melhole.View.style_hole
                   (Melhole.Template.element __melhole_node)),
                (Melhole.View.reference_hole __melhole_scope
-                  (Melhole.Template.element __melhole_node)),
-               (Melhole.Template.element __melhole_node),
-               (Melhole.Template.element __melhole_node),
-               (Melhole.View.listen __melhole_scope
-                  (Melhole.Template.element __melhole_node) "input"),
-               (Melhole.Template.element __melhole_node),
-               (Melhole.View.listen __melhole_scope
-                  (Melhole.Template.element __melhole_node) "keydown")))
+                  (Melhole.Template.element __melhole_node))))
       }
-  let __melhole_template_2 =
+  let __melhole_template_4 =
     Melhole.View.template
       (Melhole.Template.html "<div stroke-width=\"2\" for=\"x\"></div>")
       {
@@ -137,16 +133,21 @@ Every kind of prop, static and dynamic, required and optional:
       }
   let form ~text ~flag ~tab ~opacity ~style ~ref ~maybe ~html ~onInput =
     ((React.of_child
-        (Melhole.View.compiled __melhole_template_1 12
+        (Melhole.View.compiled __melhole_template_3 12
            {
              Js.Fn.I2 =
                (fun __melhole_scope
-                  (__melhole_hole_0, __melhole_hole_1, __melhole_hole_2,
-                   __melhole_hole_3, __melhole_hole_4, __melhole_hole_5,
-                   __melhole_hole_6, __melhole_hole_7, __melhole_hole_8,
-                   __melhole_hole_9, __melhole_key_9, __melhole_hole_10,
-                   __melhole_key_10)
+                  (__melhole_hole_0, __melhole_hole_4, __melhole_hole_5,
+                   __melhole_hole_6, __melhole_hole_7)
                   ->
+                  let __melhole_hole_1 = __melhole_hole_0 in
+                  let __melhole_hole_2 = __melhole_hole_0 in
+                  let __melhole_hole_3 = __melhole_hole_0 in
+                  let __melhole_hole_8 = __melhole_hole_0 in
+                  let __melhole_hole_9 = __melhole_hole_0 in
+                  let __melhole_hole_10 = __melhole_hole_0 in
+                  let __melhole_key_9 = __melhole_event_1 in
+                  let __melhole_key_10 = __melhole_event_2 in
                   let __melhole_changed_0 =
                     Melhole.View.check __melhole_scope 0 flag in
                   let __melhole_changed_1 =
@@ -222,7 +223,7 @@ Every kind of prop, static and dynamic, required and optional:
                   ())
            })),
       (React.of_child
-         (Melhole.View.compiled __melhole_template_2 1
+         (Melhole.View.compiled __melhole_template_4 1
             {
               Js.Fn.I2 =
                 (fun __melhole_scope __melhole_hole_0 ->
@@ -655,8 +656,8 @@ callbacks of a component, so a hook called there is reported by the type checker
   30:                       ((fun () -> 0)[@alert "+hook"]) in
   33:                     then ((1)[@alert "+hook"])
   34:                     else ((0)[@alert "+hook"]) in
-  61:                                               [@alert "+hook"]))
-  62:                                           [@alert "+hook"])
+  60:                                               [@alert "+hook"]))
+  61:                                           [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare

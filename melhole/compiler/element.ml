@@ -375,7 +375,36 @@ let lowercase frontend ~loc ~attributes tag arguments =
             one [%expr Melhole.View.content_hole [%e scope] [%e position indices index_in]] value)
       holes
   in
-  let creators = List.concat_map fst made_holes in
+  let creators, same, effects, keys =
+    let kept, same, effects, keys =
+      List.fold_left
+        (fun (kept, same, effects, keys) (named, creator) ->
+          match creator with
+          | [%expr Melhole.View.listen [%e? scope] [%e? element] [%e? event]] ->
+              ( kept,
+                same,
+                [%expr Melhole.View.listen [%e scope] [%e element] [%e event]] :: effects,
+                (named, Hoist.hoist ~loc "event" [%expr Melhole.View.event_key [%e event]]) :: keys )
+          | [%expr Melhole.Template.element [%e? _]] -> (
+              let printed = Pprintast.string_of_expression creator in
+              match
+                List.find_opt (fun (_, other) -> String.equal (Pprintast.string_of_expression other) printed) kept
+              with
+              | Some (original, _) -> (kept, (named, original) :: same, effects, keys)
+              | None -> ((named, creator) :: kept, same, effects, keys))
+          | _ -> ((named, creator) :: kept, same, effects, keys))
+        ([], [], [], [])
+        (List.concat_map fst made_holes)
+    in
+    (List.rev kept, List.rev same, List.rev effects, List.rev keys)
+  in
+  let effected body = List.fold_right (fun registered body -> [%expr [%e registered]; [%e body]]) effects body in
+  let bound body =
+    List.fold_right
+      (fun (named, value) body -> [%expr let [%p pvar ~loc named] = [%e value] in [%e body]])
+      (List.map (fun (named, original) -> (named, evar ~loc original)) same @ keys)
+      body
+  in
   let values = List.map snd made_holes in
   let tuple items = match items with [ single ] -> single | _ -> pexp_tuple ~loc items in
   let made =
@@ -387,7 +416,7 @@ let lowercase frontend ~loc ~attributes tag arguments =
           | Next_of previous -> [%expr Melhole.Template.next [%e node previous]]
         in
         [%expr let [%p pvar ~loc (name indices)] = [%e reach] in [%e body]])
-      walk (tuple (List.map snd creators))
+      walk (effected (tuple (List.map snd creators)))
   in
   let markup =
     match element.tag with
@@ -570,7 +599,8 @@ let lowercase frontend ~loc ~attributes tag arguments =
           find 0 holes
         in
         let finished =
-          tuple (List.map (fun (named, creator) -> match is_slot named with true -> evar ~loc named | false -> creator) creators)
+          effected
+            (tuple (List.map (fun (named, creator) -> match is_slot named with true -> evar ~loc named | false -> creator) creators))
         in
         let adopting =
           List.fold_right
@@ -654,7 +684,7 @@ let lowercase frontend ~loc ~attributes tag arguments =
           | [ single ] -> single
           | patterns -> ppat_tuple ~loc patterns
         in
-        let refresh = uncurried [%expr fun __melhole_scope [%p holes] -> [%e body]] in
+        let refresh = uncurried [%expr fun __melhole_scope [%p holes] -> [%e bound body]] in
         match role with
         | `Row key -> [%expr Melhole.View.row [%e template] [%e eint ~loc slots] [%e refresh] ([%e key] : string)]
         | `Child -> frontend.wrap loc [%expr Melhole.View.compiled [%e template] [%e eint ~loc slots] [%e refresh]]

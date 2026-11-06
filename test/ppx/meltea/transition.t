@@ -11,16 +11,14 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             ((Melhole.Template.element __melhole_node),
-               (Melhole.Template.element __melhole_node)))
+             Melhole.Template.element __melhole_node)
       }
   let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<li></li>")
       {
         Js.Fn.I2 =
           (fun __melhole_scope __melhole_node ->
-             ((Melhole.Template.element __melhole_node),
-               (Melhole.Template.element __melhole_node)))
+             Melhole.Template.element __melhole_node)
       }
   let __melhole_template_3 =
     Melhole.View.template (Melhole.Template.html "<ul></ul>")
@@ -44,8 +42,8 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                       Melhole.View.compiled __melhole_template_1 4
                         {
                           Js.Fn.I2 =
-                            (fun __melhole_scope
-                               (__melhole_hole_0, __melhole_hole_1) ->
+                            (fun __melhole_scope __melhole_hole_0 ->
+                               let __melhole_hole_1 = __melhole_hole_0 in
                                let __melhole_changed_0 =
                                  Melhole.View.check __melhole_scope 0 chosen in
                                let __melhole_changed_1 =
@@ -96,10 +94,10 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                __melhole_template_2 4
                                {
                                  Js.Fn.I3 =
-                                   (fun __melhole_scope
-                                      (__melhole_hole_0, __melhole_hole_1)
+                                   (fun __melhole_scope __melhole_hole_0
                                       __melhole_item ->
                                       ((let id = __melhole_item in
+                                        let __melhole_hole_1 = __melhole_hole_0 in
                                         let __melhole_changed_0 =
                                           Melhole.View.check __melhole_scope 0
                                             chosen in
