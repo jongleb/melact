@@ -22,10 +22,9 @@ copy() {
 
 copy melhole
 copy meltea
+mv meltea/examples examples
+find examples -type f \( -name '*.html' -o -name '*.ml' \) -exec perl -pi -e 's|meltea/examples/|examples/|g' {} +
 copy ppx/meltea
-copy examples/counter
-copy examples/todomvc
-copy examples/served
 copy test/support
 copy test/meltea
 copy test/todomvc

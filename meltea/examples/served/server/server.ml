@@ -4,4 +4,4 @@ let () =
     ("<!doctype html><html><head><meta charset=\"utf-8\"><script>" ^ Melhole_server.capture ^ "</script>"
    ^ Melhole_server.data ~id:"model" (string_of_int count)
    ^ "</head><body><div id=\"root\">" ^ Program.render ~view:Page.view count
-   ^ "</div><script type=\"module\" src=\"../client/output/examples/served/client/main.mjs\"></script></body></html>")
+   ^ "</div><script type=\"module\" src=\"../client/output/meltea/examples/served/client/main.mjs\"></script></body></html>")

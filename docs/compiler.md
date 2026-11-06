@@ -290,7 +290,7 @@ must type-check the same way on both targets.
 `meltea.server` has the same `Html`, `Cmd`, `Sub` and `Program` modules as `meltea`, so one module
 with the model, `update` and `view` builds twice: against `meltea` for the browser and against
 `meltea.server` with `meltea-ppx -server` for the server, natively or in Node. Commands and
-subscriptions are inert there. [`examples/served`](../examples/served) is a native server that
+subscriptions are inert there. [`meltea/examples/served`](../meltea/examples/served) is a native server that
 writes a page with the capture script and the counter, and a client that hydrates it.
 
 The model goes into the page as data, so the browser starts from it without running `init` and
@@ -443,7 +443,7 @@ its model, its shape and a way to stop on its root. `Program.element ~start:Prog
 `sandbox`) finds the program running on the root, stops it, and starts from its model when the
 shapes are the same, or from `init` when the types changed, without running `init`'s commands. With
 Vite, `main.mlx` accepts its own updates (`import.meta.hot.accept()`), so an edit runs it again and
-the page shows the new view of the old state; examples/todomvc does this. A stopped program drops
+the page shows the new view of the old state; meltea/examples/todomvc does this. A stopped program drops
 the messages that still reach it. A law runs a program, starts new code on its root with the same
 or another shape, and checks the page against a mount of the new view on the carried model or on
 `init`, and that the old program no longer draws.

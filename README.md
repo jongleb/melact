@@ -263,7 +263,7 @@ A server does not need a DOM either. Under `meltea-ppx -server` the same view co
 that writes its HTML through `melhole.server`, plain OCaml that runs natively and in Node:
 static markup joined into a few strings at compile time and one call per dynamic part.
 `meltea.server` has Meltea's `Html`, `Cmd`, `Sub` and `Program`, so one module with the model,
-`update` and `view` builds for both sides; [`examples/served`](examples/served) is a native
+`update` and `view` builds for both sides; [`meltea/examples/served`](meltea/examples/served) is a native
 server and the client that hydrates its page.
 
 ### Components re-render where state changed
@@ -376,8 +376,8 @@ let () = Option.iter (fun root -> ignore (Program.sandbox ~init:0 ~update ~view 
 sends a message, `onInput` and `onKeyDown` take a function of the value or key, `onCheck` of the
 checked state. `Program.sandbox` and `Program.element` run it, with `Cmd` and `Sub` as plain
 values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries meltea)` and
-`(pps melange.ppx meltea-ppx)`. Examples: [`examples/counter`](examples/counter/main.mlx) and
-[`examples/todomvc`](examples/todomvc/todomvc.mlx), the full TodoMVC with routing, editing and
+`(pps melange.ppx meltea-ppx)`. Examples: [`meltea/examples/counter`](meltea/examples/counter/main.mlx) and
+[`meltea/examples/todomvc`](meltea/examples/todomvc/todomvc.mlx), the full TodoMVC with routing, editing and
 `localStorage`.
 
 <picture>
@@ -456,8 +456,8 @@ rewrites such bindings to Melact's hooks (`useState`, `useReducer`, `useEffect` 
 | **Size** | whole apps, runtime and the Melange stdlib they use included: the counter is 3.0 kB gzip with Meltea and 5.6 kB with Melact, TodoMVC in Meltea is 14.7 kB, most of it jsonkit's `Printf` for error messages; React 18.3 and react-dom alone are 45 kB |
 | **Speed** | [`bench/`](bench/README.md) reproduces js-framework-benchmark's keyed operations in headless Chrome: geometric mean of the slowdown against hand-written vanilla JS is 1.15 for Meltea, 1.17 for Melact and 1.70 for React 18 (the ratios move by about 0.1 between runs); a list re-renders only the rows whose item changed, and swapping two rows of 1,000 moves two rows (React moves 998) |
 | **Tests** | 175 vitest + jsdom tests and 25 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
-| **Examples** | [`examples/counter-react`](examples/counter-react/counter.mlx), Melact in reason-react style; [`examples/counter`](examples/counter/main.mlx) and [`examples/todomvc`](examples/todomvc/todomvc.mlx), Meltea |
-| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable`. `meltea-ppx -server` compiles a view to code that writes its HTML with no DOM, natively or in Node ([`examples/served`](examples/served)); a Melact app renders natively with server-reason-react. `Melhole_server.capture`, a script for the page's head, keeps clicks and typing made before the code arrives and hydration delivers them |
+| **Examples** | Melact in reason-react style: [`examples/counter`](examples/counter/counter.mlx) and [`examples/todomvc`](examples/todomvc/app.mlx), the full TodoMVC; Meltea: [`meltea/examples/counter`](meltea/examples/counter/main.mlx) and [`meltea/examples/todomvc`](meltea/examples/todomvc/todomvc.mlx) |
+| **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable`. `meltea-ppx -server` compiles a view to code that writes its HTML with no DOM, natively or in Node ([`meltea/examples/served`](meltea/examples/served)); a Melact app renders natively with server-reason-react. `Melhole_server.capture`, a script for the page's head, keeps clicks and typing made before the code arrives and hydration delivers them |
 | **Not yet** | a working `useActionState` (reason-react 0.17's own binding cannot give its action to a form), `ReactDOMTestUtils.isElementOfType`, reading a `domProps` back field by field, Suspense on the server |
 | **Limits** | reading layout while rendering (`offsetTop`, `getBoundingClientRect`) is cheap under React, which renders every component before it touches the DOM; Melact renders all the components that their own state or a context made dirty before it writes, so a read in those costs one layout, as in React, but a component that renders because its parent passed new props renders while the parent's DOM is written, and a read there forces a layout per component; read geometry in `useLayoutEffect` or a ref callback, which run after the whole write, as in React; `MelactDebug.warnLayoutReadsInRender ()` warns in the console, once per component, about each such read; an element is compiled code, not React's element object: it has no `props`, `type` or `key` to read back, so code that inspects its children (`(Obj.magic child)##props##label`) gets `undefined`; give the parent the data itself (a list of records) and render the children from it; an element compares with `React.null` by structural equality (Reason's `==`), but two other elements do not compare structurally, as they hold functions; reason-react and Melact both define the module `React`, so a build must not contain both: a library that requires reason-react has to require melact instead (same API); every file melact-ppx compiles checks it, failing with `Unbound value React.reason_react_is_also_in_this_build_remove_it` (or, if only the JavaScript import went to reason-react, at load with that name); a `make` written by hand with labels and no `[@react.component]` is not a component in JSX (it is not in reason-react either): mark it `[@react.component]`; a hand-written `make` that calls hooks runs them in its parent, so call it unconditionally; hooks are found as `React.useX`, as `useX` under `open React`, `include React` or `React.( )`, and as `M.useX` for a module of the same file that includes React; a module in another file that includes React is named with `-hook-modules M` (`(pps melange.ppx melact-ppx -- -hook-modules Hooks)`); a `[@react.component] external` to a component of a JavaScript React library is a compile error, since only React can render it |
 
@@ -558,8 +558,9 @@ ppx/meltea         meltea-ppx       mlx views with messages
 react/             melact           React (with React.Event), ReactDOM, ReasonReactRouter
 meltea/            meltea           the Elm architecture: Program, Cmd, Sub, Html
 meltea/server      meltea.server    the same modules on a server: views write HTML
+meltea/examples                     counter, todomvc, served (Meltea)
 test/                               laws: QCheck, fast-check in jsdom, React vs Melact
-examples/                           counter (Meltea), counter-react (Melact)
+examples/                           counter, todomvc (Melact)
 compat/                             real reason-react apps built against Melact
 assets/                             the figures above: python3 assets/make.py
 ```

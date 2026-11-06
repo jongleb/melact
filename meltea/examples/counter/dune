@@ -1,7 +1,7 @@
 (melange.emit
  (target output)
- (libraries melact melange.dom)
+ (libraries meltea melange.dom)
  (module_systems
   (es6 mjs))
  (preprocess
-  (pps melange.ppx melact-ppx)))
+  (pps melange.ppx meltea-ppx)))

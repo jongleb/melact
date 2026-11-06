@@ -3,23 +3,7 @@ external document : Dom.document = "document"
 external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
 [@@mel.send] [@@mel.return nullable]
 
-external hash : string = "hash" [@@mel.scope "window", "location"]
-
-external saved : string -> string option = "getItem"
-[@@mel.scope "localStorage"] [@@mel.return nullable]
-
-external save : string -> string -> unit = "setItem" [@@mel.scope "localStorage"]
-
 let () =
   Option.iter
-    (fun root ->
-      ignore
-        (Program.element ~start:Program.hot
-           ~init:(Todomvc.init ~saved:(Option.value ~default:"[]" (saved "todos-meltea")) ~hash)
-           ~update:(fun message model ->
-             let next, command = Todomvc.update message model in
-             (next, Cmd.batch [ command; Cmd.port (save "todos-meltea") (Todomvc.encode next.todos) ]))
-           ~view:Todomvc.view ~subscriptions:Todomvc.subscriptions root))
+    (fun root -> ReactDOM.Client.render (ReactDOM.Client.createRoot root) <App />)
     (element_by_id document "root")
-
-let () = [%mel.raw {|import.meta.hot && import.meta.hot.accept()|}]
