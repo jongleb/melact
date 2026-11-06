@@ -196,7 +196,7 @@ Every kind of prop, static and dynamic, required and optional:
                        Melhole.View.set_style __melhole_hole_6
                          (ReactDOM.Style.declarations style));
                   Melhole.View.set_reference __melhole_hole_7
-                    (ReactDOM.Ref.attach ref);
+                    (ReactDOM.Ref.identity ref) (ReactDOM.Ref.attach ref);
                   (match __melhole_changed_1 with
                    | Melhole.View.Unchanged -> ()
                    | _ ->
@@ -397,6 +397,11 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                                         __melhole_hole_0 "placeholder"
                                         (Some (label : string)));
                                  Melhole.View.set_reference __melhole_hole_1
+                                   (Stdlib.Option.fold
+                                      ~none:ReactDOM.Ref.absent
+                                      ~some:ReactDOM.Ref.identity
+                                      (Option.map ReactDOM.Ref.domRef
+                                         (Js.Nullable.toOption ref)))
                                    (Stdlib.Option.fold ~none:ignore
                                       ~some:ReactDOM.Ref.attach
                                       (Option.map ReactDOM.Ref.domRef
