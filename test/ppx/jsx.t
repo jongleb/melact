@@ -5,6 +5,7 @@ A static tree becomes one template and one hoisted element:
   > EOF
   $ ./pp.exe -impl static.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_static_1 =
     Melhole.View.static
       (Melhole.Template.html
@@ -21,6 +22,7 @@ Holes at every depth; markers only between neighbours that would merge:
   > EOF
   $ ./pp.exe -impl holes.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_template_1 =
     Melhole.View.template
       (Melhole.Template.html "<p>a<!---->b<!----><b></b></p>")
@@ -97,6 +99,7 @@ Every kind of prop, static and dynamic, required and optional:
   > EOF
   $ ./pp.exe -impl props.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_template_1 =
     Melhole.View.template
       (Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">")
@@ -243,6 +246,7 @@ A component with optional, defaulted and children props, and its signature:
   > EOF
   $ ./pp.exe -impl card.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 = Melact_runtime.Component.make ~name:"Card.make"
   include
     struct
@@ -352,6 +356,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   > EOF
   $ ./pp.exe -impl fancy.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 = Melact_runtime.Component.make ~name:"Fancy.make"
   include
     struct
@@ -418,6 +423,7 @@ Calls with children, keys and fragments:
   > EOF
   $ ./pp.exe -impl calls.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let one =
     Card.make (Card.makeProps ~title:"a" ~children:(React.string "x") ())
   let many =
@@ -474,6 +480,7 @@ Hooks get one key per call site, also inside custom hooks:
   > EOF
   $ ./pp.exe -impl hooks.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let useToggle () =
@@ -515,6 +522,7 @@ Reason input:
   $ refmt --print ml greeting.re > greeting.ml
   $ ./pp.exe -impl greeting.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 =
     Melact_runtime.Component.make ~name:"Greeting.make"
   include
@@ -569,6 +577,7 @@ mlx input:
   $ mlx-pp greeting.mlx > greeting.ast
   $ ./pp.exe -impl greeting.ast
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 =
     Melact_runtime.Component.make ~name:"Greeting.make"
   include
@@ -638,11 +647,11 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  29:                       ((fun () -> 0)[@alert "+hook"]) in
-  32:                     then ((1)[@alert "+hook"])
-  33:                     else ((0)[@alert "+hook"]) in
-  60:                                               [@alert "+hook"]))
-  61:                                           [@alert "+hook"])
+  30:                       ((fun () -> 0)[@alert "+hook"]) in
+  33:                     then ((1)[@alert "+hook"])
+  34:                     else ((0)[@alert "+hook"]) in
+  61:                                               [@alert "+hook"]))
+  62:                                           [@alert "+hook"])
 
 Bindings to npm's react: dependencies typed as an n-tuple pick the hook with n dependencies, an
 array the one with an array; uses below become Melact's hooks with their own keys, and the binding
@@ -655,6 +664,7 @@ stays as a definition other files can call, with no limit on the number of depen
   > EOF
   $ ./pp.exe -impl npm.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
   let useEffect3 _melact_argument_0 _melact_argument_1 =
     React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
@@ -682,6 +692,7 @@ call the binding's definition:
   > EOF
   $ ./pp.exe -impl long.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
   let useMemo8 _melact_argument_0 _melact_argument_1 =
     React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
@@ -701,6 +712,7 @@ string tag builds a DOM element from the props object, a component is called wit
   > EOF
   $ ./pp.exe -impl elements.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   let createElement _melact_argument_0 _melact_argument_1 =
     Melact_npm.created _melact_argument_0 _melact_argument_1 [||][@@warning
                                                                    "-32"]
@@ -723,6 +735,7 @@ A binding to npm's Fragment with a type of its own is left alone:
   > EOF
   $ ./pp.exe -impl fragment.ml
   [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
   type elementType
   external fragmentType : elementType = "Fragment"[@@mel.module "react"]
   let a = fragmentType

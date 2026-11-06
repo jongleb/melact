@@ -36,6 +36,7 @@ type 'snapshot store = {
   mutable unsubscribe : unit -> unit;
 }
 
+let reason_react_is_also_in_this_build_remove_it () = ()
 let null = View.empty
 let string text = View.text text
 let int number = View.text (string_of_int number)

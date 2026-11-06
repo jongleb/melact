@@ -570,7 +570,8 @@ let mapper =
 
 let structure items =
   let loc = Location.none in
-  [%stri [@@@alert "-hook"]] :: mapper#structure items
+  [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
+  :: mapper#structure items
 let signature items = mapper#signature items
 let () =
   Driver.add_arg "-hook-modules"

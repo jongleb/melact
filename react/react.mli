@@ -8,6 +8,11 @@ type element
 external of_child : Melhole.View.child -> element = "%identity"
 external to_child : element -> Melhole.View.child = "%identity"
 
+(** Called once by every file melact-ppx compiles. reason-react's [React] has no such value, so a
+    build where its [React] shadows Melact's fails to compile, or, if only the JavaScript import went
+    to reason-react's file, fails as the module loads, with this name in the message. *)
+val reason_react_is_also_in_this_build_remove_it : unit -> unit
+
 val null : element
 val string : string -> element
 val int : int -> element
