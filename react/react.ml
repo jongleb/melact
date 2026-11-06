@@ -27,14 +27,6 @@ type ('state, 'action) state = {
   dispatch : 'action -> unit;
 }
 
-type 'deps effect_state = {
-  mutable deps : 'deps;
-  mutable cleanup : (unit -> unit) option;
-  mutable run : unit -> (unit -> unit) option;  (** The effect of the render that last changed [deps]. *)
-}
-
-(** An effect hook: its cell, and its cleanup and run, made once and queued whenever [deps] change. *)
-type 'deps effect_cell = { cell : 'deps effect_state; cleaning : Instance.job; running : Instance.job }
 type ('deps, 'value) memo = { mutable inputs : 'deps; mutable result : 'value }
 
 type 'snapshot store = {
@@ -160,29 +152,8 @@ let useReducerWithMapState key reduce initial map =
 let use_effect timing unchanged key run deps =
   let instance = Instance.current () in
   match Instance.found instance key with
-  | Some hook ->
-      if not (unchanged hook.cell.deps deps) then (
-        hook.cell.deps <- deps;
-        hook.cell.run <- run;
-        Instance.schedule hook.cleaning;
-        Instance.schedule hook.running)
-  | None ->
-      let cell = { deps; cleanup = None; run } in
-      let finished () =
-        Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
-        cell.cleanup <- None
-      in
-      let hook =
-        {
-          cell;
-          cleaning = Instance.job instance timing Instance.Cleanup finished;
-          running = Instance.job instance timing Instance.Run (fun () -> cell.cleanup <- cell.run ());
-        }
-      in
-      Instance.on_unmount instance finished;
-      Instance.put instance key hook;
-      Instance.schedule hook.cleaning;
-      Instance.schedule hook.running
+  | Some hook -> if not (unchanged (Instance.deps hook) deps) then Instance.rerun hook deps run
+  | None -> Instance.put instance key (Instance.start_effect instance timing deps run)
 
 let memoize unchanged key compute deps =
   let instance = Instance.current () in

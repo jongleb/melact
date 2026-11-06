@@ -1124,9 +1124,7 @@ let set_handler (hole : Hole.handler) next = Events.set hole.element hole.key ne
 
 let text_at position = !medium.text position None [@u]
 
-let write_text node value = Dom_api.set_data node value
-
-let put_text (Input last) node value = if not (Dom_api.same last value) then write_text node value
+let put_text (Input last) node value = if not (Dom_api.same last value) then Dom_api.set_data node value
 
 let write_sole_text element value =
   match Dom_api.first_child element with
@@ -1141,9 +1139,6 @@ let write_attr element name value =
   | None -> Dom_api.remove_attribute element name
 
 let put_attr (Input last) element name value = if not (Dom_api.same last value) then write_attr element name value
-
-let listen element event = Events.listen element event
-let unlisten element event = Events.unlisten element event
 
 let event_key event = Events.key_of event
 
@@ -1335,7 +1330,7 @@ let tpl_instance markup values =
             Array.iter
               (fun site ->
                 match site with
-                | Handler_hole hole -> unlisten hole.element hole.event
+                | Handler_hole hole -> Events.unlisten hole.element hole.event
                 | Reference_hole hole -> release_reference hole
                 | Content_hole hole -> release_content hole
                 | Text_hole _ | Attr_hole _ | Prop_hole _ | Style_hole _ | Class_hole _ -> ())

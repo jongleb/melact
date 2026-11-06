@@ -127,7 +127,7 @@ Holes at every depth; markers only between neighbours that would merge:
                     (match __melhole_changed_2 with
                      | Melhole.View.Unchanged -> ()
                      | _ ->
-                         Melhole.View.write_text __melhole_hole_0
+                         Melhole.Dom_api.set_data __melhole_hole_0
                            (name : string));
                     (match __melhole_changed_1 with
                      | Melhole.View.Unchanged -> ()
@@ -186,9 +186,9 @@ Every kind of prop, static and dynamic, required and optional:
       {
         Js.Fn.I1 =
           (fun __melhole_node ->
-             Melhole.View.listen (Melhole.Template.element __melhole_node)
+             Melhole.Events.listen (Melhole.Template.element __melhole_node)
                "input";
-             Melhole.View.listen (Melhole.Template.element __melhole_node)
+             Melhole.Events.listen (Melhole.Template.element __melhole_node)
                "keydown";
              {
                __melhole_frame_3_hole_0 =
@@ -230,9 +230,9 @@ Every kind of prop, static and dynamic, required and optional:
              {
                Js.Fn.I1 =
                  (fun __melhole_frame ->
-                    (Melhole.View.unlisten
+                    (Melhole.Events.unlisten
                        __melhole_frame.__melhole_frame_3_hole_0 "input";
-                     Melhole.View.unlisten
+                     Melhole.Events.unlisten
                        __melhole_frame.__melhole_frame_3_hole_0 "keydown");
                     Melhole.View.release_reference
                       __melhole_frame.__melhole_frame_3_hole_7)
@@ -560,7 +560,7 @@ A component with optional, defaulted and children props, and its signature:
                                     (match __melhole_changed_1 with
                                      | Melhole.View.Unchanged -> ()
                                      | _ ->
-                                         Melhole.View.write_text
+                                         Melhole.Dom_api.set_data
                                            __melhole_hole_0 (title : string));
                                     (match __melhole_changed_0 with
                                      | Melhole.View.Unchanged -> ()

@@ -363,7 +363,7 @@ let lowercase frontend ~loc ~attributes tag arguments =
         | On_element (indices, Handler event, value) ->
             ( [
                 (hole_name index, at indices);
-                (key_name index, [%expr Melhole.View.listen [%e at indices] [%e estring ~loc event]]);
+                (key_name index, [%expr Melhole.Events.listen [%e at indices] [%e estring ~loc event]]);
               ],
               value )
         | At_position (indices, index_in, Text_slot, value) ->
@@ -384,10 +384,10 @@ let lowercase frontend ~loc ~attributes tag arguments =
       List.fold_left
         (fun (kept, same, effects, keys) (named, creator) ->
           match creator with
-          | [%expr Melhole.View.listen [%e? element] [%e? event]] ->
+          | [%expr Melhole.Events.listen [%e? element] [%e? event]] ->
               ( kept,
                 same,
-                [%expr Melhole.View.listen [%e element] [%e event]] :: effects,
+                [%expr Melhole.Events.listen [%e element] [%e event]] :: effects,
                 (named, Hoist.hoist ~loc "event" [%expr Melhole.View.event_key [%e event]]) :: keys )
           | [%expr Melhole.Template.element [%e? _]] -> (
               let printed = Pprintast.string_of_expression creator in
@@ -542,7 +542,7 @@ let lowercase frontend ~loc ~attributes tag arguments =
           | At_position (_, _, Text_slot, value) ->
               written
                 (fun last value -> [%expr Melhole.View.put_text [%e last] [%e hole_value] [%e value]])
-                (fun value -> [%expr Melhole.View.write_text [%e hole_value] [%e value]])
+                (fun value -> [%expr Melhole.Dom_api.set_data [%e hole_value] [%e value]])
                 value
           | On_element (_, Sole_text, value) ->
               written
@@ -659,7 +659,7 @@ let lowercase frontend ~loc ~attributes tag arguments =
              (fun index (hole : expression Markup.hole) ->
                match hole with
                | On_element (_, Handler event, _) ->
-                   [ [%expr Melhole.View.unlisten [%e read (original (hole_name index))] [%e estring ~loc event]] ]
+                   [ [%expr Melhole.Events.unlisten [%e read (original (hole_name index))] [%e estring ~loc event]] ]
                | On_element (_, (Attr _ | Prop _ | Control _ | Ref | Style | Sole_text), _) | At_position _ -> [])
              holes)
       in

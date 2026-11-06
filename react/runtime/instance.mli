@@ -41,12 +41,13 @@ val invalidate : instance -> unit
 val invalidate_state : instance -> (unit -> Melhole.View.change) -> unit
 val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
 
-(** An effect's cleanup or run for an instance, made once and queued by [schedule] after each commit
-    that needs it. *)
-type job
+(** An effect hook: made once, its cleanup and run queued after each commit that changes its
+    dependencies, and its cleanup run when its instance unmounts. *)
+type 'deps effect_hook
 
-val job : instance -> timing -> phase -> (unit -> unit) -> job
-val schedule : job -> unit
+val start_effect : instance -> timing -> 'deps -> (unit -> (unit -> unit) option) -> 'deps effect_hook
+val deps : 'deps effect_hook -> 'deps
+val rerun : 'deps effect_hook -> 'deps -> (unit -> (unit -> unit) option) -> unit
 
 (** The value of the instance's next hook when an earlier render made it, else [None]: then [put] makes it. *)
 val found : instance -> 'a Hook.key -> 'a option

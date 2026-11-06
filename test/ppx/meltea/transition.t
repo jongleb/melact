@@ -288,7 +288,7 @@ With -hydratable, every template also gets the code that takes over a server's n
                     (match __melhole_changed_0 with
                      | Melhole.View.Unchanged -> ()
                      | _ ->
-                         Melhole.View.write_text __melhole_hole_0
+                         Melhole.Dom_api.set_data __melhole_hole_0
                            (string_of_int (count : int)));
                     ())
                   [@ocaml.warning "-26-27"]))

@@ -75,18 +75,14 @@ type change = Changed | Unchanged
 
 val template : Template.t -> (Dom.node -> 'frame[@u]) -> 'frame duties -> 'frame template
 
-(** A template that can also take over a server's nodes: from the frame of a first, unplaced clone,
-    the frame of the server's element. *)
 val hydratable :
   Template.t -> (Dom.node -> 'frame[@u]) -> 'frame duties -> (Dom.node -> 'frame -> 'frame[@u]) -> 'frame template
 
 val compiled : 'frame template -> ('frame -> unit[@u]) -> child
 val static : Template.t -> child
 
-(** Nothing written yet: differs from every value. *)
 val unset : input
 
-(** Whether a value differs from the remembered one; the caller remembers the new one. *)
 val check : input -> 'a -> change
 
 val compare_inputs : input array -> input array -> change
@@ -96,13 +92,10 @@ type live
 
 val nothing : live
 
-(** Visits the top-level nodes in document order. *)
 val visit : live -> (Dom.node -> unit[@u]) -> unit
 
-(** The first node, or the given one. *)
 val front : live -> Dom.node Js.null -> Dom.node Js.null
 
-(** Releases handlers, effects and portals; the nodes stay. *)
 val release : live -> unit
 
 (** How a library's own kind of child, like Melact's components, reaches what it holds: made once per kind. *)
@@ -116,7 +109,6 @@ val hosting :
 
 val live : 'value hosting -> 'value -> live
 
-(** The value of a live child of this kind. *)
 val hosted : 'value hosting -> live -> 'value option
 
 (** Whether a content hole shows its children, or only remembers them for hydration's first pass. *)
@@ -194,18 +186,12 @@ val set_style : Hole.style -> (string * string) list -> unit
 val handler_hole : Dom.element -> string -> Hole.handler
 val set_handler : Hole.handler -> (Dom.event -> unit) -> unit
 val text_at : Template.position -> Dom.text
-val write_text : Dom.text -> string -> unit
-
-(** Writes the text unless it is the one remembered as written last; the caller remembers it. *)
 val put_text : input -> Dom.text -> string -> unit
 
-(** The text of an element whose only child it is. *)
 val write_sole_text : Dom.element -> string -> unit
 val put_sole_text : input -> Dom.element -> string -> unit
 val write_attr : Dom.element -> string -> string option -> unit
 val put_attr : input -> Dom.element -> string -> string option -> unit
-val listen : Dom.element -> string -> unit
-val unlisten : Dom.element -> string -> unit
 
 (** The property a delegated handler for an event is kept in, the same for every element. *)
 val event_key : string -> string

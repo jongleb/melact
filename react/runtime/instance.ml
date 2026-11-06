@@ -26,7 +26,7 @@ type instance = {
   mutable output : View.live;
   mutable region : region;
   mutable pending : job list;  (** Effects of the last render, newest first. *)
-  mutable teardown : (unit -> unit) list;  (** Run on unmount, newest first. *)
+  mutable teardown : ending list;  (** Run on unmount, newest first. *)
 }
 
 and kind =
@@ -91,8 +91,22 @@ and failure =
   | Struck of caught  (** Caught in an effect: the children go on the next pass. *)
   | Failed of caught  (** Shows the fallback. *)
 
-(** An effect's cleanup or run, made once for its hook and queued after every commit that changes it. *)
-and job = { owner : instance; timing : timing; phase : phase; work : unit -> unit }
+(** What a commit runs after it: an effect hook's cleanup and run, or one piece of work. *)
+and job =
+  | Effect : 'deps effect_hook -> job  (** Its cleanup in the cleanup phase, its run in the run phase. *)
+  | Work of { owner : instance; timing : timing; phase : phase; work : unit -> unit }
+
+(** An effect hook, made once and queued after every commit that changes its dependencies. *)
+and 'deps effect_hook = {
+  host : instance;
+  when_run : timing;
+  mutable deps : 'deps;
+  mutable cleanup : (unit -> unit) option;
+  mutable run : unit -> (unit -> unit) option;  (** The effect of the render that last changed [deps]. *)
+}
+
+(** What an instance lets go of when it unmounts. *)
+and ending = Finishes : 'deps effect_hook -> ending | Calls of (unit -> unit)
 
 and status = Clean | Dirty of dirt | Unmounted
 
@@ -185,6 +199,10 @@ let within cell value run =
       cell := saved;
       raise error
 
+let finish hook =
+  Option.iter (fun cleanup -> cleanup ()) hook.cleanup;
+  hook.cleanup <- None
+
 let visit_nodes instance visit =
   View.visit instance.output visit;
   match instance.region with Marker node -> visit (Dom_api.to_node node) [@u] | Nodes -> ()
@@ -217,7 +235,9 @@ let instances =
       | Renders _ | Provides _ ->
           View.release instance.output;
           instance.status <- Unmounted;
-          List.iter (fun cleanup -> cleanup ()) (List.rev instance.teardown)
+          List.iter
+            (fun ending -> match ending with Finishes hook -> finish hook | Calls cleanup -> cleanup ())
+            (List.rev instance.teardown)
       | Catches _ ->
           View.release instance.output;
           instance.status <- Unmounted
@@ -235,19 +255,26 @@ let mark_dirty instance =
   | Dirty Forced | Unmounted -> ()
 
 let run_phases cleanups runs =
-  let run_jobs jobs =
+  let run_jobs phase jobs =
     List.iter
       (fun job ->
-        match job.owner.status with
+        let owner = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
+        match owner.status with
         | Unmounted -> ()
-        | Clean | Dirty _ -> ( try job.work () with error -> !suspension.rescue In_effect job.owner error [@u]))
+        | Clean | Dirty _ -> (
+            try
+              match (job, phase) with
+              | Effect hook, Cleanup -> finish hook
+              | Effect hook, Run -> hook.cleanup <- hook.run ()
+              | Work { work; _ }, (Cleanup | Run) -> work ()
+            with error -> !suspension.rescue In_effect owner error [@u]))
       (List.rev jobs)
   in
   let pending_cleanups = !cleanups and pending_runs = !runs in
   cleanups := [];
   runs := [];
-  run_jobs pending_cleanups;
-  run_jobs pending_runs
+  run_jobs Cleanup pending_cleanups;
+  run_jobs Run pending_runs
 
 let render instance =
   instance.status <- Clean;
@@ -274,11 +301,17 @@ let commit (position : Template.position) instance =
       instance.region <- Marker node);
   List.iter
     (fun job ->
-      match (job.timing, job.phase) with
-      | Layout, Cleanup -> layout_cleanups := job :: !layout_cleanups
-      | Layout, Run -> layout_runs := job :: !layout_runs
-      | Passive, Cleanup -> passive_cleanups := job :: !passive_cleanups
-      | Passive, Run -> passive_runs := job :: !passive_runs)
+      match job with
+      | Effect { when_run = Layout; _ } ->
+          layout_cleanups := job :: !layout_cleanups;
+          layout_runs := job :: !layout_runs
+      | Effect { when_run = Passive; _ } ->
+          passive_cleanups := job :: !passive_cleanups;
+          passive_runs := job :: !passive_runs
+      | Work { timing = Layout; phase = Cleanup; _ } -> layout_cleanups := job :: !layout_cleanups
+      | Work { timing = Layout; phase = Run; _ } -> layout_runs := job :: !layout_runs
+      | Work { timing = Passive; phase = Cleanup; _ } -> passive_cleanups := job :: !passive_cleanups
+      | Work { timing = Passive; phase = Run; _ } -> passive_runs := job :: !passive_runs)
     (List.rev instance.pending);
   instance.pending <- []
 
@@ -489,13 +522,25 @@ let invalidate_state instance check =
       | Dirty Forced | Unmounted -> ());
       queue_render ()
 
-let job owner timing phase work = { owner; timing; phase; work }
-let schedule job = job.owner.pending <- job :: job.owner.pending
-let after_commit instance timing phase work = schedule (job instance timing phase work)
+let after_commit instance timing phase work =
+  instance.pending <- Work { owner = instance; timing; phase; work } :: instance.pending
+
+let start_effect instance timing deps run =
+  let made = { host = instance; when_run = timing; deps; cleanup = None; run } in
+  instance.teardown <- Finishes made :: instance.teardown;
+  instance.pending <- Effect made :: instance.pending;
+  made
+
+let deps hook = hook.deps
+
+let rerun hook deps run =
+  hook.deps <- deps;
+  hook.run <- run;
+  hook.host.pending <- Effect hook :: hook.host.pending
 let found instance key = Hook.found instance.slots key
 let put instance key value = Hook.put instance.slots key value
 
-let on_unmount instance cleanup = instance.teardown <- cleanup :: instance.teardown
+let on_unmount instance cleanup = instance.teardown <- Calls cleanup :: instance.teardown
 
 let rec provided : type value. instance -> value Context.t -> instance option -> value =
  fun instance context ancestor ->

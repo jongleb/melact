@@ -24,20 +24,22 @@ its free variables, scope-aware, from the AST. Module-qualified names (`String.l
 are constants. The ppx then emits, per template site, a refresh function:
 
 ```ocaml
-View.compiled template 2 (fun scope (click, label, rows_hole) ->
-  let count_changed = View.check scope 0 count in          (* one === against the last count *)
-  let rows_changed = View.check scope 1 rows in
-  View.set_handler click dec;                              (* handlers: swapped, never guarded *)
+View.compiled template (fun frame ->
+  let count_changed = View.check frame.slot_0 count in     (* one === against the last count *)
+  frame.slot_0 <- Input count;
+  let rows_changed = View.check frame.slot_1 rows in
+  frame.slot_1 <- Input rows;
+  View.put_handler frame.click key dec;                    (* handlers: swapped, never guarded *)
   (match count_changed with
    | Unchanged -> ()
-   | Changed -> View.set_text label (string_of_int count));     (* evaluated only now *)
+   | Changed -> View.write_sole_text frame.label (string_of_int count));  (* evaluated only now *)
   match rows_changed with
   | Unchanged -> ()
-  | Changed -> View.set_content rows_hole (React.array (Array.map row rows)))
+  | Changed -> View.set_content frame.rows_hole (React.array (Array.map row rows)))
 ```
 
-`View.check scope k value` compares `value` with the `k`-th remembered dependency and stores
-it. On mount nothing is remembered yet, so every hole is evaluated once. A hole whose free
+`View.check slot value` compares `value` with the dependency the frame remembers, and the refresh
+stores the new one. On mount nothing is remembered yet, so every hole is evaluated once. A hole whose free
 variables are all physically unchanged is neither evaluated nor compared, and a nested JSX tree
 inside it is not built at all: `lazy` everywhere, without writing it.
 
@@ -66,11 +68,11 @@ The compiler knows the shape of every template, so it writes out how to reach ea
 fresh clone, sharing every step:
 
 ```ocaml
-View.template (Template.html "<p>a<!---->b<!----><b></b></p>") (fun scope p ->
+View.template (Template.html "<p>a<!---->b<!----><b></b></p>") (fun p ->
   let n0 = Template.first p in
   let n1 = Template.next n0 in
   ...
-  (View.text_hole { parent = p; before = Template.next_or_end n0 }, ...))
+  { text_1 = View.text_at { parent = p; before = Template.next_or_end n0 }; ...; slot_0 = View.unset })
 ```
 
 It also decides at compile time whether the root is an SVG element. The runtime keeps no paths
@@ -79,13 +81,25 @@ from a node reached before it and lands on the node the hole names.
 
 ## Direct writes
 
-The walk makes the holes once per clone: a text node, an attribute, a property, a handler, a
-place for child content. The refresh gets them as a typed tuple and writes each one directly,
-`set_text label (string_of_int count)`, with no index, no table of bindings and no "not bound
-yet" case. Mounting is the same refresh on fresh holes, where every check reports a change, so
-each hole expression appears once in the generated code. A later render of the same JSX site
-finds the mounted holes through its template: the mounted clone lends them to the template, and
-the refresh that belongs to that template takes them back, typed, without `Obj` or a type witness.
+The walk makes the holes once per clone: a text node, an element, a property, a place for child
+content. They go into one record, the clone's frame: for every template the compiler declares a
+record type with a field per hole (its type a parameter, so the compiler need not name DOM types)
+and a mutable field per value the refresh remembers. The frame is all a mounted clone keeps; there
+is no scope, no array of dependencies and no tuple of holes beside it. The refresh takes the frame
+and writes each hole directly, `write_sole_text frame.label (string_of_int count)`, with no index,
+no table of bindings and no "not bound yet" case. Mounting is the same refresh on a fresh frame,
+whose fields hold `View.unset`, so every check reports a change and each hole expression appears
+once in the generated code. A later render of the same JSX site finds the mounted frame through its
+template's witness and gives it to the refresh typed, without `Obj`.
+
+What a frame needs at moments only the runtime sees is generated per template too, and shared by
+every clone: what to do once the root is placed (refs get their element), when it goes (content
+released, direct listeners removed, refs called with null), and, in Melact, after a render threw
+halfway (every remembered value forgotten). A mounted child of any kind is itself one value: what
+it is (text, list, compiled template, a library's component) and what it holds; visiting its
+nodes, finding its first one and releasing it are functions of that value, and a library's own
+kind of child (Melact's components, transitions) gives them once per kind, not as closures per
+child.
 
 ## Compiled lists
 
@@ -115,16 +129,15 @@ A law runs random messages against a view whose rows read two outer values and c
 with a fresh mount.
 
 When a row is a single lowercase element with a `key` (after any `let`s), the compiler goes one step
-further and emits `View.rows` with what all rows share, once per loop: the template, how many
-values a row guards, one refresh that takes the item, and a function from an item to its key; the
+further and emits `View.rows` with what all rows share, once per loop: the template, the root of a
+row's frame, one refresh that takes the item, and a function from an item to its key; the
 `let`s before the element are repeated in both, after the item. No row allocates a description of
-itself. The loop keeps one record per row (`Mounted_row`: the root element, the scope, the holes and
-a witness of the holes' type) and calls the refresh directly. A row no longer needs a child description, a `with_key`
+itself. The loop keeps one record per row and calls the refresh directly. A row no longer needs a child description, a `with_key`
 wrapper or the three closures of a generic mounted child. Creating 1,000 rows of the benchmark
 allocates a third less, and the heap with 1,000 rows shrinks from 1.68 to 1.40 MB. Text, attribute
 and handler holes are flat as well: the generated holes are the bare text node, element and event
-key, and the last value written to a text or attribute is kept in a slot of the scope's `deps`, next
-to the guarded locals. With both, 1,000 rows take 1.31 MB.
+key, and the last value written to a text or attribute is kept next to the guarded locals. With
+both, 1,000 rows take 1.31 MB.
 
 In Meltea an event prop is a message, so its handler does not need to be a closure per element.
 The compiler hoists one handler per site to module level (`View.link`): a function of the locals
