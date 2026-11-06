@@ -256,7 +256,7 @@ the code arrives, with each field's value at that moment, and hydration delivers
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/served-dark.svg">
-  <img src="assets/served.svg" alt="One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it" width="100%">
+  <img src="assets/served.svg" alt="One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it, at startup or, resumed, at the first input. melact-ppx -server does the same for reason-react components and writes what React 18's renderToString writes, useId included" width="100%">
 </picture>
 
 A server does not need a DOM either. Under `meltea-ppx -server` the same view compiles to code

@@ -1132,11 +1132,11 @@ def served(p):
     body += box(0, 330, 880, 84, p["card"], p["line"], rx=14, width=1.2)
     body += text(18, 356, "the HTML, in React's format", size=13, weight=700)
     body += mono(18, 380, [("<div class=\"counter\"><button>-</button><output class=\"\">", ""), ("41", "green"), ("</output><button>+</button>…</div>", "")], size=12)
-    body += text(18, 402, "the same bytes natively and under Melange; floats as JavaScript writes them", size=11.5, cls="muted")
+    body += text(18, 402, "the same bytes natively and under Melange; melact-ppx -server writes React 18's renderToString, useId included", size=11.5, cls="muted")
     body += arrow(p, 595, 304, 595, 326, "green", width=1.6)
     body += curve(p, "M884,372 C912,372 912,70 884,70", "accent", flow=True, width=1.6)
-    body += text(862, 356, "hydrate: the browser build takes these nodes over", size=11.5, cls="accent", anchor="end", weight=600)
-    return svg(p, 920, 414, "One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it", body)
+    body += text(862, 356, "hydrate, or resume at the first input: the browser build takes these nodes over", size=11.5, cls="accent", anchor="end", weight=600)
+    return svg(p, 920, 414, "One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it, at startup or, resumed, at the first input. melact-ppx -server does the same for reason-react components and writes what React 18's renderToString writes, useId included", body)
 
 
 def fanout(p):
