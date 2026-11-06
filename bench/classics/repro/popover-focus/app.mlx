@@ -1,0 +1,59 @@
+(** What the popover does when it opens. *)
+type behaviour = Measure_and_focus | Focus_only | Measure_only | Plain
+
+(** Where the popover sits, once its layout effect measured it. *)
+type placement = Unplaced | Placed of int
+
+(** The popover on screen, if any. *)
+type popover = Closed | Open of behaviour
+
+module Popover = struct
+  let[@react.component] make ~behaviour ~onClose =
+    let placement, setPlacement = React.useState (fun () -> Unplaced) in
+    let box = React.useRef Js.Nullable.null in
+    let field = React.useRef Js.Nullable.null in
+    let seen, setSeen = React.useState (fun () -> "nothing") in
+    React.useLayoutEffect0 (fun () ->
+        (match behaviour with
+         | Measure_and_focus | Measure_only ->
+             Js.Nullable.toOption box.current
+             |> Option.iter (fun element -> setPlacement (fun _ -> Placed (Classic.offset_height element + 10)))
+         | Focus_only | Plain -> ());
+        None);
+    React.useEffect0 (fun () ->
+        (match behaviour with
+         | Measure_and_focus | Focus_only -> Js.Nullable.toOption field.current |> Option.iter Classic.focus
+         | Measure_only | Plain -> ());
+        Js.Nullable.toOption box.current
+        |> Option.iter (fun element ->
+               let visibility = (Obj.magic element)##style##visibility in
+               setSeen (fun _ -> "effect saw visibility '" ^ visibility ^ "'"));
+        None);
+    <div
+      ref=(ReactDOM.Ref.domRef box)
+      className="popover"
+      style=(match placement with
+             | Unplaced -> ReactDOM.Style.make ~visibility:"hidden" ~top:"0px" ()
+             | Placed top -> ReactDOM.Style.make ~top:(string_of_int top ^ "px") ())>
+      <input ref=(ReactDOM.Ref.domRef field) className="title" />
+      <button className="close" onClick=(fun _ -> onClose ())>(React.string "close")</button>
+      <span className="seen">(React.string seen)</span>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let popover, setPopover = React.useState (fun () -> Closed) in
+    <div>
+      (Array.map
+         (fun (behaviour, id) ->
+           <button key=id id onClick=(fun _ -> setPopover (fun _ -> Open behaviour))>(React.string id)</button>)
+         [| (Measure_and_focus, "both"); (Focus_only, "focus"); (Measure_only, "measure"); (Plain, "plain") |]
+      |> React.array)
+      (match popover with
+       | Closed -> React.null
+       | Open behaviour -> <Popover behaviour onClose=(fun () -> setPopover (fun _ -> Closed)) />)
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

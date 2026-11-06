@@ -1,0 +1,12 @@
+module App = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    <div>
+      <button className="close" title={js|Close ×|js}>(React.string {js|×|js})</button>
+      <span className="plain">(React.string "×")</span>
+      <span className="dynamic">(React.string (match count with 0 -> {js|▸|js} | _ -> {js|▾|js}))</span>
+      <button id="bump" onClick=(fun _ -> setCount (fun count -> count + 1))>(React.int count)</button>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

@@ -1,0 +1,17 @@
+module Row = struct
+  let[@react.component] make ~label =
+    let row = React.useRef Js.Nullable.null in
+    let top = Js.Nullable.toOption row.current |> Option.fold ~none:0 ~some:Classic.offset_top in
+    <li ref=(ReactDOM.Ref.domRef row)>(React.string (label ^ " at " ^ string_of_int top))</li>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    <div>
+      <button id="bump" onClick=(fun _ -> setCount (fun count -> count + 1))>(React.int count)</button>
+      <ul><Row label="first" /><Row label="second" /></ul>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

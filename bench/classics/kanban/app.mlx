@@ -1,0 +1,473 @@
+external add_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external remove_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "removeEventListener"
+[@@mel.send]
+
+external key_of : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+(** A colour-coded tag on a card. *)
+type label = Bug | Feature | Chore | Design | Research | Urgent
+
+type card = {
+  id : int;
+  title : string;
+  description : string;
+  labels : label array;
+  members : string array;
+  due : int;
+  checked : int;
+  items : int;
+  comments : int;
+}
+
+type column = { key : int; name : string; cards : card array }
+
+(** What the board reducer can do. *)
+type action =
+  | Move_next of int
+  | Drop of int * int
+  | Edit of int * string * string
+  | Add of int * string
+  | Toggle_label of int * label
+
+(** The card being dragged, if any. *)
+type drag = Idle | Dragging of int
+
+type drag_state = { drag : drag; setDrag : (drag -> drag) -> unit }
+
+(** Which labels the board shows. *)
+type filter = Every_label | Only of label
+
+(** Whether a column shows its cards. *)
+type fold = Expanded | Collapsed
+
+(** Whether a card is dropped on a column right now. *)
+type hover = Over | Away
+
+(** The card shown in the detail dialog. *)
+type modal = Closed | Showing of int
+
+(** The add-card form at the bottom of a column. *)
+type composer = Idle_composer | Composing of string
+
+let labels = [| Bug; Feature; Chore; Design; Research; Urgent |]
+
+let label_name label =
+  match label with
+  | Bug -> "bug"
+  | Feature -> "feature"
+  | Chore -> "chore"
+  | Design -> "design"
+  | Research -> "research"
+  | Urgent -> "urgent"
+
+let initial =
+  let seed = Classic.Seed.make 11 in
+  let people = [| "AK"; "BL"; "CM"; "DN"; "EO"; "FP"; "GQ"; "HR"; "IS"; "JT" |] in
+  let names = [| "Backlog"; "Ready"; "In progress"; "Review"; "Testing"; "Staging"; "Done"; "Archived" |] in
+  let next_id = ref 0 in
+  Array.mapi
+    (fun key name ->
+      {
+        key;
+        name;
+        cards =
+          Array.init (match key with 7 -> 184 | _ -> 188) (fun _ ->
+              incr next_id;
+              let items = Classic.Seed.next seed 9 in
+              {
+                id = !next_id;
+                title = String.capitalize_ascii (Classic.sentence seed (3 + Classic.Seed.next seed 4));
+                description = Classic.sentence seed 12;
+                labels =
+                  Array.of_list
+                    (List.filter (fun _ -> Classic.Seed.next seed 4 = 0) (Array.to_list labels));
+                members = Array.init (Classic.Seed.next seed 4) (fun _ -> Classic.Seed.pick seed people);
+                due = Classic.Seed.next seed 365;
+                checked = (match items with 0 -> 0 | _ -> Classic.Seed.next seed (items + 1));
+                items;
+                comments = Classic.Seed.next seed 12;
+              });
+      })
+    names
+
+let reduce columns action =
+  let find id =
+    Array.find_map
+      (fun column -> Option.map (fun card -> (card, column.key)) (Array.find_opt (fun card -> card.id = id) column.cards))
+      columns
+  in
+  let place card target =
+    Array.map
+      (fun column ->
+        let rest = Js.Array.filter ~f:(fun other -> other.id <> card.id) column.cards in
+        match column.key = target with
+        | true -> { column with cards = Array.append [| card |] rest }
+        | false -> (
+            match Array.length rest = Array.length column.cards with
+            | true -> column
+            | false -> { column with cards = rest }))
+      columns
+  in
+  match action with
+  | Move_next id ->
+      Option.fold ~none:columns
+        ~some:(fun (card, key) -> place card ((key + 1) mod Array.length columns))
+        (find id)
+  | Drop (id, target) ->
+      Option.fold ~none:columns
+        ~some:(fun (card, key) -> match key = target with true -> columns | false -> place card target)
+        (find id)
+  | Edit (id, title, description) ->
+      Array.map
+        (fun column ->
+          match Array.exists (fun card -> card.id = id) column.cards with
+          | true ->
+              {
+                column with
+                cards =
+                  Array.map
+                    (fun card -> match card.id = id with true -> { card with title; description } | false -> card)
+                    column.cards;
+              }
+          | false -> column)
+        columns
+  | Toggle_label (id, label) ->
+      Array.map
+        (fun column ->
+          match Array.exists (fun card -> card.id = id) column.cards with
+          | true ->
+              {
+                column with
+                cards =
+                  Array.map
+                    (fun card ->
+                      match (card.id = id, Array.mem label card.labels) with
+                      | true, true -> { card with labels = Js.Array.filter ~f:(fun other -> other <> label) card.labels }
+                      | true, false -> { card with labels = Js.Array.filter ~f:(fun other -> other = label || Array.mem other card.labels) labels }
+                      | false, _ -> card)
+                    column.cards;
+              }
+          | false -> column)
+        columns
+  | Add (target, title) ->
+      let id = 1 + Array.fold_left (fun top column -> Array.fold_left (fun top card -> max top card.id) top column.cards) 0 columns in
+      Array.map
+        (fun column ->
+          match column.key = target with
+          | true ->
+              {
+                column with
+                cards =
+                  Array.append column.cards
+                    [| { id; title; description = ""; labels = [||]; members = [||]; due = 0; checked = 0; items = 0; comments = 0 } |];
+              }
+          | false -> column)
+        columns
+
+let drag_context = React.createContext { drag = Idle; setDrag = (fun _ -> ()) }
+
+module Drag_provider = struct
+  let make = React.Context.provider drag_context
+
+  external makeProps :
+    value:drag_state -> children:React.element -> unit -> < value : drag_state ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Label_chip = struct
+  let[@react.component] make ~label =
+    <span className=("label label-" ^ label_name label) title=(label_name label)>(React.string (label_name label))</span>
+end
+
+module Avatar = struct
+  let[@react.component] make ~initials =
+    let hue = (Char.code initials.[0] * 37) mod 360 in
+    <span className="avatar" style=(ReactDOM.Style.make ~backgroundColor:("hsl(" ^ string_of_int hue ^ ", 55%, 45%)") ())>
+      (React.string initials)
+    </span>
+end
+
+module Badges = struct
+  let[@react.component] make ~card =
+    let months = [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"; "Oct"; "Nov"; "Dec" |] in
+    <div className="badges">
+      (match card.due with
+       | 0 -> React.null
+       | due -> <span className="badge due">(React.string (months.(due / 31 mod 12) ^ " " ^ string_of_int (1 + (due mod 28))))</span>)
+      (match card.items with
+       | 0 -> React.null
+       | items ->
+           <span className=(match card.checked = items with true -> "badge checklist complete" | false -> "badge checklist")>
+             (React.string (string_of_int card.checked ^ "/" ^ string_of_int items))
+           </span>)
+      (match card.comments with
+       | 0 -> React.null
+       | comments -> <span className="badge comments">(React.string ({js|💬 |js} ^ string_of_int comments))</span>)
+      (match card.description with "" -> React.null | _ -> <span className="badge described">(React.string {js|≡|js})</span>)
+    </div>
+end
+
+module Card = struct
+  let[@react.component] make =
+    React.memo (fun ~card ~onOpen ~dispatch ->
+        let { drag; setDrag } = React.useContext drag_context in
+        <div
+          className=(match drag with Dragging id when id = card.id -> "card dragging" | _ -> "card")
+          draggable=true
+          onDragStart=(fun event ->
+            ignore ((React.Event.Drag.dataTransfer event)##setData "text/plain" (string_of_int card.id));
+            setDrag (fun _ -> Dragging card.id))
+          onDragEnd=(fun _ -> setDrag (fun _ -> Idle))>
+          (match card.labels with
+           | [||] -> React.null
+           | labels -> <div className="labels">(React.array (Array.map (fun label -> <Label_chip key=(label_name label) label />) labels))</div>)
+          <a className="card-title" onClick=(fun _ -> onOpen card.id)>(React.string card.title)</a>
+          <Badges card />
+          <div className="card-footer">
+            <div className="members">
+              (React.array (Array.mapi (fun index initials -> <Avatar key=(string_of_int index) initials />) card.members))
+            </div>
+            <button className="move-next" title="Move to next column" onClick=(fun _ -> dispatch (Move_next card.id))>
+              (React.string {js|→|js})
+            </button>
+          </div>
+        </div>)
+end
+
+module Text_area = struct
+  let[@react.component] make =
+    React.forwardRef (fun ~value ~placeholder ~onChange ~onKeyDown ref ->
+        let ref = Option.map ReactDOM.Ref.domRef (Js.Nullable.toOption ref) in
+        <textarea
+          className="text-area"
+          ?ref
+          placeholder
+          value
+          onChange=(fun event -> onChange (React.Event.Form.target event)##value)
+          onKeyDown />)
+end
+
+module Composer = struct
+  let[@react.component] make ~column ~dispatch =
+    let state, setState = React.useState (fun () -> Idle_composer) in
+    let field = React.useRef Js.Nullable.null in
+    React.useEffect1
+      (fun () ->
+        (match state with
+         | Composing _ -> Js.Nullable.toOption field.current |> Option.iter Classic.focus
+         | Idle_composer -> ());
+        None)
+      [| (match state with Composing _ -> "composing" | Idle_composer -> "idle") |];
+    let submit draft =
+      match String.trim draft with
+      | "" -> setState (fun _ -> Idle_composer)
+      | title ->
+          dispatch (Add (column, title));
+          setState (fun _ -> Idle_composer)
+    in
+    match state with
+    | Idle_composer ->
+        <button className="add-card" onClick=(fun _ -> setState (fun _ -> Composing ""))>(React.string "+ Add a card")</button>
+    | Composing draft ->
+        <div className="composer">
+          <Text_area
+            ref=(ReactDOM.Ref.domRef field)
+            placeholder="Enter a title for this card..."
+            value=draft
+            onChange=(fun value -> setState (fun _ -> Composing value))
+            onKeyDown=(fun event ->
+              match React.Event.Keyboard.key event with
+              | "Enter" ->
+                  React.Event.Keyboard.preventDefault event;
+                  submit draft
+              | "Escape" -> setState (fun _ -> Idle_composer)
+              | _ -> ()) />
+          <button className="composer-add" onClick=(fun _ -> submit draft)>(React.string "Add card")</button>
+          <button className="composer-cancel" onClick=(fun _ -> setState (fun _ -> Idle_composer))>(React.string {js|×|js})</button>
+        </div>
+end
+
+module Column_header = struct
+  let[@react.component] make ~name ~count ~fold ~onFold =
+    <header className="column-header">
+      <h2>(React.string name)</h2>
+      <span className="count">(React.int count)</span>
+      <button className="fold" onClick=(fun _ -> onFold ())>
+        (React.string (match fold with Expanded -> {js|‹|js} | Collapsed -> {js|›|js}))
+      </button>
+    </header>
+end
+
+module Column = struct
+  let[@react.component] make ~column ~onOpen ~dispatch =
+    let { drag; setDrag } = React.useContext drag_context in
+    let fold, setFold = React.useState (fun () -> Expanded) in
+    let hover, setHover = React.useState (fun () -> Away) in
+    let onFold = React.useCallback1 (fun () -> setFold (fun fold -> match fold with Expanded -> Collapsed | Collapsed -> Expanded)) [||] in
+    <section
+      className=
+        (String.concat " "
+           [ "column";
+             (match fold with Expanded -> "expanded" | Collapsed -> "collapsed");
+             (match (drag, hover) with Dragging _, Over -> "drop-target" | _ -> "") ])>
+      <Column_header name=column.name count=(Array.length column.cards) fold onFold />
+      (match fold with
+       | Collapsed -> React.null
+       | Expanded ->
+           <div
+             className="column-body"
+             onDragEnter=(fun event ->
+               React.Event.Drag.preventDefault event;
+               setHover (fun _ -> Over))
+             onDragOver=(fun event -> React.Event.Drag.preventDefault event)
+             onDragLeave=(fun _ -> setHover (fun _ -> Away))
+             onDrop=(fun event ->
+               React.Event.Drag.preventDefault event;
+               setHover (fun _ -> Away);
+               (React.Event.Drag.dataTransfer event)##getData "text/plain"
+               |> int_of_string_opt
+               |> Option.iter (fun id -> dispatch (Drop (id, column.key)));
+               setDrag (fun _ -> Idle))>
+             (React.array (Array.map (fun card -> <Card key=(string_of_int card.id) card onOpen dispatch />) column.cards))
+           </div>)
+      (match fold with Collapsed -> React.null | Expanded -> <Composer column=column.key dispatch />)
+    </section>
+end
+
+module Filter_bar = struct
+  let[@react.component] make ~filter ~onFilter =
+    <div className="filter-bar">
+      <span>(React.string "Filter:")</span>
+      <div className="label-filter">
+        (React.array
+           (Array.map
+              (fun label ->
+                <button
+                  key=(label_name label)
+                  className=(match filter with Only chosen when chosen = label -> "chip active" | _ -> "chip")
+                  onClick=(fun _ -> onFilter (Only label))>
+                  (React.string (label_name label))
+                </button>)
+              labels))
+      </div>
+      <button id="clear-filter" onClick=(fun _ -> onFilter Every_label)>(React.string "Clear filter")</button>
+    </div>
+end
+
+module Card_modal = struct
+  let[@react.component] make ~card ~onClose ~dispatch =
+    let title, setTitle = React.useState (fun () -> card.title) in
+    let description, setDescription = React.useState (fun () -> card.description) in
+    let field = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption field.current |> Option.iter Classic.focus;
+        let listener event = match key_of event with "Escape" -> onClose () | _ -> () in
+        add_key_listener Classic.document "keydown" listener;
+        Some (fun () -> remove_key_listener Classic.document "keydown" listener));
+    let save () =
+      dispatch (Edit (card.id, title, description));
+      onClose ()
+    in
+    Option.fold ~none:React.null
+      ~some:(fun target ->
+        ReactDOM.createPortal
+          <div className="modal-backdrop" onClick=(fun _ -> onClose ())>
+            <div className="modal" onClick=(fun event -> React.Event.Mouse.stopPropagation event)>
+              <input
+                ref=(ReactDOM.Ref.domRef field)
+                className="title-field"
+                value=title
+                onChange=(fun event ->
+                  let value = (React.Event.Form.target event)##value in
+                  setTitle (fun _ -> value)) />
+              <div className="modal-labels">
+                (React.array
+                   (Array.map
+                      (fun label ->
+                        <button
+                          key=(label_name label)
+                          className=(match Array.mem label card.labels with true -> "label-toggle on" | false -> "label-toggle")
+                          onClick=(fun _ -> dispatch (Toggle_label (card.id, label)))>
+                          <Label_chip label />
+                        </button>)
+                      labels))
+              </div>
+              <label>(React.string "Description")</label>
+              <textarea
+                className="description-field"
+                value=description
+                onChange=(fun event ->
+                  let value = (React.Event.Form.target event)##value in
+                  setDescription (fun _ -> value)) />
+              <div
+                className="description-preview"
+                dangerouslySetInnerHTML=[%mel.obj
+                                           {
+                                             __html =
+                                               Js.String.split ~sep:"\n" description
+                                               |> Array.map (fun line ->
+                                                      Js.String.replaceByRe ~regexp:[%re "/&/g"] ~replacement:"&amp;" line
+                                                      |> Js.String.replaceByRe ~regexp:[%re "/</g"] ~replacement:"&lt;"
+                                                      |> Js.String.replaceByRe ~regexp:[%re "/\\*\\*([^*]+)\\*\\*/g"] ~replacement:"<b>$1</b>")
+                                               |> Js.Array.join ~sep:"<br>";
+                                           }] />
+              <Badges card />
+              <div className="modal-actions">
+                <button className="save" onClick=(fun _ -> save ())>(React.string "Save")</button>
+                <button className="close" onClick=(fun _ -> onClose ())>(React.string "Close")</button>
+              </div>
+            </div>
+          </div>
+          target)
+      (Classic.element_by_id Classic.document "portal")
+end
+
+module Board = struct
+  let[@react.component] make ~columns ~onOpen ~dispatch =
+    <div className="board">
+      (React.array (Array.map (fun column -> <Column key=(string_of_int column.key) column onOpen dispatch />) columns))
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let columns, dispatch = React.useReducer reduce initial in
+    let filter, setFilter = React.useState (fun () -> Every_label) in
+    let modal, setModal = React.useState (fun () -> Closed) in
+    let drag, setDrag = React.useState (fun () -> Idle) in
+    let dragState = React.useMemo1 (fun () -> { drag; setDrag }) [| drag |] in
+    let shown =
+      React.useMemo2
+        (fun () ->
+          match filter with
+          | Every_label -> columns
+          | Only label ->
+              Array.map
+                (fun column -> { column with cards = Js.Array.filter ~f:(fun card -> Array.mem label card.labels) column.cards })
+                columns)
+        (columns, filter)
+    in
+    let onOpen = React.useCallback0 (fun id -> setModal (fun _ -> Showing id)) in
+    let total = Array.fold_left (fun total column -> total + Array.length column.cards) 0 columns in
+    <Drag_provider value=dragState>
+      <div className="kanban">
+        <header className="board-header">
+          <h1>(React.string "Product board")</h1>
+          <span className="total">(React.string (string_of_int total ^ " cards"))</span>
+          <Filter_bar filter onFilter=(fun next -> setFilter (fun _ -> next)) />
+        </header>
+        <Board columns=shown onOpen dispatch />
+        (match modal with
+         | Closed -> React.null
+         | Showing id ->
+             Array.find_map (fun column -> Array.find_opt (fun card -> card.id = id) column.cards) columns
+             |> Option.fold ~none:React.null ~some:(fun card ->
+                    <Card_modal key=(string_of_int id) card onClose=(fun () -> setModal (fun _ -> Closed)) dispatch />))
+      </div>
+    </Drag_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

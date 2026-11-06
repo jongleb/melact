@@ -1,0 +1,251 @@
+external set_scroll_top : Dom.element -> int -> unit = "scrollTop" [@@mel.set]
+
+type item = { id : int; author : string; minute : int; text : string; tags : string array }
+
+(** Whether a row shows its details. *)
+type fold = Expanded | Collapsed
+
+(** What the expansion reducer does. *)
+type expansion = Toggle of int | Collapse_everything
+
+(** Which items the list draws: their positions in the shown items, overscan included. *)
+type window = { first : int; last : int }
+
+(** A request to scroll to a position; [serial] tells two requests for one position apart. *)
+type jump = { target : int; serial : int }
+
+let items =
+  let seed = Classic.Seed.make 10_000 in
+  let authors = [| "Ada"; "Brian"; "Chloe"; "Dmitri"; "Elena"; "Farid"; "Grace"; "Hiro"; "Ines"; "Jonas"; "Kemal"; "Lena" |] in
+  Array.init 10_000 (fun id ->
+      {
+        id;
+        author = Classic.Seed.pick seed authors;
+        minute = (id * 7) + Classic.Seed.next seed 7;
+        text = Classic.sentence seed (3 + Classic.Seed.next seed 60);
+        tags = Array.init (Classic.Seed.next seed 4) (fun _ -> Classic.Seed.pick seed Classic.words);
+      })
+
+let section_of item = "Section " ^ string_of_int ((item.id / 100) + 1)
+
+module Toolbar = struct
+  let[@react.component] make ~query ~onQuery ~onJump ~shown =
+    let target, setTarget = React.useState (fun () -> "") in
+    <div className="list-toolbar">
+      <input
+        id="filter"
+        placeholder="Filter messages"
+        value=query
+        onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <input
+        id="jump-index"
+        placeholder="Index"
+        value=target
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setTarget (fun _ -> value))
+        onKeyDown=(fun event ->
+          match React.Event.Keyboard.key event with
+          | "Enter" -> int_of_string_opt target |> Option.iter onJump
+          | _ -> ()) />
+      <button id="jump" onClick=(fun _ -> int_of_string_opt target |> Option.iter onJump)>(React.string "Jump")</button>
+      <span className="shown-count">(React.string (string_of_int shown ^ " messages"))</span>
+    </div>
+end
+
+module Sticky_header = struct
+  let[@react.component] make ~section ~first ~last ~shown =
+    <div className="sticky-header">
+      <strong>(React.string section)</strong>
+      <span className="range">
+        (React.string (string_of_int (first + 1) ^ {js|–|js} ^ string_of_int (last + 1) ^ " of " ^ string_of_int shown))
+      </span>
+    </div>
+end
+
+module Tag_list = struct
+  let[@react.component] make ~tags =
+    match tags with
+    | [||] -> React.null
+    | tags ->
+        <span className="tag-list">
+          (tags |> Array.mapi (fun index tag -> <span key=(string_of_int index) className="chip">(React.string tag)</span>) |> React.array)
+        </span>
+end
+
+module Item_details = struct
+  let[@react.component] make ~item =
+    let words = React.useMemo1 (fun () -> Array.length (Js.String.split ~sep:" " item.text)) [| item |] in
+    <div className="item-details">
+      <dl>
+        <dt>(React.string "Message")</dt>
+        <dd>(React.string ("#" ^ string_of_int item.id))</dd>
+        <dt>(React.string "Words")</dt>
+        <dd>(React.int words)</dd>
+        <dt>(React.string "Characters")</dt>
+        <dd>(React.int (String.length item.text))</dd>
+        <dt>(React.string "Section")</dt>
+        <dd>(React.string (section_of item))</dd>
+      </dl>
+      <p className="quoted">(React.string (String.uppercase_ascii item.text))</p>
+    </div>
+end
+
+module Row = struct
+  let[@react.component] make =
+    React.memo (fun ~item ~top ~fold ~onToggle ~onMeasure ->
+        let row = React.useRef Js.Nullable.null in
+        React.useLayoutEffect2
+          (fun () ->
+            Js.Nullable.toOption row.current |> Option.iter (fun element -> onMeasure item.id (Classic.offset_height element));
+            None)
+          (item, fold);
+        <div
+          ref=(ReactDOM.Ref.domRef row)
+          className=(match fold with Expanded -> "row expanded" | Collapsed -> "row")
+          style=(ReactDOM.Style.make ~top:(string_of_int top ^ "px") ())>
+          <div className="avatar">(React.string (String.sub item.author 0 1))</div>
+          <div className="row-main">
+            <div className="row-head">
+              <span className="author">(React.string item.author)</span>
+              <span className="time">
+                (React.string (string_of_int (item.minute / 60 mod 24) ^ ":" ^ string_of_int (item.minute mod 60)))
+              </span>
+              <button className="row-toggle" onClick=(fun _ -> onToggle item.id)>
+                (React.string (match fold with Expanded -> "Less" | Collapsed -> "More"))
+              </button>
+            </div>
+            <p className="text">(React.string item.text)</p>
+            <Tag_list tags=item.tags />
+            (match fold with Expanded -> <Item_details item /> | Collapsed -> React.null)
+          </div>
+        </div>)
+end
+
+module Virtual_list = struct
+  let[@react.component] make ~shown ~expanded ~onToggle ~jump =
+    let estimate = 56 and overscan = 4 and viewport_height = 600 in
+    let viewport = React.useRef Js.Nullable.null in
+    let heights = React.useRef (Array.make (Array.length items) 0) in
+    let version, setVersion = React.useState (fun () -> 0) in
+    let scrollTop, setScrollTop = React.useState (fun () -> 0) in
+    let offsets =
+      React.useMemo2
+        (fun () ->
+          let offsets = Array.make (Array.length shown + 1) 0 in
+          Array.iteri
+            (fun index item ->
+              offsets.(index + 1) <-
+                (offsets.(index) + match heights.current.(item.id) with 0 -> estimate | measured -> measured))
+            shown;
+          offsets)
+        (shown, version)
+    in
+    let total = offsets.(Array.length shown) in
+    let window =
+      let rec search low high target =
+        match low >= high with
+        | true -> low
+        | false -> (
+            let middle = (low + high + 1) / 2 in
+            match offsets.(middle) <= target with true -> search middle high target | false -> search low (middle - 1) target)
+      in
+      let count = Array.length shown in
+      let start = search 0 (max 0 (count - 1)) scrollTop in
+      let finish = search 0 (max 0 (count - 1)) (scrollTop + viewport_height) in
+      { first = max 0 (start - overscan); last = min (count - 1) (finish + overscan) }
+    in
+    let onMeasure =
+      React.useCallback0 (fun id height ->
+          match heights.current.(id) = height with
+          | true -> ()
+          | false ->
+              heights.current.(id) <- height;
+              setVersion (fun version -> version + 1))
+    in
+    React.useLayoutEffect1
+      (fun () ->
+        jump
+        |> Option.iter (fun { target; _ } ->
+               let at = offsets.(max 0 (min target (Array.length shown - 1))) in
+               Js.Nullable.toOption viewport.current |> Option.iter (fun element -> set_scroll_top element at);
+               setScrollTop (fun _ -> at));
+        None)
+      [| jump |];
+    <div
+      className="viewport"
+      ref=(ReactDOM.Ref.domRef viewport)
+      onScroll=(fun _ ->
+        Js.Nullable.toOption viewport.current
+        |> Option.iter (fun element ->
+               let top = int_of_float (Classic.scroll_top element) in
+               setScrollTop (fun _ -> top)))>
+      (match shown with
+       | [||] -> <div className="sticky-header empty">(React.string "No messages")</div>
+       | shown ->
+           <Sticky_header section=(section_of shown.(window.first)) first=window.first last=window.last shown=(Array.length shown) />)
+      <div className="spacer" style=(ReactDOM.Style.make ~height:(string_of_int total ^ "px") ())>
+        (match shown with
+         | [||] -> React.null
+         | shown ->
+             Array.init (window.last - window.first + 1) (fun offset ->
+                 let index = window.first + offset in
+                 let item = shown.(index) in
+                 <Row
+                   key=(string_of_int item.id)
+                   item
+                   top=offsets.(index)
+                   fold=(match Belt.Set.Int.has expanded item.id with true -> Expanded | false -> Collapsed)
+                   onToggle
+                   onMeasure />)
+             |> React.array)
+      </div>
+    </div>
+end
+
+module Status = struct
+  let[@react.component] make ~expanded ~jumps =
+    <div className="list-status">
+      <span>(React.string (string_of_int (Belt.Set.Int.size expanded) ^ " expanded"))</span>
+      <span>(React.string (string_of_int jumps ^ " jumps"))</span>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let query, setQuery = React.useState (fun () -> "") in
+    let expanded, expand =
+      React.useReducer
+        (fun expanded action ->
+          match action with
+          | Toggle id -> (
+              match Belt.Set.Int.has expanded id with
+              | true -> Belt.Set.Int.remove expanded id
+              | false -> Belt.Set.Int.add expanded id)
+          | Collapse_everything -> Belt.Set.Int.empty)
+        Belt.Set.Int.empty
+    in
+    let jump, setJump = React.useState (fun () -> None) in
+    let shown =
+      React.useMemo1
+        (fun () ->
+          match String.trim query with
+          | "" -> items
+          | needle -> Js.Array.filter ~f:(fun item -> Js.String.includes ~search:needle item.text) items)
+        [| query |]
+    in
+    let onToggle = React.useCallback0 (fun id -> expand (Toggle id)) in
+    <div className="list-app">
+      <Toolbar
+        query
+        onQuery=(fun text -> setQuery (fun _ -> text))
+        onJump=(fun target ->
+          setJump (fun jump -> Some { target; serial = Option.fold ~none:1 ~some:(fun jump -> jump.serial + 1) jump }))
+        shown=(Array.length shown) />
+      <button id="collapse-everything" onClick=(fun _ -> expand Collapse_everything)>(React.string "Collapse everything")</button>
+      <Virtual_list shown expanded onToggle jump />
+      <Status expanded jumps=(Option.fold ~none:0 ~some:(fun jump -> jump.serial) jump) />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

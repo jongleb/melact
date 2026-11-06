@@ -1,0 +1,291 @@
+external write_text : string -> unit Js.Promise.t = "writeText" [@@mel.scope ("navigator", "clipboard")]
+
+type json =
+  | Null
+  | Bool of bool
+  | Number of float
+  | String of string
+  | List of json array
+  | Object of (string * json) array
+
+(** Whether a container shows its children. *)
+type fold = Expanded | Collapsed
+
+(** What the last bulk button asked for. *)
+type command = Expand_everything | Collapse_everything | Open_to of int
+
+(** The last bulk command, and how many there were. *)
+type bulk = { command : command; generation : int }
+
+(** The paths that match the search, and the containers that hold a match. *)
+type search = { matched : Belt.Set.String.t; holding : Belt.Set.String.t }
+
+(** The key path under the mouse. *)
+type hover = Nowhere | Over of string
+
+(** What the clipboard got last. *)
+type copy = Nothing_copied | Copied of string
+
+let document =
+  let seed = Classic.Seed.make 15 in
+  let budget = ref 15_000 in
+  let keys =
+    [| "id"; "name"; "email"; "tags"; "items"; "price"; "status"; "owner"; "created"; "meta"; "children"; "address";
+       "city"; "score"; "enabled"; "notes"; "history"; "settings"; "parent"; "count" |]
+  in
+  let primitive roll =
+    match roll mod 7 with
+    | 0 -> Null
+    | 1 -> Bool (Classic.Seed.next seed 2 = 0)
+    | 2 | 3 -> Number (float_of_int (Classic.Seed.next seed 1_000_000) /. 100.)
+    | _ -> String (Classic.sentence seed (1 + Classic.Seed.next seed 5))
+  in
+  let rec value depth =
+    decr budget;
+    match (depth >= 7 || !budget <= 0, Classic.Seed.next seed 20) with
+    | true, roll -> primitive roll
+    | false, roll when roll < 13 -> primitive roll
+    | false, roll when roll < 17 ->
+        Object
+          (Array.init (2 + Classic.Seed.next seed 7) (fun index ->
+               (Classic.Seed.pick seed keys ^ "_" ^ string_of_int index, value (depth + 1))))
+    | false, _ -> List (Array.init (2 + Classic.Seed.next seed 9) (fun _ -> value (depth + 1)))
+  in
+  let rec top fields =
+    match !budget > 0 with
+    | true -> top ((Classic.Seed.pick seed keys ^ "_" ^ string_of_int (List.length fields), value 1) :: fields)
+    | false -> Object (Array.of_list (List.rev fields))
+  in
+  top []
+
+let bulk_context = React.createContext { command = Open_to 2; generation = 0 }
+let search_context = React.createContext { matched = Belt.Set.String.empty; holding = Belt.Set.String.empty }
+let hover_context = React.createContext (fun (_ : hover) -> ())
+let copy_context = React.createContext (fun (_ : string) -> ())
+
+module Bulk_provider = struct
+  let make = React.Context.provider bulk_context
+
+  external makeProps : value:bulk -> children:React.element -> unit -> < value : bulk ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Search_provider = struct
+  let make = React.Context.provider search_context
+
+  external makeProps :
+    value:search -> children:React.element -> unit -> < value : search ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Hover_provider = struct
+  let make = React.Context.provider hover_context
+
+  external makeProps :
+    value:(hover -> unit) -> children:React.element -> unit -> < value : hover -> unit ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Copy_provider = struct
+  let make = React.Context.provider copy_context
+
+  external makeProps :
+    value:(string -> unit) -> children:React.element -> unit -> < value : string -> unit ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+let fold_for command depth =
+  match command with
+  | Expand_everything -> Expanded
+  | Collapse_everything -> Collapsed
+  | Open_to limit -> ( match depth < limit with true -> Expanded | false -> Collapsed)
+
+module Primitive = struct
+  let[@react.component] make ~value =
+    match value with
+    | Null -> <span className="json-null">(React.string "null")</span>
+    | Bool flag -> <span className="json-bool">(React.string (string_of_bool flag))</span>
+    | Number number -> <span className="json-number">(React.string (Js.Float.toString number))</span>
+    | String text -> <span className="json-string">(React.string ("\"" ^ text ^ "\""))</span>
+    | List _ | Object _ -> React.null
+end
+
+module Key_label = struct
+  let[@react.component] make ~label ~path ~highlight =
+    let onHover = React.useContext hover_context in
+    <span
+      className=(match highlight with `Matched -> "json-key matched" | `Plain -> "json-key")
+      onMouseEnter=(fun _ -> onHover (Over path))
+      onMouseLeave=(fun _ -> onHover Nowhere)>
+      (React.string label)
+    </span>
+end
+
+module rec Json_node : sig
+  val make : label:string -> value:json -> path:string -> depth:int -> React.element [@@react.component]
+end = struct
+  let[@react.component] make ~label ~value ~path ~depth =
+    let bulk = React.useContext bulk_context in
+    let search = React.useContext search_context in
+    let onCopy = React.useContext copy_context in
+    let fold, setFold = React.useState (fun () -> fold_for bulk.command depth) in
+    React.useEffect1
+      (fun () ->
+        setFold (fun _ -> fold_for bulk.command depth);
+        None)
+      [| bulk.generation |];
+    let highlight = match Belt.Set.String.has search.matched path with true -> `Matched | false -> `Plain in
+    let shown = match Belt.Set.String.has search.holding path with true -> Expanded | false -> fold in
+    let container =
+      match value with
+      | List items ->
+          Some (Array.mapi (fun index item -> (string_of_int index, path ^ "[" ^ string_of_int index ^ "]", item)) items, "[", "]")
+      | Object fields -> Some (Array.map (fun (key, item) -> (key, path ^ "." ^ key, item)) fields, "{", "}")
+      | Null | Bool _ | Number _ | String _ -> None
+    in
+    match container with
+    | None ->
+        <div className="json-row">
+          <Key_label label path highlight />
+          (React.string ": ")
+          <Primitive value />
+        </div>
+    | Some (children, opening, closing) ->
+        <div className="json-node">
+          <div className="json-row">
+            <button
+              className=(match shown with Expanded -> "json-toggle open" | Collapsed -> "json-toggle")
+              onClick=(fun _ -> setFold (fun fold -> match fold with Expanded -> Collapsed | Collapsed -> Expanded))>
+              (React.string (match shown with Expanded -> "-" | Collapsed -> "+"))
+            </button>
+            <Key_label label path highlight />
+            (React.string (": " ^ opening))
+            (match shown with
+             | Collapsed ->
+                 <span className="json-count">
+                   (React.string (string_of_int (Array.length children) ^ " items " ^ closing))
+                 </span>
+             | Expanded -> React.null)
+            <button className="json-copy" onClick=(fun _ -> onCopy path)>(React.string "copy path")</button>
+          </div>
+          (match shown with
+           | Expanded ->
+               <div className="json-children">
+                 (children
+                 |> Array.map (fun (label, path, value) ->
+                        <Json_node key=label label path value depth=(depth + 1) />)
+                 |> React.array)
+                 <div className="json-close">(React.string closing)</div>
+               </div>
+           | Collapsed -> React.null)
+        </div>
+end
+
+module Path_bar = struct
+  let[@react.component] make ~hover =
+    <div className="path-bar">
+      (React.string (match hover with Over path -> path | Nowhere -> "Hover a key to see its path"))
+    </div>
+end
+
+module Toast = struct
+  let[@react.component] make ~copy ~onDismiss =
+    match (copy, Classic.element_by_id Classic.document "portal") with
+    | Copied path, Some target ->
+        ReactDOM.createPortal
+          <div className="toast">
+            (React.string ("Copied " ^ path))
+            <button className="toast-dismiss" onClick=(fun _ -> onDismiss ())>(React.string "Dismiss")</button>
+          </div>
+          target
+    | Copied _, None | Nothing_copied, _ -> React.null
+end
+
+module Viewer_toolbar = struct
+  let[@react.component] make ~query ~onQuery ~onBulk ~found =
+    <div className="viewer-toolbar">
+      <input
+        id="json-search"
+        placeholder="Search keys and values"
+        value=query
+        onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <button id="clear-search" onClick=(fun _ -> onQuery "")>(React.string "Clear")</button>
+      <span className="found">(React.string (string_of_int found ^ " found"))</span>
+      <button id="expand-all" onClick=(fun _ -> onBulk Expand_everything)>(React.string "Expand all")</button>
+      <button id="collapse-all" onClick=(fun _ -> onBulk Collapse_everything)>(React.string "Collapse all")</button>
+      <button id="expand-depth-3" onClick=(fun _ -> onBulk (Open_to 3))>(React.string "Expand to depth 3")</button>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let bulk, sendBulk =
+      React.useReducer (fun bulk command -> { command; generation = bulk.generation + 1 }) { command = Open_to 2; generation = 0 }
+    in
+    let query, setQuery = React.useState (fun () -> "") in
+    let hover, setHover = React.useState (fun () -> Nowhere) in
+    let copy, setCopy = React.useState (fun () -> Nothing_copied) in
+    let search =
+      React.useMemo1
+        (fun () ->
+          match String.trim query with
+          | "" -> { matched = Belt.Set.String.empty; holding = Belt.Set.String.empty }
+          | needle ->
+              let matched = ref Belt.Set.String.empty and holding = ref Belt.Set.String.empty in
+              let rec visit key path value ancestors =
+                let hit =
+                  Js.String.includes ~search:needle key
+                  ||
+                  match value with
+                  | String text -> Js.String.includes ~search:needle text
+                  | Number number -> Js.String.includes ~search:needle (Js.Float.toString number)
+                  | Null | Bool _ | List _ | Object _ -> false
+                in
+                (match hit with
+                 | true ->
+                     matched := Belt.Set.String.add !matched path;
+                     holding := List.fold_left Belt.Set.String.add !holding ancestors
+                 | false -> ());
+                match value with
+                | List items ->
+                    Array.iteri
+                      (fun index item ->
+                        visit (string_of_int index) (path ^ "[" ^ string_of_int index ^ "]") item (path :: ancestors))
+                      items
+                | Object fields -> Array.iter (fun (key, item) -> visit key (path ^ "." ^ key) item (path :: ancestors)) fields
+                | Null | Bool _ | Number _ | String _ -> ()
+              in
+              visit "$" "$" document [];
+              { matched = !matched; holding = !holding })
+        [| query |]
+    in
+    let onHover = React.useCallback0 (fun next -> setHover (fun _ -> next)) in
+    let onCopy =
+      React.useCallback0 (fun path ->
+          setCopy (fun _ -> Copied path);
+          ignore (Js.Promise.catch (fun _ -> Js.Promise.resolve ()) (write_text path)))
+    in
+    <Bulk_provider value=bulk>
+      <Search_provider value=search>
+        <Hover_provider value=onHover>
+          <Copy_provider value=onCopy>
+            <div className="json-viewer">
+              <Viewer_toolbar
+                query
+                onQuery=(fun text -> setQuery (fun _ -> text))
+                onBulk=sendBulk
+                found=(Belt.Set.String.size search.matched) />
+              <Path_bar hover />
+              <div className="json-tree"><Json_node label="$" path="$" value=document depth=0 /></div>
+              <Toast copy onDismiss=(fun () -> setCopy (fun _ -> Nothing_copied)) />
+            </div>
+          </Copy_provider>
+        </Hover_provider>
+      </Search_provider>
+    </Bulk_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

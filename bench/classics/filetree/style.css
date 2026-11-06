@@ -1,0 +1,27 @@
+.explorer { display: flex; flex-direction: column; height: 100vh; font: 13px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; }
+.explorer-toolbar { display: flex; gap: 6px; align-items: center; padding: 6px; border-bottom: 1px solid #e5e7eb; }
+.explorer-toolbar #tree-filter { width: 220px; padding: 3px 6px; }
+.breadcrumbs { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; color: #4b5563; white-space: nowrap; overflow: hidden; }
+.crumb { cursor: pointer; }
+.crumb + .crumb::before { content: " / "; color: #9ca3af; }
+.explorer-body { display: flex; flex: 1; min-height: 0; }
+.tree-view { flex: 1; overflow: auto; outline: none; }
+.tree-row { display: flex; align-items: center; height: 22px; white-space: nowrap; cursor: pointer; }
+.tree-row:hover { background: #f3f4f6; }
+.tree-row.selected { background: #dbeafe; }
+.twisty { width: 14px; flex: none; color: #6b7280; }
+.icon { width: 16px; height: 16px; margin-right: 4px; flex: none; border-radius: 3px; font-size: 10px; line-height: 16px; text-align: center; color: #fff; }
+.icon-folder, .icon-folder-open { background: #f59e0b; }
+.icon-ocaml { background: #ea580c; }
+.icon-script { background: #ca8a04; }
+.icon-data { background: #16a34a; }
+.icon-text { background: #6b7280; }
+.icon-style { background: #2563eb; }
+.icon-image { background: #9333ea; }
+.icon-file { background: #9ca3af; }
+.rename { font: inherit; padding: 0 2px; height: 20px; }
+.details { width: 300px; flex: none; padding: 8px; border-left: 1px solid #e5e7eb; overflow: auto; }
+.details h3 { margin: 0 0 6px; word-break: break-all; }
+.details dl { display: grid; grid-template-columns: 60px 1fr; margin: 0; }
+.details dd { margin: 0; word-break: break-all; }
+.details .empty { color: #9ca3af; }

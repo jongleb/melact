@@ -1,0 +1,22 @@
+.list-app { width: 760px; margin: 8px auto; }
+.list-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.list-toolbar #filter { flex: 1; padding: 4px 6px; }
+.list-toolbar #jump-index { width: 80px; padding: 4px 6px; }
+.viewport { position: relative; height: 600px; overflow-y: auto; border: 1px solid #d1d5db; }
+.sticky-header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; padding: 4px 10px; background: #f3f4f6; border-bottom: 1px solid #d1d5db; }
+.spacer { position: relative; }
+.row { position: absolute; left: 0; right: 0; display: flex; gap: 10px; padding: 8px 10px; border-bottom: 1px solid #f3f4f6; }
+.row.expanded { background: #f9fafb; }
+.avatar { flex: none; width: 32px; height: 32px; border-radius: 16px; background: #c7d2fe; text-align: center; line-height: 32px; font-weight: 600; }
+.row-main { flex: 1; min-width: 0; }
+.row-head { display: flex; gap: 8px; align-items: baseline; }
+.author { font-weight: 600; }
+.time { color: #6b7280; font-size: 12px; }
+.row-toggle { margin-left: auto; font-size: 11px; }
+.text { margin: 2px 0; }
+.chip { display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: 8px; background: #e5e7eb; font-size: 11px; }
+.item-details { margin-top: 6px; padding: 6px; border: 1px solid #e5e7eb; }
+.item-details dl { display: grid; grid-template-columns: 100px 1fr; margin: 0; }
+.item-details dd { margin: 0; }
+.quoted { margin: 4px 0 0; color: #4b5563; font-size: 12px; }
+.list-status { display: flex; gap: 16px; padding: 4px; color: #6b7280; }

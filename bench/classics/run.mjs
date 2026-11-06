@@ -363,7 +363,7 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 try {
   for (const app of built) {
     const report = await measureApp(browser, origin, app);
-    previous[app] = report;
+    previous[app] = { app, rates: { ...(previous[app]?.rates ?? {}), ...report.rates } };
     writeFileSync(resultsPath, JSON.stringify(previous, null, 1));
     writeMarkdown(previous);
     for (const row of report.rates[rates[0]].rows)
