@@ -37,12 +37,16 @@ let loop numbering items outer =
 
 let line_template =
   View.template (Template.html "<li></li>")
-    (fun [@u] _ node ->
-      (View.attr_hole (Template.element node) "class", View.text_hole { parent = node; before = Template.first_or_end node }))
+    (fun [@u] node ->
+      ( Template.element node,
+        View.attr_hole (Template.element node) "class",
+        View.text_hole { parent = node; before = Template.first_or_end node } ))
+    { placed = None; released = None; forgotten = None }
 
 let lines items outer =
-  View.rows items line_template 0
-    (fun [@u] _ (marking, text) item ->
+  View.rows items line_template
+    (fun [@u] (root, _, _) -> root)
+    (fun [@u] (_, marking, text) item ->
       incr renders;
       View.set_attr marking (Some (marked outer item));
       View.set_text text (item.label ^ outer.suffix))

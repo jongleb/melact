@@ -470,8 +470,6 @@ type built = {
   mutable styled : View.Hole.style option;
 }
 
-type View.hosted += Dom_built of built
-
 let apply built props name =
   let element = built.element in
   match applying name with
@@ -543,6 +541,15 @@ let clear built name =
   | Ref_value -> Option.iter (fun reference -> Ref.attach reference Js.Nullable.null) (Js.Undefined.toOption (lookup built.shown name))
   | Skipped -> ()
 
+let dom_built =
+  View.hosting
+    ~visit:(fun [@u] built visit -> visit (Dom_api.to_node built.element) [@u])
+    ~first:(fun [@u] built _ -> Js.Null.return (Dom_api.to_node built.element))
+    ~let_go:(fun [@u] built ->
+      View.release built.inner;
+      List.iter (fun stop -> stop ()) built.cleanups;
+      clear built "ref")
+
 let given props = Js.Array.filter ~f:(fun name -> not (String.equal name "key" || String.equal name "children")) (keys props)
 
 let dom tag props children =
@@ -575,16 +582,10 @@ let dom tag props children =
         in
         Array.iter (apply built props) (given props);
         (match !View.medium.adoption with Fresh_nodes -> View.insert position (Dom_api.to_node element) | Server_nodes -> ());
-        View.live (Dom_built built)
-          ~each:(fun [@u] visit -> visit (Dom_api.to_node element) [@u])
-          ~front:(fun [@u] _ -> Js.Null.return (Dom_api.to_node element))
-          ~release:(fun [@u] () ->
-            built.inner.release () [@u];
-            List.iter (fun stop -> stop ()) built.cleanups;
-            clear built "ref"))
+        View.live dom_built built)
       ~patch:(fun [@u] _ live ->
-        match View.hosted live with
-        | Some (Dom_built built) when String.equal built.tag tag ->
+        match View.hosted dom_built live with
+        | Some built when String.equal built.tag tag ->
             let old = built.shown in
             Array.iter
               (fun name -> match Js.Undefined.toOption (lookup props name) with None -> clear built name | Some _ -> ())

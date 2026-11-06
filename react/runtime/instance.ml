@@ -107,8 +107,6 @@ and region =
   | Nodes  (** The output's own nodes locate it. *)
   | Marker of Dom.text  (** An empty text node holds its place. *)
 
-type View.hosted += Instance of instance
-
 (** What [use] throws for a promise that has not settled: the nearest Suspense boundary catches it. *)
 exception Suspended of thenable
 
@@ -188,22 +186,45 @@ let within cell value run =
       raise error
 
 let visit_nodes instance visit =
-  instance.output.each visit [@u];
+  View.visit instance.output visit;
   match instance.region with Marker node -> visit (Dom_api.to_node node) [@u] | Nodes -> ()
 
 let front_node instance after =
-  instance.output.front
-    (match instance.region with Marker node -> Js.Null.return (Dom_api.to_node node) | Nodes -> after) [@u]
+  View.front instance.output
+    (match instance.region with Marker node -> Js.Null.return (Dom_api.to_node node) | Nodes -> after)
 
-let instance_live instance =
-  View.live (Instance instance)
-    ~each:(fun [@u] visit -> visit_nodes instance visit)
-    ~front:(fun [@u] after -> front_node instance after)
-    ~release:
-      (fun [@u] () ->
-        instance.output.release () [@u];
-        instance.status <- Unmounted;
-        List.iter (fun cleanup -> cleanup ()) (List.rev instance.teardown))
+let instances =
+  View.hosting
+    ~visit:(fun [@u] instance visit ->
+      match instance.kind with
+      | Renders _ | Provides _ -> visit_nodes instance visit
+      | Catches catching ->
+          visit (Dom_api.to_node catching.start) [@u];
+          View.visit instance.output visit;
+          visit (Dom_api.to_node catching.finish) [@u]
+      | Suspends suspending ->
+          visit (Dom_api.to_node suspending.opening) [@u];
+          View.visit suspending.content visit;
+          View.visit suspending.backup visit;
+          visit (Dom_api.to_node suspending.closing) [@u])
+    ~first:(fun [@u] instance after ->
+      match instance.kind with
+      | Renders _ | Provides _ -> front_node instance after
+      | Catches catching -> Js.Null.return (Dom_api.to_node catching.start)
+      | Suspends suspending -> Js.Null.return (Dom_api.to_node suspending.opening))
+    ~let_go:(fun [@u] instance ->
+      match instance.kind with
+      | Renders _ | Provides _ ->
+          View.release instance.output;
+          instance.status <- Unmounted;
+          List.iter (fun cleanup -> cleanup ()) (List.rev instance.teardown)
+      | Catches _ ->
+          View.release instance.output;
+          instance.status <- Unmounted
+      | Suspends suspending ->
+          View.release suspending.content;
+          View.release suspending.backup;
+          instance.status <- Unmounted)
 
 let mark_dirty instance =
   match instance.status with
@@ -242,7 +263,7 @@ let render instance =
       | Failed error -> catching.recover error)
 
 let commit (position : Template.position) instance =
-  (match (Js.Null.toOption (instance.output.front Js.null [@u]), instance.region) with
+  (match (Js.Null.toOption (View.front instance.output Js.null), instance.region) with
   | Some _, Nodes | None, Marker _ -> ()
   | Some _, Marker node ->
       Dom_api.remove_child position.parent node;
@@ -366,15 +387,15 @@ let mount_instance position kind =
       instance.pending <- [];
       commit position instance;
       !suspension.rescue While_rendering instance error [@u]);
-  instance_live instance
+  View.live instances instance
 
 let component definition inputs render =
   View.host
     ~build:(fun [@u] position -> mount_instance position (Renders { component = definition; inputs; render }))
     ~patch:
       (fun [@u] position live ->
-        match View.hosted live with
-        | Some (Instance instance) -> (
+        match View.hosted instances live with
+        | Some instance -> (
             match instance.kind with
             | Renders rendered when Dom_api.same rendered.component definition ->
                 (match (instance.status, View.compare_inputs rendered.inputs inputs) with
@@ -385,7 +406,7 @@ let component definition inputs render =
                     refresh position instance);
                 Some live
             | Renders _ | Provides _ | Catches _ | Suspends _ -> None)
-        | Some _ | None -> None)
+        | None -> None)
 
 let provide : type value. value Context.t -> value -> View.child -> View.child =
  fun context value children ->
@@ -394,8 +415,8 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
       mount_instance position (Provides { context; value; children; consumers = audience (); known = audience () }))
     ~patch:
       (fun [@u] position live ->
-        match View.hosted live with
-        | Some (Instance instance) -> (
+        match View.hosted instances live with
+        | Some instance -> (
             match instance.kind with
             | Provides provision -> (
                 match Type.Id.provably_equal provision.context.witness context.witness with
@@ -409,7 +430,7 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
                     Some live
                 | None -> None)
             | Renders _ | Catches _ | Suspends _ -> None)
-        | Some _ | None -> None)
+        | None -> None)
 
 let current () =
   match !rendering with
@@ -540,7 +561,7 @@ let catch =
           clear next
       | Some _ | None -> ()
     in
-    boundary.output.release () [@u];
+    View.release boundary.output;
     boundary.output <- View.nothing;
     clear (Dom_api.following_sibling (Dom_api.to_node catching.start))
   in
@@ -610,20 +631,12 @@ let catch =
         | View.Server_nodes ->
             boundary.output <- within owner (Some boundary) (fun () -> View.build (render boundary) position);
             let last = ref (Dom_api.to_node start) in
-            boundary.output.each (fun [@u] node -> last := node) [@u];
+            View.visit boundary.output (fun [@u] node -> last := node);
             Dom_api.insert_before position.parent (Dom_api.to_node finish) (Dom_api.following_sibling !last));
-        View.live (Instance boundary)
-          ~each:(fun [@u] visit ->
-            visit (Dom_api.to_node start) [@u];
-            boundary.output.each visit [@u];
-            visit (Dom_api.to_node finish) [@u])
-          ~front:(fun [@u] _ -> Js.Null.return (Dom_api.to_node start))
-          ~release:(fun [@u] () ->
-            boundary.output.release () [@u];
-            boundary.status <- Unmounted))
+        View.live instances boundary)
       ~patch:(fun [@u] _ live ->
-        match View.hosted live with
-        | Some (Instance ({ kind = Catches catching; _ } as boundary)) ->
+        match View.hosted instances live with
+        | Some ({ kind = Catches catching; _ } as boundary) ->
             catching.children <- children;
             let finish = Dom_api.to_node catching.finish in
             (match catching.failure with
@@ -644,12 +657,12 @@ let suspend =
   let suspended = ref [] and retried = ref [] and fresh = ref [] in
   let nodes (live : View.live) =
     let found = ref [] in
-    live.each (fun [@u] node -> found := node :: !found) [@u];
+    View.visit live (fun [@u] node -> found := node :: !found);
     List.rev !found
   in
   let removed (live : View.live) =
     let gone = nodes live in
-    live.release () [@u];
+    View.release live;
     List.iter (fun node -> Option.iter (fun parent -> Dom_api.remove_child parent node) (Dom_api.parent_node node)) gone
   in
   let hidden_nodes (live : View.live) =
@@ -738,7 +751,7 @@ let suspend =
                   let content =
                     match List.memq boundary built with
                     | true ->
-                        suspending.content.release () [@u];
+                        View.release suspending.content;
                         suspending.content <- View.nothing;
                         let closing = Dom_api.to_node suspending.closing in
                         let rec clear node =
@@ -797,22 +810,12 @@ let suspend =
         | View.Server_nodes ->
             suspending.content <- within owner (Some boundary) (fun () -> View.build children position);
             let last = ref (Dom_api.to_node opening) in
-            suspending.content.each (fun [@u] node -> last := node) [@u];
+            View.visit suspending.content (fun [@u] node -> last := node);
             Dom_api.insert_before position.parent (Dom_api.to_node closing) (Dom_api.following_sibling !last));
-        View.live (Instance boundary)
-          ~each:(fun [@u] visit ->
-            visit (Dom_api.to_node opening) [@u];
-            suspending.content.each visit [@u];
-            suspending.backup.each visit [@u];
-            visit (Dom_api.to_node closing) [@u])
-          ~front:(fun [@u] _ -> Js.Null.return (Dom_api.to_node opening))
-          ~release:(fun [@u] () ->
-            suspending.content.release () [@u];
-            suspending.backup.release () [@u];
-            boundary.status <- Unmounted))
+        View.live instances boundary)
       ~patch:(fun [@u] _ live ->
-        match View.hosted live with
-        | Some (Instance ({ kind = Suspends suspending; _ } as boundary)) ->
+        match View.hosted instances live with
+        | Some ({ kind = Suspends suspending; _ } as boundary) ->
             suspending.wanted <- children;
             suspending.fallback <- fallback;
             (match suspending.waiting with

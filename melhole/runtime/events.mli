@@ -19,6 +19,12 @@ val key_of : string -> string
     bubbles, on the element otherwise. *)
 val register : Dom.element -> string -> registration
 
+(** Listens on behalf of a compiled element; a direct listener is kept on the element for [unlisten]. *)
+val listen : Dom.element -> string -> unit
+
+(** Removes what [listen] attached directly to the element; a delegated event needs nothing. *)
+val unlisten : Dom.element -> string -> unit
+
 val set : Dom.element -> string -> (Dom.event -> unit) -> unit
 
 (** The property under which a controlled element keeps what puts its value back after input. *)

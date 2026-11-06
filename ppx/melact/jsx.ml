@@ -446,6 +446,7 @@ let mapper =
         wrap = (fun loc child -> [%expr React.of_child [%e child]]);
         unwrap = (fun loc element -> unwrap ~loc element);
         handlers = Element.Closures;
+        throwing = Element.Recovers;
         handler =
           (fun loc { requirement; value; _ } ->
             let native = [%expr React.Event.ofNative __melhole_event] in

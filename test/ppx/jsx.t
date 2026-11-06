@@ -23,69 +23,129 @@ Holes at every depth; markers only between neighbours that would merge:
   $ ./pp.exe -impl holes.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_template_1 =
+  type ('melhole_0, 'melhole_1, 'melhole_2, 'melhole_3) __melhole_frame_1 =
+    {
+    __melhole_frame_1_hole_0: 'melhole_0 ;
+    __melhole_frame_1_hole_1: 'melhole_1 ;
+    __melhole_frame_1_hole_2: 'melhole_2 ;
+    __melhole_frame_1_hole_3: 'melhole_3 ;
+    mutable __melhole_frame_1_slot_0: Melhole.View.input ;
+    mutable __melhole_frame_1_slot_1: Melhole.View.input ;
+    mutable __melhole_frame_1_slot_2: Melhole.View.input }[@@ocaml.warning
+                                                            "-34-69"]
+  let __melhole_template_2 =
     Melhole.View.template
       (Melhole.Template.html "<p>a<!---->b<!----><b></b></p>")
       {
-        Js.Fn.I2 =
-          (fun __melhole_scope __melhole_node ->
+        Js.Fn.I1 =
+          (fun __melhole_node ->
              let __melhole_node_0 = Melhole.Template.first __melhole_node in
              let __melhole_node_1 = Melhole.Template.next __melhole_node_0 in
              let __melhole_node_2 = Melhole.Template.next __melhole_node_1 in
              let __melhole_node_3 = Melhole.Template.next __melhole_node_2 in
              let __melhole_node_4 = Melhole.Template.next __melhole_node_3 in
-             ((Melhole.View.text_at
-                 {
-                   Melhole.Template.parent = __melhole_node;
-                   before = (Melhole.Template.next_or_end __melhole_node_0)
-                 }),
-               (Melhole.View.content_hole __melhole_scope
-                  {
-                    Melhole.Template.parent = __melhole_node;
-                    before = (Melhole.Template.next_or_end __melhole_node_2)
-                  }),
-               (Melhole.View.content_hole __melhole_scope
-                  {
-                    Melhole.Template.parent = __melhole_node;
-                    before = (Melhole.Template.next_or_end __melhole_node_3)
-                  }), (Melhole.Template.element __melhole_node_4)))
+             {
+               __melhole_frame_1_hole_0 =
+                 (Melhole.View.text_at
+                    {
+                      Melhole.Template.parent = __melhole_node;
+                      before = (Melhole.Template.next_or_end __melhole_node_0)
+                    });
+               __melhole_frame_1_hole_1 =
+                 (Melhole.View.content_hole
+                    {
+                      Melhole.Template.parent = __melhole_node;
+                      before = (Melhole.Template.next_or_end __melhole_node_2)
+                    });
+               __melhole_frame_1_hole_2 =
+                 (Melhole.View.content_hole
+                    {
+                      Melhole.Template.parent = __melhole_node;
+                      before = (Melhole.Template.next_or_end __melhole_node_3)
+                    });
+               __melhole_frame_1_hole_3 =
+                 (Melhole.Template.element __melhole_node_4);
+               __melhole_frame_1_slot_0 = Melhole.View.unset;
+               __melhole_frame_1_slot_1 = Melhole.View.unset;
+               __melhole_frame_1_slot_2 = Melhole.View.unset
+             })
+      }
+      {
+        Melhole.View.placed = None;
+        released =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    Melhole.View.release_content
+                      __melhole_frame.__melhole_frame_1_hole_1;
+                    Melhole.View.release_content
+                      __melhole_frame.__melhole_frame_1_hole_2)
+             });
+        forgotten =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    (__melhole_frame.__melhole_frame_1_slot_0 <-
+                       (Melhole.View.Input Melhole.View.unset);
+                     __melhole_frame.__melhole_frame_1_slot_1 <-
+                       (Melhole.View.Input Melhole.View.unset));
+                    __melhole_frame.__melhole_frame_1_slot_2 <-
+                      (Melhole.View.Input Melhole.View.unset))
+             })
       }
   let row ~name ~count ~extra =
     React.of_child
-      (Melhole.View.compiled __melhole_template_1 5
+      (Melhole.View.compiled __melhole_template_2
          {
-           Js.Fn.I2 =
-             (fun __melhole_scope
-                (__melhole_hole_0, __melhole_hole_1, __melhole_hole_2,
-                 __melhole_hole_3)
-                ->
-                let __melhole_changed_0 =
-                  Melhole.View.check __melhole_scope 0 count in
-                let __melhole_changed_1 =
-                  Melhole.View.check __melhole_scope 1 extra in
-                let __melhole_changed_2 =
-                  Melhole.View.check __melhole_scope 2 name in
-                (match __melhole_changed_2 with
-                 | Melhole.View.Unchanged -> ()
-                 | _ ->
-                     Melhole.View.put_text __melhole_scope 3 __melhole_hole_0
-                       (name : string));
-                (match __melhole_changed_1 with
-                 | Melhole.View.Unchanged -> ()
-                 | _ ->
-                     Melhole.View.set_content __melhole_hole_1
-                       (React.to_child extra));
-                (match __melhole_changed_1 with
-                 | Melhole.View.Unchanged -> ()
-                 | _ ->
-                     Melhole.View.set_content __melhole_hole_2
-                       (React.to_child extra));
-                (match __melhole_changed_0 with
-                 | Melhole.View.Unchanged -> ()
-                 | _ ->
-                     Melhole.View.put_sole_text __melhole_scope 4
-                       __melhole_hole_3 (string_of_int (count : int)));
-                ())
+           Js.Fn.I1 =
+             (fun __melhole_frame ->
+                ((let __melhole_hole_0 =
+                    __melhole_frame.__melhole_frame_1_hole_0 in
+                  let __melhole_hole_1 =
+                    __melhole_frame.__melhole_frame_1_hole_1 in
+                  let __melhole_hole_2 =
+                    __melhole_frame.__melhole_frame_1_hole_2 in
+                  let __melhole_hole_3 =
+                    __melhole_frame.__melhole_frame_1_hole_3 in
+                  let __melhole_changed_0 =
+                    Melhole.View.check __melhole_frame.__melhole_frame_1_slot_0
+                      count in
+                  __melhole_frame.__melhole_frame_1_slot_0 <-
+                    (Melhole.View.Input count);
+                  (let __melhole_changed_1 =
+                     Melhole.View.check
+                       __melhole_frame.__melhole_frame_1_slot_1 extra in
+                   __melhole_frame.__melhole_frame_1_slot_1 <-
+                     (Melhole.View.Input extra);
+                   (let __melhole_changed_2 =
+                      Melhole.View.check
+                        __melhole_frame.__melhole_frame_1_slot_2 name in
+                    __melhole_frame.__melhole_frame_1_slot_2 <-
+                      (Melhole.View.Input name);
+                    (match __melhole_changed_2 with
+                     | Melhole.View.Unchanged -> ()
+                     | _ ->
+                         Melhole.View.write_text __melhole_hole_0
+                           (name : string));
+                    (match __melhole_changed_1 with
+                     | Melhole.View.Unchanged -> ()
+                     | _ ->
+                         Melhole.View.set_content __melhole_hole_1
+                           (React.to_child extra));
+                    (match __melhole_changed_1 with
+                     | Melhole.View.Unchanged -> ()
+                     | _ ->
+                         Melhole.View.set_content __melhole_hole_2
+                           (React.to_child extra));
+                    (match __melhole_changed_0 with
+                     | Melhole.View.Unchanged -> ()
+                     | _ ->
+                         Melhole.View.write_sole_text __melhole_hole_3
+                           (string_of_int (count : int)));
+                    ())))
+                [@ocaml.warning "-26-27"]))
          })
 
 Every kind of prop, static and dynamic, required and optional:
@@ -102,139 +162,291 @@ Every kind of prop, static and dynamic, required and optional:
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_event_1 = Melhole.View.event_key "input"
   let __melhole_event_2 = Melhole.View.event_key "keydown"
-  let __melhole_template_3 =
+  type ('melhole_0, 'melhole_1, 'melhole_2, 'melhole_3,
+    'melhole_4) __melhole_frame_3 =
+    {
+    __melhole_frame_3_hole_0: 'melhole_0 ;
+    __melhole_frame_3_hole_4: 'melhole_1 ;
+    __melhole_frame_3_hole_5: 'melhole_2 ;
+    __melhole_frame_3_hole_6: 'melhole_3 ;
+    __melhole_frame_3_hole_7: 'melhole_4 ;
+    mutable __melhole_frame_3_slot_0: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_1: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_2: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_3: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_4: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_5: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_6: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_7: Melhole.View.input ;
+    mutable __melhole_frame_3_slot_8: Melhole.View.input }[@@ocaml.warning
+                                                            "-34-69"]
+  let __melhole_template_4 =
     Melhole.View.template
       (Melhole.Template.html "<input id=\"name\" required maxLength=\"3\">")
       {
-        Js.Fn.I2 =
-          (fun __melhole_scope __melhole_node ->
-             Melhole.View.listen __melhole_scope
-               (Melhole.Template.element __melhole_node) "input";
-             Melhole.View.listen __melhole_scope
-               (Melhole.Template.element __melhole_node) "keydown";
-             ((Melhole.Template.element __melhole_node),
-               (Melhole.View.controlled_hole
-                  (Melhole.Template.element __melhole_node) "value"),
-               (Melhole.View.controlled_hole
-                  (Melhole.Template.element __melhole_node) "checked"),
-               (Melhole.View.style_hole
-                  (Melhole.Template.element __melhole_node)),
-               (Melhole.View.reference_hole __melhole_scope
-                  (Melhole.Template.element __melhole_node))))
+        Js.Fn.I1 =
+          (fun __melhole_node ->
+             Melhole.View.listen (Melhole.Template.element __melhole_node)
+               "input";
+             Melhole.View.listen (Melhole.Template.element __melhole_node)
+               "keydown";
+             {
+               __melhole_frame_3_hole_0 =
+                 (Melhole.Template.element __melhole_node);
+               __melhole_frame_3_hole_4 =
+                 (Melhole.View.controlled_hole
+                    (Melhole.Template.element __melhole_node) "value");
+               __melhole_frame_3_hole_5 =
+                 (Melhole.View.controlled_hole
+                    (Melhole.Template.element __melhole_node) "checked");
+               __melhole_frame_3_hole_6 =
+                 (Melhole.View.style_hole
+                    (Melhole.Template.element __melhole_node));
+               __melhole_frame_3_hole_7 =
+                 (Melhole.View.reference_hole
+                    (Melhole.Template.element __melhole_node));
+               __melhole_frame_3_slot_0 = Melhole.View.unset;
+               __melhole_frame_3_slot_1 = Melhole.View.unset;
+               __melhole_frame_3_slot_2 = Melhole.View.unset;
+               __melhole_frame_3_slot_3 = Melhole.View.unset;
+               __melhole_frame_3_slot_4 = Melhole.View.unset;
+               __melhole_frame_3_slot_5 = Melhole.View.unset;
+               __melhole_frame_3_slot_6 = Melhole.View.unset;
+               __melhole_frame_3_slot_7 = Melhole.View.unset;
+               __melhole_frame_3_slot_8 = Melhole.View.unset
+             })
       }
-  let __melhole_template_4 =
+      {
+        Melhole.View.placed =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    Melhole.View.place_reference
+                      __melhole_frame.__melhole_frame_3_hole_7)
+             });
+        released =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    (Melhole.View.unlisten
+                       __melhole_frame.__melhole_frame_3_hole_0 "input";
+                     Melhole.View.unlisten
+                       __melhole_frame.__melhole_frame_3_hole_0 "keydown");
+                    Melhole.View.release_reference
+                      __melhole_frame.__melhole_frame_3_hole_7)
+             });
+        forgotten =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    (((((((__melhole_frame.__melhole_frame_3_slot_0 <-
+                             (Melhole.View.Input Melhole.View.unset);
+                           __melhole_frame.__melhole_frame_3_slot_1 <-
+                             (Melhole.View.Input Melhole.View.unset));
+                          __melhole_frame.__melhole_frame_3_slot_2 <-
+                            (Melhole.View.Input Melhole.View.unset));
+                         __melhole_frame.__melhole_frame_3_slot_3 <-
+                           (Melhole.View.Input Melhole.View.unset));
+                        __melhole_frame.__melhole_frame_3_slot_4 <-
+                          (Melhole.View.Input Melhole.View.unset));
+                       __melhole_frame.__melhole_frame_3_slot_5 <-
+                         (Melhole.View.Input Melhole.View.unset));
+                      __melhole_frame.__melhole_frame_3_slot_6 <-
+                        (Melhole.View.Input Melhole.View.unset));
+                     __melhole_frame.__melhole_frame_3_slot_7 <-
+                       (Melhole.View.Input Melhole.View.unset));
+                    __melhole_frame.__melhole_frame_3_slot_8 <-
+                      (Melhole.View.Input Melhole.View.unset))
+             })
+      }
+  type 'melhole_0 __melhole_frame_5 =
+    {
+    __melhole_frame_5_hole_0: 'melhole_0 ;
+    mutable __melhole_frame_5_slot_0: Melhole.View.input }[@@ocaml.warning
+                                                            "-34-69"]
+  let __melhole_template_6 =
     Melhole.View.template
       (Melhole.Template.html "<div stroke-width=\"2\" for=\"x\"></div>")
       {
-        Js.Fn.I2 =
-          (fun __melhole_scope __melhole_node ->
-             Melhole.View.prop_hole (Melhole.Template.element __melhole_node)
-               "innerHTML")
+        Js.Fn.I1 =
+          (fun __melhole_node ->
+             {
+               __melhole_frame_5_hole_0 =
+                 (Melhole.View.prop_hole
+                    (Melhole.Template.element __melhole_node) "innerHTML");
+               __melhole_frame_5_slot_0 = Melhole.View.unset
+             })
+      }
+      {
+        Melhole.View.placed = None;
+        released = None;
+        forgotten =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    __melhole_frame.__melhole_frame_5_slot_0 <-
+                      (Melhole.View.Input Melhole.View.unset))
+             })
       }
   let form ~text ~flag ~tab ~opacity ~style ~ref ~maybe ~html ~onInput =
     ((React.of_child
-        (Melhole.View.compiled __melhole_template_3 12
+        (Melhole.View.compiled __melhole_template_4
            {
-             Js.Fn.I2 =
-               (fun __melhole_scope
-                  (__melhole_hole_0, __melhole_hole_4, __melhole_hole_5,
-                   __melhole_hole_6, __melhole_hole_7)
-                  ->
-                  let __melhole_hole_1 = __melhole_hole_0 in
-                  let __melhole_hole_2 = __melhole_hole_0 in
-                  let __melhole_hole_3 = __melhole_hole_0 in
-                  let __melhole_hole_8 = __melhole_hole_0 in
-                  let __melhole_hole_9 = __melhole_hole_0 in
-                  let __melhole_hole_10 = __melhole_hole_0 in
-                  let __melhole_key_9 = __melhole_event_1 in
-                  let __melhole_key_10 = __melhole_event_2 in
-                  let __melhole_changed_0 =
-                    Melhole.View.check __melhole_scope 0 flag in
-                  let __melhole_changed_1 =
-                    Melhole.View.check __melhole_scope 1 maybe in
-                  let __melhole_changed_2 =
-                    Melhole.View.check __melhole_scope 2 onInput in
-                  let __melhole_changed_3 =
-                    Melhole.View.check __melhole_scope 3 style in
-                  let __melhole_changed_4 =
-                    Melhole.View.check __melhole_scope 4 tab in
-                  let __melhole_changed_5 =
-                    Melhole.View.check __melhole_scope 5 text in
-                  let __melhole_changed_6 =
-                    Melhole.View.check __melhole_scope 6 () in
-                  (match __melhole_changed_5 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_attr __melhole_scope 7 __melhole_hole_0
-                         "class" (Some (text : string)));
-                  (match __melhole_changed_0 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_attr __melhole_scope 8 __melhole_hole_1
-                         "disabled" (if (flag : bool) then Some "" else None));
-                  (match __melhole_changed_0 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_attr __melhole_scope 9 __melhole_hole_2
-                         "aria-hidden"
-                         (Some (if (flag : bool) then "true" else "false")));
-                  (match __melhole_changed_4 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_attr __melhole_scope 10
-                         __melhole_hole_3 "tabIndex"
-                         (Some (string_of_int (tab : int))));
-                  (match __melhole_changed_5 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.set_prop __melhole_hole_4 (text : string));
-                  (match __melhole_changed_0 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ -> Melhole.View.set_prop __melhole_hole_5 (flag : bool));
-                  (match __melhole_changed_3 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.set_style __melhole_hole_6
-                         (ReactDOM.Style.declarations style));
-                  Melhole.View.set_reference __melhole_hole_7
-                    (ReactDOM.Ref.identity ref) (ReactDOM.Ref.attach ref);
-                  (match __melhole_changed_1 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_attr __melhole_scope 11
-                         __melhole_hole_8 "title" (maybe : string option));
-                  (match __melhole_changed_2 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_handler __melhole_hole_9
-                         __melhole_key_9
-                         (fun __melhole_event ->
-                            onInput (React.Event.ofNative __melhole_event)));
-                  (match __melhole_changed_6 with
-                   | Melhole.View.Unchanged -> ()
-                   | _ ->
-                       Melhole.View.put_handler __melhole_hole_10
-                         __melhole_key_10
-                         (fun __melhole_event ->
-                            Stdlib.Option.iter
-                              (fun handle ->
-                                 handle (React.Event.ofNative __melhole_event))
-                              None));
-                  ())
+             Js.Fn.I1 =
+               (fun __melhole_frame ->
+                  ((let __melhole_hole_0 =
+                      __melhole_frame.__melhole_frame_3_hole_0 in
+                    let __melhole_hole_4 =
+                      __melhole_frame.__melhole_frame_3_hole_4 in
+                    let __melhole_hole_5 =
+                      __melhole_frame.__melhole_frame_3_hole_5 in
+                    let __melhole_hole_6 =
+                      __melhole_frame.__melhole_frame_3_hole_6 in
+                    let __melhole_hole_7 =
+                      __melhole_frame.__melhole_frame_3_hole_7 in
+                    let __melhole_hole_1 = __melhole_hole_0 in
+                    let __melhole_hole_2 = __melhole_hole_0 in
+                    let __melhole_hole_3 = __melhole_hole_0 in
+                    let __melhole_hole_8 = __melhole_hole_0 in
+                    let __melhole_hole_9 = __melhole_hole_0 in
+                    let __melhole_hole_10 = __melhole_hole_0 in
+                    let __melhole_key_9 = __melhole_event_1 in
+                    let __melhole_key_10 = __melhole_event_2 in
+                    let __melhole_changed_0 =
+                      Melhole.View.check
+                        __melhole_frame.__melhole_frame_3_slot_0 flag in
+                    __melhole_frame.__melhole_frame_3_slot_0 <-
+                      (Melhole.View.Input flag);
+                    (let __melhole_changed_1 =
+                       Melhole.View.check
+                         __melhole_frame.__melhole_frame_3_slot_1 maybe in
+                     __melhole_frame.__melhole_frame_3_slot_1 <-
+                       (Melhole.View.Input maybe);
+                     (let __melhole_changed_2 =
+                        Melhole.View.check
+                          __melhole_frame.__melhole_frame_3_slot_2 onInput in
+                      __melhole_frame.__melhole_frame_3_slot_2 <-
+                        (Melhole.View.Input onInput);
+                      (let __melhole_changed_3 =
+                         Melhole.View.check
+                           __melhole_frame.__melhole_frame_3_slot_3 style in
+                       __melhole_frame.__melhole_frame_3_slot_3 <-
+                         (Melhole.View.Input style);
+                       (let __melhole_changed_4 =
+                          Melhole.View.check
+                            __melhole_frame.__melhole_frame_3_slot_4 tab in
+                        __melhole_frame.__melhole_frame_3_slot_4 <-
+                          (Melhole.View.Input tab);
+                        (let __melhole_changed_5 =
+                           Melhole.View.check
+                             __melhole_frame.__melhole_frame_3_slot_5 text in
+                         __melhole_frame.__melhole_frame_3_slot_5 <-
+                           (Melhole.View.Input text);
+                         (let __melhole_changed_6 =
+                            Melhole.View.check
+                              __melhole_frame.__melhole_frame_3_slot_6 () in
+                          __melhole_frame.__melhole_frame_3_slot_6 <-
+                            (Melhole.View.Input ());
+                          (match __melhole_changed_5 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.write_attr __melhole_hole_0 "class"
+                                 (Some (text : string)));
+                          (match __melhole_changed_0 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               let __melhole_value =
+                                 if (flag : bool) then Some "" else None in
+                               (Melhole.View.put_attr
+                                  __melhole_frame.__melhole_frame_3_slot_7
+                                  __melhole_hole_1 "disabled" __melhole_value;
+                                __melhole_frame.__melhole_frame_3_slot_7 <-
+                                  (Melhole.View.Input __melhole_value)));
+                          (match __melhole_changed_0 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               let __melhole_value =
+                                 Some
+                                   (if (flag : bool) then "true" else "false") in
+                               (Melhole.View.put_attr
+                                  __melhole_frame.__melhole_frame_3_slot_8
+                                  __melhole_hole_2 "aria-hidden"
+                                  __melhole_value;
+                                __melhole_frame.__melhole_frame_3_slot_8 <-
+                                  (Melhole.View.Input __melhole_value)));
+                          (match __melhole_changed_4 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.write_attr __melhole_hole_3
+                                 "tabIndex" (Some (string_of_int (tab : int))));
+                          (match __melhole_changed_5 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.set_prop __melhole_hole_4
+                                 (text : string));
+                          (match __melhole_changed_0 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.set_prop __melhole_hole_5
+                                 (flag : bool));
+                          (match __melhole_changed_3 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.set_style __melhole_hole_6
+                                 (ReactDOM.Style.declarations style));
+                          Melhole.View.set_reference __melhole_hole_7
+                            (ReactDOM.Ref.identity ref)
+                            (ReactDOM.Ref.attach ref);
+                          (match __melhole_changed_1 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.write_attr __melhole_hole_8 "title"
+                                 (maybe : string option));
+                          (match __melhole_changed_2 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.put_handler __melhole_hole_9
+                                 __melhole_key_9
+                                 (fun __melhole_event ->
+                                    onInput
+                                      (React.Event.ofNative __melhole_event)));
+                          (match __melhole_changed_6 with
+                           | Melhole.View.Unchanged -> ()
+                           | _ ->
+                               Melhole.View.put_handler __melhole_hole_10
+                                 __melhole_key_10
+                                 (fun __melhole_event ->
+                                    Stdlib.Option.iter
+                                      (fun handle ->
+                                         handle
+                                           (React.Event.ofNative
+                                              __melhole_event)) None));
+                          ())))))))
+                  [@ocaml.warning "-26-27"]))
            })),
       (React.of_child
-         (Melhole.View.compiled __melhole_template_4 1
+         (Melhole.View.compiled __melhole_template_6
             {
-              Js.Fn.I2 =
-                (fun __melhole_scope __melhole_hole_0 ->
-                   let __melhole_changed_0 =
-                     Melhole.View.check __melhole_scope 0 html in
-                   (match __melhole_changed_0 with
-                    | Melhole.View.Unchanged -> ()
-                    | _ ->
-                        Melhole.View.set_prop __melhole_hole_0
-                          (Melhole.View.html_of html));
-                   ())
+              Js.Fn.I1 =
+                (fun __melhole_frame ->
+                   ((let __melhole_hole_0 =
+                       __melhole_frame.__melhole_frame_5_hole_0 in
+                     let __melhole_changed_0 =
+                       Melhole.View.check
+                         __melhole_frame.__melhole_frame_5_slot_0 html in
+                     __melhole_frame.__melhole_frame_5_slot_0 <-
+                       (Melhole.View.Input html);
+                     (match __melhole_changed_0 with
+                      | Melhole.View.Unchanged -> ()
+                      | _ ->
+                          Melhole.View.set_prop __melhole_hole_0
+                            (Melhole.View.html_of html));
+                     ())
+                   [@ocaml.warning "-26-27"]))
             })))
 
 A component with optional, defaulted and children props, and its signature:
@@ -253,24 +465,59 @@ A component with optional, defaulted and children props, and its signature:
     struct
       type make_props =
         | Make_props of React.element [@@unboxed ]
-      let __melhole_template_2 =
+      type ('melhole_0, 'melhole_1) __melhole_frame_2 =
+        {
+        __melhole_frame_2_hole_0: 'melhole_0 ;
+        __melhole_frame_2_hole_1: 'melhole_1 ;
+        mutable __melhole_frame_2_slot_0: Melhole.View.input ;
+        mutable __melhole_frame_2_slot_1: Melhole.View.input }[@@ocaml.warning
+                                                                "-34-69"]
+      let __melhole_template_3 =
         Melhole.View.template
           (Melhole.Template.html "<section><!----></section>")
           {
-            Js.Fn.I2 =
-              (fun __melhole_scope __melhole_node ->
+            Js.Fn.I1 =
+              (fun __melhole_node ->
                  let __melhole_node_0 = Melhole.Template.first __melhole_node in
-                 ((Melhole.View.text_at
-                     {
-                       Melhole.Template.parent = __melhole_node;
-                       before = (Melhole.Template.first_or_end __melhole_node)
-                     }),
-                   (Melhole.View.content_hole __melhole_scope
-                      {
-                        Melhole.Template.parent = __melhole_node;
-                        before =
-                          (Melhole.Template.next_or_end __melhole_node_0)
-                      })))
+                 {
+                   __melhole_frame_2_hole_0 =
+                     (Melhole.View.text_at
+                        {
+                          Melhole.Template.parent = __melhole_node;
+                          before =
+                            (Melhole.Template.first_or_end __melhole_node)
+                        });
+                   __melhole_frame_2_hole_1 =
+                     (Melhole.View.content_hole
+                        {
+                          Melhole.Template.parent = __melhole_node;
+                          before =
+                            (Melhole.Template.next_or_end __melhole_node_0)
+                        });
+                   __melhole_frame_2_slot_0 = Melhole.View.unset;
+                   __melhole_frame_2_slot_1 = Melhole.View.unset
+                 })
+          }
+          {
+            Melhole.View.placed = None;
+            released =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        Melhole.View.release_content
+                          __melhole_frame.__melhole_frame_2_hole_1)
+                 });
+            forgotten =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        __melhole_frame.__melhole_frame_2_slot_0 <-
+                          (Melhole.View.Input Melhole.View.unset);
+                        __melhole_frame.__melhole_frame_2_slot_1 <-
+                          (Melhole.View.Input Melhole.View.unset))
+                 })
           }
       let makeProps ~title:(title as __melhole_prop_0)
         ?size:__melhole_prop_1_given ?subtitle:(subtitle as __melhole_prop_2)
@@ -290,27 +537,39 @@ A component with optional, defaulted and children props, and its signature:
                (fun () ->
                   React.to_child
                     (React.of_child
-                       (Melhole.View.compiled __melhole_template_2 3
+                       (Melhole.View.compiled __melhole_template_3
                           {
-                            Js.Fn.I2 =
-                              (fun __melhole_scope
-                                 (__melhole_hole_0, __melhole_hole_1) ->
-                                 let __melhole_changed_0 =
-                                   Melhole.View.check __melhole_scope 0
-                                     children in
-                                 let __melhole_changed_1 =
-                                   Melhole.View.check __melhole_scope 1 title in
-                                 (match __melhole_changed_1 with
-                                  | Melhole.View.Unchanged -> ()
-                                  | _ ->
-                                      Melhole.View.put_text __melhole_scope 2
-                                        __melhole_hole_0 (title : string));
-                                 (match __melhole_changed_0 with
-                                  | Melhole.View.Unchanged -> ()
-                                  | _ ->
-                                      Melhole.View.set_content __melhole_hole_1
-                                        (React.to_child children));
-                                 ())
+                            Js.Fn.I1 =
+                              (fun __melhole_frame ->
+                                 ((let __melhole_hole_0 =
+                                     __melhole_frame.__melhole_frame_2_hole_0 in
+                                   let __melhole_hole_1 =
+                                     __melhole_frame.__melhole_frame_2_hole_1 in
+                                   let __melhole_changed_0 =
+                                     Melhole.View.check
+                                       __melhole_frame.__melhole_frame_2_slot_0
+                                       children in
+                                   __melhole_frame.__melhole_frame_2_slot_0 <-
+                                     (Melhole.View.Input children);
+                                   (let __melhole_changed_1 =
+                                      Melhole.View.check
+                                        __melhole_frame.__melhole_frame_2_slot_1
+                                        title in
+                                    __melhole_frame.__melhole_frame_2_slot_1 <-
+                                      (Melhole.View.Input title);
+                                    (match __melhole_changed_1 with
+                                     | Melhole.View.Unchanged -> ()
+                                     | _ ->
+                                         Melhole.View.write_text
+                                           __melhole_hole_0 (title : string));
+                                    (match __melhole_changed_0 with
+                                     | Melhole.View.Unchanged -> ()
+                                     | _ ->
+                                         Melhole.View.set_content
+                                           __melhole_hole_1
+                                           (React.to_child children));
+                                    ()))
+                                 [@ocaml.warning "-26-27"]))
                           })))) in
         Make_props
           (match __melhole_key with
@@ -320,7 +579,7 @@ A component with optional, defaulted and children props, and its signature:
                  (Melhole.View.with_key key (React.to_child __melhole_element)))
       external make : make_props -> React.element = "%identity"
     end
-  let __melhole_component_3 =
+  let __melhole_component_4 =
     Melact_runtime.Component.make ~name:"Card.nothing"
   include
     struct
@@ -329,7 +588,7 @@ A component with optional, defaulted and children props, and its signature:
       let nothingProps ?key:__melhole_key () =
         let __melhole_element =
           React.of_child
-            (Melhole.View.pure __melhole_component_3 [||]
+            (Melhole.View.pure __melhole_component_4 [||]
                (fun () -> React.to_child React.null)) in
         Nothing_props
           (match __melhole_key with
@@ -367,14 +626,51 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
     struct
       type make_props =
         | Make_props of React.element [@@unboxed ]
-      let __melhole_template_2 =
+      type ('melhole_0, 'melhole_1) __melhole_frame_2 =
+        {
+        __melhole_frame_2_hole_0: 'melhole_0 ;
+        __melhole_frame_2_hole_1: 'melhole_1 ;
+        mutable __melhole_frame_2_slot_0: Melhole.View.input }[@@ocaml.warning
+                                                                "-34-69"]
+      let __melhole_template_3 =
         Melhole.View.template (Melhole.Template.html "<input>")
           {
-            Js.Fn.I2 =
-              (fun __melhole_scope __melhole_node ->
-                 ((Melhole.Template.element __melhole_node),
-                   (Melhole.View.reference_hole __melhole_scope
-                      (Melhole.Template.element __melhole_node))))
+            Js.Fn.I1 =
+              (fun __melhole_node ->
+                 {
+                   __melhole_frame_2_hole_0 =
+                     (Melhole.Template.element __melhole_node);
+                   __melhole_frame_2_hole_1 =
+                     (Melhole.View.reference_hole
+                        (Melhole.Template.element __melhole_node));
+                   __melhole_frame_2_slot_0 = Melhole.View.unset
+                 })
+          }
+          {
+            Melhole.View.placed =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        Melhole.View.place_reference
+                          __melhole_frame.__melhole_frame_2_hole_1)
+                 });
+            released =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        Melhole.View.release_reference
+                          __melhole_frame.__melhole_frame_2_hole_1)
+                 });
+            forgotten =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        __melhole_frame.__melhole_frame_2_slot_0 <-
+                          (Melhole.View.Input Melhole.View.unset))
+                 })
           }
       let makeProps ~label:(label as __melhole_prop_0)
         ?ref:(__melhole_forwarded_ref as __melhole_prop_1) ?key:__melhole_key
@@ -388,30 +684,38 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                   React.to_child
                     (let ref = ReactDOM.Ref.forwarded __melhole_forwarded_ref in
                      React.of_child
-                       (Melhole.View.compiled __melhole_template_2 2
+                       (Melhole.View.compiled __melhole_template_3
                           {
-                            Js.Fn.I2 =
-                              (fun __melhole_scope
-                                 (__melhole_hole_0, __melhole_hole_1) ->
-                                 let __melhole_changed_0 =
-                                   Melhole.View.check __melhole_scope 0 label in
-                                 (match __melhole_changed_0 with
-                                  | Melhole.View.Unchanged -> ()
-                                  | _ ->
-                                      Melhole.View.put_attr __melhole_scope 1
-                                        __melhole_hole_0 "placeholder"
-                                        (Some (label : string)));
-                                 Melhole.View.set_reference __melhole_hole_1
-                                   (Stdlib.Option.fold
-                                      ~none:ReactDOM.Ref.absent
-                                      ~some:ReactDOM.Ref.identity
-                                      (Option.map ReactDOM.Ref.domRef
-                                         (Js.Nullable.toOption ref)))
-                                   (Stdlib.Option.fold ~none:ignore
-                                      ~some:ReactDOM.Ref.attach
-                                      (Option.map ReactDOM.Ref.domRef
-                                         (Js.Nullable.toOption ref)));
-                                 ())
+                            Js.Fn.I1 =
+                              (fun __melhole_frame ->
+                                 ((let __melhole_hole_0 =
+                                     __melhole_frame.__melhole_frame_2_hole_0 in
+                                   let __melhole_hole_1 =
+                                     __melhole_frame.__melhole_frame_2_hole_1 in
+                                   let __melhole_changed_0 =
+                                     Melhole.View.check
+                                       __melhole_frame.__melhole_frame_2_slot_0
+                                       label in
+                                   __melhole_frame.__melhole_frame_2_slot_0 <-
+                                     (Melhole.View.Input label);
+                                   (match __melhole_changed_0 with
+                                    | Melhole.View.Unchanged -> ()
+                                    | _ ->
+                                        Melhole.View.write_attr
+                                          __melhole_hole_0 "placeholder"
+                                          (Some (label : string)));
+                                   Melhole.View.set_reference __melhole_hole_1
+                                     (Stdlib.Option.fold
+                                        ~none:ReactDOM.Ref.absent
+                                        ~some:ReactDOM.Ref.identity
+                                        (Option.map ReactDOM.Ref.domRef
+                                           (Js.Nullable.toOption ref)))
+                                     (Stdlib.Option.fold ~none:ignore
+                                        ~some:ReactDOM.Ref.attach
+                                        (Option.map ReactDOM.Ref.domRef
+                                           (Js.Nullable.toOption ref)));
+                                   ())
+                                 [@ocaml.warning "-26-27"]))
                           })))) in
         Make_props
           (match __melhole_key with
@@ -445,12 +749,33 @@ Calls with children, keys and fragments:
                   ~children:(React.array
                                [|(React.string "x");(React.string "y")|]) ()))))
   let none = Card.make (Card.makeProps ~title:"a" ())
-  let __melhole_template_1 =
+  type 'melhole_0 __melhole_frame_1 =
+    {
+    __melhole_frame_1_hole_0: 'melhole_0 ;
+    mutable __melhole_frame_1_slot_0: Melhole.View.input }[@@ocaml.warning
+                                                            "-34-69"]
+  let __melhole_template_2 =
     Melhole.View.template (Melhole.Template.html "<li></li>")
       {
-        Js.Fn.I2 =
-          (fun __melhole_scope __melhole_node ->
-             Melhole.Template.element __melhole_node)
+        Js.Fn.I1 =
+          (fun __melhole_node ->
+             {
+               __melhole_frame_1_hole_0 =
+                 (Melhole.Template.element __melhole_node);
+               __melhole_frame_1_slot_0 = Melhole.View.unset
+             })
+      }
+      {
+        Melhole.View.placed = None;
+        released = None;
+        forgotten =
+          (Some
+             {
+               Js.Fn.I1 =
+                 (fun __melhole_frame ->
+                    __melhole_frame.__melhole_frame_1_slot_0 <-
+                      (Melhole.View.Input Melhole.View.unset))
+             })
       }
   let rows items =
     React.array
@@ -460,19 +785,25 @@ Calls with children, keys and fragments:
               (Melhole.View.with_key (item : string)
                  (React.to_child
                     (React.of_child
-                       (Melhole.View.compiled __melhole_template_1 2
+                       (Melhole.View.compiled __melhole_template_2
                           {
-                            Js.Fn.I2 =
-                              (fun __melhole_scope __melhole_hole_0 ->
-                                 let __melhole_changed_0 =
-                                   Melhole.View.check __melhole_scope 0 item in
-                                 (match __melhole_changed_0 with
-                                  | Melhole.View.Unchanged -> ()
-                                  | _ ->
-                                      Melhole.View.put_sole_text
-                                        __melhole_scope 1 __melhole_hole_0
-                                        (item : string));
-                                 ())
+                            Js.Fn.I1 =
+                              (fun __melhole_frame ->
+                                 ((let __melhole_hole_0 =
+                                     __melhole_frame.__melhole_frame_1_hole_0 in
+                                   let __melhole_changed_0 =
+                                     Melhole.View.check
+                                       __melhole_frame.__melhole_frame_1_slot_0
+                                       item in
+                                   __melhole_frame.__melhole_frame_1_slot_0 <-
+                                     (Melhole.View.Input item);
+                                   (match __melhole_changed_0 with
+                                    | Melhole.View.Unchanged -> ()
+                                    | _ ->
+                                        Melhole.View.write_sole_text
+                                          __melhole_hole_0 (item : string));
+                                   ())
+                                 [@ocaml.warning "-26-27"]))
                           }))))) items)
   let both =
     React.of_child
@@ -539,13 +870,38 @@ Reason input:
     struct
       type make_props =
         | Make_props of React.element [@@unboxed ]
-      let __melhole_template_2 =
+      type 'melhole_0 __melhole_frame_2 =
+        {
+        __melhole_frame_2_hole_0: 'melhole_0 ;
+        mutable __melhole_frame_2_slot_0: Melhole.View.input ;
+        mutable __melhole_frame_2_slot_1: Melhole.View.input }[@@ocaml.warning
+                                                                "-34-69"]
+      let __melhole_template_3 =
         Melhole.View.template
           (Melhole.Template.html "<span class=\"greeting\"></span>")
           {
-            Js.Fn.I2 =
-              (fun __melhole_scope __melhole_node ->
-                 Melhole.Template.element __melhole_node)
+            Js.Fn.I1 =
+              (fun __melhole_node ->
+                 {
+                   __melhole_frame_2_hole_0 =
+                     (Melhole.Template.element __melhole_node);
+                   __melhole_frame_2_slot_0 = Melhole.View.unset;
+                   __melhole_frame_2_slot_1 = Melhole.View.unset
+                 })
+          }
+          {
+            Melhole.View.placed = None;
+            released = None;
+            forgotten =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        __melhole_frame.__melhole_frame_2_slot_0 <-
+                          (Melhole.View.Input Melhole.View.unset);
+                        __melhole_frame.__melhole_frame_2_slot_1 <-
+                          (Melhole.View.Input Melhole.View.unset))
+                 })
           }
       let makeProps ~name:(name as __melhole_prop_0) ?key:__melhole_key () =
         let __melhole_element =
@@ -555,19 +911,31 @@ Reason input:
                (fun () ->
                   React.to_child
                     (React.of_child
-                       (Melhole.View.compiled __melhole_template_2 2
+                       (Melhole.View.compiled __melhole_template_3
                           {
-                            Js.Fn.I2 =
-                              (fun __melhole_scope __melhole_hole_0 ->
-                                 let __melhole_changed_0 =
-                                   Melhole.View.check __melhole_scope 0 name in
-                                 (match __melhole_changed_0 with
-                                  | Melhole.View.Unchanged -> ()
-                                  | _ ->
-                                      Melhole.View.put_sole_text
-                                        __melhole_scope 1 __melhole_hole_0
-                                        ("Hello, " ^ name : string));
-                                 ())
+                            Js.Fn.I1 =
+                              (fun __melhole_frame ->
+                                 ((let __melhole_hole_0 =
+                                     __melhole_frame.__melhole_frame_2_hole_0 in
+                                   let __melhole_changed_0 =
+                                     Melhole.View.check
+                                       __melhole_frame.__melhole_frame_2_slot_0
+                                       name in
+                                   __melhole_frame.__melhole_frame_2_slot_0 <-
+                                     (Melhole.View.Input name);
+                                   (match __melhole_changed_0 with
+                                    | Melhole.View.Unchanged -> ()
+                                    | _ ->
+                                        let __melhole_value =
+                                          ("Hello, " ^ name : string) in
+                                        (Melhole.View.put_sole_text
+                                           __melhole_frame.__melhole_frame_2_slot_1
+                                           __melhole_hole_0 __melhole_value;
+                                         __melhole_frame.__melhole_frame_2_slot_1
+                                           <-
+                                           (Melhole.View.Input __melhole_value)));
+                                   ())
+                                 [@ocaml.warning "-26-27"]))
                           })))) in
         Make_props
           (match __melhole_key with
@@ -594,13 +962,38 @@ mlx input:
     struct
       type make_props =
         | Make_props of React.element [@@unboxed ]
-      let __melhole_template_2 =
+      type 'melhole_0 __melhole_frame_2 =
+        {
+        __melhole_frame_2_hole_0: 'melhole_0 ;
+        mutable __melhole_frame_2_slot_0: Melhole.View.input ;
+        mutable __melhole_frame_2_slot_1: Melhole.View.input }[@@ocaml.warning
+                                                                "-34-69"]
+      let __melhole_template_3 =
         Melhole.View.template
           (Melhole.Template.html "<span class=\"greeting\"></span>")
           {
-            Js.Fn.I2 =
-              (fun __melhole_scope __melhole_node ->
-                 Melhole.Template.element __melhole_node)
+            Js.Fn.I1 =
+              (fun __melhole_node ->
+                 {
+                   __melhole_frame_2_hole_0 =
+                     (Melhole.Template.element __melhole_node);
+                   __melhole_frame_2_slot_0 = Melhole.View.unset;
+                   __melhole_frame_2_slot_1 = Melhole.View.unset
+                 })
+          }
+          {
+            Melhole.View.placed = None;
+            released = None;
+            forgotten =
+              (Some
+                 {
+                   Js.Fn.I1 =
+                     (fun __melhole_frame ->
+                        __melhole_frame.__melhole_frame_2_slot_0 <-
+                          (Melhole.View.Input Melhole.View.unset);
+                        __melhole_frame.__melhole_frame_2_slot_1 <-
+                          (Melhole.View.Input Melhole.View.unset))
+                 })
           }
       let makeProps ~name:(name as __melhole_prop_0) ?key:__melhole_key () =
         let __melhole_element =
@@ -610,19 +1003,31 @@ mlx input:
                (fun () ->
                   React.to_child
                     (React.of_child
-                       (Melhole.View.compiled __melhole_template_2 2
+                       (Melhole.View.compiled __melhole_template_3
                           {
-                            Js.Fn.I2 =
-                              (fun __melhole_scope __melhole_hole_0 ->
-                                 let __melhole_changed_0 =
-                                   Melhole.View.check __melhole_scope 0 name in
-                                 (match __melhole_changed_0 with
-                                  | Melhole.View.Unchanged -> ()
-                                  | _ ->
-                                      Melhole.View.put_sole_text
-                                        __melhole_scope 1 __melhole_hole_0
-                                        ("Hello, " ^ name : string));
-                                 ())
+                            Js.Fn.I1 =
+                              (fun __melhole_frame ->
+                                 ((let __melhole_hole_0 =
+                                     __melhole_frame.__melhole_frame_2_hole_0 in
+                                   let __melhole_changed_0 =
+                                     Melhole.View.check
+                                       __melhole_frame.__melhole_frame_2_slot_0
+                                       name in
+                                   __melhole_frame.__melhole_frame_2_slot_0 <-
+                                     (Melhole.View.Input name);
+                                   (match __melhole_changed_0 with
+                                    | Melhole.View.Unchanged -> ()
+                                    | _ ->
+                                        let __melhole_value =
+                                          ("Hello, " ^ name : string) in
+                                        (Melhole.View.put_sole_text
+                                           __melhole_frame.__melhole_frame_2_slot_1
+                                           __melhole_hole_0 __melhole_value;
+                                         __melhole_frame.__melhole_frame_2_slot_1
+                                           <-
+                                           (Melhole.View.Input __melhole_value)));
+                                   ())
+                                 [@ocaml.warning "-26-27"]))
                           })))) in
         Make_props
           (match __melhole_key with
@@ -657,11 +1062,11 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  30:                       ((fun () -> 0)[@alert "+hook"]) in
-  33:                     then ((1)[@alert "+hook"])
-  34:                     else ((0)[@alert "+hook"]) in
-  60:                                               [@alert "+hook"]))
-  61:                                           [@alert "+hook"])
+  66:                       ((fun () -> 0)[@alert "+hook"]) in
+  69:                     then ((1)[@alert "+hook"])
+  70:                     else ((0)[@alert "+hook"]) in
+  110:                                                   [@alert "+hook"]))
+  111:                                               [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare

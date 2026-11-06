@@ -8,14 +8,19 @@ let scrolling = Template.make ~html:"<section></section>" ~holes:[| Handler ([],
 let twin = Template.make ~html:"<section><!----></section>" ~holes:[| Child ([], 0); Child ([], 1) |]
 let mixed = Template.make ~html:"<em>a<!---->b</em>" ~holes:[| Text ([], 1) |]
 let row = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "data-key"); Text ([], 0) |]
+(** A word's row: its element, its text and the word written last. *)
+type word = { root : Dom.element; text : Dom.text; mutable written : View.input }
+
 let word_line =
   View.hydratable (Template.html "<b></b>")
-    (fun [@u] _ node -> View.text_at { parent = node; before = Template.first_or_end node })
-    (fun [@u] _ node collected ->
+    (fun [@u] node ->
+      { root = Template.element node; text = View.text_at { parent = node; before = Template.first_or_end node }; written = View.unset })
+    { placed = None; released = None; forgotten = None }
+    (fun [@u] node collected ->
       let cursor = View.inside node in
-      let text = View.adopt_text cursor (View.collected_text collected) in
+      let text = View.adopt_text cursor (View.collected_text collected.text) in
       View.adopt_finish cursor;
-      text)
+      { root = Template.element node; text; written = View.unset })
 
 let lazy_text n = View.text ("lazy" ^ string_of_int n)
 let ignore_event (_ : Dom.event) = ()
@@ -62,8 +67,11 @@ let rec description tape depth =
         [||]
   | 7 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
-      View.rows items word_line 1
-        (fun [@u] scope text item -> View.put_text scope 0 text item)
+      View.rows items word_line
+        (fun [@u] word -> word.root)
+        (fun [@u] word item ->
+          View.put_text word.written word.text item;
+          word.written <- View.Input item)
         (fun [@u] item -> item)
         (fun [@u] _ _ _ _ -> ())
         0
