@@ -2,6 +2,7 @@
 open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external test_async_long : string -> (unit -> unit Js.Promise.t) -> int -> unit = "test"
 external tag_name : Dom.element -> string = "tagName" [@@mel.get]
 external namespace_uri : Dom.element -> string = "namespaceURI" [@@mel.get]
 external get_attribute : Dom.element -> string -> string = "getAttribute" [@@mel.send]
@@ -848,6 +849,33 @@ module Opened = struct
     </Opened_provider>
 end
 
+module Wrap = struct
+  let[@react.component] make ~children =
+    let clicks, _ = React.useState (fun () -> 0) in
+    <div className=(string_of_int clicks)>children</div>
+end
+
+let rec chain depth leaf = match depth with 0 -> <b>(React.string leaf)</b> | _ -> <Wrap>(chain (depth - 1) leaf)</Wrap>
+
+let chain_send = ref (fun (_ : string -> string) -> ())
+
+module Chained = struct
+  let[@react.component] make ~depth =
+    let leaf, setLeaf = React.useState (fun () -> "first") in
+    chain_send := setLeaf;
+    <section>(chain depth leaf)</section>
+end
+
+let wide_send = ref (fun (_ : string array -> string array) -> ())
+let wide_items words = Array.map (fun word -> <li key=word>(React.string word)</li>) words
+
+module Wide = struct
+  let[@react.component] make ~start =
+    let words, setWords = React.useState (fun () -> start) in
+    wide_send := setWords;
+    <ul>(React.array (wide_items words))</ul>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1590,6 +1618,47 @@ let () =
       expect (Array.length (nodes (select_all root "b"))) |. to_equal 8000;
       let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
       finish ()));
+  describe "deep and wide trees of components" (fun () ->
+    test_async_long "a chain of hundreds of components with state passes a change down to its leaf" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:6) (fun values ->
+             let tape = tape values in
+             let depth = 200 + draw tape 300 in
+             let* root, client = mount <Chained depth /> in
+             let* () = act (fun () -> !chain_send (fun _ -> "second")) in
+             expect (text_content root) |. to_equal "second";
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             finish ()))
+        [%mel.obj { numRuns = 3 }])
+      120_000;
+    test_async_long "a list of tens of thousands of elements built at run time shows any edits in order" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:10) (fun values ->
+             let tape = tape values in
+             let start = Array.init (10_000 + draw tape 10_000) (fun index -> "w" ^ string_of_int index) in
+             let* root, client = mount <Wide start /> in
+             let rec step remaining words =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next =
+                     match draw tape 3 with
+                     | 0 -> Array.of_list (List.rev (Array.to_list words))
+                     | 1 -> Array.of_list (List.filteri (fun index _ -> index mod (2 + draw tape 3) <> 0) (Array.to_list words))
+                     | _ ->
+                         let ranked = Array.map (fun word -> (draw tape 1_000_000, word)) words in
+                         Array.stable_sort compare ranked;
+                         Array.map snd ranked
+                   in
+                   let* () = act (fun () -> !wide_send (fun _ -> next)) in
+                   expect (text_content root) |. to_equal (String.concat "" (Array.to_list next));
+                   step (remaining - 1) next
+             in
+             step 3 start))
+        [%mel.obj { numRuns = 3 }])
+      120_000);
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async
