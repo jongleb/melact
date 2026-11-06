@@ -32,6 +32,9 @@ val suspend : fallback:Melhole.View.child -> Melhole.View.child -> Melhole.View.
 val component : Component.t -> Melhole.View.input array -> (unit -> Melhole.View.child) -> Melhole.View.child
 val provide : 'value Context.t -> 'value -> Melhole.View.child -> Melhole.View.child
 val current : unit -> instance
+
+(** The component that is rendering, or whose holes are being written, if any. *)
+val writing_component : unit -> string option
 val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
 val invalidate : instance -> unit
 

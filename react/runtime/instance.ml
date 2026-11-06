@@ -538,6 +538,10 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
             | Renders _ | Catches _ | Suspends _ -> None)
         | None -> None)
 
+let writing_component () =
+  let named instance = match instance.kind with Renders { component; _ } -> Some component.name | Provides _ | Catches _ | Suspends _ -> None in
+  match !rendering with Some instance -> named instance | None -> Option.bind !owner named
+
 let current () =
   match !rendering with
   | Some instance -> instance

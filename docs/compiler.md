@@ -478,7 +478,14 @@ page again. A user team's table read `offsetTop` in each row's render: Expand al
 runs after all the dirty instances are written, made Melact faster than React there. Ref callbacks
 wait the same way: a placed ref is queued and gets its element when the outermost `View.mount` or
 `View.patch` ends, or, in Melact, after a flush's renders and before its layout effects, so a
-callback sees the whole tree, as in React; a dual law reads the number of rows from each row's ref. Rendering is
+callback sees the whole tree, as in React; a dual law reads the number of rows from each row's ref.
+`MelactDebug.warnLayoutReadsInRender ()` wraps the layout getters and methods of the DOM
+(`offset*`, `client*`, `scroll*`, `innerText`, `getBoundingClientRect`, `getClientRects`,
+`getComputedStyle`) and warns once per component and property when one is read while a component
+renders or its holes are written; components are named by their module path (`Main.Row.make`). A
+Melact law reads layout in a body, a hole, a layout effect, a ref callback and a handler, and expects
+a warning for the first two only; mutants that ignore holes, warn every time, or attach refs at once
+each break it. Rendering is
 meant to be pure, and React's docs say the same; this is the one place where code that bends the
 rule costs more under Melact.
 

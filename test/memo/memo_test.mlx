@@ -92,6 +92,61 @@ let let_law mutated expected =
          step 10 { near = 0; far = 0 } []))
     [%mel.obj { numRuns = 150 }]
 
+external console_object : prototype = "console"
+external bounding : Dom.element -> < top : float > Js.t = "getBoundingClientRect" [@@mel.send]
+external page : Dom.element = "body" [@@mel.scope "document"]
+
+(** Where a component reads layout. *)
+type reading = In_body | In_hole | In_layout_effect | In_ref | In_handler
+
+let readings = [| In_body; In_hole; In_layout_effect; In_ref; In_handler |]
+let reading_send = ref (fun (_ : int -> int) -> ())
+
+let useReader reading =
+  let count, setCount = React.useState (fun () -> 0) in
+  reading_send := setCount;
+  let top () = (bounding page)##top in
+  let body = match reading with In_body -> top () | In_hole | In_layout_effect | In_ref | In_handler -> 0. in
+  React.useLayoutEffect1 (fun () -> (match reading with In_layout_effect -> ignore (top ()) | In_body | In_hole | In_ref | In_handler -> ()); None) [| count |];
+  <p
+    ref=(ReactDOM.Ref.callbackDomRef (fun element ->
+         match (reading, Js.Nullable.toOption element) with
+         | In_ref, Some _ -> ignore (top ())
+         | In_ref, None | (In_body | In_hole | In_layout_effect | In_handler), _ -> ()))
+    onClick=(fun _ -> match reading with In_handler -> ignore (top ()) | In_body | In_hole | In_layout_effect | In_ref -> ())>
+    (React.float (body +. match reading with In_hole -> (bounding page)##top +. float_of_int count | In_body | In_layout_effect | In_ref | In_handler -> float_of_int count))
+  </p>
+
+module Body_reader = struct
+  let[@react.component] make () = useReader In_body
+end
+
+module Hole_reader = struct
+  let[@react.component] make () = useReader In_hole
+end
+
+module Effect_reader = struct
+  let[@react.component] make () = useReader In_layout_effect
+end
+
+module Ref_reader = struct
+  let[@react.component] make () = useReader In_ref
+end
+
+module Handler_reader = struct
+  let[@react.component] make () = useReader In_handler
+end
+
+let reader reading =
+  match reading with
+  | In_body -> <Body_reader />
+  | In_hole -> <Hole_reader />
+  | In_layout_effect -> <Effect_reader />
+  | In_ref -> <Ref_reader />
+  | In_handler -> <Handler_reader />
+
+let warned_before = ref []
+
 let law volatile expected =
   check_async
     (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
@@ -119,6 +174,38 @@ let law volatile expected =
     [%mel.obj { numRuns = 150 }]
 
 let () =
+  MelactDebug.warnLayoutReadsInRender ();
+  describe "layout read while rendering" (fun () ->
+      test_async "warns once per component for a read in its body or a hole, never for one in an effect, a ref or a handler" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+                 let tape = tape values in
+                 let reading = readings.(draw tape (Array.length readings)) in
+                 let warned = spy_on console_object "warn" in
+                 let root = attached () in
+                 let client = ReactDOM.Client.createRoot root in
+                 let* () = act (fun () -> ReactDOM.Client.render client (reader reading)) in
+                 let rec step remaining =
+                   match remaining with
+                   | 0 -> Js.Promise.resolve ()
+                   | _ ->
+                       let* () = act (fun () -> !reading_send (fun count -> count + 1)) in
+                       let* () = act (fun () -> click (select root "p")) in
+                       step (remaining - 1)
+                 in
+                 let* () = step (1 + draw tape 4) in
+                 let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                 let count = Array.length (calls (mock warned)) in
+                 restore warned;
+                 let expected =
+                   match (reading, List.mem reading !warned_before) with
+                   | (In_body | In_hole), false -> 1
+                   | (In_body | In_hole), true | (In_layout_effect | In_ref | In_handler), _ -> 0
+                 in
+                 warned_before := reading :: !warned_before;
+                 expect count |. to_equal expected;
+                 Js.Promise.resolve ()))
+            [%mel.obj { numRuns = 60 }]));
   describe "props written inline in a component" (fun () ->
       test_async "a child whose props capture nothing that changed, and are equal otherwise, is not rendered again"
         (fun () ->

@@ -566,6 +566,7 @@ let mapper =
       }
 
     val mutable react : opened = Closed
+    val mutable modules : string list = []
     val mutable hooks : string list = []
 
     method! structure items =
@@ -574,6 +575,17 @@ let mapper =
       react <- saved;
       hooks <- known;
       mapped
+
+    method! module_binding binding =
+      let saved = modules in
+      modules <- Option.fold ~none:modules ~some:(fun name -> name :: modules) binding.pmb_name.txt;
+      match super#module_binding binding with
+      | mapped ->
+          modules <- saved;
+          mapped
+      | exception error ->
+          modules <- saved;
+          raise error
 
     method! structure_item item =
       match item.pstr_desc with
@@ -668,7 +680,9 @@ let mapper =
           in
           let type_name = props_type name in
           let props_constructor = String.capitalize_ascii type_name in
-          let builder = component ~loc ~name:(file ^ "." ^ name) ~props_constructor binding.pvb_expr in
+          let builder =
+            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor binding.pvb_expr
+          in
           ( [
               pstr_type ~loc Recursive
                 [
