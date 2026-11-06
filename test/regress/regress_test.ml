@@ -22,6 +22,11 @@ let () =
       in
       expect (inner_html opened, inner_html wrapped) |. to_equal ("<button>1</button>", "<button>11 21 31</button>");
       Js.Promise.resolve ());
+    test_async "hooks in a file that starts with include React, in a component and in a custom hook" (fun () ->
+      let* root, _ = mount (Included.make (Included.makeProps ())) in
+      let* () = React.act (fun () -> click (select root "button")) in
+      expect (inner_html root) |. to_equal "<button>1b</button>";
+      Js.Promise.resolve ());
     test_async "a hook polymorphic in its value, used with two types" (fun () ->
       let* root, client = mount (Findings.Previous.make (Findings.Previous.makeProps ~count:1 ~label:"a" ())) in
       let* () =

@@ -14,6 +14,8 @@ let keyed_hooks =
         "useImperativeHandle";
       ]
 
+let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionState" ]
+
 let without_component attributes =
   match
     List.partition
@@ -337,7 +339,8 @@ let mapper =
 
     method! structure_item item =
       match item.pstr_desc with
-      | Pstr_open { popen_expr = { pmod_desc = Pmod_ident { txt = Lident "React"; _ }; _ }; _ } ->
+      | Pstr_open { popen_expr = { pmod_desc = Pmod_ident { txt = Lident "React"; _ }; _ }; _ }
+      | Pstr_include { pincl_mod = { pmod_desc = Pmod_ident { txt = Lident "React"; _ }; _ }; _ } ->
           react <- Opened;
           item
       | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr; _ }
@@ -464,6 +467,12 @@ let mapper =
                 | Pexp_ident { txt = Ldot _; _ }, _ -> true
                 | Pexp_ident { txt = Lident _; _ }, Opened -> not (List.mem name self#locals)
                 | _ -> false) ->
+          self#keyed expression
+      | Pexp_ident { txt = Ldot (Ldot (Lident "React", "Experimental"), name); _ }
+        when List.exists (String.equal name) experimental_hooks ->
+          self#keyed expression
+      | Pexp_ident { txt = Ldot (Lident "Experimental", name); _ }
+        when List.exists (String.equal name) experimental_hooks && (match react with Opened -> true | Closed -> false) ->
           self#keyed expression
       | Pexp_ident { txt = Ldot (Lident owner, name); _ }
         when List.exists (String.equal name) keyed_hooks
