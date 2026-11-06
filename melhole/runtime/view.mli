@@ -23,11 +23,20 @@ val empty : child
 val list : child list -> child
 val keyed : (string * child) list -> child
 val with_key : string -> child -> child
-(** A compiled loop: [project item out at] writes the [pieces] values of a row's rendering that read
+(** Whether a compiled loop's rows are drawn from the item alone, or from the item and its index. *)
+type numbering = Items | Numbered
+
+(** A compiled loop: [project item index out at] writes the [pieces] values of a row's rendering that read
     [outer] into [out] from [at], so that a change of [outer] re-renders only the rows they differ in
-    and allocates nothing per row. *)
+    and allocates nothing per row; a [Numbered] row is drawn again when its index changes. *)
 val each :
-  'item array -> ('item -> child[@u]) -> ('item -> input array -> int -> unit[@u]) -> int -> input array -> child
+  numbering ->
+  'item array ->
+  ('item -> int -> child[@u]) ->
+  ('item -> int -> input array -> int -> unit[@u]) ->
+  int ->
+  input array ->
+  child
 
 (** A mounted compiled template: the values its refresh last read and what it holds. *)
 type scope
@@ -43,7 +52,7 @@ val rows :
   int ->
   (scope -> 'holes -> 'item -> unit[@u]) ->
   ('item -> string[@u]) ->
-  ('item -> input array -> int -> unit[@u]) ->
+  ('item -> int -> input array -> int -> unit[@u]) ->
   int ->
   input array ->
   child

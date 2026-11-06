@@ -4,7 +4,7 @@
 (melange.emit
  (target output)
  (alias runtest-js)
- (libraries reason-react testing melange.dom)
+ (libraries reason-react testing melange.dom melange.belt)
  (module_systems
   (es6 mjs))
  (preprocess

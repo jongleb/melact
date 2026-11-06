@@ -424,10 +424,12 @@ let pieces_copied source from target at pieces =
     Array.unsafe_set target (at + index) (Array.unsafe_get source (from + index))
   done
 
-let each items render project pieces outer =
+type numbering = Items | Numbered
+
+let each numbering items render project pieces outer =
   let count = Array.length items in
   let rendered index item =
-    let child = render item [@u] in
+    let child = render item index [@u] in
     match child.shape with
     | Entry (key, inner) -> (inner, key)
     | Single | Nothing | Many _ | Entries _ | Deferred _ -> (child, string_of_int index)
@@ -447,7 +449,7 @@ let each items render project pieces outer =
         in
         let projections = Array.make (count * pieces) unset in
         for index = 0 to count - 1 do
-          project (Array.unsafe_get items index) projections (index * pieces) [@u]
+          project (Array.unsafe_get items index) index projections (index * pieces) [@u]
         done;
         group (Each_state { items; keys; outer; projections; lives }) lives);
     patch =
@@ -498,12 +500,12 @@ let each items render project pieces outer =
                   let fresh = match Array.length made with 0 -> None | _ -> Array.unsafe_get made index in
                   match (fresh, outer_change) with
                   | Some child, _ ->
-                      project item projections at [@u];
+                      project item index projections at [@u];
                       Array.unsafe_set lives index
                         (update { position with before = ahead lives (index + 1) } (Array.unsafe_get lives index) child)
                   | None, Unchanged -> ()
                   | None, Changed -> (
-                      project item scratch 0 [@u];
+                      project item index scratch 0 [@u];
                       match piece_change projections at scratch pieces with
                       | Unchanged -> ()
                       | Changed ->
@@ -522,9 +524,10 @@ let each items render project pieces outer =
             let shift = ref 0 in
             Array.iteri
               (fun index item ->
-                (match outer_change with Unchanged -> () | Changed -> project item scratch 0 [@u]);
+                (match outer_change with Unchanged -> () | Changed -> project item index scratch 0 [@u]);
                 let fits from =
                   from >= 0 && from < old_count
+                  && (match numbering with Items -> true | Numbered -> from = index)
                   && Dom_api.same (Array.unsafe_get old.items from) item
                   &&
                   match outer_change with
@@ -551,7 +554,7 @@ let each items render project pieces outer =
                   Array.unsafe_set made index (Some child);
                   Array.unsafe_set keys index key;
                   match outer_change with
-                  | Unchanged -> project item projections (index * pieces) [@u]
+                  | Unchanged -> project item index projections (index * pieces) [@u]
                   | Changed -> pieces_copied scratch 0 projections (index * pieces) pieces))
               items;
             let described index =
@@ -811,7 +814,7 @@ let rows (type holes item) (items : item array) (template : holes template) slot
         in
         let projections = Array.make (count * pieces) unset in
         for index = 0 to count - 1 do
-          project (Array.unsafe_get items index) projections (index * pieces) [@u]
+          project (Array.unsafe_get items index) index projections (index * pieces) [@u]
         done;
         shown items keys projections rows);
     patch =
@@ -854,14 +857,14 @@ let rows (type holes item) (items : item array) (template : holes template) slot
                   match (Dom_api.same item (Array.unsafe_get old.items index), outer_change) with
                   | true, Unchanged -> ()
                   | true, Changed -> (
-                      project item scratch 0 [@u];
+                      project item index scratch 0 [@u];
                       match piece_change projections at scratch pieces with
                       | Unchanged -> ()
                       | Changed ->
                           pieces_copied scratch 0 projections at pieces;
                           Array.unsafe_set rows index (refreshed (Array.unsafe_get rows index) item))
                   | false, _ ->
-                      project item projections at [@u];
+                      project item index projections at [@u];
                       Array.unsafe_set rows index (refreshed (Array.unsafe_get rows index) item)
                 done;
                 Some (shown items old.keys projections rows)
@@ -887,7 +890,7 @@ let rows (type holes item) (items : item array) (template : holes template) slot
             let shift = ref 0 in
             for index = 0 to count - 1 do
               let item = Array.unsafe_get items index in
-              (match outer_change with Unchanged -> () | Changed -> project item scratch 0 [@u]);
+              (match outer_change with Unchanged -> () | Changed -> project item index scratch 0 [@u]);
               let from = index + !shift in
               if fits from item then reuse index from
               else if fits (from + 1) item then (
@@ -899,7 +902,7 @@ let rows (type holes item) (items : item array) (template : holes template) slot
               else (
                 Array.unsafe_set keys index (key item [@u]);
                 match outer_change with
-                | Unchanged -> project item projections (index * pieces) [@u]
+                | Unchanged -> project item index projections (index * pieces) [@u]
                 | Changed -> pieces_copied scratch 0 projections (index * pieces) pieces)
             done;
             let rec order index =

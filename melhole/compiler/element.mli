@@ -48,6 +48,9 @@ val output : output ref
 val without_jsx : Ppxlib.attributes -> Ppxlib.attributes option
 val list_items : Ppxlib.expression -> Ppxlib.expression list option
 
+(** Whether a loop's row function takes the item, or the index and then the item. *)
+type numbering = Items | Numbered
+
 val loop :
   frontend ->
   loc:Ppxlib.location ->
@@ -55,6 +58,7 @@ val loop :
   view:(Ppxlib.expression -> bool) ->
   stable:Ppxlib.expression list ->
   render:(Ppxlib.expression -> Ppxlib.expression) ->
+  numbering:numbering ->
   Ppxlib.expression ->
   Ppxlib.expression ->
   Ppxlib.expression option

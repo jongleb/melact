@@ -22,13 +22,14 @@ let row_template = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "class");
 let renders = ref 0
 let marked outer item = match String.equal item.key outer.chosen with true -> "on" | false -> ""
 
-let loop items outer =
-  View.each items
-    (fun [@u] item ->
+let loop numbering items outer =
+  View.each numbering items
+    (fun [@u] item index ->
       incr renders;
+      let place = match numbering with View.Items -> "" | View.Numbered -> string_of_int index ^ ":" in
       View.with_key item.key
-        (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ outer.suffix) |]))
-    (fun [@u] item out at ->
+        (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (place ^ item.label ^ outer.suffix) |]))
+    (fun [@u] item _ out at ->
       Array.unsafe_set out at (View.Input (marked outer item));
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
     2
@@ -46,17 +47,22 @@ let lines items outer =
       View.set_attr marking (Some (marked outer item));
       View.set_text text (item.label ^ outer.suffix))
     (fun [@u] item -> item.key)
-    (fun [@u] item out at ->
+    (fun [@u] item _ out at ->
       Array.unsafe_set out at (View.Input (marked outer item));
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
     2
     [| View.Input outer |]
 
 (** Which compiled loop a law runs on. *)
-type loop = Each | Rows
+type loop = Each | Numbered_each | Rows
 
-let looped kind items outer = match kind with Each -> loop items outer | Rows -> lines items outer
-let loops = [ ("View.each", Each); ("View.rows", Rows) ]
+let looped kind items outer =
+  match kind with
+  | Each -> loop View.Items items outer
+  | Numbered_each -> loop View.Numbered items outer
+  | Rows -> lines items outer
+
+let loops = [ ("View.each", Each); ("View.each, numbered rows", Numbered_each); ("View.rows", Rows) ]
 
 (** How a step changes the rows. *)
 type edit = Structural | Same_order

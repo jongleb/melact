@@ -663,7 +663,9 @@ let lowercase frontend ~loc ~attributes tag arguments =
             [%expr Melhole.View.with_key ([%e key] : string) [%e frontend.unwrap loc instance]])
         key
 
-let loop frontend ~loc ~definitions ~view ~stable ~render row items =
+type numbering = Items | Numbered
+
+let loop frontend ~loc ~definitions ~view ~stable ~render ~numbering row items =
   match (!output, Free.closure ~definitions ~locals:frontend.locals row) with
   | Server, _ -> None
   | (Client_only | Hydratable), closure ->
@@ -683,19 +685,33 @@ let loop frontend ~loc ~definitions ~view ~stable ~render row items =
           | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name definitions
           | _ -> Some row)
           (fun lambda ->
-            match lambda.pexp_desc with
-            | Pexp_function
-                ([ { pparam_desc = Pparam_val (Nolabel, None, pattern); _ } ], None, Pfunction_body body)
-              -> (
+            let bound =
+              match (numbering, lambda.pexp_desc) with
+              | Items, Pexp_function ([ { pparam_desc = Pparam_val (Nolabel, None, pattern); _ } ], None, Pfunction_body body)
+                ->
+                  Some ((fun inner -> [%expr let [%p pattern] = __melhole_item in [%e inner]]), body)
+              | ( Numbered,
+                  Pexp_function
+                    ( [
+                        { pparam_desc = Pparam_val (Nolabel, None, position); _ };
+                        { pparam_desc = Pparam_val (Nolabel, None, pattern); _ };
+                      ],
+                      None,
+                      Pfunction_body body ) ) ->
+                  Some
+                    ( (fun inner -> [%expr let [%p position] = __melhole_index in let [%p pattern] = __melhole_item in [%e inner]]),
+                      body )
+              | (Items | Numbered), _ -> None
+            in
+            Option.bind bound (fun (bind, body) ->
                 match Free.of_expression lambda with
                 | Volatile -> None
                 | Reads read ->
                     Option.map
-                      (fun leaves -> (pattern, leaves))
+                      (fun leaves -> (bind, leaves))
                       (Free.leaves
                          ~outer:(List.filter (fun name -> List.mem name frontend.locals) read)
-                         ~view body))
-            | _ -> None)
+                         ~view body)))
       in
       let written values =
         List.fold_right
@@ -714,14 +730,13 @@ let loop frontend ~loc ~definitions ~view ~stable ~render row items =
       let project =
         pexp_record ~loc
           [
-            ( { txt = Ldot (Ldot (Lident "Js", "Fn"), "I3"); loc },
+            ( { txt = Ldot (Ldot (Lident "Js", "Fn"), "I4"); loc },
               Option.fold
-                ~none:[%expr fun _ __melhole_out __melhole_at -> [%e written (List.map (fun name -> evar ~loc name) names)]]
-                ~some:(fun (pattern, leaves) ->
+                ~none:[%expr fun _ _ __melhole_out __melhole_at -> [%e written (List.map (fun name -> evar ~loc name) names)]]
+                ~some:(fun (bind, leaves) ->
                   [%expr
-                    fun __melhole_item __melhole_out __melhole_at ->
-                      (let [%p pattern] = __melhole_item in
-                       [%e written leaves])
+                    fun __melhole_item __melhole_index __melhole_out __melhole_at ->
+                      [%e bind (written leaves)]
                       [@ocaml.warning "-26-27"]])
                 split );
           ]
@@ -745,9 +760,10 @@ let loop frontend ~loc ~definitions ~view ~stable ~render row items =
       in
       let compiled_rows =
         Option.bind
-          (match row.pexp_desc with
-          | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name definitions
-          | _ -> Some row)
+          (match (numbering, row.pexp_desc) with
+          | Numbered, _ -> None
+          | Items, Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name definitions
+          | Items, _ -> Some row)
           (fun lambda ->
             match lambda.pexp_desc with
             | Pexp_function (([ { pparam_desc = Pparam_val (Nolabel, None, _); _ } ] as parameters), None, Pfunction_body body)
@@ -813,8 +829,22 @@ let loop frontend ~loc ~definitions ~view ~stable ~render row items =
       | None ->
           Some
             [%expr
-              Melhole.View.each [%e items]
-                [%e uncurried [%expr fun __melhole_item -> [%e render [%expr [%e frontend.map row] __melhole_item]]]]
+              Melhole.View.each
+                [%e match numbering with Items -> [%expr Melhole.View.Items] | Numbered -> [%expr Melhole.View.Numbered]]
+                [%e items]
+                [%e
+                  pexp_record ~loc
+                    [
+                      ( { txt = Ldot (Ldot (Lident "Js", "Fn"), "I2"); loc },
+                        match numbering with
+                        | Items ->
+                            [%expr fun __melhole_item _ -> [%e render [%expr [%e frontend.map row] __melhole_item]]]
+                        | Numbered ->
+                            [%expr
+                              fun __melhole_item __melhole_index ->
+                                [%e render [%expr [%e frontend.map row] __melhole_index __melhole_item]]] );
+                    ]
+                    None]
                 [%e project] [%e pieces] [%e outer]]
 
 let fragment frontend ~loc items =

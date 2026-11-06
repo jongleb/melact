@@ -528,6 +528,71 @@ let marked_html marked =
             marked.entries))
   ^ "</ul>"
 
+(** A way reason-react code writes a keyed list. *)
+type form =
+  | Mapped
+  | Last_piped
+  | Belt_piped
+  | Js_labelled
+  | Indexed
+  | Index_unused
+  | Belt_indexed
+  | Js_indexed
+
+let forms =
+  [| Mapped; Last_piped; Belt_piped; Js_labelled; Indexed; Index_unused; Belt_indexed; Js_indexed |]
+
+(** The labels a list shows and the suffix every row reads. *)
+type listing = { labels : string array; suffix : string }
+
+let listing_send = ref (fun (_ : listing -> listing) -> ())
+
+module Entry = struct
+  let[@react.component] make ~text ~onPick = <li onClick=(fun _ -> onPick ())>(React.string text)</li>
+end
+
+module Forms = struct
+  let[@react.component] make ~form =
+    let listing, setListing = React.useState (fun () -> { labels = [||]; suffix = "" }) in
+    listing_send := setListing;
+    let { labels; suffix } = listing in
+    let pick () = setListing (fun current -> current) in
+    match form with
+    | Mapped -> <ul>(React.array (Array.map (fun label -> <Entry key=label text=(label ^ suffix) onPick=pick />) labels))</ul>
+    | Last_piped -> <ul>(labels |> Array.map (fun label -> <Entry key=label text=(label ^ suffix) onPick=pick />) |> React.array)</ul>
+    | Belt_piped -> <ul>(labels |. Belt.Array.map (fun label -> <Entry key=label text=(label ^ suffix) onPick=pick />) |. React.array)</ul>
+    | Js_labelled -> <ul>(labels |. Js.Array.map ~f:(fun label -> <Entry key=label text=(label ^ suffix) onPick=pick />) |. React.array)</ul>
+    | Indexed ->
+        <ul>
+          (Array.mapi (fun index label -> <Entry key=label text=(string_of_int index ^ ":" ^ label ^ suffix) onPick=pick />) labels
+          |. React.array)
+        </ul>
+    | Index_unused -> <ul>(Array.mapi (fun _ label -> <Entry key=label text=(label ^ suffix) onPick=pick />) labels |. React.array)</ul>
+    | Belt_indexed ->
+        <ul>
+          (labels
+          |. Belt.Array.mapWithIndex (fun index label -> <Entry key=label text=(string_of_int index ^ ":" ^ label ^ suffix) onPick=pick />)
+          |. React.array)
+        </ul>
+    | Js_indexed ->
+        <ul>
+          (labels
+          |. Js.Array.mapi ~f:(fun label index -> <Entry key=label text=(string_of_int index ^ ":" ^ label ^ suffix) onPick=pick />)
+          |. React.array)
+        </ul>
+end
+
+let listing_html form { labels; suffix } =
+  let numbered = match form with Indexed | Belt_indexed | Js_indexed -> `Numbered | Mapped | Last_piped | Belt_piped | Js_labelled | Index_unused -> `Plain in
+  "<ul>"
+  ^ String.concat ""
+      (Array.to_list
+         (Array.mapi
+            (fun index label ->
+              "<li>" ^ (match numbered with `Numbered -> string_of_int index ^ ":" | `Plain -> "") ^ label ^ suffix ^ "</li>")
+            labels))
+  ^ "</ul>"
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1116,6 +1181,34 @@ let () =
              in
              step 10 marked_start))
         [%mel.obj { numRuns = 60 }]));
+  describe "lists written in any of reason-react's forms" (fun () ->
+    test_async "show the labels in order, numbered where the row reads its index, after any edits" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let form = forms.(draw tape (Array.length forms)) in
+             let* root, client = mount <Forms form /> in
+             let pool = [| "a"; "b"; "c"; "d"; "e"; "f" |] in
+             let rec step remaining listing =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let listing =
+                     match draw tape 3 with
+                     | 0 -> { listing with suffix = [| ""; "!"; "?" |].(draw tape 3) }
+                     | _ ->
+                         let ranked = Array.map (fun label -> (draw tape 100, label)) pool in
+                         Array.stable_sort compare ranked;
+                         { listing with labels = Array.sub (Array.map snd ranked) 0 (draw tape 7) }
+                   in
+                   let* () = act (fun () -> !listing_send (fun _ -> listing)) in
+                   expect (inner_html root) |. to_equal (listing_html form listing);
+                   step (remaining - 1) listing
+             in
+             step 10 { labels = [||]; suffix = "" }))
+        [%mel.obj { numRuns = 120 }]));
   describe "server rendering" (fun () ->
     test_async "hydrating the server's HTML creates no element and then updates like a render" (fun () ->
       check_async

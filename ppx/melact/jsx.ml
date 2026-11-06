@@ -294,33 +294,82 @@ let mapper =
         extra = (fun _ -> None);
         each =
           (fun loc item ->
+            let rec piped expression =
+              match expression.pexp_desc with
+              | Pexp_apply
+                  ( { pexp_desc = Pexp_ident { txt = Lident (("|." | "|>") as pipe); _ }; _ },
+                    [ (Nolabel, subject); (Nolabel, step) ] ) ->
+                  let subject = piped subject in
+                  let applied =
+                    match (pipe, step.pexp_desc) with
+                    | "|.", Pexp_apply (callee, arguments) -> Pexp_apply (callee, (Nolabel, subject) :: arguments)
+                    | _, Pexp_apply (callee, arguments) -> Pexp_apply (callee, arguments @ [ (Nolabel, subject) ])
+                    | _, _ -> Pexp_apply (step, [ (Nolabel, subject) ])
+                  in
+                  { expression with pexp_desc = applied }
+              | _ -> expression
+            in
             let mapping =
-              match item.pexp_desc with
+              match (piped item).pexp_desc with
               | Pexp_apply
-                  ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "array"); _ }; _ },
-                    [ (Nolabel, { pexp_desc = Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, arguments); _ }) ] )
-                -> (
-                  match (txt, arguments) with
-                  | (Ldot (Lident "Array", "map") | Ldot (Ldot (Lident "Stdlib", "Array"), "map")), [ (Nolabel, row); (Nolabel, items) ]
-                  | Ldot (Ldot (Lident "Belt", "Array"), "map"), [ (Nolabel, items); (Nolabel, row) ] ->
-                      Some (row, self#expression items)
+                  ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", (("array" | "list") as shown)); _ }; _ },
+                    [ (Nolabel, inner) ] ) -> (
+                  match (piped inner).pexp_desc with
+                  | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, arguments) -> (
+                      let path = match Longident.flatten_exn txt with path -> path | exception Invalid_argument _ -> [] in
+                      let unlabelled = List.filter_map (fun (label, value) -> match label with Nolabel -> Some value | Labelled _ | Optional _ -> None) arguments in
+                      let given =
+                        match (path, arguments, unlabelled) with
+                        | (["Array"; "map"] | ["Stdlib"; "Array"; "map"] | ["List"; "map"] | ["Stdlib"; "List"; "map"]), [ _; _ ], [ row; items ]
+                          ->
+                            Some (path, row, items)
+                        | ["Belt"; "Array"; "map"], [ _; _ ], [ items; row ]
+                          ->
+                            Some (path, row, items)
+                        | (["Array"; "mapi"] | ["Stdlib"; "Array"; "mapi"]), [ _; _ ], [ row; items ]
+                          ->
+                            Some (path, row, items)
+                        | ["Belt"; "Array"; "mapWithIndex"], [ _; _ ], [ items; row ]
+                          ->
+                            Some (path, row, items)
+                        | (["Js"; "Array"; "map"] | ["Js"; "Array"; "mapi"]), [ _; _ ], [ items ] ->
+                            Option.map
+                              (fun row -> (path, row, items))
+                              (List.find_map
+                                 (fun (label, value) -> match label with Labelled "f" -> Some value | Nolabel | Labelled _ | Optional _ -> None)
+                                 arguments)
+                        | _ -> None
+                      in
+                      let swapped row =
+                        match row.pexp_desc with
+                        | Pexp_function ([ item; index ], None, body) -> Some { row with pexp_desc = Pexp_function ([ index; item ], None, body) }
+                        | _ -> None
+                      in
+                      match (shown, given) with
+                      | "array", Some ((["Array"; "map"] | ["Stdlib"; "Array"; "map"] | ["Belt"; "Array"; "map"] | ["Js"; "Array"; "map"]), row, items) ->
+                          Some (Element.Items, row, self#expression items)
+                      | "array", Some ((["Array"; "mapi"] | ["Stdlib"; "Array"; "mapi"] | ["Belt"; "Array"; "mapWithIndex"]), row, items) ->
+                          Some (Element.Numbered, row, self#expression items)
+                      | "array", Some (["Js"; "Array"; "mapi"], row, items) ->
+                          Option.map (fun row -> (Element.Numbered, row, self#expression items)) (swapped row)
+                      | "list", Some ((["List"; "map"] | ["Stdlib"; "List"; "map"]), row, items) ->
+                          Some (Element.Items, row, [%expr Stdlib.Array.of_list [%e self#expression items]])
+                      | _, (Some _ | None) -> None)
                   | _ -> None)
-              | Pexp_apply
-                  ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "list"); _ }; _ },
-                    [
-                      ( Nolabel,
-                        {
-                          pexp_desc =
-                            Pexp_apply
-                              ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "List", "map") | Ldot (Ldot (Lident "Stdlib", "List"), "map"); _ }; _ },
-                                [ (Nolabel, row); (Nolabel, items) ] );
-                          _;
-                        } );
-                    ] ) ->
-                  Some (row, [%expr Stdlib.Array.of_list [%e self#expression items]])
               | _ -> None
             in
-            Option.bind mapping (fun (row, items) ->
+            let unnumbered (numbering, row, items) =
+              match (numbering, row.pexp_desc) with
+              | Element.Numbered, Pexp_function ([ { pparam_desc = Pparam_val (Nolabel, None, position); _ }; item ], None, body)
+                -> (
+                  let by_item = { row with pexp_desc = Pexp_function ([ item ], None, body) } in
+                  match Free.of_expression by_item with
+                  | Reads read when not (List.exists (fun name -> List.mem name read) (Free.bound position)) ->
+                      (Element.Items, by_item, items)
+                  | Reads _ | Volatile -> (numbering, row, items))
+              | (Element.Items | Element.Numbered), _ -> (numbering, row, items)
+            in
+            Option.bind (Option.map unnumbered mapping) (fun (numbering, row, items) ->
                 Element.loop self#frontend ~loc ~definitions:self#definitions
                   ~view:(fun expression ->
                     match expression.pexp_desc with
@@ -330,7 +379,7 @@ let mapper =
                     | _ -> false)
                   ~stable:[]
                   ~render:(fun element -> [%expr React.to_child [%e element]])
-                  row items));
+                  ~numbering row items));
       }
 
     val mutable react : opened = Closed

@@ -754,3 +754,24 @@ render, and says so:
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Error: melact: [@react.component] external binds a component of a JavaScript React library. It is React code and needs React itself to render; Melact cannot run it. Write the component in Reason or OCaml, or keep this part of the app on reason-react.
   [1]
+
+Lists in the forms reason-react code writes them, piped or not, compile to keyed loops; a row that
+reads its index is numbered, one that ignores it is not:
+
+  $ cat > forms.ml <<'EOF'
+  > let piped items = ((ul ~children:[ items |. Belt.Array.map (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > let last items = ((ul ~children:[ items |> Array.map (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) |> React.array ] ()) [@JSX])
+  > let labelled items = ((ul ~children:[ items |. Js.Array.map ~f:(fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > let numbered items = ((ul ~children:[ Array.mapi (fun i x -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX])) items |. React.array ] ()) [@JSX])
+  > let belt_numbered items = ((ul ~children:[ items |. Belt.Array.mapWithIndex (fun i x -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > let js_numbered items = ((ul ~children:[ items |. Js.Array.mapi ~f:(fun x i -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > let unused items = ((ul ~children:[ Array.mapi (fun _ x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) items |. React.array ] ()) [@JSX])
+  > EOF
+  $ ./pp.exe -impl forms.ml | grep -o "Melhole.View.each Melhole.View.[A-Za-z]*"
+  Melhole.View.each Melhole.View.Items
+  Melhole.View.each Melhole.View.Items
+  Melhole.View.each Melhole.View.Items
+  Melhole.View.each Melhole.View.Numbered
+  Melhole.View.each Melhole.View.Numbered
+  Melhole.View.each Melhole.View.Numbered
+  Melhole.View.each Melhole.View.Items

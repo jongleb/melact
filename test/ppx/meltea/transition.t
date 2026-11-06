@@ -137,9 +137,9 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                       [@ocaml.warning "-26-27"]))
                                }
                                {
-                                 Js.Fn.I3 =
-                                   (fun __melhole_item __melhole_out
-                                      __melhole_at ->
+                                 Js.Fn.I4 =
+                                   (fun __melhole_item __melhole_index
+                                      __melhole_out __melhole_at ->
                                       ((let id = __melhole_item in
                                         Stdlib.Array.unsafe_set __melhole_out
                                           (__melhole_at + 0)

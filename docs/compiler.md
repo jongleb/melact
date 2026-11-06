@@ -94,6 +94,12 @@ of a list of row descriptions. The compiler finds what a row reads besides its i
 variables of `row`, looking through local `let` definitions. If none of them changed and an item is
 physically the same as before, the loop keeps the row as it is and never calls `row`.
 
+Melact compiles the forms reason-react code writes lists in: `React.array` over `Array.map`,
+`Belt.Array.map` or `Js.Array.map ~f`, called directly or through `|.` and `|>`, and `React.list`
+over `List.map`. `Array.mapi`, `Belt.Array.mapWithIndex` and `Js.Array.mapi ~f` give a numbered
+loop: a row that reads its index is drawn again when its index changes, and a row whose index is
+ignored compiles as a plain one. A law runs every form against React after random edits.
+
 When an outer variable does change, the loop does not re-render every row. As in Vue Vapor's
 selectors, the compiler splits the row into its item and the smallest pieces without JSX that read
 outer variables (its leaves), for example
