@@ -224,6 +224,10 @@ let useInsertionEffect0 key run = use_effect Instance.Layout always key run ()
 let useInsertionEffect1 key run deps = use_effect Instance.Layout same_array key run deps
 let useInsertionEffect2 key run deps = use_effect Instance.Layout same2 key run deps
 let useInsertionEffect3 key run deps = use_effect Instance.Layout same3 key run deps
+let useInsertionEffect4 key run deps = use_effect Instance.Layout same4 key run deps
+let useInsertionEffect5 key run deps = use_effect Instance.Layout same5 key run deps
+let useInsertionEffect6 key run deps = use_effect Instance.Layout same6 key run deps
+let useInsertionEffect7 key run deps = use_effect Instance.Layout same7 key run deps
 
 let useSyncExternalStore key ~subscribe ~getSnapshot =
   let instance = Instance.current () in
@@ -278,8 +282,18 @@ let useId key () =
       incr ids;
       ":m" ^ string_of_int !ids ^ ":")
 
+let useSyncExternalStoreWithServer key ~subscribe ~getSnapshot ~getServerSnapshot:_ =
+  useSyncExternalStore key ~subscribe ~getSnapshot
+
+let[@warning "-16"] useDeferredValue value ?initialValue:_ = value
 let startTransition run = run ()
 let useTransition () = (false, startTransition)
+
+let useTransitionAsync () =
+  ( false,
+    fun run ->
+      run ();
+      Js.Promise.resolve () )
 let act run =
   run ();
   Instance.flush ();

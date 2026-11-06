@@ -42,8 +42,9 @@ let target package name type_ =
     | Some _ -> react Keyed (base ^ "1")
   in
   match (package, name) with
+  | "react", "useSyncExternalStore" when List.length (parameters type_) >= 3 -> react Keyed "useSyncExternalStoreWithServer"
   | "react", ("useState" | "useReducer" | "useRef" | "useId" | "useSyncExternalStore") -> react Keyed name
-  | "react", ("useContext" | "useTransition" | "startTransition" | "useDebugValue" | "createContext" | "memo"
+  | "react", ("useContext" | "useTransition" | "useDeferredValue" | "startTransition" | "useDebugValue" | "createContext" | "memo"
              | "forwardRef" | "isValidElement" | "cloneElement" | "createRef") ->
       react Plain name
   | "react", ("useEffect" | "useLayoutEffect" | "useMemo" | "useCallback" | "useInsertionEffect") -> with_deps name 1

@@ -5,7 +5,7 @@ open Ast_builder.Default
 let keyed_hooks =
   [
     "useState"; "useReducer"; "useReducerWithMapState"; "useRef"; "useId"; "useEffect";
-    "useLayoutEffect"; "useMemo"; "useCallback"; "useInsertionEffect"; "useSyncExternalStore";
+    "useLayoutEffect"; "useMemo"; "useCallback"; "useInsertionEffect"; "useSyncExternalStore"; "useSyncExternalStoreWithServer";
   ]
   @ List.concat_map
       (fun base -> List.init 8 (fun arity -> base ^ string_of_int arity))

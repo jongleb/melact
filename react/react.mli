@@ -355,6 +355,34 @@ val useInsertionEffect3 :
   unit
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
+val useInsertionEffect4 :
+  ('a * 'b * 'c * 'd) effect_cell Melact_runtime.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a * 'b * 'c * 'd ->
+  unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+val useInsertionEffect5 :
+  ('a * 'b * 'c * 'd * 'e) effect_cell Melact_runtime.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a * 'b * 'c * 'd * 'e ->
+  unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+val useInsertionEffect6 :
+  ('a * 'b * 'c * 'd * 'e * 'f) effect_cell Melact_runtime.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a * 'b * 'c * 'd * 'e * 'f ->
+  unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+val useInsertionEffect7 :
+  ('a * 'b * 'c * 'd * 'e * 'f * 'g) effect_cell Melact_runtime.Hook.key ->
+  (unit -> (unit -> unit) option) ->
+  'a * 'b * 'c * 'd * 'e * 'f * 'g ->
+  unit
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
 (** The slot of a [useSyncExternalStore] call. *)
 type 'snapshot store
 
@@ -363,6 +391,20 @@ val useSyncExternalStore :
   subscribe:((unit -> unit) -> unit -> unit) ->
   getSnapshot:(unit -> 'snapshot) ->
   'snapshot
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+(** On the client the server snapshot is not read: Melact hydrates with the client's own snapshot
+    and patches what differs. *)
+val useSyncExternalStoreWithServer :
+  'snapshot store Melact_runtime.Hook.key ->
+  subscribe:((unit -> unit) -> unit -> unit) ->
+  getSnapshot:(unit -> 'snapshot) ->
+  getServerSnapshot:(unit -> 'snapshot) ->
+  'snapshot
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+(** Melact renders without interruption, so the deferred value is the value itself. *)
+val useDeferredValue : 'a -> ?initialValue:'a -> 'a
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useDebugValue : 'value -> ?format:('value -> string) -> unit -> unit
@@ -434,6 +476,9 @@ val useImperativeHandle7 :
 val useId : string Melact_runtime.Hook.key -> unit -> string
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val useTransition : unit -> bool * ((unit -> unit) -> unit)
+[@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+val useTransitionAsync : unit -> bool * ((unit -> unit) -> unit Js.Promise.t)
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 val startTransition : (unit -> unit) -> unit
 val act : (unit -> unit) -> unit Js.Promise.t

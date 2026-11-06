@@ -265,6 +265,33 @@ module Typed = struct
     </section>
 end
 
+let store = ref 0
+let listeners = ref []
+
+let publish value =
+  store := value;
+  List.iter (fun listener -> listener ()) !listeners
+
+module Fresh_hooks = struct
+  let[@react.component] make ~a ~b ~c ~d =
+    React.useInsertionEffect4 (fun () -> log ("insert " ^ a ^ b ^ c ^ d); None) (a, b, c, d);
+    React.useInsertionEffect7 (fun () -> log ("seven " ^ a ^ d); None) (a, 1, 2, 3, 4, 5, d);
+    let shared =
+      React.useSyncExternalStoreWithServer
+        ~subscribe:(fun listener ->
+          listeners := listener :: !listeners;
+          fun () -> listeners := List.filter (fun other -> other != listener) !listeners)
+        ~getSnapshot:(fun () -> !store)
+        ~getServerSnapshot:(fun () -> -1)
+    in
+    let deferred = React.useDeferredValue (a ^ b) ~initialValue:"" in
+    let pending, _ = React.useTransitionAsync () in
+    <p>
+      (React.string (deferred ^ "/" ^ string_of_int shared ^ "/" ^ string_of_bool pending))
+      <button onClick=(fun _ -> publish (!store + 1))>(React.string "go")</button>
+    </p>
+end
+
 module Address = struct
   let[@react.component] make () =
     let url = ReasonReactRouter.useUrl () in
@@ -1430,6 +1457,46 @@ let () =
       loud ();
       expect (inner_html root) |. to_equal "<main><i>late</i></main>";
       finish ()));
+  describe "hooks from reason-react 0.17" (fun () ->
+    test_async "insertion effects with four and seven dependencies, a store with a server snapshot, a deferred value and useTransitionAsync" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let letters = [| "x"; "y" |] in
+             store := 0;
+             let* root, client = mount <Fresh_hooks a="x" b="x" c="x" d="x" /> in
+             let rec run remaining (a, b, c, d, shared) =
+               match remaining with
+               | 0 -> Js.Promise.resolve ()
+               | _ -> (
+                   match draw tape 2 with
+                   | 0 ->
+                       let* () = act (fun () -> click (select root "button")) in
+                       expect (inner_html (select root "p"), take ())
+                       |. to_equal
+                            ( a ^ b ^ "/" ^ string_of_int (shared + 1) ^ "/false<button>go</button>",
+                              [] );
+                       run (remaining - 1) (a, b, c, d, shared + 1)
+                   | _ ->
+                       let a' = letters.(draw tape 2) and b' = letters.(draw tape 2)
+                       and c' = letters.(draw tape 2) and d' = letters.(draw tape 2) in
+                       let* () = act (fun () -> ReactDOM.Client.render client <Fresh_hooks a=a' b=b' c=c' d=d' />) in
+                       let inserted =
+                         match (a, b, c, d) = (a', b', c', d') with
+                         | true -> []
+                         | false -> [ "insert " ^ a' ^ b' ^ c' ^ d' ]
+                       and seven = match (a, d) = (a', d') with true -> [] | false -> [ "seven " ^ a' ^ d' ] in
+                       expect (inner_html (select root "p"), take ())
+                       |. to_equal
+                            ( a' ^ b' ^ "/" ^ string_of_int shared ^ "/false<button>go</button>",
+                              inserted @ seven );
+                       run (remaining - 1) (a', b', c', d', shared))
+             in
+             let* () = run (1 + draw tape 10) ("x", "x", "x", "x", 0) in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             ignore (take ());
+             finish ()))
+        [%mel.obj { numRuns = 80 }]));
   describe "lists and conditions" (fun () ->
     test_async "React.createElement and React.jsxKeyed with makeProps keep rows and their state exactly as JSX does" (fun () ->
       check_async
