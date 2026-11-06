@@ -4,355 +4,355 @@ module Style = struct
   type t = Declarations of (string * string) list [@@unboxed]
 
   let make ?azimuth ?background ?backgroundAttachment ?backgroundColor ?backgroundImage ?backgroundPosition ?backgroundRepeat ?border ?borderCollapse ?borderColor ?borderSpacing ?borderStyle ?borderTop ?borderRight ?borderBottom ?borderLeft ?borderTopColor ?borderRightColor ?borderBottomColor ?borderLeftColor ?borderTopStyle ?borderRightStyle ?borderBottomStyle ?borderLeftStyle ?borderTopWidth ?borderRightWidth ?borderBottomWidth ?borderLeftWidth ?borderWidth ?bottom ?captionSide ?clear ?clip ?color ?content ?counterIncrement ?counterReset ?cue ?cueAfter ?cueBefore ?cursor ?direction ?display ?elevation ?emptyCells ?float ?font ?fontFamily ?fontSize ?fontSizeAdjust ?fontStretch ?fontStyle ?fontVariant ?fontWeight ?height ?left ?letterSpacing ?lineHeight ?listStyle ?listStyleImage ?listStylePosition ?listStyleType ?margin ?marginTop ?marginRight ?marginBottom ?marginLeft ?markerOffset ?marks ?maxHeight ?maxWidth ?minHeight ?minWidth ?orphans ?outline ?outlineColor ?outlineStyle ?outlineWidth ?overflow ?overflowX ?overflowY ?padding ?paddingTop ?paddingRight ?paddingBottom ?paddingLeft ?page ?pageBreakAfter ?pageBreakBefore ?pageBreakInside ?pause ?pauseAfter ?pauseBefore ?pitch ?pitchRange ?playDuring ?position ?quotes ?richness ?right ?size ?speak ?speakHeader ?speakNumeral ?speakPunctuation ?speechRate ?stress ?tableLayout ?textAlign ?textDecoration ?textIndent ?textShadow ?textTransform ?top ?unicodeBidi ?verticalAlign ?visibility ?voiceFamily ?volume ?whiteSpace ?widows ?width ?wordSpacing ?zIndex ?opacity ?backgroundOrigin ?backgroundSize ?backgroundClip ?borderRadius ?borderTopLeftRadius ?borderTopRightRadius ?borderBottomLeftRadius ?borderBottomRightRadius ?borderImage ?borderImageSource ?borderImageSlice ?borderImageWidth ?borderImageOutset ?borderImageRepeat ?boxShadow ?columns ?columnCount ?columnFill ?columnGap ?columnRule ?columnRuleColor ?columnRuleStyle ?columnRuleWidth ?columnSpan ?columnWidth ?breakAfter ?breakBefore ?breakInside ?rest ?restAfter ?restBefore ?speakAs ?voiceBalance ?voiceDuration ?voicePitch ?voiceRange ?voiceRate ?voiceStress ?voiceVolume ?objectFit ?objectPosition ?imageResolution ?imageOrientation ?alignContent ?alignItems ?alignSelf ?flex ?flexBasis ?flexDirection ?flexFlow ?flexGrow ?flexShrink ?flexWrap ?justifyContent ?order ?textDecorationColor ?textDecorationLine ?textDecorationSkip ?textDecorationStyle ?textEmphasis ?textEmphasisColor ?textEmphasisPosition ?textEmphasisStyle ?textUnderlinePosition ?fontFeatureSettings ?fontKerning ?fontLanguageOverride ?fontSynthesis ?forntVariantAlternates ?fontVariantCaps ?fontVariantEastAsian ?fontVariantLigatures ?fontVariantNumeric ?fontVariantPosition ?all ?glyphOrientationVertical ?textCombineUpright ?textOrientation ?writingMode ?shapeImageThreshold ?shapeMargin ?shapeOutside ?clipPath ?clipRule ?mask ?maskBorder ?maskBorderMode ?maskBorderOutset ?maskBorderRepeat ?maskBorderSlice ?maskBorderSource ?maskBorderWidth ?maskClip ?maskComposite ?maskImage ?maskMode ?maskOrigin ?maskPosition ?maskRepeat ?maskSize ?maskType ?backgroundBlendMode ?isolation ?mixBlendMode ?boxDecorationBreak ?boxSizing ?caretColor ?navDown ?navLeft ?navRight ?navUp ?outlineOffset ?resize ?textOverflow ?grid ?gridArea ?gridAutoColumns ?gridAutoFlow ?gridAutoRows ?gridColumn ?gridColumnEnd ?gridColumnGap ?gridColumnStart ?gridGap ?gridRow ?gridRowEnd ?gridRowGap ?gridRowStart ?gridTemplate ?gridTemplateAreas ?gridTemplateColumns ?gridTemplateRows ?willChange ?hangingPunctuation ?hyphens ?lineBreak ?overflowWrap ?tabSize ?textAlignLast ?textJustify ?wordBreak ?wordWrap ?animation ?animationDelay ?animationDirection ?animationDuration ?animationFillMode ?animationIterationCount ?animationName ?animationPlayState ?animationTimingFunction ?transition ?transitionDelay ?transitionDuration ?transitionProperty ?transitionTimingFunction ?backfaceVisibility ?perspective ?perspectiveOrigin ?transform ?transformOrigin ?transformStyle ?justifyItems ?justifySelf ?placeContent ?placeItems ?placeSelf ?appearance ?caret ?caretAnimation ?caretShape ?userSelect ?maxLines ?marqueeDirection ?marqueeLoop ?marqueeSpeed ?marqueeStyle ?overflowStyle ?rotation ?rotationPoint ?alignmentBaseline ?baselineShift ?colorInterpolation ?colorInterpolationFilters ?colorProfile ?colorRendering ?dominantBaseline ?fill ?fillOpacity ?fillRule ?filter ?floodColor ?floodOpacity ?glyphOrientationHorizontal ?imageRendering ?kerning ?lightingColor ?markerEnd ?markerMid ?markerStart ?pointerEvents ?shapeRendering ?stopColor ?stopOpacity ?stroke ?strokeDasharray ?strokeDashoffset ?strokeLinecap ?strokeLinejoin ?strokeMiterlimit ?strokeOpacity ?strokeWidth ?textAnchor ?textRendering ?rubyAlign ?rubyMerge ?rubyPosition ?gap ?rowGap () =
+    let declared name (value : string option) declarations =
+      match value with Some value -> (name, value) :: declarations | None -> declarations
+    in
     Declarations
-      (List.filter_map
-         (fun (name, value) -> Option.map (fun value -> (name, value)) value)
-         [
-           ("azimuth", azimuth);
-           ("background", background);
-           ("backgroundAttachment", backgroundAttachment);
-           ("backgroundColor", backgroundColor);
-           ("backgroundImage", backgroundImage);
-           ("backgroundPosition", backgroundPosition);
-           ("backgroundRepeat", backgroundRepeat);
-           ("border", border);
-           ("borderCollapse", borderCollapse);
-           ("borderColor", borderColor);
-           ("borderSpacing", borderSpacing);
-           ("borderStyle", borderStyle);
-           ("borderTop", borderTop);
-           ("borderRight", borderRight);
-           ("borderBottom", borderBottom);
-           ("borderLeft", borderLeft);
-           ("borderTopColor", borderTopColor);
-           ("borderRightColor", borderRightColor);
-           ("borderBottomColor", borderBottomColor);
-           ("borderLeftColor", borderLeftColor);
-           ("borderTopStyle", borderTopStyle);
-           ("borderRightStyle", borderRightStyle);
-           ("borderBottomStyle", borderBottomStyle);
-           ("borderLeftStyle", borderLeftStyle);
-           ("borderTopWidth", borderTopWidth);
-           ("borderRightWidth", borderRightWidth);
-           ("borderBottomWidth", borderBottomWidth);
-           ("borderLeftWidth", borderLeftWidth);
-           ("borderWidth", borderWidth);
-           ("bottom", bottom);
-           ("captionSide", captionSide);
-           ("clear", clear);
-           ("clip", clip);
-           ("color", color);
-           ("content", content);
-           ("counterIncrement", counterIncrement);
-           ("counterReset", counterReset);
-           ("cue", cue);
-           ("cueAfter", cueAfter);
-           ("cueBefore", cueBefore);
-           ("cursor", cursor);
-           ("direction", direction);
-           ("display", display);
-           ("elevation", elevation);
-           ("emptyCells", emptyCells);
-           ("float", float);
-           ("font", font);
-           ("fontFamily", fontFamily);
-           ("fontSize", fontSize);
-           ("fontSizeAdjust", fontSizeAdjust);
-           ("fontStretch", fontStretch);
-           ("fontStyle", fontStyle);
-           ("fontVariant", fontVariant);
-           ("fontWeight", fontWeight);
-           ("height", height);
-           ("left", left);
-           ("letterSpacing", letterSpacing);
-           ("lineHeight", lineHeight);
-           ("listStyle", listStyle);
-           ("listStyleImage", listStyleImage);
-           ("listStylePosition", listStylePosition);
-           ("listStyleType", listStyleType);
-           ("margin", margin);
-           ("marginTop", marginTop);
-           ("marginRight", marginRight);
-           ("marginBottom", marginBottom);
-           ("marginLeft", marginLeft);
-           ("markerOffset", markerOffset);
-           ("marks", marks);
-           ("maxHeight", maxHeight);
-           ("maxWidth", maxWidth);
-           ("minHeight", minHeight);
-           ("minWidth", minWidth);
-           ("orphans", orphans);
-           ("outline", outline);
-           ("outlineColor", outlineColor);
-           ("outlineStyle", outlineStyle);
-           ("outlineWidth", outlineWidth);
-           ("overflow", overflow);
-           ("overflowX", overflowX);
-           ("overflowY", overflowY);
-           ("padding", padding);
-           ("paddingTop", paddingTop);
-           ("paddingRight", paddingRight);
-           ("paddingBottom", paddingBottom);
-           ("paddingLeft", paddingLeft);
-           ("page", page);
-           ("pageBreakAfter", pageBreakAfter);
-           ("pageBreakBefore", pageBreakBefore);
-           ("pageBreakInside", pageBreakInside);
-           ("pause", pause);
-           ("pauseAfter", pauseAfter);
-           ("pauseBefore", pauseBefore);
-           ("pitch", pitch);
-           ("pitchRange", pitchRange);
-           ("playDuring", playDuring);
-           ("position", position);
-           ("quotes", quotes);
-           ("richness", richness);
-           ("right", right);
-           ("size", size);
-           ("speak", speak);
-           ("speakHeader", speakHeader);
-           ("speakNumeral", speakNumeral);
-           ("speakPunctuation", speakPunctuation);
-           ("speechRate", speechRate);
-           ("stress", stress);
-           ("tableLayout", tableLayout);
-           ("textAlign", textAlign);
-           ("textDecoration", textDecoration);
-           ("textIndent", textIndent);
-           ("textShadow", textShadow);
-           ("textTransform", textTransform);
-           ("top", top);
-           ("unicodeBidi", unicodeBidi);
-           ("verticalAlign", verticalAlign);
-           ("visibility", visibility);
-           ("voiceFamily", voiceFamily);
-           ("volume", volume);
-           ("whiteSpace", whiteSpace);
-           ("widows", widows);
-           ("width", width);
-           ("wordSpacing", wordSpacing);
-           ("zIndex", zIndex);
-           ("opacity", opacity);
-           ("backgroundOrigin", backgroundOrigin);
-           ("backgroundSize", backgroundSize);
-           ("backgroundClip", backgroundClip);
-           ("borderRadius", borderRadius);
-           ("borderTopLeftRadius", borderTopLeftRadius);
-           ("borderTopRightRadius", borderTopRightRadius);
-           ("borderBottomLeftRadius", borderBottomLeftRadius);
-           ("borderBottomRightRadius", borderBottomRightRadius);
-           ("borderImage", borderImage);
-           ("borderImageSource", borderImageSource);
-           ("borderImageSlice", borderImageSlice);
-           ("borderImageWidth", borderImageWidth);
-           ("borderImageOutset", borderImageOutset);
-           ("borderImageRepeat", borderImageRepeat);
-           ("boxShadow", boxShadow);
-           ("columns", columns);
-           ("columnCount", columnCount);
-           ("columnFill", columnFill);
-           ("columnGap", columnGap);
-           ("columnRule", columnRule);
-           ("columnRuleColor", columnRuleColor);
-           ("columnRuleStyle", columnRuleStyle);
-           ("columnRuleWidth", columnRuleWidth);
-           ("columnSpan", columnSpan);
-           ("columnWidth", columnWidth);
-           ("breakAfter", breakAfter);
-           ("breakBefore", breakBefore);
-           ("breakInside", breakInside);
-           ("rest", rest);
-           ("restAfter", restAfter);
-           ("restBefore", restBefore);
-           ("speakAs", speakAs);
-           ("voiceBalance", voiceBalance);
-           ("voiceDuration", voiceDuration);
-           ("voicePitch", voicePitch);
-           ("voiceRange", voiceRange);
-           ("voiceRate", voiceRate);
-           ("voiceStress", voiceStress);
-           ("voiceVolume", voiceVolume);
-           ("objectFit", objectFit);
-           ("objectPosition", objectPosition);
-           ("imageResolution", imageResolution);
-           ("imageOrientation", imageOrientation);
-           ("alignContent", alignContent);
-           ("alignItems", alignItems);
-           ("alignSelf", alignSelf);
-           ("flex", flex);
-           ("flexBasis", flexBasis);
-           ("flexDirection", flexDirection);
-           ("flexFlow", flexFlow);
-           ("flexGrow", flexGrow);
-           ("flexShrink", flexShrink);
-           ("flexWrap", flexWrap);
-           ("justifyContent", justifyContent);
-           ("order", order);
-           ("textDecorationColor", textDecorationColor);
-           ("textDecorationLine", textDecorationLine);
-           ("textDecorationSkip", textDecorationSkip);
-           ("textDecorationStyle", textDecorationStyle);
-           ("textEmphasis", textEmphasis);
-           ("textEmphasisColor", textEmphasisColor);
-           ("textEmphasisPosition", textEmphasisPosition);
-           ("textEmphasisStyle", textEmphasisStyle);
-           ("textUnderlinePosition", textUnderlinePosition);
-           ("fontFeatureSettings", fontFeatureSettings);
-           ("fontKerning", fontKerning);
-           ("fontLanguageOverride", fontLanguageOverride);
-           ("fontSynthesis", fontSynthesis);
-           ("forntVariantAlternates", forntVariantAlternates);
-           ("fontVariantCaps", fontVariantCaps);
-           ("fontVariantEastAsian", fontVariantEastAsian);
-           ("fontVariantLigatures", fontVariantLigatures);
-           ("fontVariantNumeric", fontVariantNumeric);
-           ("fontVariantPosition", fontVariantPosition);
-           ("all", all);
-           ("glyphOrientationVertical", glyphOrientationVertical);
-           ("textCombineUpright", textCombineUpright);
-           ("textOrientation", textOrientation);
-           ("writingMode", writingMode);
-           ("shapeImageThreshold", shapeImageThreshold);
-           ("shapeMargin", shapeMargin);
-           ("shapeOutside", shapeOutside);
-           ("clipPath", clipPath);
-           ("clipRule", clipRule);
-           ("mask", mask);
-           ("maskBorder", maskBorder);
-           ("maskBorderMode", maskBorderMode);
-           ("maskBorderOutset", maskBorderOutset);
-           ("maskBorderRepeat", maskBorderRepeat);
-           ("maskBorderSlice", maskBorderSlice);
-           ("maskBorderSource", maskBorderSource);
-           ("maskBorderWidth", maskBorderWidth);
-           ("maskClip", maskClip);
-           ("maskComposite", maskComposite);
-           ("maskImage", maskImage);
-           ("maskMode", maskMode);
-           ("maskOrigin", maskOrigin);
-           ("maskPosition", maskPosition);
-           ("maskRepeat", maskRepeat);
-           ("maskSize", maskSize);
-           ("maskType", maskType);
-           ("backgroundBlendMode", backgroundBlendMode);
-           ("isolation", isolation);
-           ("mixBlendMode", mixBlendMode);
-           ("boxDecorationBreak", boxDecorationBreak);
-           ("boxSizing", boxSizing);
-           ("caretColor", caretColor);
-           ("navDown", navDown);
-           ("navLeft", navLeft);
-           ("navRight", navRight);
-           ("navUp", navUp);
-           ("outlineOffset", outlineOffset);
-           ("resize", resize);
-           ("textOverflow", textOverflow);
-           ("grid", grid);
-           ("gridArea", gridArea);
-           ("gridAutoColumns", gridAutoColumns);
-           ("gridAutoFlow", gridAutoFlow);
-           ("gridAutoRows", gridAutoRows);
-           ("gridColumn", gridColumn);
-           ("gridColumnEnd", gridColumnEnd);
-           ("gridColumnGap", gridColumnGap);
-           ("gridColumnStart", gridColumnStart);
-           ("gridGap", gridGap);
-           ("gridRow", gridRow);
-           ("gridRowEnd", gridRowEnd);
-           ("gridRowGap", gridRowGap);
-           ("gridRowStart", gridRowStart);
-           ("gridTemplate", gridTemplate);
-           ("gridTemplateAreas", gridTemplateAreas);
-           ("gridTemplateColumns", gridTemplateColumns);
-           ("gridTemplateRows", gridTemplateRows);
-           ("willChange", willChange);
-           ("hangingPunctuation", hangingPunctuation);
-           ("hyphens", hyphens);
-           ("lineBreak", lineBreak);
-           ("overflowWrap", overflowWrap);
-           ("tabSize", tabSize);
-           ("textAlignLast", textAlignLast);
-           ("textJustify", textJustify);
-           ("wordBreak", wordBreak);
-           ("wordWrap", wordWrap);
-           ("animation", animation);
-           ("animationDelay", animationDelay);
-           ("animationDirection", animationDirection);
-           ("animationDuration", animationDuration);
-           ("animationFillMode", animationFillMode);
-           ("animationIterationCount", animationIterationCount);
-           ("animationName", animationName);
-           ("animationPlayState", animationPlayState);
-           ("animationTimingFunction", animationTimingFunction);
-           ("transition", transition);
-           ("transitionDelay", transitionDelay);
-           ("transitionDuration", transitionDuration);
-           ("transitionProperty", transitionProperty);
-           ("transitionTimingFunction", transitionTimingFunction);
-           ("backfaceVisibility", backfaceVisibility);
-           ("perspective", perspective);
-           ("perspectiveOrigin", perspectiveOrigin);
-           ("transform", transform);
-           ("transformOrigin", transformOrigin);
-           ("transformStyle", transformStyle);
-           ("justifyItems", justifyItems);
-           ("justifySelf", justifySelf);
-           ("placeContent", placeContent);
-           ("placeItems", placeItems);
-           ("placeSelf", placeSelf);
-           ("appearance", appearance);
-           ("caret", caret);
-           ("caretAnimation", caretAnimation);
-           ("caretShape", caretShape);
-           ("userSelect", userSelect);
-           ("maxLines", maxLines);
-           ("marqueeDirection", marqueeDirection);
-           ("marqueeLoop", marqueeLoop);
-           ("marqueeSpeed", marqueeSpeed);
-           ("marqueeStyle", marqueeStyle);
-           ("overflowStyle", overflowStyle);
-           ("rotation", rotation);
-           ("rotationPoint", rotationPoint);
-           ("alignmentBaseline", alignmentBaseline);
-           ("baselineShift", baselineShift);
-           ("colorInterpolation", colorInterpolation);
-           ("colorInterpolationFilters", colorInterpolationFilters);
-           ("colorProfile", colorProfile);
-           ("colorRendering", colorRendering);
-           ("dominantBaseline", dominantBaseline);
-           ("fill", fill);
-           ("fillOpacity", fillOpacity);
-           ("fillRule", fillRule);
-           ("filter", filter);
-           ("floodColor", floodColor);
-           ("floodOpacity", floodOpacity);
-           ("glyphOrientationHorizontal", glyphOrientationHorizontal);
-           ("imageRendering", imageRendering);
-           ("kerning", kerning);
-           ("lightingColor", lightingColor);
-           ("markerEnd", markerEnd);
-           ("markerMid", markerMid);
-           ("markerStart", markerStart);
-           ("pointerEvents", pointerEvents);
-           ("shapeRendering", shapeRendering);
-           ("stopColor", stopColor);
-           ("stopOpacity", stopOpacity);
-           ("stroke", stroke);
-           ("strokeDasharray", strokeDasharray);
-           ("strokeDashoffset", strokeDashoffset);
-           ("strokeLinecap", strokeLinecap);
-           ("strokeLinejoin", strokeLinejoin);
-           ("strokeMiterlimit", strokeMiterlimit);
-           ("strokeOpacity", strokeOpacity);
-           ("strokeWidth", strokeWidth);
-           ("textAnchor", textAnchor);
-           ("textRendering", textRendering);
-           ("rubyAlign", rubyAlign);
-           ("rubyMerge", rubyMerge);
-           ("rubyPosition", rubyPosition);
-           ("gap", gap);
-           ("rowGap", rowGap);
-         ])
+      (declared "azimuth" azimuth
+      @@ declared "background" background
+      @@ declared "backgroundAttachment" backgroundAttachment
+      @@ declared "backgroundColor" backgroundColor
+      @@ declared "backgroundImage" backgroundImage
+      @@ declared "backgroundPosition" backgroundPosition
+      @@ declared "backgroundRepeat" backgroundRepeat
+      @@ declared "border" border
+      @@ declared "borderCollapse" borderCollapse
+      @@ declared "borderColor" borderColor
+      @@ declared "borderSpacing" borderSpacing
+      @@ declared "borderStyle" borderStyle
+      @@ declared "borderTop" borderTop
+      @@ declared "borderRight" borderRight
+      @@ declared "borderBottom" borderBottom
+      @@ declared "borderLeft" borderLeft
+      @@ declared "borderTopColor" borderTopColor
+      @@ declared "borderRightColor" borderRightColor
+      @@ declared "borderBottomColor" borderBottomColor
+      @@ declared "borderLeftColor" borderLeftColor
+      @@ declared "borderTopStyle" borderTopStyle
+      @@ declared "borderRightStyle" borderRightStyle
+      @@ declared "borderBottomStyle" borderBottomStyle
+      @@ declared "borderLeftStyle" borderLeftStyle
+      @@ declared "borderTopWidth" borderTopWidth
+      @@ declared "borderRightWidth" borderRightWidth
+      @@ declared "borderBottomWidth" borderBottomWidth
+      @@ declared "borderLeftWidth" borderLeftWidth
+      @@ declared "borderWidth" borderWidth
+      @@ declared "bottom" bottom
+      @@ declared "captionSide" captionSide
+      @@ declared "clear" clear
+      @@ declared "clip" clip
+      @@ declared "color" color
+      @@ declared "content" content
+      @@ declared "counterIncrement" counterIncrement
+      @@ declared "counterReset" counterReset
+      @@ declared "cue" cue
+      @@ declared "cueAfter" cueAfter
+      @@ declared "cueBefore" cueBefore
+      @@ declared "cursor" cursor
+      @@ declared "direction" direction
+      @@ declared "display" display
+      @@ declared "elevation" elevation
+      @@ declared "emptyCells" emptyCells
+      @@ declared "float" float
+      @@ declared "font" font
+      @@ declared "fontFamily" fontFamily
+      @@ declared "fontSize" fontSize
+      @@ declared "fontSizeAdjust" fontSizeAdjust
+      @@ declared "fontStretch" fontStretch
+      @@ declared "fontStyle" fontStyle
+      @@ declared "fontVariant" fontVariant
+      @@ declared "fontWeight" fontWeight
+      @@ declared "height" height
+      @@ declared "left" left
+      @@ declared "letterSpacing" letterSpacing
+      @@ declared "lineHeight" lineHeight
+      @@ declared "listStyle" listStyle
+      @@ declared "listStyleImage" listStyleImage
+      @@ declared "listStylePosition" listStylePosition
+      @@ declared "listStyleType" listStyleType
+      @@ declared "margin" margin
+      @@ declared "marginTop" marginTop
+      @@ declared "marginRight" marginRight
+      @@ declared "marginBottom" marginBottom
+      @@ declared "marginLeft" marginLeft
+      @@ declared "markerOffset" markerOffset
+      @@ declared "marks" marks
+      @@ declared "maxHeight" maxHeight
+      @@ declared "maxWidth" maxWidth
+      @@ declared "minHeight" minHeight
+      @@ declared "minWidth" minWidth
+      @@ declared "orphans" orphans
+      @@ declared "outline" outline
+      @@ declared "outlineColor" outlineColor
+      @@ declared "outlineStyle" outlineStyle
+      @@ declared "outlineWidth" outlineWidth
+      @@ declared "overflow" overflow
+      @@ declared "overflowX" overflowX
+      @@ declared "overflowY" overflowY
+      @@ declared "padding" padding
+      @@ declared "paddingTop" paddingTop
+      @@ declared "paddingRight" paddingRight
+      @@ declared "paddingBottom" paddingBottom
+      @@ declared "paddingLeft" paddingLeft
+      @@ declared "page" page
+      @@ declared "pageBreakAfter" pageBreakAfter
+      @@ declared "pageBreakBefore" pageBreakBefore
+      @@ declared "pageBreakInside" pageBreakInside
+      @@ declared "pause" pause
+      @@ declared "pauseAfter" pauseAfter
+      @@ declared "pauseBefore" pauseBefore
+      @@ declared "pitch" pitch
+      @@ declared "pitchRange" pitchRange
+      @@ declared "playDuring" playDuring
+      @@ declared "position" position
+      @@ declared "quotes" quotes
+      @@ declared "richness" richness
+      @@ declared "right" right
+      @@ declared "size" size
+      @@ declared "speak" speak
+      @@ declared "speakHeader" speakHeader
+      @@ declared "speakNumeral" speakNumeral
+      @@ declared "speakPunctuation" speakPunctuation
+      @@ declared "speechRate" speechRate
+      @@ declared "stress" stress
+      @@ declared "tableLayout" tableLayout
+      @@ declared "textAlign" textAlign
+      @@ declared "textDecoration" textDecoration
+      @@ declared "textIndent" textIndent
+      @@ declared "textShadow" textShadow
+      @@ declared "textTransform" textTransform
+      @@ declared "top" top
+      @@ declared "unicodeBidi" unicodeBidi
+      @@ declared "verticalAlign" verticalAlign
+      @@ declared "visibility" visibility
+      @@ declared "voiceFamily" voiceFamily
+      @@ declared "volume" volume
+      @@ declared "whiteSpace" whiteSpace
+      @@ declared "widows" widows
+      @@ declared "width" width
+      @@ declared "wordSpacing" wordSpacing
+      @@ declared "zIndex" zIndex
+      @@ declared "opacity" opacity
+      @@ declared "backgroundOrigin" backgroundOrigin
+      @@ declared "backgroundSize" backgroundSize
+      @@ declared "backgroundClip" backgroundClip
+      @@ declared "borderRadius" borderRadius
+      @@ declared "borderTopLeftRadius" borderTopLeftRadius
+      @@ declared "borderTopRightRadius" borderTopRightRadius
+      @@ declared "borderBottomLeftRadius" borderBottomLeftRadius
+      @@ declared "borderBottomRightRadius" borderBottomRightRadius
+      @@ declared "borderImage" borderImage
+      @@ declared "borderImageSource" borderImageSource
+      @@ declared "borderImageSlice" borderImageSlice
+      @@ declared "borderImageWidth" borderImageWidth
+      @@ declared "borderImageOutset" borderImageOutset
+      @@ declared "borderImageRepeat" borderImageRepeat
+      @@ declared "boxShadow" boxShadow
+      @@ declared "columns" columns
+      @@ declared "columnCount" columnCount
+      @@ declared "columnFill" columnFill
+      @@ declared "columnGap" columnGap
+      @@ declared "columnRule" columnRule
+      @@ declared "columnRuleColor" columnRuleColor
+      @@ declared "columnRuleStyle" columnRuleStyle
+      @@ declared "columnRuleWidth" columnRuleWidth
+      @@ declared "columnSpan" columnSpan
+      @@ declared "columnWidth" columnWidth
+      @@ declared "breakAfter" breakAfter
+      @@ declared "breakBefore" breakBefore
+      @@ declared "breakInside" breakInside
+      @@ declared "rest" rest
+      @@ declared "restAfter" restAfter
+      @@ declared "restBefore" restBefore
+      @@ declared "speakAs" speakAs
+      @@ declared "voiceBalance" voiceBalance
+      @@ declared "voiceDuration" voiceDuration
+      @@ declared "voicePitch" voicePitch
+      @@ declared "voiceRange" voiceRange
+      @@ declared "voiceRate" voiceRate
+      @@ declared "voiceStress" voiceStress
+      @@ declared "voiceVolume" voiceVolume
+      @@ declared "objectFit" objectFit
+      @@ declared "objectPosition" objectPosition
+      @@ declared "imageResolution" imageResolution
+      @@ declared "imageOrientation" imageOrientation
+      @@ declared "alignContent" alignContent
+      @@ declared "alignItems" alignItems
+      @@ declared "alignSelf" alignSelf
+      @@ declared "flex" flex
+      @@ declared "flexBasis" flexBasis
+      @@ declared "flexDirection" flexDirection
+      @@ declared "flexFlow" flexFlow
+      @@ declared "flexGrow" flexGrow
+      @@ declared "flexShrink" flexShrink
+      @@ declared "flexWrap" flexWrap
+      @@ declared "justifyContent" justifyContent
+      @@ declared "order" order
+      @@ declared "textDecorationColor" textDecorationColor
+      @@ declared "textDecorationLine" textDecorationLine
+      @@ declared "textDecorationSkip" textDecorationSkip
+      @@ declared "textDecorationStyle" textDecorationStyle
+      @@ declared "textEmphasis" textEmphasis
+      @@ declared "textEmphasisColor" textEmphasisColor
+      @@ declared "textEmphasisPosition" textEmphasisPosition
+      @@ declared "textEmphasisStyle" textEmphasisStyle
+      @@ declared "textUnderlinePosition" textUnderlinePosition
+      @@ declared "fontFeatureSettings" fontFeatureSettings
+      @@ declared "fontKerning" fontKerning
+      @@ declared "fontLanguageOverride" fontLanguageOverride
+      @@ declared "fontSynthesis" fontSynthesis
+      @@ declared "forntVariantAlternates" forntVariantAlternates
+      @@ declared "fontVariantCaps" fontVariantCaps
+      @@ declared "fontVariantEastAsian" fontVariantEastAsian
+      @@ declared "fontVariantLigatures" fontVariantLigatures
+      @@ declared "fontVariantNumeric" fontVariantNumeric
+      @@ declared "fontVariantPosition" fontVariantPosition
+      @@ declared "all" all
+      @@ declared "glyphOrientationVertical" glyphOrientationVertical
+      @@ declared "textCombineUpright" textCombineUpright
+      @@ declared "textOrientation" textOrientation
+      @@ declared "writingMode" writingMode
+      @@ declared "shapeImageThreshold" shapeImageThreshold
+      @@ declared "shapeMargin" shapeMargin
+      @@ declared "shapeOutside" shapeOutside
+      @@ declared "clipPath" clipPath
+      @@ declared "clipRule" clipRule
+      @@ declared "mask" mask
+      @@ declared "maskBorder" maskBorder
+      @@ declared "maskBorderMode" maskBorderMode
+      @@ declared "maskBorderOutset" maskBorderOutset
+      @@ declared "maskBorderRepeat" maskBorderRepeat
+      @@ declared "maskBorderSlice" maskBorderSlice
+      @@ declared "maskBorderSource" maskBorderSource
+      @@ declared "maskBorderWidth" maskBorderWidth
+      @@ declared "maskClip" maskClip
+      @@ declared "maskComposite" maskComposite
+      @@ declared "maskImage" maskImage
+      @@ declared "maskMode" maskMode
+      @@ declared "maskOrigin" maskOrigin
+      @@ declared "maskPosition" maskPosition
+      @@ declared "maskRepeat" maskRepeat
+      @@ declared "maskSize" maskSize
+      @@ declared "maskType" maskType
+      @@ declared "backgroundBlendMode" backgroundBlendMode
+      @@ declared "isolation" isolation
+      @@ declared "mixBlendMode" mixBlendMode
+      @@ declared "boxDecorationBreak" boxDecorationBreak
+      @@ declared "boxSizing" boxSizing
+      @@ declared "caretColor" caretColor
+      @@ declared "navDown" navDown
+      @@ declared "navLeft" navLeft
+      @@ declared "navRight" navRight
+      @@ declared "navUp" navUp
+      @@ declared "outlineOffset" outlineOffset
+      @@ declared "resize" resize
+      @@ declared "textOverflow" textOverflow
+      @@ declared "grid" grid
+      @@ declared "gridArea" gridArea
+      @@ declared "gridAutoColumns" gridAutoColumns
+      @@ declared "gridAutoFlow" gridAutoFlow
+      @@ declared "gridAutoRows" gridAutoRows
+      @@ declared "gridColumn" gridColumn
+      @@ declared "gridColumnEnd" gridColumnEnd
+      @@ declared "gridColumnGap" gridColumnGap
+      @@ declared "gridColumnStart" gridColumnStart
+      @@ declared "gridGap" gridGap
+      @@ declared "gridRow" gridRow
+      @@ declared "gridRowEnd" gridRowEnd
+      @@ declared "gridRowGap" gridRowGap
+      @@ declared "gridRowStart" gridRowStart
+      @@ declared "gridTemplate" gridTemplate
+      @@ declared "gridTemplateAreas" gridTemplateAreas
+      @@ declared "gridTemplateColumns" gridTemplateColumns
+      @@ declared "gridTemplateRows" gridTemplateRows
+      @@ declared "willChange" willChange
+      @@ declared "hangingPunctuation" hangingPunctuation
+      @@ declared "hyphens" hyphens
+      @@ declared "lineBreak" lineBreak
+      @@ declared "overflowWrap" overflowWrap
+      @@ declared "tabSize" tabSize
+      @@ declared "textAlignLast" textAlignLast
+      @@ declared "textJustify" textJustify
+      @@ declared "wordBreak" wordBreak
+      @@ declared "wordWrap" wordWrap
+      @@ declared "animation" animation
+      @@ declared "animationDelay" animationDelay
+      @@ declared "animationDirection" animationDirection
+      @@ declared "animationDuration" animationDuration
+      @@ declared "animationFillMode" animationFillMode
+      @@ declared "animationIterationCount" animationIterationCount
+      @@ declared "animationName" animationName
+      @@ declared "animationPlayState" animationPlayState
+      @@ declared "animationTimingFunction" animationTimingFunction
+      @@ declared "transition" transition
+      @@ declared "transitionDelay" transitionDelay
+      @@ declared "transitionDuration" transitionDuration
+      @@ declared "transitionProperty" transitionProperty
+      @@ declared "transitionTimingFunction" transitionTimingFunction
+      @@ declared "backfaceVisibility" backfaceVisibility
+      @@ declared "perspective" perspective
+      @@ declared "perspectiveOrigin" perspectiveOrigin
+      @@ declared "transform" transform
+      @@ declared "transformOrigin" transformOrigin
+      @@ declared "transformStyle" transformStyle
+      @@ declared "justifyItems" justifyItems
+      @@ declared "justifySelf" justifySelf
+      @@ declared "placeContent" placeContent
+      @@ declared "placeItems" placeItems
+      @@ declared "placeSelf" placeSelf
+      @@ declared "appearance" appearance
+      @@ declared "caret" caret
+      @@ declared "caretAnimation" caretAnimation
+      @@ declared "caretShape" caretShape
+      @@ declared "userSelect" userSelect
+      @@ declared "maxLines" maxLines
+      @@ declared "marqueeDirection" marqueeDirection
+      @@ declared "marqueeLoop" marqueeLoop
+      @@ declared "marqueeSpeed" marqueeSpeed
+      @@ declared "marqueeStyle" marqueeStyle
+      @@ declared "overflowStyle" overflowStyle
+      @@ declared "rotation" rotation
+      @@ declared "rotationPoint" rotationPoint
+      @@ declared "alignmentBaseline" alignmentBaseline
+      @@ declared "baselineShift" baselineShift
+      @@ declared "colorInterpolation" colorInterpolation
+      @@ declared "colorInterpolationFilters" colorInterpolationFilters
+      @@ declared "colorProfile" colorProfile
+      @@ declared "colorRendering" colorRendering
+      @@ declared "dominantBaseline" dominantBaseline
+      @@ declared "fill" fill
+      @@ declared "fillOpacity" fillOpacity
+      @@ declared "fillRule" fillRule
+      @@ declared "filter" filter
+      @@ declared "floodColor" floodColor
+      @@ declared "floodOpacity" floodOpacity
+      @@ declared "glyphOrientationHorizontal" glyphOrientationHorizontal
+      @@ declared "imageRendering" imageRendering
+      @@ declared "kerning" kerning
+      @@ declared "lightingColor" lightingColor
+      @@ declared "markerEnd" markerEnd
+      @@ declared "markerMid" markerMid
+      @@ declared "markerStart" markerStart
+      @@ declared "pointerEvents" pointerEvents
+      @@ declared "shapeRendering" shapeRendering
+      @@ declared "stopColor" stopColor
+      @@ declared "stopOpacity" stopOpacity
+      @@ declared "stroke" stroke
+      @@ declared "strokeDasharray" strokeDasharray
+      @@ declared "strokeDashoffset" strokeDashoffset
+      @@ declared "strokeLinecap" strokeLinecap
+      @@ declared "strokeLinejoin" strokeLinejoin
+      @@ declared "strokeMiterlimit" strokeMiterlimit
+      @@ declared "strokeOpacity" strokeOpacity
+      @@ declared "strokeWidth" strokeWidth
+      @@ declared "textAnchor" textAnchor
+      @@ declared "textRendering" textRendering
+      @@ declared "rubyAlign" rubyAlign
+      @@ declared "rubyMerge" rubyMerge
+      @@ declared "rubyPosition" rubyPosition
+      @@ declared "gap" gap
+      @@ declared "rowGap" rowGap
+      @@ [])
 
   let combine (Declarations first) (Declarations second) = Declarations (first @ second)
 
@@ -376,8 +376,8 @@ module Ref = struct
 
   let attach reference element =
     match reference with
-    | Current target -> target.current <- Js.Nullable.return element
-    | Callback apply -> apply (Js.Nullable.return element)
+    | Current target -> target.current <- element
+    | Callback apply -> apply element
 
   let forwarded reference =
     match reference with
@@ -511,7 +511,7 @@ let apply built props name =
             hole
       in
       View.set_style hole (Style.declarations (read props name))
-  | Ref_value -> Ref.attach (read props name) element
+  | Ref_value -> Ref.attach (read props name) (Js.Nullable.return element)
   | Inner_html_value -> Dom_api.set_inner_html element (read props name)##__html
   | Skipped -> ()
 
@@ -532,7 +532,8 @@ let clear built name =
   | Event event -> Option.iter (fun key -> Events.set element key ignore) (List.assoc_opt event built.events)
   | Style_value -> Option.iter (fun hole -> View.set_style hole []) built.styled
   | Inner_html_value -> Dom_api.set_inner_html element ""
-  | Ref_value | Skipped -> ()
+  | Ref_value -> Option.iter (fun reference -> Ref.attach reference Js.Nullable.null) (Js.Undefined.toOption (lookup built.shown name))
+  | Skipped -> ()
 
 let given props = Js.Array.filter ~f:(fun name -> not (String.equal name "key" || String.equal name "children")) (keys props)
 
@@ -571,7 +572,8 @@ let dom tag props children =
           ~front:(fun [@u] _ -> Js.Null.return (Dom_api.to_node element))
           ~release:(fun [@u] () ->
             built.inner.release () [@u];
-            List.iter (fun stop -> stop ()) built.cleanups))
+            List.iter (fun stop -> stop ()) built.cleanups;
+            clear built "ref"))
       ~patch:(fun [@u] _ live ->
         match View.hosted live with
         | Some (Dom_built built) when String.equal built.tag tag ->

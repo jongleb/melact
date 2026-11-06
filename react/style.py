@@ -1,6 +1,6 @@
 """Prints module ReactDOM.Style for melact from reason-react's style properties.
 
-python3 react/style.py path/to/reason-react/melange/ReactDOM.rei
+python3 react/style.py path/to/reason-react/src/ReactDOM.rei
 prints the signature, a line with ----, then the implementation of module Style.
 """
 
@@ -26,12 +26,13 @@ signature += ["    unit ->", "    t", "",
 implementation = ["module Style = struct",
                   "  type t = Declarations of (string * string) list [@@unboxed]", "",
                   "  let make " + " ".join(f"?{name}" for name in names) + " () ="]
-implementation += ["    Declarations",
-                   "      (List.filter_map",
-                   "         (fun (name, value) -> Option.map (fun value -> (name, value)) value)",
-                   "         ["]
-implementation += [f'           ("{name}", {name});' for name in names]
-implementation += ["         ])", "",
+implementation += ["    let declared name (value : string option) declarations =",
+                   "      match value with Some value -> (name, value) :: declarations | None -> declarations",
+                   "    in",
+                   "    Declarations"]
+implementation += [f'      (declared "{names[0]}" {names[0]}']
+implementation += [f'      @@ declared "{name}" {name}' for name in names[1:]]
+implementation += ["      @@ [])", "",
                    "  let combine (Declarations first) (Declarations second) = Declarations (first @ second)",
                    "",
                    "  let unsafeAddProp (Declarations declarations) name value =",

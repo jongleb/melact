@@ -35,6 +35,23 @@ let counter label =
       View.tpl_instance button
         [| HHandler (fun _ -> set (fun n -> n + 1)); HText (label ^ string_of_int count) |])
 
+let tally_def = Component.make ~name:"Tally"
+let tally_key = Hook.key ()
+let tally_effect_key = Hook.key ()
+let set_tally = ref (fun (_ : int -> int) -> ())
+
+let tally () =
+  Instance.component tally_def [||] (fun () ->
+      let n, set = React.useState tally_key (fun () -> 0) in
+      set_tally := set;
+      log ("render " ^ string_of_int n);
+      React.useEffect1 tally_effect_key (fun () -> log ("effect " ^ string_of_int n); None) [| n |];
+      View.tpl_instance button [| HHandler (fun _ -> set (fun n -> n + 1)); HText (string_of_int n) |])
+
+external queue_microtask : (unit -> unit) -> unit = "queueMicrotask"
+let next_task : unit -> unit Js.Promise.t =
+  [%mel.raw {|function () { return new Promise(function (done) { setTimeout(done, 0); }); }|}]
+
 let pair_def = Component.make ~name:"Pair"
 let pair_key = Hook.key ()
 let set_pair = ref (fun (_ : int -> int) -> ())
@@ -176,6 +193,44 @@ let () =
               View.unmount mounted;
               Js.Promise.resolve ())
             (Js.Promise.resolve ()));
+      test_async "renders updates from outside a discrete event once, in a task, whatever microtasks they span"
+        (fun () ->
+          check_async
+            (async_property (tapes ~shortest:1 ~longest:8) (fun values ->
+                 let _, mounted = fresh (tally ()) in
+                 Instance.flush ();
+                 ignore (take ());
+                 let rec chain remaining =
+                   match remaining with
+                   | 0 -> ()
+                   | _ -> queue_microtask (fun () -> !set_tally (fun n -> n + 1); chain (remaining - 1))
+                 in
+                 chain (Array.length values);
+                 Js.Promise.then_
+                   (fun () ->
+                     expect (List.filter (fun event -> String.sub event 0 6 = "render") (take ()))
+                     |. to_equal [ "render " ^ string_of_int (Array.length values) ];
+                     View.unmount mounted;
+                     Instance.flush ();
+                     Js.Promise.resolve ())
+                   (Js.Promise.then_ (fun () -> next_task ()) (next_task ()))))
+            [%mel.obj { numRuns = 30 }]);
+      test_async "renders clicks before the next task and runs their passive effects by then" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:1 ~longest:5) (fun values ->
+                 let root, mounted = fresh (tally ()) in
+                 Instance.flush ();
+                 ignore (take ());
+                 Array.iter (fun _ -> click (select root "button")) values;
+                 let clicks = string_of_int (Array.length values) in
+                 Js.Promise.then_
+                   (fun () ->
+                     expect (take ()) |. to_equal [ "render " ^ clicks; "effect " ^ clicks ];
+                     View.unmount mounted;
+                     Instance.flush ();
+                     Js.Promise.resolve ())
+                   (next_task ())))
+            [%mel.obj { numRuns = 30 }]);
       test "skips a render when the value is unchanged" (fun () ->
           let _, _ = fresh (pair ()) in
           ignore (take ());

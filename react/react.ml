@@ -145,18 +145,22 @@ let use_effect timing unchanged key run deps =
         cell.cleanup <- None);
     Instance.after_commit instance timing Instance.Run (fun () -> cell.cleanup <- run ())
   in
+  let made = ref `Kept in
   let cell =
     Instance.slot instance key (fun () ->
         let cell = { deps; cleanup = None } in
         Instance.on_unmount instance (fun () ->
             Option.iter (fun cleanup -> cleanup ()) cell.cleanup;
             cell.cleanup <- None);
-        schedule cell;
+        made := `Made;
         cell)
   in
-  if not (unchanged cell.deps deps) then (
-    cell.deps <- deps;
-    schedule cell)
+  match !made with
+  | `Made -> schedule cell
+  | `Kept ->
+      if not (unchanged cell.deps deps) then (
+        cell.deps <- deps;
+        schedule cell)
 
 let memoize unchanged key compute deps =
   let cell =

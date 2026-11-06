@@ -3,7 +3,7 @@ open Melhole
 (** When an effect runs after its instance is patched. *)
 type timing =
   | Layout  (** Synchronously, before the browser paints. *)
-  | Passive  (** After the whole flush, once the browser has painted. *)
+  | Passive  (** After the whole flush: at once after a discrete event, as React 18, else once the browser has painted. *)
 
 (** Within one commit every cleanup runs before any effect, as in React. *)
 type phase = Cleanup | Run
@@ -118,6 +118,12 @@ type recovery = {
 (** Whether a flush is already queued. *)
 type schedule = Idle | Queued
 
+(** When the queued render of dirty instances runs, after React's lanes. *)
+type render_queue =
+  | Unqueued
+  | Next_task  (** For an update outside a discrete event: a task of its own, as React's default lane. *)
+  | Next_microtask  (** For an update from a discrete event: before the browser paints, as React's sync lane. *)
+
 let thrown error =
   match error with
   | Js.Exn.Error raw -> ([%mel.raw "function (error) { throw error }"] : Js.Exn.t -> unit) raw
@@ -147,7 +153,7 @@ let layout_cleanups = ref []
 let layout_runs = ref []
 let passive_cleanups = ref []
 let passive_runs = ref []
-let render_schedule = ref Idle
+let render_schedule = ref Unqueued
 let passive_schedule = ref Idle
 
 let within cell value run =
@@ -309,7 +315,7 @@ and run_passive () =
   | Busy, _ | _, Busy -> settle ()
 
 let flush () =
-  render_schedule := Idle;
+  render_schedule := Unqueued;
   settle ();
   run_passive ()
 
@@ -394,19 +400,42 @@ let current () =
 
 let slot instance key init = Hook.take instance.slots key init
 
+let queue_render () =
+  let lane =
+    Option.fold ~none:`Default
+      ~some:(fun event ->
+        match Dom_api.event_type event with
+        | "auxclick" | "beforeinput" | "blur" | "cancel" | "change" | "click" | "close" | "compositionend"
+        | "compositionstart" | "compositionupdate" | "contextmenu" | "copy" | "cut" | "dblclick" | "dragend"
+        | "dragstart" | "drop" | "focus" | "focusin" | "focusout" | "fullscreenchange" | "hashchange" | "input"
+        | "invalid" | "keydown" | "keypress" | "keyup" | "mousedown" | "mouseup" | "paste" | "pause" | "play"
+        | "pointercancel" | "pointerdown" | "pointerup" | "popstate" | "ratechange" | "reset" | "resize" | "seeked"
+        | "select" | "selectionchange" | "selectstart" | "submit" | "textInput" | "touchcancel" | "touchend"
+        | "touchstart" | "volumechange" ->
+            `Discrete
+        | _ -> `Default)
+      (Js.Undefined.toOption Dom_api.current_event)
+  in
+  match (!render_schedule, lane) with
+  | Next_microtask, _ | Next_task, `Default -> ()
+  | (Unqueued | Next_task), `Discrete ->
+      render_schedule := Next_microtask;
+      Dom_api.queue_microtask flush
+  | Unqueued, `Default ->
+      render_schedule := Next_task;
+      Dom_api.set_timeout
+        (fun () ->
+          render_schedule := Unqueued;
+          settle ())
+        0
+
 let invalidate instance =
   match !rendering with
   | Some _ ->
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
-  | None -> (
+  | None ->
       mark_dirty instance;
-      match !render_schedule with
-      | Queued -> ()
-      | Idle ->
-          render_schedule := Queued;
-          Dom_api.queue_microtask (fun () ->
-              render_schedule := Idle;
-              settle ()))
+      queue_render ()
 
 let after_commit instance timing phase job =
   instance.pending <- (timing, phase, job) :: instance.pending
@@ -576,15 +605,6 @@ let catch =
 
 let suspend =
   let suspended = ref [] and retried = ref [] and fresh = ref [] in
-  let queued () =
-    match !render_schedule with
-    | Queued -> ()
-    | Idle ->
-        render_schedule := Queued;
-        Dom_api.queue_microtask (fun () ->
-            render_schedule := Idle;
-            settle ())
-  in
   let nodes (live : View.live) =
     let found = ref [] in
     live.each (fun [@u] node -> found := node :: !found) [@u];
@@ -704,7 +724,7 @@ let suspend =
                     | Waiting { content; throwers } when boundary.status != Unmounted ->
                         suspending.waiting <- Retrying { content; throwers };
                         retried := boundary :: !retried;
-                        queued ()
+                        queue_render ()
                     | _ -> ()
                   in
                   ([%mel.raw

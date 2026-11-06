@@ -7,7 +7,7 @@ type instance
 (** When an effect runs after its instance is patched. *)
 type timing =
   | Layout  (** Synchronously, before the browser paints. *)
-  | Passive  (** After the whole flush, once the browser has painted. *)
+  | Passive  (** After the whole flush: at once after a discrete event, as React 18, else once the browser has painted. *)
 
 (** Within one commit every cleanup runs before any effect, as in React. *)
 type phase = Cleanup | Run

@@ -198,6 +198,27 @@ module Focus = struct
     <input ref=(ReactDOM.Ref.domRef input) />
 end
 
+(** Whether the element that holds the refs is on the page. *)
+type held = Held | Dropped
+
+let held_send = ref (fun (_ : held -> held) -> ())
+
+let seen kind element =
+  log (Option.fold ~none:(kind ^ " null") ~some:(fun element -> kind ^ " " ^ tag_name element) (Js.Nullable.toOption element))
+
+let called = ReactDOM.Ref.callbackDomRef (seen "callback")
+
+module Holder = struct
+  let[@react.component] make () =
+    let held, setHeld = React.useState (fun () -> Held) in
+    let target = React.useRef Js.Nullable.null in
+    held_send := setHeld;
+    React.useEffect (fun () -> seen "object" target.current; None);
+    match held with
+    | Held -> <p ref=(ReactDOM.Ref.domRef target)><b ref=called /></p>
+    | Dropped -> <span />
+end
+
 module Fancy_input = struct
   let[@react.component] make = React.forwardRef (fun ~label ref ->
     let ref = Option.map ReactDOM.Ref.domRef (Js.Nullable.toOption ref) in
@@ -1139,6 +1160,34 @@ let () =
       let* () = act (fun () -> ReactDOM.Client.render client <Focus />) in
       expect (take ()) |. to_equal [ "ref INPUT" ];
       finish ()));
+  describe "refs of an element that goes" (fun () ->
+    test_async "are null before effects run, and point at the element again once it is back" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:12) (fun values ->
+             let tape = tape values in
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let* () = act (fun () -> ReactDOM.Client.render client <Holder />) in
+             expect (take ()) |. to_equal [ "callback B"; "object P" ];
+             let rec step remaining held =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (take ()) |. to_equal (match held with Held -> [ "callback null" ] | Dropped -> []);
+                   finish ()
+               | _ ->
+                   let next = match (draw tape 2, held) with 0, _ -> held | _, Held -> Dropped | _, Dropped -> Held in
+                   let* () = act (fun () -> !held_send (fun _ -> next)) in
+                   expect (take ())
+                   |. to_equal
+                        (match (held, next) with
+                        | Held, Held | Dropped, Dropped -> []
+                        | Held, Dropped -> [ "callback null"; "object null" ]
+                        | Dropped, Held -> [ "callback B"; "object P" ]);
+                   step (remaining - 1) next
+             in
+             step (Array.length values) Held))
+        [%mel.obj { numRuns = 40 }]));
   describe "forwardRef and svg" (fun () ->
     test_async "forward a ref to an element inside the component" (fun () ->
       let root = attached () in

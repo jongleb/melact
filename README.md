@@ -273,9 +273,12 @@ server and the client that hydrates its page.
 
 Each `[@react.component]` gets an identity at module level. Its props are compared one by one
 with `===`. A component that calls no hook compiles to a pure view with no instance, kept while
-its props are the same. A setter marks its instance dirty, and one microtask
-renders the dirty instances parents first. Layout effects run right after their instance's
-patch. Passive effects run after the whole flush, and cleanups go children before parents. A
+its props are the same. A setter marks its instance dirty. After a discrete event (a click, a key)
+one microtask renders the dirty instances parents first and then runs their passive effects, as
+React's sync lane does; any other update (a timer, a promise, a `ResizeObserver`) waits for a task of
+its own, as React's default lane, so updates from many callbacks of one task render once, and its
+passive effects run once the browser has painted. Layout effects run right after their instance's
+patch, and cleanups go children before parents. A ref is set to null when its element goes. A
 component that renders nothing keeps its place with an empty text node.
 
 ### Hooks are typed by their call site

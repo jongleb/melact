@@ -371,7 +371,7 @@ module Ref : sig
 
   val domRef : currentDomRef -> domRef
   val callbackDomRef : callbackDomRef -> domRef
-  val attach : domRef -> Dom.element -> unit
+  val attach : domRef -> Dom.element Js.nullable -> unit
   val forwarded : domRef option -> Dom.element Js.nullable React.ref Js.Nullable.t
 end
 

@@ -85,7 +85,7 @@ and hole =
   | HClass of string list
   | HStyle of (string * string) list
   | HHandler of (Dom.event -> unit)
-  | HRef of (Dom.element -> unit)
+  | HRef of (Dom.element Js.nullable -> unit)
   | HChild of child
 
 (** A compiled template: its markup and how to make its holes on a fresh clone. *)
@@ -1051,7 +1051,7 @@ module Hole = struct
   type style = { element : Dom.element; mutable value : (string * string) list }
   type classes = { element : Dom.element; mutable value : string list }
   type handler = { element : Dom.element; key : string }
-  type reference = { scope : scope; element : Dom.element; mutable callback : Dom.element -> unit }
+  type reference = { scope : scope; element : Dom.element; mutable callback : Dom.element Js.nullable -> unit }
   type content = {
     position : Template.position;
     mutable source : child;
@@ -1234,13 +1234,14 @@ let put_linked element key link dispatch data =
 
 let reference_hole scope element =
   let hole : Hole.reference = { scope; element; callback = ignore } in
-  scope.references <- (fun [@u] () -> hole.callback hole.element) :: scope.references;
+  scope.references <- (fun [@u] () -> hole.callback (Js.Nullable.return hole.element)) :: scope.references;
+  scope.cleanups <- (fun [@u] () -> hole.callback Js.Nullable.null) :: scope.cleanups;
   hole
 
 let set_reference (hole : Hole.reference) callback =
   if not (Dom_api.same hole.callback callback) then (
     hole.callback <- callback;
-    match hole.scope.placement with Placed -> callback hole.element | Detached -> ())
+    match hole.scope.placement with Placed -> callback (Js.Nullable.return hole.element) | Detached -> ())
 
 let content_hole scope (position : Template.position) =
   let range = !medium.opened position [@u] in

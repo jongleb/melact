@@ -198,11 +198,12 @@ Replicate reason-react's signatures exactly (0.16/0.17 line):
 - `useTransition`, `startTransition` — inert: run synchronously
 - `React.string/int/float/array/list/null/fragment`
 
-Update semantics: a setter outside render marks the instance dirty and schedules a flush in a
-microtask (`Js.Promise.resolve () |> then_`); the flush renders dirty instances parent-first,
+Update semantics: a setter outside render marks the instance dirty and schedules a flush: in a
+microtask when `window.event` is a discrete event (React's sync lane), otherwise in a task of its own
+(`setTimeout 0`, React's default lane); the flush renders dirty instances parent-first,
 skipping instances unmounted by a parent's render; layout effects run synchronously after each
-instance's patch, passive effects after the whole flush on `requestAnimationFrame` then
-`setTimeout 0` fallback. A setter during render raises with a clear message. Effect cleanups run
+instance's patch, passive effects right after a discrete flush, as React 18 does, and otherwise after
+the whole flush on `requestAnimationFrame` then `setTimeout 0`. A setter during render raises with a clear message. Effect cleanups run
 before re-execution and on unmount, children before parents.
 
 ### Acceptance (test/react)
