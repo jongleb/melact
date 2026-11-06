@@ -576,6 +576,36 @@ module Marked = struct
     </ul>
 end
 
+(** How a picked row is drawn. *)
+type tone = Lit | Dim
+
+let picked_send = ref (fun (_ : mark) -> ())
+
+module Picked_row = struct
+  let[@react.component] make =
+    React.memo (fun ~entry ~tone ~suffix ->
+        <li className=(match tone with Lit -> "on" | Dim -> "")>(React.string (entry.title ^ suffix))</li>)
+end
+
+module Picked = struct
+  let[@react.component] make () =
+    let listed, send = React.useReducer mark marked_start in
+    let chosen, choose = React.useState (fun () -> None) in
+    (picked_send :=
+       fun message -> match message with Choose id -> choose (fun _ -> id) | Suffix _ | Drop _ | Grow -> send message);
+    <ul>
+      (React.array
+         (Array.map
+            (fun entry ->
+              <Picked_row
+                key=(string_of_int entry.id)
+                entry
+                tone=(match chosen with Some id when id = entry.id -> Lit | _ -> Dim)
+                suffix=listed.suffix />)
+            listed.entries))
+    </ul>
+end
+
 let marked_html marked =
   "<ul>"
   ^ String.concat ""
@@ -1533,6 +1563,36 @@ let () =
                    step (remaining - 1) marked
              in
              step 10 marked_start))
+        [%mel.obj { numRuns = 60 }]));
+  describe "component rows picked by a selection" (fun () ->
+    test_async "show the chosen row and the suffix after any selections and edits" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Picked /> in
+             let rec step remaining marked =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let ids = Array.map (fun entry -> entry.id) marked.entries in
+                   let pick () =
+                     match Array.length ids with 0 -> None | count -> Some ids.(draw tape count)
+                   in
+                   let message =
+                     match draw tape 6 with
+                     | 0 | 1 | 2 -> Choose (match draw tape 4 with 0 -> None | 1 -> Some 999 | _ -> pick ())
+                     | 3 -> Suffix [| ""; "!"; "?" |].(draw tape 3)
+                     | 4 -> Option.fold ~none:Grow ~some:(fun id -> Drop id) (pick ())
+                     | _ -> Grow
+                   in
+                   let marked = mark marked message in
+                   let* () = act (fun () -> !picked_send message) in
+                   expect (inner_html root) |. to_equal (marked_html marked);
+                   step (remaining - 1) marked
+             in
+             step 14 marked_start))
         [%mel.obj { numRuns = 60 }]));
   describe "lists written in any of reason-react's forms" (fun () ->
     test_async "show the labels in order, numbered where the row reads its index, after any edits" (fun () ->

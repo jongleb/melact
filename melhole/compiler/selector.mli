@@ -1,7 +1,7 @@
 (** A projected leaf of a loop's row that differs between rows only in whether a row's key is the one
-    the outer values choose: [match o with p when x = i -> a | _ -> b] or [if e = i then a else b],
-    where [p] binds [x] alone, [o] and [e] read no row name, and [i], [a], [b] read no outer name nor
-    [x]. [=] may be [==], and either side of it may be the key. *)
+    the outer values choose: [match o with p when x = i -> a | q -> b] or [if e = i then a else b],
+    where [p] binds [x] alone, [q] binds nothing, [o] and [e] read no row name, and [i], [a], [b] read
+    no outer name nor [x]. [=] may be [==], and either side of it may be the key. *)
 
 (** How the chosen key is compared with a row's. *)
 type equality = Structural | Physical

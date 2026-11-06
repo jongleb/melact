@@ -1244,3 +1244,19 @@ A row function bound by a let in a component is cached and still compiles to a l
   $ ./pp.exe -impl letrow.ml | grep -o "Memo.lookup2\|Melhole.View.rows\|melhole.cached"
   Memo.lookup2
   Melhole.View.rows
+
+A row whose prop picks it by key gets a selector, in a numbered loop too, where the key can be the
+index:
+
+  $ cat > selected.ml <<'EOF'
+  > let make ~items ~chosen = ((ul ~children:[ Array.mapi (fun i x -> ((Row.createElement ~key:x ~tone:(match chosen with Some k when k = i -> "on" | _ -> "") ~children:[] ()) [@JSX])) items |. React.array ] ()) [@JSX])
+  > [@@react.component]
+  > let plain ~items ~chosen = ((ul ~children:[ items |. Belt.Array.map (fun x -> ((Row.createElement ~key:x ~tone:(if x = chosen then "on" else "") ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > EOF
+  $ ./pp.exe -impl selected.ml | tr -s ' \n' ' ' | grep -o "Melhole.View.each Melhole.View.[A-Za-z]*\|Melhole.View.selector Melhole.View.[A-Za-z]*\|Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let [^}]*"
+  Melhole.View.each Melhole.View.Numbered
+  Melhole.View.selector Melhole.View.Structural
+  Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let i = __melhole_index in let x = __melhole_item in i) [@ocaml.warning "-26-27"])) 
+  Melhole.View.each Melhole.View.Items
+  Melhole.View.selector Melhole.View.Structural
+  Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let x = __melhole_item in x) [@ocaml.warning "-26-27"])) 

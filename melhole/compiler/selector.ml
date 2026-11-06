@@ -29,10 +29,10 @@ let of_leaf ~outer ~row leaf =
       ( target,
         [
           { pc_lhs = pattern; pc_guard = Some guard; pc_rhs = picked };
-          { pc_lhs = { ppat_desc = Ppat_any; _ }; pc_guard = None; pc_rhs = other };
+          { pc_lhs = rest; pc_guard = None; pc_rhs = other };
         ] ) -> (
-      match Free.bound pattern with
-      | [ bound ] ->
+      match (Free.bound pattern, Free.bound rest) with
+      | [ bound ], [] ->
           Option.bind (compared guard) (fun (equality, left, right) ->
               let named side =
                 match side.pexp_desc with
