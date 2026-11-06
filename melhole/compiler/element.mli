@@ -34,7 +34,7 @@ type frontend = {
   style : Ppxlib.location -> [ `Required | `Optional ] -> Ppxlib.expression -> Ppxlib.expression;
       (** The hole value of a [style] prop. *)
   reference : Ppxlib.location -> [ `Required | `Optional ] -> Ppxlib.expression -> Ppxlib.expression;
-      (** The hole value of a [ref] prop. *)
+      (** The hole value of a [ref] prop: the callback, or a pair of what tells the ref from another and the callback. *)
   classify : Ppxlib.expression -> special option;
   extra : string -> Dom_props.kind option;  (** Props the front end adds to reason-react's. *)
   each : Ppxlib.location -> Ppxlib.expression -> Ppxlib.expression option;

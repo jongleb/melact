@@ -654,6 +654,26 @@ end
 let tallied_text { step; label; total } =
   label ^ "," ^ string_of_int step ^ "|" ^ label ^ string_of_int total ^ string_of_int total ^ "|" ^ string_of_int step ^ label
 
+let versioned_send = ref (fun (_ : int * int -> int * int) -> ())
+
+module Versioned = struct
+  let[@react.component] make ~built =
+    let (version, other), setState = React.useState (fun () -> (0, 0)) in
+    versioned_send := setState;
+    let reference =
+      React.useCallback1
+        (fun element ->
+          log ("v" ^ string_of_int version ^ " " ^ match Js.Nullable.toOption element with Some _ -> "element" | None -> "null"))
+        [| version |]
+    in
+    match built with
+    | `Compiled -> <div><p ref=(ReactDOM.Ref.callbackDomRef reference)>(React.int other)</p></div>
+    | `At_run_time ->
+        <div>
+          (ReactDOM.createElement "p" ~props:(ReactDOM.domProps ~ref:(ReactDOM.Ref.callbackDomRef reference) ()) [| React.int other |])
+        </div>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1228,6 +1248,36 @@ let () =
              in
              step (Array.length values) Held))
         [%mel.obj { numRuns = 40 }]));
+  describe "a callback ref replaced by another" (fun () ->
+    test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:16) (fun values ->
+             let tape = tape values in
+             let built = match draw tape 2 with 0 -> `Compiled | _ -> `At_run_time in
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let* () = act (fun () -> ReactDOM.Client.render client <Versioned built />) in
+             expect (take ()) |. to_equal [ "v0 element" ];
+             let rec step remaining version =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (take ()) |. to_equal [ "v" ^ string_of_int version ^ " null" ];
+                   finish ()
+               | _ -> (
+                   match draw tape 2 with
+                   | 0 ->
+                       let* () = act (fun () -> !versioned_send (fun (version, other) -> (version, other + 1))) in
+                       expect (take ()) |. to_equal [];
+                       step (remaining - 1) version
+                   | _ ->
+                       let* () = act (fun () -> !versioned_send (fun (version, other) -> (version + 1, other))) in
+                       expect (take ())
+                       |. to_equal [ "v" ^ string_of_int version ^ " null"; "v" ^ string_of_int (version + 1) ^ " element" ];
+                       step (remaining - 1) (version + 1))
+             in
+             step (Array.length values) 0))
+        [%mel.obj { numRuns = 60 }]));
   describe "forwardRef and svg" (fun () ->
     test_async "forward a ref to an element inside the component" (fun () ->
       let root = attached () in

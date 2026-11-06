@@ -15,7 +15,7 @@ type hole =
   | HClass of string list  (** The classes that are on. *)
   | HStyle of (string * string) list  (** camelCase property, value. *)
   | HHandler of (Dom.event -> unit)  (** Replaced on every patch, never compared. *)
-  | HRef of (Dom.element Js.nullable -> unit)  (** Called with the element when mounted or replaced, with null when it goes. *)
+  | HRef of (Dom.element Js.nullable -> unit)  (** Called with the element when mounted, with null when it goes; a new one replaces the old, called with null first. *)
   | HChild of child
 
 val text : string -> child
@@ -187,7 +187,9 @@ type ('data, 'dispatch) link
 val link : ('data -> 'dispatch -> Dom.event -> unit[@u]) -> ('data, 'dispatch) link
 val put_linked : Dom.element -> string -> ('data, 'dispatch) link -> 'dispatch -> 'data -> unit
 val reference_hole : scope -> Dom.element -> Hole.reference
-val set_reference : Hole.reference -> (Dom.element Js.nullable -> unit) -> unit
+(** [set_reference hole identity callback]: a ref whose identity is not the one held replaces it, the
+    old one called with null and the new one with the element, as React compares its refs. *)
+val set_reference : Hole.reference -> 'identity -> (Dom.element Js.nullable -> unit) -> unit
 val content_hole : scope -> Template.position -> Hole.content
 val set_content : Hole.content -> child -> unit
 

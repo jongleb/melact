@@ -1051,7 +1051,12 @@ module Hole = struct
   type style = { element : Dom.element; mutable value : (string * string) list }
   type classes = { element : Dom.element; mutable value : string list }
   type handler = { element : Dom.element; key : string }
-  type reference = { scope : scope; element : Dom.element; mutable callback : Dom.element Js.nullable -> unit }
+  type reference = {
+    scope : scope;
+    element : Dom.element;
+    mutable identity : input;  (** What tells this ref from another, like React's ref object or function. *)
+    mutable callback : Dom.element Js.nullable -> unit;
+  }
   type content = {
     position : Template.position;
     mutable source : child;
@@ -1233,15 +1238,22 @@ let put_linked element key link dispatch data =
   Events.set element key link.handler
 
 let reference_hole scope element =
-  let hole : Hole.reference = { scope; element; callback = ignore } in
+  let hole : Hole.reference = { scope; element; identity = unset; callback = ignore } in
   scope.references <- (fun [@u] () -> hole.callback (Js.Nullable.return hole.element)) :: scope.references;
   scope.cleanups <- (fun [@u] () -> hole.callback Js.Nullable.null) :: scope.cleanups;
   hole
 
-let set_reference (hole : Hole.reference) callback =
-  if not (Dom_api.same hole.callback callback) then (
+let set_reference (hole : Hole.reference) identity callback =
+  let (Input held) = hole.identity in
+  if not (Dom_api.same held identity) then (
+    let previous = hole.callback in
+    hole.identity <- Input identity;
     hole.callback <- callback;
-    match hole.scope.placement with Placed -> callback (Js.Nullable.return hole.element) | Detached -> ())
+    match hole.scope.placement with
+    | Placed ->
+        previous Js.Nullable.null;
+        callback (Js.Nullable.return hole.element)
+    | Detached -> ())
 
 let content_hole scope (position : Template.position) =
   let range = !medium.opened position [@u] in
@@ -1362,7 +1374,7 @@ let tpl_instance markup values =
         | Style_hole hole, HStyle value -> set_style hole value
         | Class_hole hole, HClass value -> set_classes hole value
         | Handler_hole hole, HHandler value -> set_handler hole value
-        | Reference_hole hole, HRef value -> set_reference hole value
+        | Reference_hole hole, HRef value -> set_reference hole value value
         | Content_hole hole, HChild value -> set_content hole value
         | ( ( Text_hole _ | Attr_hole _ | Prop_hole _ | Style_hole _ | Class_hole _
             | Handler_hole _ | Reference_hole _ | Content_hole _ ),

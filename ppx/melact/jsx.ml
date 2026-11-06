@@ -395,11 +395,11 @@ let mapper =
         reference =
           (fun loc requirement value ->
             match requirement with
-            | `Required -> [%expr (ReactDOM.Ref.attach [%e value])]
+            | `Required -> [%expr (ReactDOM.Ref.identity [%e value], ReactDOM.Ref.attach [%e value])]
             | `Optional ->
                 [%expr
-                  
-                    (Stdlib.Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value])]);
+                  ( Stdlib.Option.fold ~none:ReactDOM.Ref.absent ~some:ReactDOM.Ref.identity [%e value],
+                    Stdlib.Option.fold ~none:ignore ~some:ReactDOM.Ref.attach [%e value] )]);
         classify = react_text;
         extra = (fun _ -> None);
         each =

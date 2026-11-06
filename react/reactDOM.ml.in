@@ -379,6 +379,11 @@ module Ref = struct
     | Current target -> target.current <- element
     | Callback apply -> apply element
 
+  type identity = Identity : 'a -> identity [@@unboxed]
+
+  let identity reference = match reference with Current target -> Identity target | Callback apply -> Identity apply
+  let absent = Identity ()
+
   let forwarded reference =
     match reference with
     | Some (Current target) -> Js.Nullable.return target
@@ -582,7 +587,19 @@ let dom tag props children =
               (fun name -> match Js.Undefined.toOption (lookup props name) with None -> clear built name | Some _ -> ())
               (given old);
             Array.iter
-              (fun name -> if not (Dom_api.same (read old name) (read props name)) then apply built props name)
+              (fun name ->
+                match applying name with
+                | Ref_value -> (
+                    let held props = Option.map Ref.identity (Js.Undefined.toOption (lookup props name)) in
+                    match (held old, held props) with
+                    | Some (Ref.Identity before), Some (Ref.Identity after) when Dom_api.same before after -> ()
+                    | _ ->
+                        clear built name;
+                        apply built props name)
+                | Text_attribute _ | Flag_attribute _ | Booleanish_attribute _ | Integer_attribute _
+                | Decimal_attribute _ | Property_value _ | Controlled_value _ | Event _ | Style_value
+                | Inner_html_value | Skipped ->
+                    if not (Dom_api.same (read old name) (read props name)) then apply built props name)
               (given props);
             built.shown <- props;
             built.inner <- View.update { Template.parent = Dom_api.to_node built.element; before = Js.null } built.inner (content ());

@@ -128,9 +128,12 @@ let () =
           expect (inner_html root)
           |. to_be "<input style=\"width: 1px;\" class=\"y\">";
           View.patch mounted (instance "b" [ ("width", "1px") ] [ "y" ] second);
-          expect (List.map fst !refs) |. to_equal [ "second"; "first" ];
-          expect (List.for_all (fun (_, seen) -> same seen element) !refs)
-          |. to_be true));
+          expect
+            (List.map
+               (fun (name, seen) ->
+                 (name, match Js.Nullable.toOption seen with Some seen when same seen element -> "element" | Some _ | None -> "null"))
+               !refs)
+          |. to_equal [ ("second", "element"); ("first", "null"); ("first", "element") ]));
   describe "handlers" (fun () ->
       let button =
         Template.make ~html:"<div><button></button></div>"

@@ -372,6 +372,12 @@ module Ref : sig
   val domRef : currentDomRef -> domRef
   val callbackDomRef : callbackDomRef -> domRef
   val attach : domRef -> Dom.element Js.nullable -> unit
+
+  (** What React compares to tell a ref from another: the ref object, or the function. *)
+  type identity = Identity : 'a -> identity [@@unboxed]
+
+  val identity : domRef -> identity
+  val absent : identity
   val forwarded : domRef option -> Dom.element Js.nullable React.ref Js.Nullable.t
 end
 

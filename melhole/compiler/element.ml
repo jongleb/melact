@@ -489,7 +489,12 @@ let lowercase frontend ~loc ~attributes tag arguments =
                   [%expr Melhole.View.put_linked [%e hole_value] [%e key] [%e site] [%e evar ~loc dispatch] [%e carried]]
               | Linked _, Free.Volatile | Closures, _ -> [%expr Melhole.View.put_handler [%e hole_value] [%e key] [%e value]])
           | On_element (_, (Prop _ | Control _), value) -> [%expr Melhole.View.set_prop [%e hole_value] [%e value]]
-          | On_element (_, Ref, value) -> [%expr Melhole.View.set_reference [%e hole_value] [%e value]]
+          | On_element (_, Ref, { pexp_desc = Pexp_tuple [ identity; callback ]; _ }) ->
+              [%expr Melhole.View.set_reference [%e hole_value] [%e identity] [%e callback]]
+          | On_element (_, Ref, value) ->
+              [%expr
+                let __melhole_reference = [%e value] in
+                Melhole.View.set_reference [%e hole_value] __melhole_reference __melhole_reference]
           | On_element (_, Style, value) -> [%expr Melhole.View.set_style [%e hole_value] [%e value]]
           | At_position (_, _, Child_slot, value) -> [%expr Melhole.View.set_content [%e hole_value] [%e value]]
         in
