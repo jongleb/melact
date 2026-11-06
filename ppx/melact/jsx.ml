@@ -270,6 +270,45 @@ let component ~loc ~name ~props_constructor expression =
               in
               match expression.pexp_desc with
               | Pexp_function _ -> expression
+              | Pexp_let (Nonrecursive, bindings, rest) ->
+                  let bound binding =
+                    let named =
+                      match binding.pvb_pat.ppat_desc with
+                      | Ppat_var { txt; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt; _ }; _ }, _) -> Some txt
+                      | _ -> None
+                    in
+                    let value = binding.pvb_expr in
+                    let kept =
+                      Option.bind named (fun name ->
+                          match value.pexp_desc with
+                          | Pexp_function _ -> Some value
+                          | Pexp_ident _ | Pexp_constant _ | Pexp_construct (_, None) | Pexp_variant (_, None) -> None
+                          | _ -> (
+                              match Frozen.uses name rest with
+                              | Frozen.Read_only -> Some (walker#expression value)
+                              | Frozen.Possibly_changed -> None))
+                    in
+                    Option.fold
+                      ~none:{ binding with pvb_expr = (match value.pexp_desc with Pexp_function _ -> value | _ -> walker#expression value) }
+                      ~some:(fun inner ->
+                        let cached = cache inner in
+                        {
+                          binding with
+                          pvb_expr =
+                            (match cached == inner with
+                            | true -> cached
+                            | false ->
+                                {
+                                  cached with
+                                  pexp_attributes =
+                                    attribute ~loc ~name:{ txt = "melhole.cached"; loc }
+                                      ~payload:(PStr [ pstr_eval ~loc inner [] ])
+                                    :: cached.pexp_attributes;
+                                });
+                        })
+                      kept
+                  in
+                  { expression with pexp_desc = Pexp_let (Nonrecursive, List.map bound bindings, walker#expression rest) }
               | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot _; _ }; _ } as callee), arguments)
                 when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
                   {

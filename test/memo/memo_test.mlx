@@ -42,6 +42,56 @@ module Parent = struct
         </div>
 end
 
+let computed = ref 0
+let let_send = ref (fun (_ : state -> state) -> ())
+
+let counted near =
+  incr computed;
+  Array.init 3 (fun index -> near + index)
+
+module Lets = struct
+  let[@react.component] make ~mutated =
+    let state, setState = React.useState (fun () -> { near = 0; far = 0 }) in
+    let_send := setState;
+    let { near; far } = state in
+    let numbers = counted near in
+    let shown = Array.fold_left (fun sum value -> sum + value) 0 numbers in
+    match mutated with
+    | `Read_only -> <p>(React.int shown)(React.string "/")(React.int far)</p>
+    | `Written ->
+        let total = ref (counted near |> Array.length) in
+        total := !total + far;
+        <p>(React.int shown)(React.string "/")(React.int !total)</p>
+end
+
+let let_law mutated expected =
+  check_async
+    (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+         let tape = tape values in
+         let root = attached () in
+         let client = ReactDOM.Client.createRoot root in
+         let* () = act (fun () -> ReactDOM.Client.render client <Lets mutated />) in
+         let rec step remaining (state : state) seen =
+           match remaining with
+           | 0 ->
+               let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+               expect (List.map fst seen) |. to_equal (List.map snd seen);
+               Js.Promise.resolve ()
+           | _ ->
+               let next =
+                 match draw tape 2 with 0 -> { state with near = draw tape 3 } | _ -> { state with far = draw tape 3 }
+               in
+               computed := 0;
+               let* () = act (fun () -> !let_send (fun _ -> next)) in
+               let shown = (3 * next.near) + 3 in
+               let text =
+                 string_of_int shown ^ "/" ^ string_of_int (match mutated with `Read_only -> next.far | `Written -> 3 + next.far)
+               in
+               step (remaining - 1) next (((!computed, text_content root), (expected state next, text)) :: seen)
+         in
+         step 10 { near = 0; far = 0 } []))
+    [%mel.obj { numRuns = 150 }]
+
 let law volatile expected =
   check_async
     (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
@@ -74,5 +124,9 @@ let () =
         (fun () ->
           law `Captures_state (fun before after ->
               match (before.near = after.near, before.far mod 2 = after.far mod 2) with true, true -> 0 | _ -> 1));
+      test_async "a let computed in the body runs again only when what it reads changed" (fun () ->
+          let_law `Read_only (fun before after -> match before.near = after.near with true -> 0 | false -> 1));
+      test_async "a let whose value is changed in place afterwards is computed on every render" (fun () ->
+          let_law `Written (fun before after -> match before.near = after.near with true -> 1 | false -> 2));
       test_async "a value that reads mutable state while rendering is made again on every render" (fun () ->
           law `Reads_a_ref (fun _ _ -> 1)))

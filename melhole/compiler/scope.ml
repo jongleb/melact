@@ -40,14 +40,13 @@ class mapper =
             | Recursive -> []
             | Nonrecursive ->
                 let uncached definition =
-                  match definition.pexp_desc with
-                  | Pexp_apply (_, arguments)
-                    when List.exists (fun attribute -> String.equal attribute.attr_name.txt "melhole.cached") definition.pexp_attributes
-                    -> (
-                      match List.rev arguments with
-                      | (Nolabel, { pexp_desc = Pexp_function ([ _ ], None, Pfunction_body inner); _ }) :: _ -> inner
-                      | _ -> definition)
-                  | _ -> definition
+                  Option.value ~default:definition
+                    (List.find_map
+                       (fun attribute ->
+                         match (attribute.attr_name.txt, attribute.attr_payload) with
+                         | "melhole.cached", PStr [ { pstr_desc = Pstr_eval (inner, _); _ } ] -> Some inner
+                         | _ -> None)
+                       definition.pexp_attributes)
                 in
                 List.filter_map
                   (fun binding ->
@@ -55,6 +54,22 @@ class mapper =
                     | Ppat_var { txt; _ } -> Some (txt, uncached binding.pvb_expr)
                     | _ -> None)
                   bindings
+          in
+          let bindings =
+            List.map
+              (fun binding ->
+                {
+                  binding with
+                  pvb_expr =
+                    {
+                      binding.pvb_expr with
+                      pexp_attributes =
+                        List.filter
+                          (fun attribute -> not (String.equal attribute.attr_name.txt "melhole.cached"))
+                          binding.pvb_expr.pexp_attributes;
+                    };
+                })
+              bindings
           in
           let bindings =
             match flag with

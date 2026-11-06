@@ -822,3 +822,16 @@ reads its index is numbered, one that ignores it is not:
   Melhole.View.each Melhole.View.Numbered
   Melhole.View.each Melhole.View.Numbered
   Melhole.View.each Melhole.View.Items
+
+A row function bound by a let in a component is cached and still compiles to a loop:
+
+  $ cat > letrow.ml <<'EOF'
+  > let make ~items =
+  >   let chosen, setChosen = React.useState (fun () -> "") in
+  >   let row item = ((li ~key:item ~className:(if item = chosen then "on" else "") ~onClick:(fun _ -> setChosen (fun _ -> item)) ~children:[ React.string item ] ()) [@JSX]) in
+  >   ((ul ~children:[ React.array (Array.map row items) ] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl letrow.ml | grep -o "Memo.lookup2\|Melhole.View.rows\|melhole.cached"
+  Memo.lookup2
+  Melhole.View.rows

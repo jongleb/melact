@@ -417,6 +417,14 @@ reads a `ref`, each break one. A regression test renders a child whose props use
 another file's record and variants, in records, constructors, tuples, arrays, lists, and closures
 that return them, read fields or match on them.
 
+The same cache keeps the `let`s of a component's body. A closure is always kept on what it
+captures. A computed value is kept only when `Frozen` finds that the rest of the body just reads
+it: in JSX, a hook's dependencies, a `match`, a field, or a library function known not to change
+its argument (`List`, `Belt.Array.keep`, `Js.Array.map`, …); `let total = ref 0` followed by
+`total := …` is computed on every render. A kept `let` carries `[@melhole.cached value]` until the
+scope traversal records `value`, so a loop whose row function is such a `let` still compiles. Two
+Melact laws count the computations, and mutants that ignore `Frozen` or keep no `let` break them.
+
 ## Controlled inputs
 
 `value` and `checked` are properties the user changes too. A guard compares a value with the one
