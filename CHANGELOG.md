@@ -74,3 +74,4 @@
   `ReactDOM.Ref.t`, `currentDomRef` and `callbackDomRef` exist;
   melact-ppx's npm rewrite is an instrumentation run before the other rewriters, not a whole-file preprocessor, so it sits next to another ppx that has one (server-reason-react.ppx);
   and a binding to npm's `Fragment` with a type of its own is left alone again.
+- `ReactDOM.Experimental`'s resource hints as React 19 does them on the client: `preconnect`, `prefetchDNS`, `preload` (nothing without `as`), `preloadModule`, `preinit` (a script, or a stylesheet placed after the last one of its precedence) and `preinitModule` add their tag to the head once per resource. A law checks random sequences against a model of React 19's head; a mutant that ignores precedence groups is caught. Every `as` value carries `[@mel.as]`: when only `object` did, as in reason-react's declaration, Melange turned every other value into `undefined`.

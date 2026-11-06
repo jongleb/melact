@@ -391,6 +391,7 @@ external domElementToObj : Dom.element -> < .. > Js.t = "%identity"
 
 
 module Client = ReactDOMClient
+module Experimental = ReactDOMExperimental
 
 let roots = ref []
 

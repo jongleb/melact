@@ -376,6 +376,7 @@ module Ref : sig
 end
 
 module Client = ReactDOMClient
+module Experimental = ReactDOMExperimental
 
 val render : React.element -> Dom.element -> unit
 [@@deprecated "Use ReactDOM.Client.createRoot and ReactDOM.Client.render instead."]
