@@ -263,7 +263,7 @@ taking over with the current model each break one of them.
 ### Without a DOM: the server renderer
 
 `Served.render` needs a DOM, so on a server it needs jsdom or linkedom, and it cannot run in native
-OCaml. Under the ppx flag `-server` (meltea-ppx) a view compiles to code that writes its HTML
+OCaml. Under the ppx flag `-server` (meltea-ppx, melact-ppx) a view compiles to code that writes its HTML
 instead: the static markup of each JSX tree is joined at compile time into as few strings as
 possible, and every dynamic part becomes one call into `melhole.server`, a library of plain OCaml
 that builds natively and under Melange. For the counter:
@@ -312,6 +312,66 @@ one JavaScript string grown with `^`, which V8 joins as a rope, because Melange'
 on `Bytes` and costs a copy per character. A 1,000-row page renders in 0.16 ms under Node (React's
 `renderToString`: 1.2 ms; it was 2 ms before) and in 0.26 ms natively; a mutant that skips escaping
 breaks two served laws.
+
+
+### Melact without a DOM
+
+`melact-ppx -server` compiles reason-react components the same way, against `melact.server` (Melange,
+in Node) or `melact.server.native` (native OCaml): the same `React`, `ReactDOM` and `ReactDOMServer`,
+where `renderToString` and `renderToStaticMarkup` write what React 18's write, byte for byte. A
+server build is one more stanza, `(libraries melact.server) (preprocess (pps melange.ppx melact-ppx
+-server))`. Natively the API is the portable part of reason-react's, with records where reason-react
+has JavaScript objects: a provider's `makeProps` builds `React.Context.props`, and
+`dangerouslySetInnerHTML` takes an object with an `__html` method.
+
+An element is a writer. A component writes itself when its parent writes it: it renders once with
+fresh hook slots (`useState` and `useReducer` give their initial state, `useMemo`, `useCallback` and
+`useRef` their first value, `useContext` the value of the provider being written around it), and
+effects of every kind never run. A state set while the component renders makes it render again with
+the update, as React's server does, and a dispatch afterwards is dropped. Handlers and refs are typed
+and dropped. A Suspense boundary is written as `<!--$-->…<!--/$-->`; if a child throws, what it wrote
+is taken back and the boundary is left to the client, `<!--$!--><template></template>`, the fallback,
+`<!--/$-->`, as React writes it in production. An error boundary writes its children, as on React's
+server.
+
+The format follows React's server rather than the DOM: attributes in reason-react's order (the order
+of its `domProps`, with `?label` props after the others), React's names (`tabindex`, `readonly`, …),
+`cols`, `rows`, `size` and `span` only from 1, an input's `checked` and `value` last, a textarea's
+value as its text and a select's value as `selected=""` on its options (also on options written by
+components below it), one more newline at the start of a `textarea`, `pre` or `listing` whose content
+starts with one, and style values trimmed. Elements built at run time (`ReactDOM.createElement`,
+`createDOMElementVariadic`, `React.createElement` of `stringToComponent`, `ReactDOM.jsx`, npm-style
+`createElement` of a tag) go through the same rules from their props object.
+
+`useId` gives React's ids, `:R` and the position's tree id: every JavaScript array of children
+(`React.array`, a JSX list of two or more children, a fragment, the variadic children of
+`createElement`) numbers its items, a component that took an id numbers its output as the only child,
+and a component's second and later ids add `H` and a count, as React's `pushTreeContext` does. The
+compiler knows the arrays of a template, so each content hole carries its path of positions; the
+writer keeps the position. Melact's client numbers positions the same way while it hydrates: the
+generated `adopt` passes each content hole's path, lists number their rows, and an instance that takes
+a server's nodes keeps its position, so `useId` there gives the server's id; components mounted later
+keep Melact's own ids. Hydration also takes React's Suspense markers over (and renders a boundary the
+server left to the client), and keeps the server's `dangerouslySetInnerHTML`.
+
+Laws, on random pages of components with every hook, nested providers, ids in arrays, fragments and
+components, forms, styles, attributes, elements built at run time, Suspense, render-phase updates,
+floats and texts next to texts ([`test/mserver`](../test/mserver)): Melact's server under Melange
+writes exactly what React 18's `renderToString` and `renderToStaticMarkup` write for the same
+reason-react code; a native corpus is byte for byte the Melange output; no effect runs on either
+server; and Melact's client hydrates the HTML with the server's own elements and ids, also after a
+hydration that failed, then patches like a mounted page. Mutants that drop a text separator, skip
+escaping, run effects or layout effects, ignore a provider, number array items from 0, forget the
+position below a component that took an id, ignore the JSX children's positions, do not reset the
+client's position, number every row of a list alike, keep source attribute order, write an input's
+value before `checked`, ignore a select's value, drop the leading newline, drop render-phase updates,
+drop Suspense markers, keep untrimmed styles, write `rows` below 1, keep separators in static markup,
+rewrite the server's inner HTML or keep React's markers on the client each break a law.
+
+On the SSR benchmark (1,000 rows, median of 200 renders, Node 26), Melact's server renders a page in
+0.26 ms natively and 0.15 ms under Node, where React 18's `renderToString` takes 1.1 ms, Svelte 5's
+0.04 ms and Meltea 0.27 and 0.15 ms; with 10,000 rows 3.0 and 1.8 ms against React's 17.7 ms.
+Before, Melact's `renderToString` needed a DOM in Node and was 13 to 55 times slower than React.
 
 ## Types, where dune can give them
 

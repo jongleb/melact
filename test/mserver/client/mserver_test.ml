@@ -35,24 +35,6 @@ let ( let* ) promise next = Js.Promise.then_ next promise
 let act run = adopt (React.act run)
 let corpus () = parse_json (read_file "_build/default/test/mserver/native/corpus.json" "utf8")
 
-let rec normalized shapes =
-  List.map
-    (fun shape ->
-      match shape with
-      | Text_shape _ -> shape
-      | Element_shape (tag, attributes, children) ->
-          Element_shape
-            ( tag,
-              List.filter_map
-                (fun (name, value) ->
-                  match (name, String.length value > 1 && value.[0] = ':') with
-                  | ("checked" | "selected" | "value"), _ -> None
-                  | _, true -> Some (name, ":id:")
-                  | _, false -> Some (name, value))
-                attributes,
-              normalized children ))
-    shapes
-
 let rec ids shapes =
   List.concat_map
     (fun shape ->
@@ -67,6 +49,24 @@ external clone : Dom.element -> (_[@mel.as {json|true|json}]) -> Dom.element = "
 external set_attribute : Dom.element -> string -> string -> unit = "setAttribute" [@@mel.send]
 
 let observe root =
+  let rec normalized shapes =
+    List.map
+      (fun shape ->
+        match shape with
+        | Text_shape _ -> shape
+        | Element_shape (tag, attributes, children) ->
+            Element_shape
+              ( tag,
+                List.filter_map
+                  (fun (name, value) ->
+                    match (name, String.length value > 1 && value.[0] = ':') with
+                    | ("checked" | "selected" | "value"), _ -> None
+                    | _, true -> Some (name, ":id:")
+                    | _, false -> Some (name, value))
+                  attributes,
+                normalized children ))
+      shapes
+  in
   let copy = clone root in
   Array.iter (fun element -> set_attribute element "style" (css_text element)) (elements (select_all copy "[style]"));
   ( normalized (shapes (as_node copy)),
@@ -74,10 +74,8 @@ let observe root =
       (fun field -> (value_of field, checked_of field))
       (Array.to_list (elements (select_all root "input, textarea, select"))) )
 
-let quiet : unit -> unit = [%mel.raw {|function () { console.error = function () {}; }|}]
-
 let () =
-  quiet ();
+  ([%mel.raw {|function () { console.error = function () {}; }|}] : unit -> unit) ();
   describe "Melact's server without a DOM" (fun () ->
       test "writes what React 18's renderToString and renderToStaticMarkup write, byte for byte" (fun () ->
           check

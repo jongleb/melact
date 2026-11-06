@@ -39,12 +39,11 @@ type node =
   | Picked of string
 
 let effects = ref 0
-let words = [| ""; "a"; "b c"; "<&>\"'"; " "; "x"; "\nnew"; "1" |]
-let floats = [| 0.; 1.; -1.5; 0.1; 1e21; 1e-7; 3.14159; 100.; 2.5 |]
-let styles = [| ""; "red"; " blue "; "1px solid"; "0" |]
-let tags = [| "div"; "span"; "p"; "button"; "textarea"; "select" |]
-
 let decode values =
+  let words = [| ""; "a"; "b c"; "<&>\"'"; " "; "x"; "\nnew"; "1" |] in
+  let floats = [| 0.; 1.; -1.5; 0.1; 1e21; 1e-7; 3.14159; 100.; 2.5 |] in
+  let styles = [| ""; "red"; " blue "; "1px solid"; "0" |] in
+  let tags = [| "div"; "span"; "p"; "button"; "textarea"; "select" |] in
   let at = ref 0 in
   let draw bound =
     match !at < Array.length values with
@@ -173,8 +172,11 @@ end
 module Settles = struct
   let[@react.component] make ~upto =
     let count, setCount = React.useState (fun () -> 0) in
+    let renders = React.useRef 0 in
+    let first = React.useMemo0 (fun () -> renders.current) in
+    renders.current <- renders.current + 1;
     if count < upto then setCount (fun count -> count + 1);
-    <b>(React.int count)</b>
+    <b title=(string_of_int renders.current ^ "/" ^ string_of_int first)>(React.int count)</b>
 end
 
 module Memo = struct

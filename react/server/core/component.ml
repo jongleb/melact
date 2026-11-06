@@ -45,12 +45,12 @@ let render body =
           raise error)
 
 let take frame key init =
-  Option.fold
-    ~none:
-      (let value = init () in
-       Hook.put frame.slots key value;
-       value)
-    ~some:Fun.id (Hook.found frame.slots key)
+  match Hook.found frame.slots key with
+  | Some value -> value
+  | None ->
+      let value = init () in
+      Hook.put frame.slots key value;
+      value
 
 let id frame =
   let local = frame.ids in

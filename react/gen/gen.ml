@@ -78,35 +78,21 @@ let style_labels source =
       | false -> None)
     (style_module source)
 
-let server_applying (name, (kind : Melhole_compiler.Dom_props.kind)) =
-  let named = Melhole_compiler.Dom_props.react_name in
-  match (name, kind) with
-  | "defaultValue", _ -> "Default_value_prop"
-  | "defaultChecked", _ -> "Default_checked_prop"
-  | _, Attribute (attribute, value) -> applying (Attribute (named attribute, value))
-  | _, (Property _ | Controlled _ | Handler _ | Style | Ref | Inner_html | Ignored) -> applying kind
-
-let native_label_type (kind : Melhole_compiler.Dom_props.kind) =
-  match kind with
-  | Inner_html -> "< __html : string >"
-  | Attribute _ | Property _ | Controlled _ | Handler _ | Style | Ref | Ignored -> label_type kind
-
 let native_prop name (kind : Melhole_compiler.Dom_props.kind) variable =
-  let named = Melhole_compiler.Dom_props.react_name in
   let mapped constructor = Printf.sprintf "Option.map (fun value -> Melact_server.Dom.%s) %s" constructor variable in
   match (name, kind) with
   | "defaultValue", _ -> Some (mapped "Default_value value")
   | "defaultChecked", _ -> Some (mapped "Default_checked value")
-  | _, Attribute (attribute, Text) -> Some (mapped (Printf.sprintf "Attribute (%S, value)" (named attribute)))
+  | _, Attribute (attribute, Text) -> Some (mapped (Printf.sprintf "Attribute (%S, value)" (Melhole_compiler.Dom_props.react_name attribute)))
   | _, Attribute (attribute, Flag) ->
       Some
         (Printf.sprintf "Option.bind %s (fun value -> match value with true -> Some (Melact_server.Dom.Present %S) | false -> None)"
-           variable (named attribute))
+           variable (Melhole_compiler.Dom_props.react_name attribute))
   | _, Attribute (attribute, Booleanish) ->
       Some
-        (mapped (Printf.sprintf "Attribute (%S, match value with true -> \"true\" | false -> \"false\")" (named attribute)))
-  | _, Attribute (attribute, Integer) -> Some (mapped (Printf.sprintf "Number (%S, value)" (named attribute)))
-  | _, Attribute (attribute, Decimal) -> Some (mapped (Printf.sprintf "Attribute (%S, Melhole_server.float value)" (named attribute)))
+        (mapped (Printf.sprintf "Attribute (%S, match value with true -> \"true\" | false -> \"false\")" (Melhole_compiler.Dom_props.react_name attribute)))
+  | _, Attribute (attribute, Integer) -> Some (mapped (Printf.sprintf "Number (%S, value)" (Melhole_compiler.Dom_props.react_name attribute)))
+  | _, Attribute (attribute, Decimal) -> Some (mapped (Printf.sprintf "Attribute (%S, Melhole_server.float value)" (Melhole_compiler.Dom_props.react_name attribute)))
   | _, (Property ("value", _) | Controlled ("value", _)) -> Some (mapped "Value value")
   | _, (Property ("checked", _) | Controlled ("checked", _)) -> Some (mapped "Checked value")
   | _, (Property ("selected", _) | Controlled ("selected", _)) -> Some (mapped "Selected value")
@@ -120,6 +106,18 @@ let native_prop name (kind : Melhole_compiler.Dom_props.kind) variable =
 
 let () =
   let label name = match List.mem name keywords with true -> name ^ "_" | false -> name in
+  let server_applying (name, (kind : Melhole_compiler.Dom_props.kind)) =
+    match (name, kind) with
+    | "defaultValue", _ -> "Default_value_prop"
+    | "defaultChecked", _ -> "Default_checked_prop"
+    | _, Attribute (attribute, value) -> applying (Attribute (Melhole_compiler.Dom_props.react_name attribute, value))
+    | _, (Property _ | Controlled _ | Handler _ | Style | Ref | Inner_html | Ignored) -> applying kind
+  in
+  let native_label_type (kind : Melhole_compiler.Dom_props.kind) =
+    match kind with
+    | Inner_html -> "< __html : string >"
+    | Attribute _ | Property _ | Controlled _ | Handler _ | Style | Ref | Ignored -> label_type kind
+  in
   let props =
     List.map (fun prop -> (Melhole_compiler.Dom_props.Prop.to_string prop, Melhole_compiler.Dom_props.kind prop)) Melhole_compiler.Dom_props.Prop.all
   in

@@ -472,7 +472,17 @@ let served frontend ~loc (element : expression Markup.element) key =
                     `Run
                       (Option.fold
                          ~none:[%expr Melhole_server.write [%e writer] [%e value]]
-                         ~some:(fun path -> [%expr Melhole_server.forked [%e writer] [%e path] [%e value]])
+                         ~some:(fun path ->
+                           [%expr
+                             Melhole_server.forked [%e writer] [%e path]
+                               [%e
+                                 {
+                                   value with
+                                   pexp_attributes =
+                                     List.filter
+                                       (fun attribute -> not (String.equal attribute.attr_name.txt fork_marker))
+                                       value.pexp_attributes;
+                                 }]])
                          (fork_path value));
                   ],
                   `Unknown )
