@@ -650,13 +650,13 @@ stays as a definition other files can call, with no limit on the number of depen
   $ ./pp.exe -impl npm.ml
   [@@@alert "-hook"]
   let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useEffect3 melact_argument_0 melact_argument_1 =
+  let useEffect3 _melact_argument_0 _melact_argument_1 =
     React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
-      melact_argument_0 melact_argument_1[@@warning "-32"]
+      _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let melact_key_useEffect8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useEffect8 melact_argument_0 melact_argument_1 =
+  let useEffect8 _melact_argument_0 _melact_argument_1 =
     React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
-      melact_argument_0 melact_argument_1[@@warning "-32"]
+      _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let __melhole_hook_1 = Melact_runtime.Hook.key ()
   let __melhole_hook_2 = Melact_runtime.Hook.key ()
   let use a =
@@ -673,8 +673,33 @@ call the binding's definition:
   $ ./pp.exe -impl long.ml
   [@@@alert "-hook"]
   let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useMemo8 melact_argument_0 melact_argument_1 =
+  let useMemo8 _melact_argument_0 _melact_argument_1 =
     React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
-      melact_argument_0 (Melact_runtime.Hook.listed melact_argument_1)[@@warning
-                                                                      "-32"]
+      _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
+    [@@warning "-32"]
   let use a = useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
+
+Bindings to npm React's element functions that return a React.element become Melact's elements: a
+string tag builds a DOM element from the props object, a component is called with its props:
+
+  $ cat > elements.ml <<'EOF'
+  > external createElement : string -> < .. > Js.t -> React.element = "createElement" [@@mel.module "react"]
+  > external jsx : string -> < .. > Js.t -> ?key:string -> unit -> React.element = "jsx" [@@mel.module "react/jsx-runtime"]
+  > type real
+  > external own : string -> < .. > Js.t -> real = "createElement" [@@mel.module "react"]
+  > let make () = createElement "h1" [%mel.obj { id = "x" }]
+  > EOF
+  $ ./pp.exe -impl elements.ml
+  [@@@alert "-hook"]
+  let createElement _melact_argument_0 _melact_argument_1 =
+    Melact_npm.created _melact_argument_0 _melact_argument_1 [||][@@warning
+                                                                   "-32"]
+  let jsx _melact_argument_0 _melact_argument_1 ?key:_melact_argument_2
+    _melact_argument_3 =
+    Melact_npm.keyed
+      (Melact_npm.created _melact_argument_0 _melact_argument_1 [||])
+      _melact_argument_2[@@warning "-32"]
+  type real
+  external own : string -> < .. >  Js.t -> real = "createElement"[@@mel.module
+                                                                   "react"]
+  let make () = createElement "h1" ([%mel.obj { id = "x" }])

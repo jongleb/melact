@@ -321,6 +321,46 @@ module Probe_utils = struct
     </div>
 end
 
+external npmCreateElement : string -> < .. > Js.t -> React.element = "createElement" [@@mel.module "react"]
+
+external npmCreateElementWith : string -> < .. > Js.t -> React.element array -> React.element = "createElement"
+[@@mel.module "react"] [@@mel.variadic]
+
+external npmCreateElementOne : string -> < .. > Js.t -> React.element -> React.element = "createElement"
+[@@mel.module "react"]
+
+external npmCreateAny : 'kind -> 'props -> React.element array -> React.element = "createElement"
+[@@mel.module "react"] [@@mel.variadic]
+
+external npmJsx : string -> < .. > Js.t -> React.element = "jsx" [@@mel.module "react/jsx-runtime"]
+external npmJsxs : string -> < .. > Js.t -> React.element = "jsxs" [@@mel.module "react/jsx-runtime"]
+
+external npmJsxKeyed : string -> < .. > Js.t -> ?key:string -> unit -> React.element = "jsx"
+[@@mel.module "react/jsx-runtime"]
+
+external npmFragment : < children : React.element > Js.t React.component = "Fragment" [@@mel.module "react"]
+
+module Npm_elements = struct
+  let[@react.component] make ~label =
+    let count, setCount = React.useState (fun () -> 0) in
+    npmCreateElementWith "section" [%mel.obj { className = "npm" }]
+      [|
+        npmCreateElement "h1" [%mel.obj { id = "x"; children = React.string label }];
+        npmCreateElementOne "button" [%mel.obj { onClick = (fun _ -> setCount (fun count -> count + 1)) }] (React.int count);
+        npmJsx "em" [%mel.obj { children = React.string "jsx" }];
+        npmJsxs "ul"
+          [%mel.obj
+            {
+              children =
+                Array.map
+                  (fun item -> npmJsxKeyed "li" [%mel.obj { children = React.string item }] ~key:item ())
+                  [| label; "z" |];
+            }];
+        npmCreateAny npmFragment [%mel.obj { children = React.string "frag" }] [||];
+        npmCreateAny Shout.make (Shout.makeProps ~text:label ()) [||];
+      |]
+end
+
 module Address = struct
   let[@react.component] make () =
     let url = ReasonReactRouter.useUrl () in
@@ -1593,6 +1633,36 @@ let () =
              expect !container |. to_equal None;
              finish ()))
         [%mel.obj { numRuns = 80 }]));
+  describe "elements from npm react's createElement and jsx" (fun () ->
+    test_async "bindings to createElement, jsx, jsxs and Fragment build Melact elements, as React builds its own" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:20) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Npm_elements label="a" /> in
+             let rec run remaining (label, count) =
+               let shown =
+                 "<section class=\"npm\"><h1 id=\"x\">" ^ label ^ "</h1><button>" ^ string_of_int count
+                 ^ "</button><em>jsx</em><ul><li>" ^ label ^ "</li><li>z</li></ul>frag<b>"
+                 ^ String.uppercase_ascii label ^ "</b></section>"
+               in
+               expect (inner_html root) |. to_equal shown;
+               match remaining with
+               | 0 -> Js.Promise.resolve ()
+               | _ -> (
+                   match draw tape 2 with
+                   | 0 ->
+                       let* () = act (fun () -> click (select root "button")) in
+                       run (remaining - 1) (label, count + 1)
+                   | _ ->
+                       let label = [| "a"; "b" |].(draw tape 2) in
+                       let* () = act (fun () -> ReactDOM.Client.render client <Npm_elements label />) in
+                       run (remaining - 1) (label, count))
+             in
+             let* () = run (1 + draw tape 10) ("a", 0) in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             ignore (take ());
+             finish ()))
+        [%mel.obj { numRuns = 60 }]));
   describe "lists and conditions" (fun () ->
     test_async "React.createElement and React.jsxKeyed with makeProps keep rows and their state exactly as JSX does" (fun () ->
       check_async

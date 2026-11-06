@@ -297,12 +297,14 @@ let useTransitionAsync () =
 let act run =
   run ();
   Instance.flush ();
+  View.restore_controlled ();
   Js.Promise.resolve ()
 
 let actAsync run =
   Js.Promise.then_
     (fun () ->
       Instance.flush ();
+      View.restore_controlled ();
       Js.Promise.resolve ())
     (run ())
 
