@@ -1,3 +1,4 @@
+[@@@alert "-deprecated"]
 open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
@@ -290,6 +291,34 @@ module Fresh_hooks = struct
       (React.string (deferred ^ "/" ^ string_of_int shared ^ "/" ^ string_of_bool pending))
       <button onClick=(fun _ -> publish (!store + 1))>(React.string "go")</button>
     </p>
+end
+
+module Probe_utils = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    let text, setText = React.useState (fun () -> "") in
+    let ticked, setTicked = React.useState (fun () -> false) in
+    <div>
+      <button onClick=(fun _ -> setCount (fun count -> count + 1))>(React.int count)</button>
+      <input
+        className="text"
+        value=text
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setText (fun _ -> String.sub value 0 (min 3 (String.length value))))
+        onFocus=(fun _ -> log "focus")
+        onBlur=(fun _ -> log "blur")
+      />
+      <input
+        className="tick"
+        type_="checkbox"
+        checked=ticked
+        onChange=(fun event ->
+          let checked = (React.Event.Form.target event)##checked in
+          setTicked (fun _ -> checked))
+      />
+      <p>(React.string (text ^ "|" ^ string_of_bool ticked))</p>
+    </div>
 end
 
 module Address = struct
@@ -1495,6 +1524,73 @@ let () =
              let* () = run (1 + draw tape 10) ("x", "x", "x", "x", 0) in
              let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
              ignore (take ());
+             finish ()))
+        [%mel.obj { numRuns = 80 }]));
+  describe "ReactDOMTestUtils" (fun () ->
+    test_async "Simulate, DOM and the container helpers drive a page as under React" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let container = ref None in
+             ReactDOMTestUtils.prepareContainer container ();
+             let root = ReactDOMTestUtils.getContainer container in
+             let client = ReactDOM.Client.createRoot root in
+             ReactDOMTestUtils.act (fun () -> ReactDOM.Client.render client <Probe_utils />);
+             ignore (take ());
+             let words = [| ""; "a"; "abcd"; "xy" |] in
+             let find selector = Option.get (ReactDOMTestUtils.DOM.findBySelector root selector) in
+             let rec run remaining (count, text, ticked) =
+               match remaining with
+               | 0 -> ()
+               | _ ->
+                   let next, logged =
+                     match draw tape 5 with
+                     | 0 ->
+                         ReactDOMTestUtils.act (fun () -> ReactDOMTestUtils.Simulate.click (find "button"));
+                         ((count + 1, text, ticked), [])
+                     | 1 ->
+                         let word = words.(draw tape 4) in
+                         ReactDOMTestUtils.act (fun () -> ReactDOMTestUtils.Simulate.changeWithValue (find ".text") word);
+                         ((count, String.sub word 0 (min 3 (String.length word)), ticked), [])
+                     | 2 ->
+                         let checked = draw tape 2 = 0 in
+                         ReactDOMTestUtils.act (fun () -> ReactDOMTestUtils.Simulate.changeWithChecked (find ".tick") checked);
+                         ((count, text, checked), [])
+                     | 3 ->
+                         ReactDOMTestUtils.act (fun () -> ReactDOMTestUtils.Simulate.focus (find ".text"));
+                         ((count, text, ticked), [ "focus" ])
+                     | _ ->
+                         ReactDOMTestUtils.act (fun () -> ReactDOMTestUtils.Simulate.blur (find ".text"));
+                         ((count, text, ticked), [ "blur" ])
+                   in
+                   let count, text, ticked = next in
+                   expect
+                     ( Option.map text_content (ReactDOMTestUtils.DOM.findBySelectorAndTextContent root "button" (string_of_int count)),
+                       ReactDOMTestUtils.DOM.value (find ".text"),
+                       (dom_property (find ".tick") "checked" : bool),
+                       Option.map text_content
+                         (ReactDOMTestUtils.DOM.findBySelectorAndPartialTextContent root "p" ("|" ^ string_of_bool ticked)),
+                       Array.length (ReactDOMTestUtils.DOM.findByAllSelector root "input"),
+                       take () )
+                   |. to_equal
+                        ( Some (string_of_int count),
+                          Some text,
+                          ticked,
+                          Some (text ^ "|" ^ string_of_bool ticked),
+                          2,
+                          logged );
+                   run (remaining - 1) next
+             in
+             run (1 + draw tape 12) (0, "", false);
+             expect
+               ( ReactDOMTestUtils.isDOMComponent root,
+                 ReactDOMTestUtils.isElement <i />,
+                 ReactDOMTestUtils.isElement "text",
+                 ReactDOMTestUtils.isCompositeComponent root )
+             |. to_equal (true, true, false, false);
+             ReactDOMTestUtils.act (fun () -> ReactDOM.Client.unmount client ());
+             ReactDOMTestUtils.cleanupContainer container ();
+             expect !container |. to_equal None;
              finish ()))
         [%mel.obj { numRuns = 80 }]));
   describe "lists and conditions" (fun () ->
