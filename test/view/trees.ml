@@ -1,6 +1,8 @@
 open Melhole
 open Testing
 
+let each_site = View.loop_site ()
+
 let words = [| ""; "a"; "b"; "ab"; "<&>" |]
 let labelled = Template.make ~html:"<div class=\"a\"><i></i></div>" ~holes:[| Attr ([], "title"); Text ([], 0); Child ([], 1) |]
 let styled = Template.make ~html:"<span><b>x</b></span>" ~holes:[| Class_list []; Style []; Child ([], 0) |]
@@ -60,7 +62,7 @@ let rec description tape depth =
   | 6 -> View.lazy1 lazy_text (draw tape 3)
   | 8 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
-      View.each View.Items items
+      View.each each_site View.Items items
         (fun [@u] item _ -> View.with_key item (View.text item))
         (fun [@u] _ _ _ _ -> ())
         0

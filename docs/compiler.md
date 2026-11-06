@@ -467,6 +467,18 @@ its argument (`List`, `Belt.Array.keep`, `Js.Array.map`, …); `let total = ref 
 scope traversal records `value`, so a loop whose row function is such a `let` still compiles. Two
 Melact laws count the computations, and mutants that ignore `Frozen` or keep no `let` break them.
 
+### Reading layout while rendering
+
+React renders every dirty component first and writes the DOM afterwards, in its commit, so a
+render that reads `offsetTop` or `getBoundingClientRect` sees a clean layout and costs nothing
+extra. Melact writes a component's holes as soon as the component renders, and its children render
+inside that write, so the next component that reads geometry forces the browser to lay out the
+page again. A user team's table read `offsetTop` in each row's render: Expand all on 400 rows took
+401 layouts under Melact against 4 under React; reading it in a layout effect instead, which Melact
+runs after all the dirty instances are written, made Melact faster than React there. Rendering is
+meant to be pure, and React's docs say the same; this is the one place where code that bends the
+rule costs more under Melact.
+
 ## Controlled inputs
 
 `value` and `checked` are properties the user changes too. A guard compares a value with the one

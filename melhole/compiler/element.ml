@@ -1028,6 +1028,7 @@ let loop frontend ~loc ~definitions ~view ~stable ~render ~numbering row items =
           Some
             [%expr
               Melhole.View.each
+                [%e Hoist.hoist ~loc "site" [%expr Melhole.View.loop_site ()]]
                 [%e match numbering with Items -> [%expr Melhole.View.Items] | Numbered -> [%expr Melhole.View.Numbered]]
                 [%e items]
                 [%e

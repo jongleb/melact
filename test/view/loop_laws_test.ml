@@ -1,6 +1,8 @@
 open Melhole
 open Testing
 
+let each_site = View.loop_site ()
+
 external remove_root : Dom.element -> unit = "remove" [@@mel.send]
 
 (** One row of a keyed loop. The same objects recur between steps, so the loop can reuse rows. *)
@@ -36,7 +38,7 @@ let renders = ref 0
 let marked outer item = match String.equal item.key outer.chosen with true -> "on" | false -> ""
 
 let loop numbering items outer =
-  View.each numbering items
+  View.each each_site numbering items
     (fun [@u] item index ->
       incr renders;
       let place = match numbering with View.Items -> "" | View.Numbered -> string_of_int index ^ ":" in
@@ -68,6 +70,20 @@ let lines items outer =
     (fun [@u] item _ out at ->
       Array.unsafe_set out at (View.Input (marked outer item));
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
+    2
+    [| View.Input outer |]
+    View.Unselecting
+
+let shouted_site = View.loop_site ()
+
+let shouted items outer =
+  View.each shouted_site View.Items items
+    (fun [@u] item _ ->
+      View.with_key item.key
+        (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ "!") |]))
+    (fun [@u] item _ out at ->
+      Array.unsafe_set out at (View.Input (marked outer item));
+      Array.unsafe_set out (at + 1) (View.Input (item.label ^ "!")))
     2
     [| View.Input outer |]
     View.Unselecting
@@ -318,6 +334,27 @@ let () =
                  expect records |. to_be 0))
             [%mel.obj { numRuns = 200 }])))
     loops;
+  describe "Keyed loop laws: two loops in one hole" (fun () ->
+      test "a hole that switches loops over the same items and outer shows what mounting the new loop shows" (fun () ->
+          check
+            (property (tapes ~shortest:4 ~longest:40) (fun values ->
+                 let tape = tape values in
+                 let root = create_element document "ul" in
+                 let items, outer = start in
+                 let pick () = match draw tape 2 with 0 -> loop View.Items items outer | _ -> shouted items outer in
+                 let mounted = View.mount (pick ()) ~parent:root ~before:None in
+                 let rec run remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let next = pick () in
+                       View.patch mounted next;
+                       (shapes (as_node root), shown next) :: run (remaining - 1)
+                 in
+                 let seen = run (2 + draw tape 10) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 200 }]));
   describe "Pure component laws" (fun () ->
       test "patching shows what mounting shows, and renders exactly the slots whose inputs or identity changed"
         (fun () ->
@@ -498,7 +535,7 @@ let selected kind keying items picked =
   match kind with
   | Each | Numbered_each ->
       let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows -> View.Items in
-      View.each numbering items
+      View.each each_site numbering items
         (fun [@u] item index ->
           incr renders;
           let place = match numbering with View.Items -> "" | View.Numbered -> string_of_int index ^ ":" in

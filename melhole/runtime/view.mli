@@ -51,7 +51,13 @@ type 'item selectors = Unselecting | Selecting of selection * 'item selector arr
 (** A compiled loop: [project item index out at] writes the [pieces] values of a row's rendering that read
     [outer] into [out] from [at], so that a change of [outer] re-renders only the rows they differ in
     and allocates nothing per row; a [Numbered] row is drawn again when its index changes. *)
+(** One loop in the generated code, made once per loop site: a loop patches only the rows its own site drew. *)
+type loop_site
+
+val loop_site : unit -> loop_site
+
 val each :
+  loop_site ->
   numbering ->
   'item array ->
   ('item -> int -> child[@u]) ->
