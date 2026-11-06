@@ -37,7 +37,8 @@ type 'snapshot store = {
 }
 
 let reason_react_is_also_in_this_build_remove_it () = ()
-let null = View.empty
+let null : element =
+  ([%mel.raw {|function (empty) { return Object.assign({ TAG: "React.null" }, empty); }|}] : View.child -> element) View.empty
 let string text = View.text text
 let int number = View.text (string_of_int number)
 let float number = View.text (Js.Float.toString number)
