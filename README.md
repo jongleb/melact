@@ -455,9 +455,29 @@ let[@react.component] make ~initial () =
   </div>
 ```
 
+## Install
+
+Melact needs OCaml ≥ 5.4, Melange ≥ 7.0 and dune ≥ 3.16.
+
+```console
+$ opam install melact melact-ppx
+```
+
+Until the packages are in opam-repository, pin them from a release tag:
+
+```console
+$ opam pin add melhole.0.1.0 git+https://github.com/jongleb/melact#0.1.0
+$ opam pin add melact-ppx.0.1.0 git+https://github.com/jongleb/melact#0.1.0
+$ opam pin add melact.0.1.0 git+https://github.com/jongleb/melact#0.1.0
+```
+
+Then, in each `dune` file of the app, `(libraries reason-react)` becomes `(libraries melact)` and
+`(pps reason-react-ppx)` becomes `(pps melact-ppx)`. No library in the build may require reason-react
+itself (see Limits above).
+
 ## Try it
 
-You need OCaml ≥ 5.4, Melange ≥ 5.1, dune ≥ 3.16 and Node for the tests.
+To work on Melact itself you also need Node for the tests.
 
 ```console
 $ dune build                          # libraries and examples
