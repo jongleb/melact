@@ -64,17 +64,12 @@ let () =
   let generated =
     match part with
     | "impl" ->
-        [
-          "let domProps ?key ?children "
-          ^ String.concat " " (List.map (fun (name, _) -> "?" ^ label name) props)
-          ^ " () =";
-          "  let props = new_props () in";
-          "  Option.iter (put props \"key\") key;";
-          "  Option.iter (put props \"children\") children;";
-        ]
-        @ List.map (fun (name, _) -> Printf.sprintf "  Option.iter (put props %S) %s;" name (label name)) props
+        [ "external domProps :"; "  ?key:(string[@mel.as \"key\"]) ->"; "  ?children:(React.element[@mel.as \"children\"]) ->" ]
+        @ List.map (fun (name, kind) -> Printf.sprintf "  ?%s:((%s)[@mel.as %S]) ->" (label name) (label_type kind) name) props
         @ [
-            "  props";
+            "  unit ->";
+            "  domProps = \"\"";
+            "[@@mel.obj]";
             "";
             "let applying name =";
             "  match name with";
@@ -86,12 +81,12 @@ let () =
           "(** The props of a DOM element built at run time, as [domProps] makes them. *)";
           "type domProps";
           "";
-          "val domProps :";
-          "  ?key:string ->";
-          "  ?children:React.element ->";
+          "external domProps :";
+          "  ?key:(string[@mel.as \"key\"]) ->";
+          "  ?children:(React.element[@mel.as \"children\"]) ->";
         ]
-        @ List.map (fun (name, kind) -> Printf.sprintf "  ?%s:(%s) ->" (label name) (label_type kind)) props
-        @ [ "  unit ->"; "  domProps" ]
+        @ List.map (fun (name, kind) -> Printf.sprintf "  ?%s:((%s)[@mel.as %S]) ->" (label name) (label_type kind) name) props
+        @ [ "  unit ->"; "  domProps = \"\""; "[@@mel.obj]" ]
   in
   List.iter
     (fun line -> if String.equal (String.trim line) "[@@@melact.dom_props]" then List.iter print_endline generated else print_endline line)

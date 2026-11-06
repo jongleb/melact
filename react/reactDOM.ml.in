@@ -434,8 +434,6 @@ let flushSync run =
 
 type domProps
 
-external new_props : unit -> domProps = "Object" [@@mel.new]
-external put : domProps -> string -> 'a -> unit = "" [@@mel.set_index]
 external read : domProps -> string -> 'a = "" [@@mel.get_index]
 external lookup : domProps -> string -> 'a Js.undefined = "" [@@mel.get_index]
 external keys : domProps -> string array = "keys" [@@mel.scope "Object"]

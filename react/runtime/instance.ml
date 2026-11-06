@@ -425,7 +425,13 @@ let rec settle () =
                  (fun ancestor ->
                    take ancestor;
                    let walker = tree_walker Dom_api.document ancestor (-1) in
-                   let rec next () = Option.iter (fun node -> take node; next ()) (Js.Null.toOption (next_node walker)) in
+                   let rec next () =
+                     match Js.Null.toOption (next_node walker) with
+                     | Some node ->
+                         take node;
+                         next ()
+                     | None -> ()
+                   in
                    next ())
                  (Option.bind first common);
                let missed = List.filter (fun (node, _) -> Js.Undefined.testAny (found_get starts node) |> not) placed in

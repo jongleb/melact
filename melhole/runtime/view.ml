@@ -1252,7 +1252,7 @@ let set_style (hole : Hole.style) value =
   then (
     let style = Dom_api.style hole.element in
     let written name value =
-      match (String.length name >= 2 && String.equal (String.sub name 0 2) "--", value) with
+      match (String.length name >= 2 && String.unsafe_get name 0 = '-' && String.unsafe_get name 1 = '-', value) with
       | true, "" -> Dom_api.remove_style_property style name
       | true, _ -> Dom_api.set_style_property style name value ""
       | false, _ -> Dom_api.set_style style name value

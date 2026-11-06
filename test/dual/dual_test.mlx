@@ -823,6 +823,31 @@ module Ordered = struct
     </Theme_provider>
 end
 
+let opened_send = ref (fun (_ : bool -> bool) -> ())
+let opened_context = React.createContext false
+
+module Opened_provider = struct
+  let make = React.Context.provider opened_context
+
+  external makeProps : value:bool -> children:React.element -> unit -> < value : bool ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Opened_row = struct
+  let[@react.component] make ~label =
+    let opened = React.useContext opened_context in
+    <li>(React.string label)(match opened with true -> <b>(React.string "detail")</b> | false -> React.null)</li>
+end
+
+module Opened = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    opened_send := setOpened;
+    <Opened_provider value=opened>
+      <ul>(React.array (Array.init count (fun index -> <Opened_row key=(string_of_int index) label=(string_of_int index) />)))</ul>
+    </Opened_provider>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1538,6 +1563,33 @@ let () =
              in
              step 4 "a" (Array.init 30 (fun index -> "r" ^ string_of_int index))))
         [%mel.obj { numRuns = 30 }]));
+  describe "rows that read a context to show their detail" (fun () ->
+    test_async "all show it or hide it when the context flips, however many there are" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:12) (fun values ->
+             let tape = tape values in
+             let count = 1 + draw tape 60 in
+             let* root, client = mount <Opened count /> in
+             let rec step remaining opened =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = not opened in
+                   let* () = act (fun () -> !opened_send (fun _ -> next)) in
+                   expect (Array.length (nodes (select_all root "b")))
+                   |. to_equal (match next with true -> count | false -> 0);
+                   step (remaining - 1) next
+             in
+             step 4 false))
+        [%mel.obj { numRuns = 40 }]);
+    test_async "all show it in a page of tens of thousands of nodes" (fun () ->
+      let* root, client = mount <Opened count=8000 /> in
+      let* () = act (fun () -> !opened_send (fun _ -> true)) in
+      expect (Array.length (nodes (select_all root "b"))) |. to_equal 8000;
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      finish ()));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async
