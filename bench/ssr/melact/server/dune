@@ -1,0 +1,8 @@
+(copy_files
+ (files ../page.mlx))
+
+(executable
+ (name server)
+ (libraries melact.server.native unix)
+ (preprocess
+  (pps melact-ppx -server)))

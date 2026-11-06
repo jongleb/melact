@@ -40,8 +40,8 @@ const NATIVE = join(repo, "_build/default/bench/ssr/meltea/server/server.exe");
 const RENDERERS = {
   "meltea-native": { label: "Meltea, native OCaml (meltea.server)", native: NATIVE },
   "meltea-node": { label: "Meltea, Melange in Node (meltea.server)", module: "_build/default/bench/ssr/meltea/node/output/bench/ssr/meltea/node/ssr.mjs" },
-  "melact-linkedom": { label: "Melact renderToString, Node + linkedom", module: "_build/default/bench/ssr/melact/node/output/bench/ssr/melact/node/ssr.mjs", dom: "linkedom" },
-  "melact-jsdom": { label: "Melact renderToString, Node + jsdom", module: "_build/default/bench/ssr/melact/node/output/bench/ssr/melact/node/ssr.mjs", dom: "jsdom" },
+  "melact-native": { label: "Melact renderToString, native OCaml (melact.server.native)", native: join(repo, "_build/default/bench/ssr/melact/server/server.exe") },
+  "melact-node": { label: "Melact renderToString, Melange in Node (melact.server)", module: "_build/default/bench/ssr/melact/node/output/bench/ssr/melact/node/ssr.mjs" },
   react: { label: "React 18.3 renderToString, Node", module: "bench/ssr/react/_server/server.js" },
   svelte: { label: "Svelte 5 render (svelte/server), Node", module: "bench/ssr/svelte/_server/server.js" },
 };
@@ -50,7 +50,7 @@ const renderers = list(args.renderers ?? Object.keys(RENDERERS).join(","));
 // Hydrating clients, and the renderer whose HTML each one is served.
 const CLIENTS = {
   meltea: { server: "meltea-native", own: false },
-  melact: { server: "melact-linkedom", own: false },
+  melact: { server: "melact-native", own: false },
   react: { server: "react", own: true },
   svelte: { server: "svelte", own: true },
 };
@@ -61,16 +61,6 @@ const iterationsFor = (count) => iterations ?? (count >= 10000 ? 50 : 200);
 const child = async () => {
   process.env.NODE_ENV = "production";
   const renderer = RENDERERS[args.child];
-  if (renderer.dom === "linkedom") {
-    const { parseHTML } = await import(pathToFileURL(join(here, "node_modules/linkedom/esm/index.js")).href);
-    const { window, document } = parseHTML("<!doctype html><html><head></head><body></body></html>");
-    Object.assign(globalThis, { window, document });
-  }
-  if (renderer.dom === "jsdom") {
-    const { JSDOM } = await import(pathToFileURL(join(repo, "node_modules/jsdom/lib/api.js")).href);
-    const { window } = new JSDOM("<!doctype html><html><head></head><body></body></html>");
-    Object.assign(globalThis, { window, document: window.document });
-  }
   const app = await import(pathToFileURL(join(repo, renderer.module)).href);
   const props = (app.prepare ?? ((rows) => rows))(rowsOf(Number(args.count)));
   let html = app.render(props);
@@ -178,6 +168,7 @@ const ssr = async (results) => {
       if (wrong >= 0) problems.push(`row ${wrong} reads ${JSON.stringify(seen.rowTexts[wrong])}`);
       written[name] = html;
       if (name === "meltea-node" && "meltea-native" in written && html !== written["meltea-native"]) problems.push("bytes differ from the native Meltea server's");
+      if (name === "melact-node" && "melact-native" in written && html !== written["melact-native"]) problems.push("bytes differ from the native Melact server's");
       reference ??= seen;
       if (seen.text !== reference.text) problems.push(`text differs from ${renderers[0]}`);
       if (seen.digest !== reference.digest) problems.push(`normalised DOM differs from ${renderers[0]}`);
