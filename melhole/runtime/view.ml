@@ -1328,13 +1328,38 @@ let put_linked element key link dispatch data =
         (fun event -> link.body (Dom_api.property (Dom_api.current_target event) link.data_key) dispatch event [@u]));
   Events.set element key link.handler
 
+let attachments = ref []
+let writing = ref 0
+let attach_later attach = attachments := attach :: !attachments
+
+let attach_references () =
+  let pending = !attachments in
+  attachments := [];
+  List.iter (fun attach -> attach ()) (List.rev pending)
+
+let written run =
+  incr writing;
+  match run () with
+  | result ->
+      decr writing;
+      (match !writing with 0 -> attach_references () | _ -> ());
+      result
+  | exception error ->
+      decr writing;
+      raise error
+
 let reference_hole element : Hole.reference = { placement = Detached; element; identity = unset; callback = ignore }
+
+let attached (hole : Hole.reference) () =
+  match hole.placement with Placed -> hole.callback (Js.Nullable.return hole.element) | Detached -> ()
 
 let place_reference (hole : Hole.reference) =
   hole.placement <- Placed;
-  hole.callback (Js.Nullable.return hole.element)
+  attach_later (attached hole)
 
-let release_reference (hole : Hole.reference) = hole.callback Js.Nullable.null
+let release_reference (hole : Hole.reference) =
+  hole.placement <- Detached;
+  hole.callback Js.Nullable.null
 
 let set_reference (hole : Hole.reference) identity callback =
   let (Input held) = hole.identity in
@@ -1345,7 +1370,7 @@ let set_reference (hole : Hole.reference) identity callback =
     match hole.placement with
     | Placed ->
         previous Js.Nullable.null;
-        callback (Js.Nullable.return hole.element)
+        attach_later (attached hole)
     | Detached -> ())
 
 let content_hole (position : Template.position) : Hole.content =
@@ -1600,17 +1625,19 @@ let mount child ~parent ~before =
       before = Js.Null.fromOption (Option.map Dom_api.to_node before);
     }
   in
-  { position; source = child; live = child.build position [@u] }
+  written (fun () -> { position; source = child; live = child.build position [@u] })
 
 let patch mounted child =
-  if not (Dom_api.same mounted.source child) then (
-    mounted.live <- update mounted.position mounted.live child;
-    mounted.source <- child)
+  if not (Dom_api.same mounted.source child) then
+    written (fun () ->
+        mounted.live <- update mounted.position mounted.live child;
+        mounted.source <- child)
 
 let mount_over child ~parent =
   let parent = Dom_api.to_node parent in
   let position = { Template.parent; before = Js.null } in
-  { position; source = child; live = child.build { position with before = Dom_api.first_child_or_end parent } [@u] }
+  written (fun () ->
+      { position; source = child; live = child.build { position with before = Dom_api.first_child_or_end parent } [@u] })
 
 let unmount mounted =
   remove mounted.position mounted.live;

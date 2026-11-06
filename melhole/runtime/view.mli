@@ -241,6 +241,12 @@ val place_reference : Hole.reference -> unit
 val release_reference : Hole.reference -> unit
 (** [set_reference hole identity callback]: a ref whose identity is not the one held replaces it, the
     old one called with null and the new one with the element, as React compares its refs. *)
+(** Runs [attach] once the current write is over, as React attaches refs after its commit. *)
+val attach_later : (unit -> unit) -> unit
+
+(** Runs the attachments waiting for the end of the write: Melact calls it after a flush's renders. *)
+val attach_references : unit -> unit
+
 val set_reference : Hole.reference -> 'identity -> (Dom.element Js.nullable -> unit) -> unit
 val content_hole : Template.position -> Hole.content
 val release_content : Hole.content -> unit

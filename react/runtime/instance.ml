@@ -436,6 +436,7 @@ let rec settle () =
                  (Option.bind first common);
                let missed = List.filter (fun (node, _) -> Js.Undefined.testAny (found_get starts node) |> not) placed in
                List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced);
+        View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
         run_phases layout_cleanups layout_runs;

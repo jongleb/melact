@@ -475,7 +475,10 @@ extra. Melact writes a component's holes as soon as the component renders, and i
 inside that write, so the next component that reads geometry forces the browser to lay out the
 page again. A user team's table read `offsetTop` in each row's render: Expand all on 400 rows took
 401 layouts under Melact against 4 under React; reading it in a layout effect instead, which Melact
-runs after all the dirty instances are written, made Melact faster than React there. Rendering is
+runs after all the dirty instances are written, made Melact faster than React there. Ref callbacks
+wait the same way: a placed ref is queued and gets its element when the outermost `View.mount` or
+`View.patch` ends, or, in Melact, after a flush's renders and before its layout effects, so a
+callback sees the whole tree, as in React; a dual law reads the number of rows from each row's ref. Rendering is
 meant to be pure, and React's docs say the same; this is the one place where code that bends the
 rule costs more under Melact.
 

@@ -3,6 +3,7 @@ open Testing
 
 external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
 external test_async_long : string -> (unit -> unit Js.Promise.t) -> int -> unit = "test"
+external parent_of : Dom.element -> Dom.element = "parentElement" [@@mel.get]
 external tag_name : Dom.element -> string = "tagName" [@@mel.get]
 external namespace_uri : Dom.element -> string = "namespaceURI" [@@mel.get]
 external get_attribute : Dom.element -> string -> string = "getAttribute" [@@mel.send]
@@ -876,6 +877,23 @@ module Wide = struct
     <ul>(React.array (wide_items words))</ul>
 end
 
+module Counted_rows = struct
+  let[@react.component] make ~count =
+    let seen = React.useRef [] in
+    let reference element =
+      Option.iter
+        (fun element -> seen.current <- Array.length (nodes (child_nodes (parent_of element))) :: seen.current)
+        (Js.Nullable.toOption element)
+    in
+    React.useLayoutEffect0 (fun () ->
+        log (String.concat "," (List.rev_map string_of_int seen.current));
+        None);
+    <ul>
+      (React.array
+         (Array.init count (fun index -> <li key=(string_of_int index) ref=(ReactDOM.Ref.callbackDomRef reference)>(React.int index)</li>)))
+    </ul>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -1659,6 +1677,19 @@ let () =
              step 3 start))
         [%mel.obj { numRuns = 3 }])
       120_000);
+  describe "callback refs" (fun () ->
+    test_async "run once the whole tree is in the page, as React attaches them after its writes" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:4) (fun values ->
+             let tape = tape values in
+             let count = 1 + draw tape 30 in
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let* () = act (fun () -> ReactDOM.Client.render client <Counted_rows count />) in
+             expect (take ()) |. to_equal [ String.concat "," (List.init count (fun _ -> string_of_int count)) ];
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             finish ()))
+        [%mel.obj { numRuns = 20 }]));
   describe "a callback ref replaced by another" (fun () ->
     test_async "calls the old one with null, then the new one with the element, and neither for an unrelated render" (fun () ->
       check_async

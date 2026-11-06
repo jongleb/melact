@@ -457,9 +457,13 @@ type applying =
 [@@@melact.dom_props]
 
 (** A DOM element built at run time, with what it shows and holds. *)
+(** Whether a built element is still in the tree. *)
+type life = Shown | Released
+
 type built = {
   tag : string;
   element : Dom.element;
+  mutable life : life;
   mutable shown : domProps;
   mutable inner : View.live;
   mutable events : (string * string) list;
@@ -515,7 +519,13 @@ let apply built props name =
             hole
       in
       View.set_style hole (Style.declarations (read props name))
-  | Ref_value -> Ref.attach (read props name) (Js.Nullable.return element)
+  | Ref_value ->
+      let reference = read props name in
+      View.attach_later (fun () ->
+          match (built.life, lookup built.shown name) with
+          | Shown, given when Dom_api.same (Js.Undefined.toOption given) (Some reference) ->
+              Ref.attach reference (Js.Nullable.return element)
+          | (Shown | Released), _ -> ())
   | Inner_html_value -> Dom_api.set_inner_html element (read props name)##__html
   | Skipped -> ()
 
@@ -546,6 +556,7 @@ let dom_built =
     ~let_go:(fun [@u] built ->
       View.release built.inner;
       List.iter (fun stop -> stop ()) built.cleanups;
+      built.life <- Released;
       clear built "ref")
 
 let given props = Js.Array.filter ~f:(fun name -> not (String.equal name "key" || String.equal name "children")) (keys props)
@@ -576,7 +587,7 @@ let dom tag props children =
         in
         let inside = { Template.parent = Dom_api.to_node element; before = Dom_api.first_child_or_end (Dom_api.to_node element) } in
         let built =
-          { tag; element; shown = props; inner = View.build (content ()) inside; events = []; cleanups = []; controlled = []; styled = None }
+          { tag; element; life = Shown; shown = props; inner = View.build (content ()) inside; events = []; cleanups = []; controlled = []; styled = None }
         in
         Array.iter (apply built props) (given props);
         (match !View.medium.adoption with Fresh_nodes -> View.insert position (Dom_api.to_node element) | Server_nodes -> ());
