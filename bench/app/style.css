@@ -1,0 +1,25 @@
+body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: #111827; background: #fff; }
+.app { padding: 8px 16px; }
+.app.dark { background: #111827; color: #f9fafb; }
+.header, .toolbar { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+.tabs { display: flex; gap: 4px; }
+.tab { border: 1px solid #d1d5db; background: transparent; padding: 4px 12px; }
+.tab.active { background: #2563eb; color: #fff; }
+.badge { min-width: 20px; padding: 0 6px; border-radius: 10px; background: #ef4444; color: #fff; text-align: center; }
+#search { width: 240px; padding: 4px; }
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { border-left: 4px solid; padding: 2px 8px; border-bottom: 1px solid #e5e7eb; }
+.row.selected { background: #fef3c7; }
+.line { display: flex; gap: 8px; align-items: center; }
+.toggle { width: 24px; }
+.id { width: 40px; color: #6b7280; text-align: right; }
+.title { flex: 1; cursor: pointer; }
+.tag { margin-right: 4px; padding: 0 6px; border-radius: 4px; background: #e5e7eb; font-size: 12px; }
+.points { width: 24px; text-align: right; }
+.details { margin: 4px 0 4px 72px; padding: 4px 8px; background: #f3f4f6; }
+.details dl { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 0; }
+.board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.column h3 { margin: 4px 0; font-size: 14px; }
+.card { display: flex; gap: 6px; border-top: 3px solid; margin-bottom: 4px; padding: 4px; background: #f9fafb; cursor: pointer; }
+.card.selected { background: #fef3c7; }
+.stats td { padding: 2px 12px; }

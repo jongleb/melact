@@ -54,3 +54,48 @@ averaged over the runs (`--top=N`, default 15); results go to `bench/profile.jso
 - Memory: `HeapProfiler.collectGarbage` twice, then `Runtime.getHeapUsage`, after load, after
   creating 1,000 rows, and after five more create/clear cycles.
 - Size: the gzip (-9) size of all JS in the production bundle.
+
+# App benchmark
+
+js-framework-benchmark is one list component. [`app/`](app) measures what one state change costs
+across nested components with hooks: a small task app with 1,000 items, three tabs (a list of rows,
+a board of cards grouped by status, per-owner totals), a search field that filters as you type, rows
+with local `useState` (expanded or not, synced from "Expand all" / "Collapse all" by a `useEffect`),
+a child `Details` and `Tags` per row, a selection driven from the parent, a theme context, and a
+badge unrelated to the list. Every component counts its renders (`window.__renders`).
+
+| build | source |
+|---|---|
+| `reason-react` | [`app/src/app.mlx`](app/src/app.mlx) with reason-react on React 18.3 ([`app/reason-react/dune`](app/reason-react/dune)) |
+| `melact` | the same file with Melact: the dune file differs in two words ([`app/melact/dune`](app/melact/dune)) |
+| `react` | [`app/react/src/app.jsx`](app/react/src/app.jsx), the same app in idiomatic JSX on React 18.3 |
+| `react-compiler` | the same JSX with `babel-plugin-react-compiler` 1.0 (target 18), which compiles all 15 components |
+
+The Reason source is written as ordinary reason-react code: inline closures and style records in
+props, arrays built in render, `useMemo` for the filter and the totals only.
+
+```console
+$ (cd bench/app/react && npm install)
+$ DYLD_LIBRARY_PATH=/opt/homebrew/Cellar/simdjson/4.6.4/lib node bench/run.mjs --suite=app
+```
+
+It reuses the harness above (browser, trace phases, medians, `--profile`, `--top`, `--no-build`,
+`--frameworks`, `--ops`, `--out`) and adds `--throttle=N` (CPU slowdown for every operation,
+default 4), `--warmups=N` (default 5), `--runs=N` (default 7) and, with `--profile`, `--callers`
+(self time split by calling function). Bundles go to `bench/app/_dist`, samples to
+`bench/app/results.json`.
+
+Operations, each on a fresh page after its warmups: mount; switch tab list → board, board → list,
+list → stats, stats → list; type `orang` into search one real key event at a time
+(`Input.dispatchKeyEvent`, one sample per keystroke, 1,000 → 91 rows); clear the search; expand all;
+collapse all; toggle one row; select a row; bump the badge. The time is main-thread busy time from
+the input event to the paint after the last script it caused, so effects that run after the first
+paint and the renders they cause are counted. Waiting for the page to settle is done by polls
+marked in the trace with `console.timeStamp`, and their tasks are left out.
+
+After every measured step the page must match a model of the app built from
+[`app/data.mjs`](app/data.mjs): active tab, the field's value, the count shown, the badge, the ids of
+the rows in order, which rows are expanded (with their details and toggle in agreement), the
+selection, the cards and the totals. After each operation the normalised DOM of the four builds
+(tags, sorted attributes, text) must also be identical. The report gives the phases, the component
+renders per operation, the gzip size of the bundle, and the heap before and after mount.

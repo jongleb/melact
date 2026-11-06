@@ -1,0 +1,10 @@
+(copy_files
+ (files ../src/*.mlx))
+
+(melange.emit
+ (target output)
+ (libraries melact melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (pps melange.ppx melact-ppx)))

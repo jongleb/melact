@@ -1,0 +1,360 @@
+external document : Dom.document = "document"
+
+external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
+[@@mel.send] [@@mel.return nullable]
+
+external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external rendered : string -> unit = "__rendered"
+
+(** Where an item stands on the board. *)
+type category = Backlog | Doing | Review | Done
+
+type item = { id : int; title : string; category : category; owner : string; points : int; note : string }
+
+(** The three views of the items. *)
+type tab = Rows | Board | Stats
+
+(** Whether a row shows its details. *)
+type fold = Expanded | Collapsed
+
+(** The last "Expand all" or "Collapse all": its fold, and how many there were. *)
+type bulk = { fold : fold; generation : int }
+
+(** The item whose title was clicked last. *)
+type selection = Unselected | Selected of int
+
+(** How a row or card is painted. *)
+type highlight = Highlighted | Plain
+
+(** How a tab is painted. *)
+type activity = Active | Inactive
+
+(** The colour scheme, shared through context. *)
+type theme = Light | Dark
+
+(** One owner's share of the shown items. *)
+type total = { owner : string; count : int; sum : int }
+
+let categories = [| Backlog; Doing; Review; Done |]
+let owners = [| "Ada"; "Brian"; "Chloe"; "Dmitri"; "Elena"; "Farid"; "Grace"; "Hiro" |]
+
+let category_name category =
+  match category with Backlog -> "Backlog" | Doing -> "Doing" | Review -> "Review" | Done -> "Done"
+
+let category_colour category =
+  match category with Backlog -> "#9ca3af" | Doing -> "#3b82f6" | Review -> "#f59e0b" | Done -> "#10b981"
+
+let items =
+  let adjectives =
+    [| "pretty"; "large"; "big"; "small"; "tall"; "short"; "long"; "handsome"; "plain"; "quaint";
+       "clean"; "elegant"; "easy"; "angry"; "crazy"; "helpful"; "mushy"; "odd"; "unsightly";
+       "adorable"; "important"; "inexpensive"; "cheap"; "expensive"; "fancy" |]
+  and colours =
+    [| "red"; "yellow"; "blue"; "green"; "pink"; "brown"; "purple"; "grey"; "white"; "black"; "orange" |]
+  and nouns =
+    [| "table"; "chair"; "house"; "bbq"; "desk"; "car"; "pony"; "cookie"; "sandwich"; "burger";
+       "pizza"; "mouse"; "keyboard" |]
+  in
+  Array.init 1000 (fun index ->
+      let id = index + 1 and points = (index * 37 mod 13) + 1 and owner = owners.(index * 13 mod 8) in
+      {
+        id;
+        title =
+          adjectives.((index * 7 + 3) mod 25) ^ " " ^ colours.((index * 5 + 1) mod 11) ^ " "
+          ^ nouns.((index * 3 + 2) mod 13);
+        category = categories.(index mod 4);
+        owner;
+        points;
+        note =
+          "Item " ^ string_of_int id ^ " needs " ^ string_of_int points ^ " points of work from " ^ owner
+          ^ ".";
+      })
+
+let theme_context = React.createContext Light
+
+let theme_class theme = match theme with Light -> "light" | Dark -> "dark"
+
+module Theme_provider = struct
+  let make = React.Context.provider theme_context
+
+  external makeProps :
+    value:theme -> children:React.element -> unit -> < value : theme ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Tab = struct
+  let[@react.component] make ~label ~activity ~onClick =
+    rendered "Tab";
+    <button
+      id=("tab-" ^ String.lowercase_ascii label)
+      className=(match activity with Active -> "tab active" | Inactive -> "tab")
+      onClick=(fun _ -> onClick ())>
+      (React.string label)
+    </button>
+end
+
+module Badge = struct
+  let[@react.component] make ~count =
+    rendered "Badge";
+    let theme = React.useContext theme_context in
+    <span id="badge" className=("badge " ^ theme_class theme)>(React.int count)</span>
+end
+
+module Header = struct
+  let[@react.component] make ~tab ~onTab ~notifications ~onNotify ~onTheme =
+    rendered "Header";
+    <header className="header">
+      <nav className="tabs">
+        (React.array
+           (Array.map
+              (fun (target, label) ->
+                <Tab
+                  key=label
+                  label
+                  activity=(match (target, tab) with Rows, Rows | Board, Board | Stats, Stats -> Active | _ -> Inactive)
+                  onClick=(fun () -> onTab target) />)
+              [| (Rows, "List"); (Board, "Board"); (Stats, "Stats") |]))
+      </nav>
+      <button id="notify" onClick=(fun _ -> onNotify ())>(React.string "Notify")</button>
+      <Badge count=notifications />
+      <button id="theme" onClick=(fun _ -> onTheme ())>(React.string "Theme")</button>
+    </header>
+end
+
+module Search_box = struct
+  let[@react.component] make ~value ~onChange =
+    rendered "SearchBox";
+    <input
+      id="search"
+      type_="text"
+      placeholder="Search"
+      value
+      onChange=(fun event -> onChange (React.Event.Form.target event)##value) />
+end
+
+module Toolbar = struct
+  let[@react.component] make ~query ~onQuery ~shown ~onExpandAll ~onCollapseAll =
+    rendered "Toolbar";
+    <div className="toolbar">
+      <Search_box value=query onChange=onQuery />
+      <button id="clear-search" onClick=(fun _ -> onQuery "")>(React.string "Clear")</button>
+      <span id="shown">(React.string (string_of_int shown ^ " shown"))</span>
+      <button id="expand-all" onClick=(fun _ -> onExpandAll ())>(React.string "Expand all")</button>
+      <button id="collapse-all" onClick=(fun _ -> onCollapseAll ())>(React.string "Collapse all")</button>
+    </div>
+end
+
+module Tags = struct
+  let[@react.component] make ~tags =
+    rendered "Tags";
+    <span className="tags">
+      (React.array (Array.map (fun tag -> <span key=tag className="tag">(React.string tag)</span>) tags))
+    </span>
+end
+
+module Details = struct
+  let[@react.component] make ~item =
+    rendered "Details";
+    let theme = React.useContext theme_context in
+    let words =
+      React.useMemo1 (fun () -> Array.length (Js.String.split ~sep:" " item.note)) [| item |]
+    in
+    <div className=("details " ^ theme_class theme)>
+      <p className="note">(React.string item.note)</p>
+      <dl>
+        <dt>(React.string "Owner")</dt>
+        <dd>(React.string item.owner)</dd>
+        <dt>(React.string "Points")</dt>
+        <dd>(React.int item.points)</dd>
+        <dt>(React.string "Status")</dt>
+        <dd>(React.string (category_name item.category))</dd>
+        <dt>(React.string "Words")</dt>
+        <dd>(React.int words)</dd>
+      </dl>
+    </div>
+end
+
+module Row = struct
+  let[@react.component] make ~item ~highlight ~bulk ~onSelect =
+    rendered "Row";
+    let theme = React.useContext theme_context in
+    let fold, setFold = React.useState (fun () -> bulk.fold) in
+    React.useEffect1
+      (fun () ->
+        setFold (fun _ -> bulk.fold);
+        None)
+      [| bulk.generation |];
+    <li
+      className=
+        ("row " ^ theme_class theme
+        ^ (match highlight with Highlighted -> " selected" | Plain -> "")
+        ^ match fold with Expanded -> " expanded" | Collapsed -> "")
+      style=(ReactDOM.Style.make ~borderLeftColor:(category_colour item.category) ())>
+      <div className="line">
+        <button
+          className="toggle"
+          onClick=(fun _ -> setFold (fun fold -> match fold with Expanded -> Collapsed | Collapsed -> Expanded))>
+          (React.string (match fold with Expanded -> "-" | Collapsed -> "+"))
+        </button>
+        <span className="id">(React.int item.id)</span>
+        <a className="title" onClick=(fun _ -> onSelect ())>(React.string item.title)</a>
+        <Tags tags=[| category_name item.category; item.owner |] />
+        <span className="points">(React.int item.points)</span>
+      </div>
+      (match fold with Expanded -> <Details item /> | Collapsed -> React.null)
+    </li>
+end
+
+module Row_list = struct
+  let[@react.component] make ~items ~selection ~bulk ~onSelect =
+    rendered "RowList";
+    <ul className="rows">
+      (React.array
+         (Array.map
+            (fun item ->
+              <Row
+                key=(string_of_int item.id)
+                item
+                highlight=(match selection with Selected id when id = item.id -> Highlighted | _ -> Plain)
+                bulk
+                onSelect=(fun () -> onSelect item.id) />)
+            items))
+    </ul>
+end
+
+module Card = struct
+  let[@react.component] make ~item ~highlight ~onSelect =
+    rendered "Card";
+    <div
+      className=(match highlight with Highlighted -> "card selected" | Plain -> "card")
+      style=(ReactDOM.Style.make ~borderTopColor:(category_colour item.category) ())
+      onClick=(fun _ -> onSelect ())>
+      <span className="id">(React.int item.id)</span>
+      <span className="title">(React.string item.title)</span>
+      <span className="points">(React.int item.points)</span>
+    </div>
+end
+
+module Column = struct
+  let[@react.component] make ~category ~items ~selection ~onSelect =
+    rendered "Column";
+    <section className="column">
+      <h3>(React.string (category_name category ^ " (" ^ string_of_int (Array.length items) ^ ")"))</h3>
+      (React.array
+         (Array.map
+            (fun item ->
+              <Card
+                key=(string_of_int item.id)
+                item
+                highlight=(match selection with Selected id when id = item.id -> Highlighted | _ -> Plain)
+                onSelect=(fun () -> onSelect item.id) />)
+            items))
+    </section>
+end
+
+module Board = struct
+  let[@react.component] make ~items ~selection ~onSelect =
+    rendered "Board";
+    <div className="board">
+      (React.array
+         (Array.map
+            (fun category ->
+              <Column
+                key=(category_name category)
+                category
+                items=(Js.Array.filter ~f:(fun item -> item.category = category) items)
+                selection
+                onSelect />)
+            categories))
+    </div>
+end
+
+module Stat_row = struct
+  let[@react.component] make ~total =
+    rendered "StatRow";
+    <tr>
+      <td>(React.string total.owner)</td>
+      <td>(React.int total.count)</td>
+      <td>(React.int total.sum)</td>
+    </tr>
+end
+
+module Stats = struct
+  let[@react.component] make ~items =
+    rendered "Stats";
+    let totals =
+      React.useMemo1
+        (fun () ->
+          Array.map
+            (fun owner ->
+              let mine = Js.Array.filter ~f:(fun (item : item) -> item.owner = owner) items in
+              { owner; count = Array.length mine; sum = Array.fold_left (fun sum item -> sum + item.points) 0 mine })
+            owners)
+        [| items |]
+    in
+    <table className="stats">
+      <tbody>(React.array (Array.map (fun total -> <Stat_row key=total.owner total />) totals))</tbody>
+    </table>
+end
+
+module App = struct
+  let[@react.component] make () =
+    rendered "App";
+    let tab, setTab = React.useState (fun () -> Rows) in
+    let query, setQuery = React.useState (fun () -> "") in
+    let selection, setSelection = React.useState (fun () -> Unselected) in
+    let notifications, setNotifications = React.useState (fun () -> 0) in
+    let theme, setTheme = React.useState (fun () -> Light) in
+    let bulk, dispatchBulk =
+      React.useReducer (fun bulk fold -> { fold; generation = bulk.generation + 1 }) { fold = Collapsed; generation = 0 }
+    in
+    let visible =
+      React.useMemo1 (fun () -> Js.Array.filter ~f:(fun item -> Js.String.includes ~search:query item.title) items) [| query |]
+    in
+    <Theme_provider value=theme>
+      <div className=("app " ^ theme_class theme)>
+        <Header
+          tab
+          onTab=(fun next -> setTab (fun _ -> next))
+          notifications
+          onNotify=(fun () -> setNotifications (fun count -> count + 1))
+          onTheme=(fun () -> setTheme (fun theme -> match theme with Light -> Dark | Dark -> Light)) />
+        <Toolbar
+          query
+          onQuery=(fun text -> setQuery (fun _ -> text))
+          shown=(Array.length visible)
+          onExpandAll=(fun () -> dispatchBulk Expanded)
+          onCollapseAll=(fun () -> dispatchBulk Collapsed) />
+        (match tab with
+         | Rows ->
+             <Row_list items=visible selection bulk onSelect=(fun id -> setSelection (fun _ -> Selected id)) />
+         | Board -> <Board items=visible selection onSelect=(fun id -> setSelection (fun _ -> Selected id)) />
+         | Stats -> <Stats items=visible />)
+      </div>
+    </Theme_provider>
+end
+
+(** The root the app is mounted on, while it is. *)
+type mounted = Unmounted | Mounted of ReactDOM.Client.root
+
+let () =
+  match (element_by_id document "root", element_by_id document "mount", element_by_id document "unmount") with
+  | Some container, Some mount, Some unmount ->
+      let mounted = ref Unmounted in
+      add_event_listener mount "click" (fun _ ->
+          match !mounted with
+          | Unmounted ->
+              let root = ReactDOM.Client.createRoot container in
+              ReactDOM.Client.render root <App />;
+              mounted := Mounted root
+          | Mounted _ -> ());
+      add_event_listener unmount "click" (fun _ ->
+          match !mounted with
+          | Mounted root ->
+              ReactDOM.Client.unmount root ();
+              mounted := Unmounted
+          | Unmounted -> ())
+  | _ -> ()

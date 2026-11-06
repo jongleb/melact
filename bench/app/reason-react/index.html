@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>App benchmark: reason-react on React 18</title>
+    <link rel="stylesheet" href="/bench/app/style.css" />
+    <script>
+      window.__renders = {};
+      window.__rendered = (name) => { __renders[name] = (__renders[name] | 0) + 1; };
+    </script>
+  </head>
+  <body>
+    <button id="mount">Mount</button>
+    <button id="unmount">Unmount</button>
+    <div id="root"></div>
+    <script type="module" src="/_build/default/bench/app/reason-react/output/bench/app/reason-react/app.mjs"></script>
+  </body>
+</html>

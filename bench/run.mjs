@@ -55,10 +55,10 @@ const build = async () => {
   }
 };
 
-const measureSizes = () => {
+const measureSizes = (names = frameworks, root = dist) => {
   const sizes = {};
-  for (const name of frameworks) {
-    const outDir = join(dist, name);
+  for (const name of names) {
+    const outDir = join(root, name);
     let raw = 0;
     let gzip = 0;
     for (const file of readdirSync(join(outDir, "assets")))
@@ -72,12 +72,12 @@ const measureSizes = () => {
   return sizes;
 };
 
-const serve = () =>
+const serve = (root = dist) =>
   new Promise((done) => {
     const types = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css" };
     const server = createServer((request, response) => {
-      const path = join(dist, decodeURIComponent(new URL(request.url, "http://x").pathname));
-      if (!path.startsWith(dist) || !existsSync(path) || !statSync(path).isFile()) {
+      const path = join(root, decodeURIComponent(new URL(request.url, "http://x").pathname));
+      if (!path.startsWith(root) || !existsSync(path) || !statSync(path).isFile()) {
         response.writeHead(404).end();
         return;
       }
@@ -142,7 +142,7 @@ const launch = async () => {
   return { send, listeners, close };
 };
 
-const openPage = async (browser, url) => {
+const openPage = async (browser, url, ready = "#run") => {
   const { targetId } = await browser.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await browser.send("Target.attachToTarget", { targetId, flatten: true });
   const send = (method, params) => browser.send(method, params, sessionId);
@@ -173,7 +173,7 @@ const openPage = async (browser, url) => {
     return result.value;
   };
   await evaluate(PAGE_HELPERS);
-  await evaluate(`__until(() => document.getElementById("run") !== null)`);
+  await evaluate(`__until(() => document.querySelector(${JSON.stringify(ready)}) !== null)`);
   const click = async (selector) => {
     const point = await evaluate(`__point(${JSON.stringify(selector)})`);
     if (point === null) throw new Error("no element " + selector);
@@ -670,4 +670,7 @@ const report = (results) => {
   return lines.join("\n");
 };
 
-await main();
+// The app suite (bench/app) reuses the browser, page, trace and statistics code above.
+if (args.suite === "app")
+  await (await import("./app/suite.mjs")).run({ args, log, repo, launch, openPage, serve, measureSizes, covered, median, CATEGORIES, SCRIPT, STYLE, PAINT, TASK });
+else await main();
