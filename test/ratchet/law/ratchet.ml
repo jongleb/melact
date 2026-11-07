@@ -56,8 +56,9 @@ let comparison kind =
          target with one, inserted and taken out with it, each with its mutation record; React inserts nothing"
   | Property ->
       Known_gap
-        "a controlled select's value is written when it mounts, after its options are in the document; React marks the \
-         selected option before it inserts it"
+        "a controlled select's value is written when it mounts, after its options are in the document, where React \
+         marks the selected option before it inserts it; and bench/classics/settings writes 104 more control states \
+         than React, not yet explained"
   | Keyed ->
       Known_gap
         "a compiled loop computes the key of a changed row to see whether the rows stayed in place, and again to find \
