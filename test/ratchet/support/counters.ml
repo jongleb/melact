@@ -20,11 +20,12 @@ type kind =
   | Projected
   | Refreshed
   | Walked
+  | Jobs_moved
 
 let kinds =
   [
     Moved; Inserted; Removed; Attribute; Class; Text; Style; Property; Created; Forced_layout; Frame_layout; Layout_read; Rendered;
-    Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked;
+    Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked; Jobs_moved;
   ]
 
 let name kind =
@@ -50,6 +51,7 @@ let name kind =
   | Projected -> "projections"
   | Refreshed -> "row refreshes"
   | Walked -> "nodes walked"
+  | Jobs_moved -> "queued jobs moved"
 
 type t = int Js.Dict.t
 

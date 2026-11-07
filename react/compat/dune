@@ -1,0 +1,8 @@
+(library
+ (name melact_compat)
+ (public_name melact.compat)
+ (modes melange)
+ (libraries melact melact_runtime melhole melange.dom)
+ (melange.runtime_deps react.js jsx-runtime.js react-dom.js react-dom-client.js)
+ (preprocess
+  (pps melange.ppx)))

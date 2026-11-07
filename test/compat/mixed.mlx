@@ -1,0 +1,231 @@
+(* One app of OCaml components and components of JavaScript libraries, built twice: with
+   reason-react on npm's React 18, and with Melact, where the JavaScript components run on
+   melact.compat. test/compat/mixed.test.mjs drives both and compares what they show and log. *)
+
+open Testing
+
+module Box = struct
+  external make : name:string -> log:(string -> unit) -> stop:string -> children:React.element -> React.element = "Box"
+  [@@mel.module "compat-layers"] [@@react.component]
+end
+
+module Provide = struct
+  external make : value:string -> children:React.element -> React.element = "Provide"
+  [@@mel.module "compat-layers"] [@@react.component]
+end
+
+module Show = struct
+  external make : name:string -> React.element = "Show" [@@mel.module "compat-layers"] [@@react.component]
+end
+
+module Portal = struct
+  external make : container:Dom.element -> children:React.element -> React.element = "Portal"
+  [@@mel.module "compat-layers"] [@@react.component]
+end
+
+module Tally = struct
+  external make : name:string -> log:(string -> unit) -> children:React.element -> React.element = "Tally"
+  [@@mel.module "compat-layers"] [@@react.component]
+end
+
+(** The props react-window gives a row component. *)
+type row_props = < index : int ; label : string ; log : string -> unit > Js.t
+
+module RowFrame = struct
+  external make : frame:row_props -> children:React.element -> React.element = "RowFrame"
+  [@@mel.module "compat-layers"] [@@react.component]
+end
+
+module Window = struct
+  external make :
+    rowCount:int ->
+    rowHeight:int ->
+    defaultHeight:int ->
+    overscanCount:int ->
+    rowComponent:(row_props -> React.element) ->
+    rowProps:< label : string ; log : string -> unit > Js.t ->
+    React.element = "List"
+  [@@mel.module "react-window"] [@@react.component]
+end
+
+(** An option of react-select. *)
+type choice = < value : string ; label : string > Js.t
+
+module Select = struct
+  external make :
+    instanceId:string ->
+    options:choice array ->
+    value:choice Js.Nullable.t ->
+    onChange:(choice Js.Nullable.t -> unit) ->
+    isClearable:bool ->
+    React.element = "default"
+  [@@mel.module "react-select"] [@@react.component]
+end
+
+module Popover = struct
+  module Root = struct
+    external make : onOpenChange:(bool -> unit) -> children:React.element -> React.element = "Root"
+    [@@mel.module "@radix-ui/react-popover"] [@@react.component]
+  end
+
+  module Trigger = struct
+    external make : asChild:bool -> children:React.element -> React.element = "Trigger"
+    [@@mel.module "@radix-ui/react-popover"] [@@react.component]
+  end
+
+  module Portal = struct
+    external make : container:Dom.element -> children:React.element -> React.element = "Portal"
+    [@@mel.module "@radix-ui/react-popover"] [@@react.component]
+  end
+
+  module Content = struct
+    external make : className:string -> children:React.element -> React.element = "Content"
+    [@@mel.module "@radix-ui/react-popover"] [@@react.component]
+  end
+
+  module Close = struct
+    external make : className:string -> children:React.element -> React.element = "Close"
+    [@@mel.module "@radix-ui/react-popover"] [@@react.component]
+  end
+end
+
+module Mel = struct
+  let[@react.component] make ~name ~log ~stop ~version ~children =
+    let count, setCount = React.useState (fun () -> 0) in
+    React.useLayoutEffect1
+      (fun () ->
+        log ("layout mel:" ^ name);
+        Some (fun () -> log ("layout cleanup mel:" ^ name)))
+      [| version |];
+    React.useEffect1
+      (fun () ->
+        log ("effect mel:" ^ name);
+        Some (fun () -> log ("effect cleanup mel:" ^ name)))
+      [| version |];
+    <div
+      className="mel"
+      title=name
+      onClick=(fun event ->
+        log ("click mel:" ^ name);
+        if String.equal stop name then React.Event.Mouse.stopPropagation event)>
+      <button className="bump" title=name onClick=(fun _ -> setCount (fun n -> n + 1))>
+        (React.string (string_of_int count ^ "/" ^ string_of_int version))
+      </button>
+      children
+    </div>
+end
+
+(** A random tree of layers: OCaml components and JavaScript ones, nested. *)
+type layer =
+  | Melact_layer of string * layer list
+  | Box_layer of string * layer list
+  | Provide_layer of string * layer list
+  | Show_layer of string
+  | Portal_layer of layer list
+  | Tally_layer of string * layer list
+
+let grow values =
+  let tape = tape values and counter = ref 0 in
+  let named () =
+    incr counter;
+    "n" ^ string_of_int !counter
+  in
+  let rec layer depth =
+    match (depth >= 4, draw tape 6) with
+    | true, _ | false, 3 -> Show_layer (named ())
+    | false, 0 -> Melact_layer (named (), kids depth)
+    | false, 1 -> Box_layer (named (), kids depth)
+    | false, 2 -> Provide_layer (named (), kids depth)
+    | false, 4 -> Portal_layer (kids depth)
+    | false, _ -> Tally_layer (named (), kids depth)
+  and kids depth = List.init (1 + draw tape 2) (fun _ -> layer (depth + 1)) in
+  Melact_layer (named (), kids 0)
+
+let rec names layer =
+  match layer with
+  | Melact_layer (name, kids) | Box_layer (name, kids) | Tally_layer (name, kids) -> name :: List.concat_map names kids
+  | Provide_layer (_, kids) | Portal_layer kids -> List.concat_map names kids
+  | Show_layer name -> [ name ]
+
+let rec view ~log ~stop ~layer ~version tree =
+  let many kids = React.array (Array.of_list (List.map (view ~log ~stop ~layer ~version) kids)) in
+  match tree with
+  | Melact_layer (name, kids) -> <Mel key=name name log stop version>(many kids)</Mel>
+  | Box_layer (name, kids) -> <Box key=name name log stop>(many kids)</Box>
+  | Provide_layer (name, kids) -> <Provide key=name value=name>(many kids)</Provide>
+  | Show_layer name -> <Show key=name name />
+  | Portal_layer kids -> <Portal key="portal" container=layer>(many kids)</Portal>
+  | Tally_layer (name, kids) -> <Tally key=name name log>(many kids)</Tally>
+
+module Layers = struct
+  let[@react.component] make ~tree ~log ~layer =
+    let every = Array.of_list (names tree) in
+    let stop, setStop = React.useState (fun () -> 0) in
+    let version, setVersion = React.useState (fun () -> 0) in
+    let stopped = match stop with 0 -> "" | index -> every.((index - 1) mod Array.length every) in
+    <div className="layers">
+      <button className="rerender" onClick=(fun _ -> setVersion (fun n -> n + 1))>(React.int version)</button>
+      <button className="stop" onClick=(fun _ -> setStop (fun n -> (n + 1) mod (Array.length every + 1)))>
+        (React.string stopped)
+      </button>
+      (view ~log ~stop:stopped ~layer ~version tree)
+    </div>
+end
+
+module Row = struct
+  let[@react.component] make ~index ~label ~log =
+    let clicks, setClicks = React.useState (fun () -> 0) in
+    React.useEffect0 (fun () ->
+        log ("row mounted " ^ string_of_int index);
+        Some (fun () -> log ("row unmounted " ^ string_of_int index)));
+    <button className="row" onClick=(fun _ -> setClicks (fun n -> n + 1))>
+      (React.string (label ^ " " ^ string_of_int index ^ " clicked " ^ string_of_int clicks))
+    </button>
+end
+
+let row (props : row_props) = <RowFrame frame=props><Row index=props##index label=props##label log=props##log /></RowFrame>
+
+let fruits : choice array =
+  Array.map (fun name -> [%mel.obj { value = String.lowercase_ascii name; label = name }]) [| "Apple"; "Banana"; "Cherry" |]
+
+module Widgets = struct
+  let[@react.component] make ~log ~layer =
+    let chosen, setChosen = React.useState (fun () -> Js.Nullable.null) in
+    let label, setLabel = React.useState (fun () -> "row") in
+    <div className="widgets">
+      <button className="relabel" onClick=(fun _ -> setLabel (fun text -> text ^ "!"))>(React.string label)</button>
+      <button className="choose" onClick=(fun _ -> setChosen (fun _ -> Js.Nullable.return fruits.(1)))>
+        (React.string "banana")
+      </button>
+      <Select
+        instanceId="fruit"
+        options=fruits
+        value=chosen
+        isClearable=true
+        onChange=(fun next ->
+          log ("select " ^ Option.fold ~none:"none" ~some:(fun choice -> choice##value) (Js.Nullable.toOption next));
+          setChosen (fun _ -> next)) />
+      <Popover.Root onOpenChange=(fun next -> log ("popover " ^ string_of_bool next))>
+        <Popover.Trigger asChild=true><button className="trigger">(React.string "open")</button></Popover.Trigger>
+        <Popover.Portal container=layer>
+          <Popover.Content className="content">
+            <Mel name="inside" log stop="" version=(String.length label)>(React.string "melact inside radix")</Mel>
+            <Popover.Close className="close">(React.string "x")</Popover.Close>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      <Window rowCount=30 rowHeight=20 defaultHeight=60 overscanCount=1 rowComponent=row rowProps=[%mel.obj { label; log }] />
+    </div>
+end
+
+let mount_layers root layer values log =
+  let client = ReactDOM.Client.createRoot root in
+  ReactDOM.Client.render client <Layers tree=(grow values) log layer />;
+  client
+
+let mount_widgets root layer log =
+  let client = ReactDOM.Client.createRoot root in
+  ReactDOM.Client.render client <Widgets log layer />;
+  client
+
+let unmount client = ReactDOM.Client.unmount client ()

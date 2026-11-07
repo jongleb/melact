@@ -51,6 +51,16 @@ val component : Component.t -> Melhole.View.input array -> (unit -> Melhole.View
 val provide : 'value Context.t -> 'value -> Melhole.View.child -> Melhole.View.child
 val current : unit -> instance
 
+(** How a pass that sorts effects orders two instances: negative when the first comes first in the
+    tree, [0] to leave it to document order. melact.compat sets it to order through its portals. *)
+val tree_order : (instance -> instance -> int) option ref
+
+(** [`Below] when the second instance is inside the first one. *)
+val below : instance -> instance -> [ `Below | `Apart ]
+
+(** The deepest last node of what the instance shows, if it shows anything. *)
+val last_node : instance -> Dom.node option
+
 (** The component that is rendering, or whose holes are being written, if any. *)
 val writing_component : unit -> string option
 val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
