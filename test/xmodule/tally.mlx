@@ -1,0 +1,4 @@
+let useTally start =
+  let count, setCount = React.useState (fun () -> start) in
+  let bump = React.useCallback0 (fun by -> setCount (fun count -> count + by)) in
+  (count, bump)

@@ -18,6 +18,10 @@ val lookup3 : t -> int -> 'a -> 'b -> 'c -> 'value found
 val lookup4 : t -> int -> 'a -> 'b -> 'c -> 'd -> 'value found
 val lookup : t -> int -> Melhole.View.input array -> 'value found
 
+(** [graph cells at changed mask]: the value kept at [at] while none of the sources in [mask] is
+    among those that [changed] since the last render. *)
+val graph : t -> int -> Instance.sources -> int -> 'value found
+
 external kept : 'value found -> 'value option = "%identity"
 
 val store : t -> int -> 'value found -> 'value -> 'value

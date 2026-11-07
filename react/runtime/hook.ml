@@ -14,6 +14,8 @@ type dependency
 external listed : 'tuple -> dependency array = "%identity"
 let slots () = { items = [||]; count = 0; cursor = 0 }
 let rewind slots = slots.cursor <- 0
+let skip slots = slots.cursor <- slots.cursor + 1
+let position slots = slots.cursor
 
 let found : type a. slots -> a key -> a option =
  fun slots (Key witness) ->

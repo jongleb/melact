@@ -4,6 +4,17 @@
 (** A mounted component, as seen by the hooks it calls. *)
 type instance
 
+(** What changed since an instance last rendered. *)
+type sources =
+  | Every  (** Not known: a mount, a boundary, a parent without inputs to compare; every step runs again. *)
+  | Bits of int  (** The bits of the inputs, hook slots and context reads that changed, as melact-ppx numbers them. *)
+
+(** Whether a step of an update graph reads a source that changed. *)
+type reach = Reached | Unreached
+
+(** [reaches sources mask]: whether a step whose sources are the bits of [mask] runs again. *)
+val reaches : sources -> int -> reach
+
 (** When an effect runs after its instance is patched. *)
 type timing =
   | Layout  (** Synchronously, before the browser paints. *)
@@ -46,9 +57,27 @@ val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
 val invalidate : instance -> unit
 
 (** Marks an instance to render again because a state cell changed; [check] tells, when the render
-    is due, whether the cell's value still differs from the one it last rendered with. If no check
-    does and nothing else asked, the render is skipped, as React bails out. *)
-val invalidate_state : instance -> 'cell -> ('cell -> Melhole.View.change) -> unit
+    is due, whether the cell's value still differs from the one it last rendered with, and [bit] is
+    the cell's source. If no check does and nothing else asked, the render is skipped, as React bails out. *)
+val invalidate_state : instance -> 'cell -> ('cell -> Melhole.View.change) -> sources -> unit
+
+(** The source of a state cell made by the instance's next hook: its bit after the inputs and the hooks
+    before it, as melact-ppx numbers them; past the thirtieth, [Every]. *)
+val cell_source : instance -> sources
+
+(** What changed since the last render of the component under way: a component compiled with its
+    update graph skips what reads none of it. *)
+val changed : unit -> sources
+
+(** Passes over the next hook of the component rendering, whose value its render does not need. *)
+val skip_hook : unit -> unit
+
+(** What a render returns when nothing its output reads changed: its holes stay as they are. *)
+val unchanged : Melhole.View.child
+
+(** [consume_source instance source context]: the value of the nearest provider, which renders the
+    instance again with [source] among its changed sources when the value changes. *)
+val consume_source : instance -> sources -> 'value Context.t -> 'value
 val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
 
 (** An effect hook: made once, its cleanup and run queued after each commit that changes its
@@ -71,6 +100,10 @@ val on_unmount : instance -> (unit -> unit) -> unit
 val consume : instance -> 'value Context.t -> 'value
 val settle : unit -> unit
 val flush : unit -> unit
+
+(** Settles what a root's render made; inside a discrete event its passive effects run at the next
+    microtask, as React 18 runs those of a commit in its sync lane, before any later event. *)
+val settle_in_event : unit -> unit
 
 (** Runs [job] in a later task, outside any render: a deferred value catching up. *)
 val defer : (unit -> unit) -> unit

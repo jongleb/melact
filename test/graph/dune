@@ -1,0 +1,4 @@
+(test
+ (name graph_laws)
+ (package melact-ppx)
+ (libraries qcheck-core qcheck-core.runner ppxlib melact-ppx))

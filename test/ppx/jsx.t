@@ -454,7 +454,7 @@ A component with optional, defaulted and children props, and its signature:
   $ ./pp.exe -impl card.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_component_1 = Melact_runtime.Component.make ~name:"Card.make"
+  let __melhole_component_1 = Melact_runtime.Component.pure ~name:"Card.make"
   include
     struct
       type make_props =
@@ -573,7 +573,7 @@ A component with optional, defaulted and children props, and its signature:
       external make : make_props -> React.element = "%identity"
     end
   let __melhole_component_4 =
-    Melact_runtime.Component.make ~name:"Card.nothing"
+    Melact_runtime.Component.pure ~name:"Card.nothing"
   include
     struct
       type nothing_props =
@@ -614,7 +614,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   $ ./pp.exe -impl fancy.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_component_1 = Melact_runtime.Component.make ~name:"Fancy.make"
+  let __melhole_component_1 = Melact_runtime.Component.pure ~name:"Fancy.make"
   include
     struct
       type make_props =
@@ -817,10 +817,11 @@ Hooks get one key per call site, also inside custom hooks:
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let useToggle () =
-    (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
-      (fun () -> false)
-  let __melhole_component_2 = Melact_runtime.Component.make ~name:"Hooks.make"
+  let ((useToggle)[@melhole.hook (1, 1)]) =
+    fun () ->
+      (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
+        (fun () -> false)
+  let __melhole_component_2 = Melact_runtime.Component.pure ~name:"Hooks.make"
   include
     struct
       type make_props =
@@ -858,7 +859,7 @@ Reason input:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 =
-    Melact_runtime.Component.make ~name:"Greeting.make"
+    Melact_runtime.Component.pure ~name:"Greeting.make"
   include
     struct
       type make_props =
@@ -963,7 +964,7 @@ mlx input:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 =
-    Melact_runtime.Component.make ~name:"Greeting.make"
+    Melact_runtime.Component.pure ~name:"Greeting.make"
   include
     struct
       type make_props =
@@ -1080,11 +1081,14 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  58:                       ((fun () -> 0)[@alert "+hook"]) in
-  61:                     then ((1)[@alert "+hook"])
-  62:                     else ((0)[@alert "+hook"]) in
-  102:                                                   [@alert "+hook"]))
-  103:                                               [@alert "+hook"])
+  63:                       ((fun () -> 0)[@alert "+hook"]) in
+  70:                         [@alert "+hook"])
+  75:                              then ((1)[@alert "+hook"])
+  76:                              else ((0)[@alert "+hook"])))
+  77:                         [@alert "+hook"]) in
+  83:                       [@alert "+hook"])
+  125:                                                       [@alert "+hook"]))
+  126:                                                   [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare
@@ -1140,13 +1144,15 @@ stays as a definition other files can call, with no limit on the number of depen
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useEffect3 _melact_argument_0 _melact_argument_1 =
-    React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
-      _melact_argument_0 _melact_argument_1[@@warning "-32"]
+  let ((useEffect3)[@melhole.hook (1, 1)]) =
+    fun _melact_argument_0 _melact_argument_1 ->
+      React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
+        _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let melact_key_useEffect8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useEffect8 _melact_argument_0 _melact_argument_1 =
-    React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
-      _melact_argument_0 _melact_argument_1[@@warning "-32"]
+  let ((useEffect8)[@melhole.hook (1, 1)]) =
+    fun _melact_argument_0 _melact_argument_1 ->
+      React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
+        _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let __melhole_hook_2 =
@@ -1168,9 +1174,10 @@ call the binding's definition:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useMemo8 _melact_argument_0 _melact_argument_1 =
-    React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
-      _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
+  let ((useMemo8)[@melhole.hook (1, 1)]) =
+    fun _melact_argument_0 _melact_argument_1 ->
+      React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
+        _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
     [@@warning "-32"]
   let use a = useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
 
@@ -1262,7 +1269,8 @@ that ignores it is not:
   Melhole.View.Items
   Melhole.View.Numbered
 
-A row function bound by a let in a component is cached and still compiles to a loop:
+A row function bound by a let in a component is kept while the sources it reads stay (the update
+graph's memory, below) and still compiles to a loop:
 
   $ cat > letrow.ml <<'EOF'
   > let make ~items =
@@ -1271,8 +1279,8 @@ A row function bound by a let in a component is cached and still compiles to a l
   >   ((ul ~children:[ React.array (Array.map row items) ] ()) [@JSX])
   > [@@react.component]
   > EOF
-  $ ./pp.exe -impl letrow.ml | grep -o "Memo.lookup2\|Melhole.View.rows\|melhole.cached"
-  Memo.lookup2
+  $ ./pp.exe -impl letrow.ml | grep -o "Memo.graph\|Memo.lookup2\|Melhole.View.rows\|melhole.cached"
+  Memo.graph
   Melhole.View.rows
 
 A row whose prop picks it by key gets a selector, in a numbered loop too, where the key can be the
@@ -1307,3 +1315,22 @@ their round, after the layout reads of the components rendered before it:
   Melhole.View.rows
   Row.makeProps
   Row.makeProps
+
+A custom hook whose body is pure and calls its hooks at its top level carries how many hook slots it
+takes, so that a component calling it, in this file or in another module under staged_pps, keeps its
+update graph; the component numbers the hook's state cells after its own slots:
+
+  $ cat > tally.ml <<'EOF'
+  > let useTally start =
+  >   let count, setCount = React.useState (fun () -> start) in
+  >   let bump = React.useCallback0 (fun by -> setCount (fun count -> count + by)) in
+  >   (count, bump)
+  > let make () =
+  >   let left, bump = useTally 0 in
+  >   ((button ~onClick:(fun _ -> bump 1) ~children:[ React.int left ] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl tally.ml | grep -o "melhole.hook ([0-9], [0-9])\|Component.pure\|Instance.changed\|Memo.graph __melact_memo [0-9]* __melact_changed [0-9]*"
+  melhole.hook (1, 2)
+  Component.pure
+  Instance.changed

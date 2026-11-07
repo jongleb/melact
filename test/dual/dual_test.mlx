@@ -957,6 +957,26 @@ module Measured_row = struct
     <li>(React.string (label ^ match opened with true -> "+" | false -> "-"))</li>
 end
 
+module Echoed = struct
+  let[@react.component] make ~value =
+    let suffix, _ = React.useState (fun () -> "!") in
+    <b>(React.string (string_of_int value ^ suffix))</b>
+end
+
+let echo_send = ref (fun (_ : bool -> bool) -> ())
+
+module Echoing = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    echo_send := setOpened;
+    <Opened_provider value=opened>
+      <div>
+        <Echoed value=(match opened with true -> 1 | false -> 0) />
+        <ul>(React.array (Array.init count (fun index -> <Measured_row key=(string_of_int index) label=(string_of_int index) />)))</ul>
+      </div>
+    </Opened_provider>
+end
+
 module Measured = struct
   let[@react.component] make ~count =
     let opened, setOpened = React.useState (fun () -> false) in
@@ -1085,6 +1105,193 @@ module Effect_top = struct
             shape))
     </div>
 end
+
+(** Named nodes, each with its children in the order the page shows them. *)
+type tree = Tree of (string * tree) array
+
+(** What the root of a tree of pure consumers renders: a context value, a prop every node gets, the tree. *)
+type forest = { tick : int; n : int; tree : tree }
+
+let tick_context = React.createContext 0
+let forest_send = ref (fun (_ : forest -> forest) -> ())
+
+module Tick_provider = struct
+  let make = React.Context.provider tick_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Forest_leaf = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, _) -> <b key>(React.string key)</b>) children))
+    </div>
+end
+
+module Forest_low = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, sub) -> <Forest_leaf key name=key n tree=sub />) children))
+    </div>
+end
+
+module Forest_middle = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, sub) -> <Forest_low key name=key n tree=sub />) children))
+    </div>
+end
+
+module Forest_node = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, sub) -> <Forest_middle key name=key n tree=sub />) children))
+    </div>
+end
+
+module Forest = struct
+  let[@react.component] make ~initial =
+    let forest, setForest = React.useState (fun () -> initial) in
+    forest_send := setForest;
+    <Tick_provider value=forest.tick><Forest_node name="r" n=forest.n tree=forest.tree /></Tick_provider>
+end
+
+let shade_context = React.createContext 0
+
+module Shade_provider = struct
+  let make = React.Context.provider shade_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+(** What the parent of the probe holds: the context it provides and the probe's two props. *)
+type outer = { shade : int; p : int; q : int }
+
+let probe_a = ref (fun (_ : int -> int) -> ())
+let probe_b = ref (fun (_ : int) -> ())
+let outer_send = ref (fun (_ : outer -> outer) -> ())
+
+module Sourced_child = struct
+  let[@react.component] make =
+    React.memo (fun ~onBump ~label ->
+        React.useEffect1
+          (fun () ->
+            log "child callback";
+            None)
+          [| onBump |];
+        <i onClick=(fun _ -> onBump ())>(React.string label)</i>)
+end
+
+module Sourced = struct
+  let[@react.component] make =
+    React.memo (fun ~p ~q ->
+        let a, setA = React.useState (fun () -> 0) in
+        let b, addB = React.useReducer (fun b by -> b + by) 0 in
+        let shade = React.useContext shade_context in
+        React.useEffect0 (fun () ->
+            probe_a := setA;
+            probe_b := addB;
+            None);
+        let sum = a + p in
+        let label = string_of_int b ^ "/" ^ string_of_int shade in
+        let scaled =
+          React.useMemo2
+            (fun () ->
+              log ("memo " ^ string_of_int b ^ " " ^ string_of_int q);
+              (b * 10) + q)
+            (b, q)
+        in
+        let onBump = React.useCallback1 (fun () -> setA (fun a -> a + p)) [| p |] in
+        React.useEffect1
+          (fun () ->
+            log ("effect a " ^ string_of_int a);
+            Some (fun () -> log ("cleanup a " ^ string_of_int a)))
+          [| a |];
+        React.useLayoutEffect2
+          (fun () ->
+            log ("layout " ^ string_of_int shade ^ " " ^ string_of_int p);
+            None)
+          (shade, p);
+        React.useEffect (fun () ->
+            log "every";
+            None);
+        <p>(React.string (string_of_int sum ^ ";" ^ label ^ ";" ^ string_of_int scaled ^ ";")) <Sourced_child onBump label /></p>)
+end
+
+module Sourced_parent = struct
+  let[@react.component] make () =
+    let outer, setOuter = React.useState (fun () -> { shade = 0; p = 1; q = 0 }) in
+    React.useEffect0 (fun () ->
+        outer_send := setOuter;
+        None);
+    <Shade_provider value=outer.shade><Sourced p=outer.p q=outer.q /></Shade_provider>
+end
+
+module Mounted_by_click = struct
+  let[@react.component] make ~label =
+    let shown, setShown = React.useState (fun () -> "") in
+    React.useEffect0 (fun () ->
+        log ("passive " ^ label);
+        setShown (fun _ -> label);
+        None);
+    <i>(React.string shown)</i>
+end
+
+external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> unit = "addEventListener" [@@mel.send]
 
 let unicode_send = ref (fun (_ : int -> int) -> ())
 
@@ -2119,6 +2326,79 @@ let () =
              step 3 start))
         [%mel.obj { numRuns = 3 }])
       120_000);
+  describe "a component with state, a reducer, a context, props, memos, a callback and effects" (fun () ->
+    test_async "shows, computes and runs what React does after any batch of changes to any of its sources" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Sourced_parent /> in
+             let rec step remaining (a, b, (outer : outer)) =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   ignore (take ());
+                   finish ()
+               | _ ->
+                   let actions =
+                     List.init (1 + draw tape 3) (fun _ ->
+                         match draw tape 6 with
+                         | 0 ->
+                             let by = draw tape 3 in
+                             (`A by, fun () -> !probe_a (fun a -> a + by))
+                         | 1 ->
+                             let by = draw tape 3 in
+                             (`B by, fun () -> !probe_b by)
+                         | 2 -> (`Shade, fun () -> !outer_send (fun outer -> { outer with shade = outer.shade + 1 }))
+                         | 3 -> (`P, fun () -> !outer_send (fun outer -> { outer with p = outer.p + 1 }))
+                         | 4 -> (`Q, fun () -> !outer_send (fun outer -> { outer with q = outer.q + 1 }))
+                         | _ -> (`Click, fun () -> click (select root "i")))
+                   in
+                   let a', b', outer' =
+                     List.fold_left
+                       (fun (a, b, next) (action, _) ->
+                         match action with
+                         | `A by -> (a + by, b, next)
+                         | `B by -> (a, b + by, next)
+                         | `Shade -> (a, b, { next with shade = next.shade + 1 })
+                         | `P -> (a, b, { next with p = next.p + 1 })
+                         | `Q -> (a, b, { next with q = next.q + 1 })
+                         | `Click -> (a + outer.p, b, next))
+                       (a, b, outer) actions
+                   in
+                   let* () = act (fun () -> List.iter (fun (_, run) -> run ()) actions) in
+                   let label = string_of_int b' ^ "/" ^ string_of_int outer'.shade in
+                   let rendered = (a, b, outer) <> (a', b', outer') in
+                   let when_ changed entries = match changed with true -> entries | false -> [] in
+                   expect (text_content root, take ())
+                   |. to_equal
+                        ( string_of_int (a' + outer'.p) ^ ";" ^ label ^ ";" ^ string_of_int ((b' * 10) + outer'.q) ^ ";" ^ label,
+                          when_ (b <> b' || outer.q <> outer'.q) [ "memo " ^ string_of_int b' ^ " " ^ string_of_int outer'.q ]
+                          @ when_ (outer.shade <> outer'.shade || outer.p <> outer'.p)
+                              [ "layout " ^ string_of_int outer'.shade ^ " " ^ string_of_int outer'.p ]
+                          @ when_ (a <> a') [ "cleanup a " ^ string_of_int a ]
+                          @ when_ (outer.p <> outer'.p) [ "child callback" ]
+                          @ when_ (a <> a') [ "effect a " ^ string_of_int a' ]
+                          @ when_ rendered [ "every" ] );
+                   step (remaining - 1) (a', b', outer')
+             in
+             step 8 (0, 0, { shade = 0; p = 1; q = 0 })))
+        [%mel.obj { numRuns = 150 }]));
+  describe "a root rendered inside a click" (fun () ->
+    test_async "runs its passive effects at the next microtask, before any later event, as React 18 runs those of a commit in its sync lane" (fun () ->
+      let root = attached () in
+      let button = create_element document "button" in
+      append_child (body document) button;
+      let client = ReactDOM.Client.createRoot root in
+      add_event_listener button "click" (fun _ -> ReactDOM.Client.render client <Mounted_by_click label="a" />);
+      let loud = quiet_errors () in
+      ignore (take ());
+      click button;
+      let* () = Js.Promise.resolve () in
+      let seen = (take (), text_content root) in
+      loud ();
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      expect seen |. to_equal ([ "passive a" ], "");
+      finish ()));
   describe "callback refs" (fun () ->
     test_async "run once the whole tree is in the page, as React attaches them after its writes" (fun () ->
       check_async
@@ -2157,6 +2437,29 @@ let () =
                    step (remaining - 1) next
              in
              step 3 false))
+        [%mel.obj { numRuns = 40 }]));
+  describe "a pure component given new props in the same update as components that read the page" (fun () ->
+    test_async "writes after they render, so they all see the page as it was before the update" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+             let tape = tape values in
+             let count = 2 + draw tape 30 in
+             ignore (dom_writes ());
+             let* root, client = mount <Echoing count /> in
+             let rec step remaining opened =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = not opened in
+                   let before = dom_writes () in
+                   let* () = act (fun () -> !echo_send (fun _ -> next)) in
+                   expect (List.sort_uniq compare (take ()), text_content (select root "b"))
+                   |. to_equal ([ string_of_int before ], (match next with true -> "1!" | false -> "0!"));
+                   step (remaining - 1) next
+             in
+             step 4 false))
         [%mel.obj { numRuns = 40 }]));
   describe "children given new props by their parent" (fun () ->
     test_async "all render before any of them writes the DOM, whether rows appear or go" (fun () ->
@@ -2264,6 +2567,72 @@ let () =
              in
              step 8))
         [%mel.obj { numRuns = 150 }]));
+  describe "a tree of pure components that read a context and pass a prop down" (fun () ->
+    test_async "shows every change and runs effects children first in the order of the page, through context changes, new props and keyed moves" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let rec grown name depth =
+               Tree
+                 (Array.init
+                    (match depth with 0 -> 0 | _ -> draw tape 4)
+                    (fun index ->
+                      let key = name ^ "." ^ string_of_int index in
+                      (key, grown key (depth - 1))))
+             in
+             let rec names name (Tree children) = name :: List.concat_map (fun (key, sub) -> names key sub) (Array.to_list children) in
+             let rec post name (Tree children) = List.concat_map (fun (key, sub) -> post key sub) (Array.to_list children) @ [ name ] in
+             let rec shown forest name (Tree children) =
+               name ^ ":" ^ string_of_int forest.tick ^ ":" ^ string_of_int forest.n ^ ";"
+               ^ String.concat "" (List.map (fun (key, sub) -> shown forest key sub) (Array.to_list children))
+             in
+             let rec moved target turn name (Tree children as tree) =
+               match (String.equal target name, Array.length children) with
+               | true, (0 | 1) -> tree
+               | true, count -> (
+                   match turn with
+                   | `Rotate -> Tree (Array.init count (fun index -> children.((index + 1) mod count)))
+                   | `Reverse -> Tree (Array.init count (fun index -> children.(count - 1 - index))))
+               | false, _ ->
+                   let next = Array.map (fun (key, sub) -> (key, moved target turn key sub)) children in
+                   match Array.for_all2 (fun (_, before) (_, after) -> before == after) children next with
+                   | true -> tree
+                   | false -> Tree next
+             in
+             let initial = { tick = 0; n = 0; tree = grown "r" 3 } in
+             let* root, client = mount <Forest initial /> in
+             let rec step remaining (forest : forest) =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   ignore (take ());
+                   finish ()
+               | _ ->
+                   let changes =
+                     List.init (1 + draw tape 3) (fun _ ->
+                         match draw tape 3 with
+                         | 0 -> fun forest -> { forest with tick = forest.tick + 1 }
+                         | 1 -> fun forest -> { forest with n = forest.n + 1 }
+                         | _ ->
+                             let all = names "r" forest.tree in
+                             let target = List.nth all (draw tape (List.length all)) in
+                             let turn = match draw tape 2 with 0 -> `Rotate | _ -> `Reverse in
+                             fun forest -> { forest with tree = moved target turn "r" forest.tree })
+                   in
+                   let next = List.fold_left (fun forest change -> change forest) forest changes in
+                   let* () = act (fun () -> List.iter (fun change -> !forest_send change) changes) in
+                   let order = post "r" next.tree in
+                   let phase name = List.map (fun node -> name ^ " " ^ node) order in
+                   expect (text_content root, take ())
+                   |. to_equal
+                        ( shown next "r" next.tree,
+                          match (next.tick = forest.tick, next.n = forest.n) with
+                          | true, true -> []
+                          | _ -> phase "unlayout" @ phase "layout" @ phase "unpassive" @ phase "passive" );
+                   step (remaining - 1) next
+             in
+             step 6 initial))
+        [%mel.obj { numRuns = 80 }]));
   describe "effects of a parent and the children it passes new props" (fun () ->
     test_async "run children first, in the order of the page, cleanups before runs, as in React" (fun () ->
       check_async
