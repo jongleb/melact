@@ -25,23 +25,23 @@ let assign reference value =
   | Record record -> Raw.set record "current" value
   | Missing | Flag _ | Number _ | Text _ | Listed _ | Other _ -> ()
 
-let hyphenated =
-  [
-    "accent-height"; "alignment-baseline"; "arabic-form"; "baseline-shift"; "cap-height"; "clip-path"; "clip-rule";
-    "color-interpolation"; "color-interpolation-filters"; "color-profile"; "color-rendering"; "dominant-baseline";
-    "enable-background"; "fill-opacity"; "fill-rule"; "flood-color"; "flood-opacity"; "font-family"; "font-size";
-    "font-size-adjust"; "font-stretch"; "font-style"; "font-variant"; "font-weight"; "glyph-name";
-    "glyph-orientation-horizontal"; "glyph-orientation-vertical"; "horiz-adv-x"; "horiz-origin-x"; "image-rendering";
-    "letter-spacing"; "lighting-color"; "marker-end"; "marker-mid"; "marker-start"; "overline-position";
-    "overline-thickness"; "paint-order"; "pointer-events"; "rendering-intent"; "shape-rendering"; "stop-color";
-    "stop-opacity"; "strikethrough-position"; "strikethrough-thickness"; "stroke-dasharray"; "stroke-dashoffset";
-    "stroke-linecap"; "stroke-linejoin"; "stroke-miterlimit"; "stroke-opacity"; "stroke-width"; "text-anchor";
-    "text-decoration"; "text-rendering"; "underline-position"; "underline-thickness"; "unicode-bidi"; "unicode-range";
-    "units-per-em"; "v-alphabetic"; "v-hanging"; "v-ideographic"; "v-mathematical"; "vector-effect"; "vert-adv-y";
-    "vert-origin-x"; "vert-origin-y"; "word-spacing"; "writing-mode"; "x-height";
-  ]
-
 let attribute_name space name =
+  let hyphenated =
+    [
+      "accent-height"; "alignment-baseline"; "arabic-form"; "baseline-shift"; "cap-height"; "clip-path"; "clip-rule";
+      "color-interpolation"; "color-interpolation-filters"; "color-profile"; "color-rendering"; "dominant-baseline";
+      "enable-background"; "fill-opacity"; "fill-rule"; "flood-color"; "flood-opacity"; "font-family"; "font-size";
+      "font-size-adjust"; "font-stretch"; "font-style"; "font-variant"; "font-weight"; "glyph-name";
+      "glyph-orientation-horizontal"; "glyph-orientation-vertical"; "horiz-adv-x"; "horiz-origin-x"; "image-rendering";
+      "letter-spacing"; "lighting-color"; "marker-end"; "marker-mid"; "marker-start"; "overline-position";
+      "overline-thickness"; "paint-order"; "pointer-events"; "rendering-intent"; "shape-rendering"; "stop-color";
+      "stop-opacity"; "strikethrough-position"; "strikethrough-thickness"; "stroke-dasharray"; "stroke-dashoffset";
+      "stroke-linecap"; "stroke-linejoin"; "stroke-miterlimit"; "stroke-opacity"; "stroke-width"; "text-anchor";
+      "text-decoration"; "text-rendering"; "underline-position"; "underline-thickness"; "unicode-bidi"; "unicode-range";
+      "units-per-em"; "v-alphabetic"; "v-hanging"; "v-ideographic"; "v-mathematical"; "vector-effect"; "vert-adv-y";
+      "vert-origin-x"; "vert-origin-y"; "word-spacing"; "writing-mode"; "x-height";
+    ]
+  in
   match name with
   | "className" -> "class"
   | "htmlFor" -> "for"
@@ -94,31 +94,31 @@ let attribute element space name value =
   | _, Boolean -> write ""
   | (Number _ | Text _ | Record _ | Listed _), (Overloaded | Booleanish | Plain) -> write (Raw.text_of value)
 
-let unitless name =
-  let bare =
-    let prefixed prefix =
-      let length = String.length prefix in
-      String.length name > length && String.sub name 0 length = prefix && Char.uppercase_ascii name.[length] = name.[length]
-    in
-    match List.find_opt prefixed [ "Webkit"; "Moz"; "ms"; "O" ] with
-    | Some prefix ->
-        let rest = String.sub name (String.length prefix) (String.length name - String.length prefix) in
-        String.make 1 (Char.lowercase_ascii rest.[0]) ^ String.sub rest 1 (String.length rest - 1)
-    | None -> name
-  in
-  List.mem bare
-    [
-      "animationIterationCount"; "aspectRatio"; "borderImageOutset"; "borderImageSlice"; "borderImageWidth"; "boxFlex";
-      "boxFlexGroup"; "boxOrdinalGroup"; "columnCount"; "columns"; "flex"; "flexGrow"; "flexPositive"; "flexShrink";
-      "flexNegative"; "flexOrder"; "gridArea"; "gridRow"; "gridRowEnd"; "gridRowSpan"; "gridRowStart"; "gridColumn";
-      "gridColumnEnd"; "gridColumnSpan"; "gridColumnStart"; "fontWeight"; "lineClamp"; "lineHeight"; "opacity"; "order";
-      "orphans"; "tabSize"; "widows"; "zIndex"; "zoom"; "fillOpacity"; "floodOpacity"; "stopOpacity"; "strokeDasharray";
-      "strokeDashoffset"; "strokeMiterlimit"; "strokeOpacity"; "strokeWidth";
-    ]
-
 external trimmed : string -> string = "trim" [@@mel.send]
 
 let styles element previous next =
+  let unitless name =
+    let bare =
+      let prefixed prefix =
+        let length = String.length prefix in
+        String.length name > length && String.sub name 0 length = prefix && Char.uppercase_ascii name.[length] = name.[length]
+      in
+      match List.find_opt prefixed [ "Webkit"; "Moz"; "ms"; "O" ] with
+      | Some prefix ->
+          let rest = String.sub name (String.length prefix) (String.length name - String.length prefix) in
+          String.make 1 (Char.lowercase_ascii rest.[0]) ^ String.sub rest 1 (String.length rest - 1)
+      | None -> name
+    in
+    List.mem bare
+      [
+        "animationIterationCount"; "aspectRatio"; "borderImageOutset"; "borderImageSlice"; "borderImageWidth"; "boxFlex";
+        "boxFlexGroup"; "boxOrdinalGroup"; "columnCount"; "columns"; "flex"; "flexGrow"; "flexPositive"; "flexShrink";
+        "flexNegative"; "flexOrder"; "gridArea"; "gridRow"; "gridRowEnd"; "gridRowSpan"; "gridRowStart"; "gridColumn";
+        "gridColumnEnd"; "gridColumnSpan"; "gridColumnStart"; "fontWeight"; "lineClamp"; "lineHeight"; "opacity"; "order";
+        "orphans"; "tabSize"; "widows"; "zIndex"; "zoom"; "fillOpacity"; "floodOpacity"; "stopOpacity"; "strokeDasharray";
+        "strokeDashoffset"; "strokeMiterlimit"; "strokeOpacity"; "strokeWidth";
+      ]
+  in
   let style = Dom_api.style element in
   let put name value =
     let custom = String.length name > 1 && String.sub name 0 2 = "--" in
@@ -154,9 +154,8 @@ let styles element previous next =
         (Raw.keys next))
     (fields next)
 
-let valued tag = match tag with "input" | "select" | "textarea" -> `Valued | _ -> `Plain
-
 let write element space tag name previous value =
+  let valued tag = match tag with "input" | "select" | "textarea" -> `Valued | _ -> `Plain in
   match (name, valued tag) with
   | ( ( "children" | "key" | "ref" | "suppressContentEditableWarning" | "suppressHydrationWarning" | "defaultValue"
       | "defaultChecked" | "autoFocus" | "innerHTML" ),
@@ -236,15 +235,15 @@ let hosting =
       View.release mounted.content;
       assign mounted.reference Raw.null)
 
-let space_at (position : Template.position) tag =
-  match tag with
-  | "svg" -> Svg
-  | _ -> (
-      match (Js.Null.toOption (namespace_of position.parent), Dom_api.node_name position.parent) with
-      | Some namespace, name when String.equal namespace svg_namespace && not (String.equal name "foreignObject") -> Svg
-      | _ -> Html)
-
 let child tag props reference children =
+  let space_at (position : Template.position) tag =
+    match tag with
+    | "svg" -> Svg
+    | _ -> (
+        match (Js.Null.toOption (namespace_of position.parent), Dom_api.node_name position.parent) with
+        | Some namespace, name when String.equal namespace svg_namespace && not (String.equal name "foreignObject") -> Svg
+        | _ -> Html)
+  in
   View.host
     ~build:(fun [@u] position ->
       let space = space_at position tag in

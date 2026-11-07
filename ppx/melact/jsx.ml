@@ -21,6 +21,47 @@ let keyed_hooks =
 let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionState" ]
 let inline_fact = "melhole.inline"
 let inline_version = 1
+let hook_fact = "melhole.hook"
+let hook_version = 1
+let environment = lazy (match Ocaml_common.Compmisc.initial_env () with environment -> Some environment | exception _ -> None)
+
+let imported_hook path =
+  match
+    Option.bind (Ocaml_common.Longident.unflatten (Longident.flatten_exn path)) (fun lid ->
+        Option.map (fun environment -> Ocaml_common.Env.lookup_value ~use:false ~loc:Ocaml_common.Location.none lid environment)
+          (Lazy.force environment))
+  with
+  | exception _ -> None
+  | None -> None
+  | Some (_, description) ->
+      List.find_map
+        (fun (attribute : Ocaml_common.Typedtree.attribute) ->
+          match (attribute.attr_name.txt, attribute.attr_payload) with
+          | name, PStr payload when String.equal name hook_fact -> (
+              match Ppxlib_ast.Selected_ast.of_ocaml Structure payload with
+              | [
+               {
+                 pstr_desc =
+                   Pstr_eval
+                     ( {
+                         pexp_desc =
+                           Pexp_tuple
+                             [
+                               { pexp_desc = Pexp_constant (Pconst_integer (version, None)); _ };
+                               { pexp_desc = Pexp_constant (Pconst_integer (count, None)); _ };
+                             ];
+                         _;
+                       },
+                       _ );
+                 _;
+               };
+              ]
+                when int_of_string version = hook_version ->
+                  Some (int_of_string count)
+              | _ -> None
+              | exception _ -> None)
+          | _ -> None)
+        description.val_attributes
 let own_module = "Melhole_own_module__"
 
 let without_component attributes =
@@ -57,7 +98,7 @@ let react_text expression =
       Option.map (fun kind -> Element.Text (kind, value)) (text name)
   | _ -> None
 
-let component ~loc ~name ~props_constructor expression =
+let component ~loc ~name ~props_constructor ~hooks expression =
   let rec gather forwarding expression =
     match expression.pexp_desc with
     | Pexp_apply
@@ -156,8 +197,13 @@ let component ~loc ~name ~props_constructor expression =
     | `Missing ->
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
+  let rendering = Graph.rendering ~hooks expression in
   let definition =
-    lazy (Hoist.hoist ~loc "component" [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]])
+    lazy
+      (Hoist.hoist ~loc "component"
+         (match rendering with
+         | Graph.Pure -> [%expr Melact_runtime.Component.pure ~name:[%e estring ~loc name]]
+         | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
   in
   let read_fields =
     List.concat_map
@@ -193,6 +239,23 @@ let component ~loc ~name ~props_constructor expression =
       (List.filteri (fun index _ -> index < List.length names) labelled)
   in
   let inputs = pexp_array ~loc (List.concat field_inputs) in
+  let props =
+    let rec bits offset patterns counts =
+      match (patterns, counts) with
+      | pattern :: patterns, count :: counts ->
+          let mask = match offset + count <= 30 with true -> ((1 lsl count) - 1) lsl offset | false -> Graph.every_source in
+          List.map (fun name -> (name, mask)) (Free.bound pattern) @ bits (offset + count) patterns counts
+      | [], _ | _, [] -> []
+    in
+    bits 0
+      (List.filter_map
+         (fun param ->
+           match param.pparam_desc with
+           | Pparam_val ((Labelled _ | Optional _), _, pattern) -> Some pattern
+           | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
+         params)
+      (List.map List.length field_inputs)
+  in
   let stateful expression =
     let finder =
       object
@@ -371,17 +434,79 @@ let component ~loc ~name ~props_constructor expression =
               | _ -> super#expression expression
           end
         in
-        let walked = walker#expression body in
-        match !sites with
-        | 0 -> body
-        | count ->
-            [%expr
-              let __melact_memo =
-                Melact_runtime.Memo.cells
-                  [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
-                  [%e eint ~loc count]
+        let remembered walked count =
+          [%expr
+            let __melact_memo =
+              Melact_runtime.Memo.cells
+                [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
+                [%e eint ~loc count]
+            in
+            [%e walked]]
+        in
+        match
+          match rendering with
+          | Graph.Pure -> Graph.plan ~hooks ~inputs:(List.length (List.concat field_inputs)) ~props body
+          | Graph.Impure -> None
+        with
+        | Some plan ->
+            let held pattern mask ~source value kept rest =
+              let at = !sites in
+              sites := at + 1;
+              let found =
+                [%expr
+                  let __melact_found =
+                    Melact_runtime.Memo.graph __melact_memo [%e eint ~loc at] __melact_changed [%e eint ~loc mask]
+                  in
+                  match Melact_runtime.Memo.kept __melact_found with
+                  | Some __melact_kept -> [%e kept]
+                  | None -> Melact_runtime.Memo.store __melact_memo [%e eint ~loc at] __melact_found [%e value]]
               in
-              [%e walked]])
+              [%expr
+                let [%p pattern] =
+                  [%e
+                    {
+                      found with
+                      pexp_attributes =
+                        attribute ~loc ~name:{ txt = "melhole.cached"; loc } ~payload:(PStr [ pstr_eval ~loc source [] ])
+                        :: found.pexp_attributes;
+                    }]
+                in
+                [%e rest]]
+            in
+            let graphed =
+              List.fold_right
+                (fun step rest ->
+                  match step with
+                  | Graph.Statement value -> [%expr [%e walker#expression value]; [%e rest]]
+                  | Graph.Called (pattern, value) -> [%expr let [%p pattern] = [%e value] in [%e rest]]
+                  | Graph.Context { pattern; context; bit } ->
+                      held pattern bit ~source:[%expr React.useContext [%e context]]
+                        [%expr
+                          Melact_runtime.Instance.consume_source (Melact_runtime.Instance.current ())
+                            (Melact_runtime.Instance.Bits [%e eint ~loc bit])
+                            (match [%e context] with React.Context.Context __melact_context -> __melact_context)]
+                        [%expr __melact_kept] rest
+                  | Graph.Memo { pattern; hook; mask } ->
+                      held pattern mask ~source:hook [%expr ([%e hook] [@alert "-hook"])]
+                        [%expr Melact_runtime.Instance.skip_hook (); __melact_kept] rest
+                  | Graph.Effect { hook; mask } ->
+                      [%expr
+                        (match Melact_runtime.Instance.reaches __melact_changed [%e eint ~loc mask] with
+                        | Melact_runtime.Instance.Unreached -> Melact_runtime.Instance.skip_hook ()
+                        | Melact_runtime.Instance.Reached -> (([%e hook] [@alert "-hook"]) : unit));
+                        [%e rest]]
+                  | Graph.Derived { pattern; value; mask } ->
+                      held pattern mask ~source:value (walker#expression value) [%expr __melact_kept] rest)
+                plan.steps
+                [%expr
+                  match Melact_runtime.Instance.reaches __melact_changed [%e eint ~loc plan.reads] with
+                  | Melact_runtime.Instance.Unreached -> React.of_child Melact_runtime.Instance.unchanged
+                  | Melact_runtime.Instance.Reached -> [%e walker#expression plan.result]]
+            in
+            remembered [%expr let __melact_changed = Melact_runtime.Instance.changed () in [%e graphed]] (max 1 !sites)
+        | None -> (
+            let walked = walker#expression body in
+            match !sites with 0 -> body | count -> remembered walked count))
   in
   let checked =
     let watched expression =
@@ -734,12 +859,20 @@ let mapper =
     val mutable react : opened = Closed
     val mutable modules : string list = []
     val mutable hooks : string list = []
+    val mutable custom : (string * int) list = []
+
+    method private custom callee =
+      match callee.pexp_desc with
+      | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name custom
+      | Pexp_ident { txt = Ldot _ as path; _ } -> imported_hook path
+      | _ -> None
 
     method! structure items =
-      let saved = react and known = hooks in
+      let saved = react and known = hooks and facts = custom in
       let mapped = Hoist.structure self#structure_item items in
       react <- saved;
       hooks <- known;
+      custom <- facts;
       mapped
 
     method! module_binding binding =
@@ -776,6 +909,33 @@ let mapper =
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
           Location.raise_errorf ~loc:item.pstr_loc "melact: a [@react.component] external is bound before the JSX rewrite"
       | Pstr_value (flag, bindings) -> (
+          let bindings =
+            List.map
+              (fun binding ->
+                match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
+                | Ppat_var { txt = name; loc }, Pexp_function _
+                  when String.length name > 3
+                       && String.equal (String.sub name 0 3) "use"
+                       && Char.uppercase_ascii name.[3] = name.[3] ->
+                    Option.fold ~none:binding
+                      ~some:(fun count ->
+                        custom <- (name, count) :: custom;
+                        {
+                          binding with
+                          pvb_pat =
+                            {
+                              binding.pvb_pat with
+                              ppat_attributes =
+                                attribute ~loc ~name:{ loc; txt = hook_fact }
+                                  ~payload:(PStr [ pstr_eval ~loc (pexp_tuple ~loc [ eint ~loc hook_version; eint ~loc count ]) [] ])
+                                :: binding.pvb_pat.ppat_attributes;
+                            };
+                        })
+                      (Graph.slots ~hooks:self#custom binding.pvb_expr)
+                | _ -> binding)
+              bindings
+          in
+          let item = { item with pstr_desc = Pstr_value (flag, bindings) } in
           let expanded = List.map self#component bindings in
           match List.concat_map (fun (types, _, _) -> types) expanded with
           | [] -> super#structure_item item
@@ -844,7 +1004,8 @@ let mapper =
           let type_name = props_type name in
           let props_constructor = String.capitalize_ascii type_name in
           let builder =
-            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor binding.pvb_expr
+            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor ~hooks:self#custom
+              binding.pvb_expr
           in
           ( [
               pstr_type ~loc Recursive
@@ -1240,7 +1401,6 @@ let structure items =
                   (defined item @ names, item :: done_))
                 ([], []) items))
   in
-  let environment = lazy (match Ocaml_common.Compmisc.initial_env () with environment -> Some environment | exception _ -> None) in
   let imported path =
     match Option.bind (Longident.flatten_exn (Ldot (path, "make")) |> Ocaml_common.Longident.unflatten) (fun lid -> Option.map (fun environment -> (lid, environment)) (Lazy.force environment)) with
     | None -> None

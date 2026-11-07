@@ -19,7 +19,7 @@ let render root element =
       root.content <- Showing mounted;
       View.patch mounted child
   | Nothing -> root.content <- Showing (View.mount child ~parent:root.container ~before:None));
-  Melact_runtime.Instance.settle ()
+  Melact_runtime.Instance.settle_in_event ()
 
 let hydrateRoot container element =
   let root = createRoot container in

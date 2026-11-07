@@ -73,3 +73,5 @@ external kept : 'value found -> 'value option = "%identity"
 let store cells at (_ : 'value found) value =
   Array.unsafe_set cells at (View.Input value);
   value
+
+let graph cells at changed mask = match Instance.reaches changed mask with Instance.Unreached -> lookup0 cells at | Instance.Reached -> None

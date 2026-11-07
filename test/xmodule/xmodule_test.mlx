@@ -29,6 +29,29 @@ module App = struct
     </div>
 end
 
+let seen = ref []
+
+module Tallied = struct
+  let[@react.component] make () =
+    let left, bumpLeft = Tally.useTally 0 in
+    let right, bumpRight = Tally.useTally 10 in
+    let total = left + right in
+    React.useEffect1
+      (fun () ->
+        seen := !seen @ [ left ];
+        None)
+      [| left |];
+    <p>
+      <button onClick=(fun _ -> bumpLeft 1)>(React.int left)</button>
+      <button onClick=(fun _ -> bumpRight 2)>(React.int right)</button>
+      <b>(React.int total)</b>
+    </p>
+end
+
+let compiled file text =
+  let output = read_file ("_build/default/test/xmodule/" ^ file ^ "/output/test/xmodule/" ^ file ^ "/xmodule_test.mjs") "utf8" in
+  Array.length (Js.String.split ~sep:text output) - 1
+
 let calls file name =
   let text = read_file ("_build/default/test/xmodule/" ^ file ^ "/output/test/xmodule/" ^ file ^ "/xmodule_test.mjs") "utf8" in
   Array.length (Js.String.split ~sep:(name ^ ".makeProps") text) - 1
@@ -40,6 +63,38 @@ let () =
             ( (calls "melact" "Tag", calls "melact" "Holder", calls "melact" "Badge" > 0, calls "melact" "Stale" > 0),
               (calls "plain" "Tag" > 0, calls "plain" "Holder" > 0) )
           |. to_equal ((1, 1, true, true), (true, true)));
+      test "with a custom hook of another module are compiled with their update graph under staged_pps, and render whole under pps"
+        (fun () ->
+          expect
+            ( compiled "melact" "Component.pure(\"Xmodule_test.Tallied.make\")",
+              compiled "plain" "Component.make(\"Xmodule_test.Tallied.make\")" )
+          |. to_equal (1, 1));
+      test_async "with a custom hook of another module show what React shows and run its effects when React does" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:1 ~longest:20) (fun values ->
+                 let tape = tape values in
+                 let root = attached () in
+                 let client = ReactDOM.Client.createRoot root in
+                 let* () = act (fun () -> ReactDOM.Client.render client <Tallied />) in
+                 seen := [];
+                 let rec step remaining (left, right) lefts =
+                   match remaining with
+                   | 0 ->
+                       let shown = (text_content root, !seen) in
+                       let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                       expect shown |. to_equal (string_of_int left ^ string_of_int right ^ string_of_int (left + right), List.rev lefts);
+                       Js.Promise.resolve ()
+                   | _ ->
+                       let buttons = Array.map element_of (nodes (select_all root "button")) in
+                       let clicks = 1 + draw tape 3 in
+                       let side = draw tape 2 in
+                       let* () = act (fun () -> for _ = 1 to clicks do click buttons.(side) done) in
+                       match side with
+                       | 0 -> step (remaining - 1) (left + clicks, right) ((left + clicks) :: lefts)
+                       | _ -> step (remaining - 1) (left, right + (2 * clicks)) lefts
+                 in
+                 step 6 (0, 10) []))
+            [%mel.obj { numRuns = 40 }]);
       test_async "show what React shows, keep their children's state by key and in place, and read their own module's values" (fun () ->
           check_async
             (async_property (tapes ~shortest:2 ~longest:30) (fun values ->

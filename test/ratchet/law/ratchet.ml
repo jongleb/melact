@@ -19,8 +19,8 @@ type verdict =
 
 let comparison kind =
   match kind with
-  | Counters.Removed | Attribute | Class | Text | Style | Frame_layout | Layout_read | Rendered | Effect_ran
-  | Evaluated ->
+  | Counters.Removed | Moved | Property | Attribute | Class | Text | Style | Frame_layout | Layout_read | Rendered
+  | Effect_ran | Evaluated ->
       Compared
   | Forced_layout ->
       Known_gap
@@ -30,14 +30,6 @@ let comparison kind =
       Known_gap
         "an instance that renders nothing keeps an empty text node for its place, inserted when it mounts; React inserts \
          nothing"
-  | Moved ->
-      Known_gap
-        "the few-moves path of a compiled loop moves every row whose key changed, also one already in place once the \
-         other moved: swapping neighbours moves two rows where React moves one"
-  | Property ->
-      Known_gap
-        "a controlled value hole writes value and defaultValue after typing although the field already shows the value; \
-         React compares with node.value first"
   | Keyed ->
       Known_gap
         "a compiled loop computes the key of a changed row to see whether the rows stayed in place, and again to find \
@@ -46,6 +38,10 @@ let comparison kind =
       Known_gap
         "a compiled row's lets run in its projection and again in its refresh, so a row drawn again evaluates them twice; \
          React once per render"
+  | Walked ->
+      Known_gap
+        "effects of children put off to a later round are put back in document order: by comparing positions when few, \
+         by walking the subtree that holds them when many; React keeps that order in its fibers"
   | Created -> Excluded "templates keep a comment anchor for every child slot, where React keeps positions in fibers"
   | Viewed | Listed | Projected -> Excluded "only the Meltea and melhole runs count it"
 

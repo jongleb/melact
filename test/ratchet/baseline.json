@@ -202,7 +202,8 @@
     "frame layouts": 18,
     "layout reads": 1,
     "renders": 233,
-    "hole evaluations": 408
+    "hole evaluations": 408,
+    "nodes walked": 1
   },
   "melact: rows reading offsetTop, sorted and selected": {
     "moves": 79,
@@ -215,7 +216,8 @@
     "frame layouts": 8,
     "layout reads": 4,
     "renders": 65,
-    "hole evaluations": 58
+    "hole evaluations": 58,
+    "nodes walked": 1
   },
   "melact: memo rows reading the selection from a context and offsetTop": {
     "moves": 39,
@@ -224,11 +226,12 @@
     "attributes": 5,
     "texts": 5,
     "created nodes": 46,
-    "forced layouts": 4,
+    "forced layouts": 1,
     "frame layouts": 7,
     "layout reads": 121,
     "renders": 173,
-    "hole evaluations": 50
+    "hole evaluations": 50,
+    "nodes walked": 363
   },
   "melact: components without hooks in child slots before a layout read": {
     "insertions": 1,
@@ -240,7 +243,8 @@
     "frame layouts": 8,
     "layout reads": 14,
     "renders": 38,
-    "hole evaluations": 39
+    "hole evaluations": 39,
+    "nodes walked": 16
   },
   "melact: controlled field, debounce and popover": {
     "insertions": 3,
@@ -254,7 +258,8 @@
     "layout reads": 2,
     "renders": 47,
     "effects": 12,
-    "hole evaluations": 21
+    "hole evaluations": 21,
+    "nodes walked": 15
   },
   "melact: memo boundaries, contexts at several depths and fresh callbacks": {
     "insertions": 1,
@@ -266,7 +271,8 @@
     "frame layouts": 8,
     "layout reads": 10,
     "renders": 74,
-    "hole evaluations": 41
+    "hole evaluations": 41,
+    "nodes walked": 34
   },
   "melact: memo rows given fresh callbacks": {
     "moves": 50,
@@ -278,7 +284,8 @@
     "frame layouts": 6,
     "layout reads": 1,
     "renders": 211,
-    "hole evaluations": 59
+    "hole evaluations": 59,
+    "nodes walked": 49
   },
   "melact: random program, seed 1": {
     "insertions": 1,
@@ -291,7 +298,8 @@
     "frame layouts": 5,
     "layout reads": 3,
     "renders": 83,
-    "hole evaluations": 31
+    "hole evaluations": 31,
+    "nodes walked": 17
   },
   "melact: random program, seed 2": {
     "insertions": 2,
@@ -304,7 +312,8 @@
     "layout reads": 5,
     "renders": 58,
     "effects": 2,
-    "hole evaluations": 38
+    "hole evaluations": 38,
+    "nodes walked": 6
   },
   "melact: random program, seed 3": {
     "insertions": 1,
@@ -317,7 +326,8 @@
     "layout reads": 2,
     "renders": 41,
     "effects": 2,
-    "hole evaluations": 33
+    "hole evaluations": 33,
+    "nodes walked": 3
   },
   "melact: random program, seed 4": {
     "insertions": 1,
@@ -329,7 +339,8 @@
     "frame layouts": 4,
     "layout reads": 3,
     "renders": 18,
-    "hole evaluations": 17
+    "hole evaluations": 17,
+    "nodes walked": 2
   },
   "melact: random program, seed 5": {
     "insertions": 1,
@@ -373,7 +384,8 @@
     "frame layouts": 11,
     "layout reads": 1,
     "renders": 52,
-    "hole evaluations": 54
+    "hole evaluations": 54,
+    "nodes walked": 10
   },
   "melact: random program, seed 9": {
     "insertions": 1,
@@ -447,9 +459,10 @@
     "row refreshes": 215
   },
   "Law A: Melact's excess over React 18 on the generated programs": {
-    "forced layouts": 103,
+    "forced layouts": 96,
     "keys": 63,
-    "row refreshes": 305
+    "row refreshes": 305,
+    "nodes walked": 657
   },
   "event table: Melact, through its scenario": {
     "moves": 1325,
@@ -459,12 +472,12 @@
     "texts": 1466,
     "properties": 1,
     "created nodes": 17062,
-    "forced layouts": 30,
     "frame layouts": 70,
-    "layout reads": 11498
+    "layout reads": 11498,
+    "nodes walked": 305503
   },
   "Law A: Melact's excess over React 18 on the event table": {
     "insertions": 1,
-    "forced layouts": 30
+    "nodes walked": 305503
   }
 }

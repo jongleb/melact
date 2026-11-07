@@ -1,12 +1,14 @@
 // Runs the ratchet suite and rewrites test/ratchet/baseline.json to what it measured, only downwards:
 // if a counter went up or a recorded run is gone, it changes nothing. New runs are added; each test
 // file writes the runs it owns into RATCHET_OUT. Usage: node test/ratchet/lower.mjs [--no-build]
+// [--admit=<counter>]: a counter that is new to the suite is recorded as measured, once, the first time.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const baselinePath = "test/ratchet/baseline.json";
+const admitted = process.argv.filter((arg) => arg.startsWith("--admit=")).map((arg) => arg.slice("--admit=".length));
 const measuredDirectory = mkdtempSync(join(tmpdir(), "ratchet-"));
 
 if (!process.argv.includes("--no-build")) {
@@ -42,6 +44,7 @@ for (const [run, counts] of Object.entries(measured)) {
   }
   const recorded = baseline[run];
   for (const kind of new Set([...Object.keys(recorded), ...Object.keys(counts)])) {
+    if (admitted.includes(kind) && Object.values(baseline).every((counted) => !(kind in counted))) continue;
     const was = recorded[kind] ?? 0;
     const now = counts[kind] ?? 0;
     if (now > was) raised.push(`  ↑ ${run} · ${kind}: ${was} → ${now}`);

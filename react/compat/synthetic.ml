@@ -10,15 +10,15 @@ type source =
 
 type t = { source : source; phase : phase; shown : string  (** The synthetic event's [type]. *) }
 
-let target_only = function
-  | "scroll" | "scrollend" | "load" | "error" | "abort" | "cancel" | "close" | "toggle" | "invalid" | "play" | "pause"
-  | "playing" | "ended" | "canplay" | "canplaythrough" | "durationchange" | "emptied" | "encrypted" | "loadeddata"
-  | "loadedmetadata" | "loadstart" | "progress" | "ratechange" | "seeked" | "seeking" | "stalled" | "suspend"
-  | "timeupdate" | "volumechange" | "waiting" ->
-      `Target
-  | _ -> `Walked
-
 let of_prop ~tag name =
+  let target_only = function
+    | "scroll" | "scrollend" | "load" | "error" | "abort" | "cancel" | "close" | "toggle" | "invalid" | "play" | "pause"
+    | "playing" | "ended" | "canplay" | "canplaythrough" | "durationchange" | "emptied" | "encrypted" | "loadeddata"
+    | "loadedmetadata" | "loadstart" | "progress" | "ratechange" | "seeked" | "seeking" | "stalled" | "suspend"
+    | "timeupdate" | "volumechange" | "waiting" ->
+        `Target
+    | _ -> `Walked
+  in
   let length = String.length name in
   match length > 2 && String.sub name 0 2 = "on" && Char.uppercase_ascii name.[2] = name.[2] with
   | false -> None
@@ -261,22 +261,22 @@ let put element prop handler =
                 [ Capture; Bubble ]))
   | Crossing kind, Some _ -> crossing kind
 
-let bridged =
-  [
-    ("click", "click"); ("dblclick", "dblclick"); ("mousedown", "mousedown"); ("mouseup", "mouseup");
-    ("mousemove", "mousemove"); ("mouseover", "mouseover"); ("mouseout", "mouseout"); ("keydown", "keydown");
-    ("keyup", "keyup"); ("keypress", "keypress"); ("focusin", "focus"); ("focusout", "blur"); ("input", "input");
-    ("onchange", "change"); ("change", "change"); ("pointerdown", "pointerdown"); ("pointerup", "pointerup");
-    ("pointermove", "pointermove"); ("pointerover", "pointerover"); ("pointerout", "pointerout");
-    ("touchstart", "touchstart"); ("touchend", "touchend"); ("touchmove", "touchmove");
-    ("contextmenu", "contextmenu"); ("submit", "submit"); ("wheel", "wheel");
-  ]
-
 external define : Dom.node -> string -> < get : unit -> 'handler ; set : 'handler -> unit ; configurable : bool > Js.t -> unit
   = "defineProperty"
 [@@mel.scope "Object"]
 
 let bridge node ~parent =
+  let bridged =
+    [
+      ("click", "click"); ("dblclick", "dblclick"); ("mousedown", "mousedown"); ("mouseup", "mouseup");
+      ("mousemove", "mousemove"); ("mouseover", "mouseover"); ("mouseout", "mouseout"); ("keydown", "keydown");
+      ("keyup", "keyup"); ("keypress", "keypress"); ("focusin", "focus"); ("focusout", "blur"); ("input", "input");
+      ("onchange", "change"); ("change", "change"); ("pointerdown", "pointerdown"); ("pointerup", "pointerup");
+      ("pointermove", "pointermove"); ("pointerover", "pointerover"); ("pointerout", "pointerout");
+      ("touchstart", "touchstart"); ("touchend", "touchend"); ("touchmove", "touchmove");
+      ("contextmenu", "contextmenu"); ("submit", "submit"); ("wheel", "wheel");
+    ]
+  in
   let raw = Raw.of_any node in
   match (Raw.find raw portal_parent, Dom_api.node_type node) with
   | Some _, _ -> Raw.set raw portal_parent parent

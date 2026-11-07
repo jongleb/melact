@@ -21,6 +21,12 @@ type slots
 
 val slots : unit -> slots
 val rewind : slots -> unit
+
+(** Passes over the next hook, whose value its render does not need. *)
+val skip : slots -> unit
+
+(** The position of the next hook call. *)
+val position : slots -> int
 val take : slots -> 'a key -> (unit -> 'a) -> 'a
 
 (** The value of the next hook call when an earlier render made it, else [None]: then [put] makes it. *)

@@ -1,5 +1,23 @@
 open Melhole
 
+(** What changed since an instance last rendered. *)
+type sources =
+  | Every  (** Not known: a mount, a boundary, a parent without inputs to compare; every step runs again. *)
+  | Bits of int  (** The bits of the inputs, hook slots and context reads that changed, as melact-ppx numbers them. *)
+
+(** Whether a step of an update graph reads a source that changed. *)
+type reach = Reached | Unreached
+
+let union first second =
+  match (first, second) with
+  | Every, _ | _, Every -> Every
+  | Bits first, Bits second -> Bits (first lor second)
+
+let reaches sources mask =
+  match sources with
+  | Every -> Reached
+  | Bits bits -> ( match bits land mask with 0 -> Unreached | _ -> Reached)
+
 (** When an effect runs after its instance is patched. *)
 type timing =
   | Layout  (** Synchronously, before the browser paints. *)
@@ -16,6 +34,9 @@ external caught_of : 'a -> caught = "%identity"
 (** A mounted component: its hook slots, its output and its effects. *)
 (** A JavaScript [Set] of the instances that read a provider. *)
 type audience
+
+(** A JavaScript [Map] from an instance that read a provider to the bits of its sources the provider's value is. *)
+type readers
 
 (** Where an instance is as React's [useId] numbers positions: known when it took over a server's
     nodes, else not counted. *)
@@ -34,7 +55,12 @@ type instance = {
   mutable pending : job list;  (** Effects of the last render, newest first. *)
   mutable teardown : ending list;  (** Run on unmount, newest first. *)
   mutable renders : int;  (** How many times it started rendering. *)
+  mutable providers : instance list;  (** The providers above it that it has read, found once: they stay while it does. *)
+  mutable prepared : prepared;
 }
+
+(** A render made ahead of its round, while the page was still as the update found it. *)
+and prepared = Unprepared | Prepared of (View.child, exn) result
 
 and kind =
   | Renders of {
@@ -46,7 +72,7 @@ and kind =
       context : 'value Context.t;
       mutable value : 'value;
       mutable children : View.child;
-      consumers : audience;  (** The instances that read the value since it last changed. *)
+      consumers : readers;  (** The instances that read the value since it last changed, with the sources it is to them. *)
       known : audience;  (** The mounted instances that ever read it, each leaving once it unmounts. *)
     }
       -> kind
@@ -116,19 +142,20 @@ and 'deps effect_hook = {
 (** What an instance lets go of when it unmounts. *)
 and ending =
   | Finishes : 'deps effect_hook -> ending
-  | Leaves of { consumers : audience; known : audience }  (** Stops reading a provider. *)
+  | Leaves of { consumers : readers; known : audience }  (** Stops reading a provider. *)
   | Calls of (unit -> unit)
 
 and status = Clean | Dirty of dirt | Unmounted
 
 (** Why an instance is to render again. *)
 and dirt =
-  | Forced  (** Its parent, a context or a boundary asks for it. *)
-  | Stated of checking list
-      (** Only its own state changed: each check tells whether a value differs from the one it last rendered with. *)
+  | Forced  (** Its parent, a context or a boundary asks for it, without saying what changed. *)
+  | Sourced of { mask : sources; checks : checking list }
+      (** The props and contexts whose bits are in [mask] changed, and the state cells checked may have: each
+          check tells whether a value differs from the one it last rendered with. *)
 
-(** A state cell and how to tell whether its value differs from the one it last rendered with. *)
-and checking = Checking : 'cell * ('cell -> View.change) -> checking
+(** A state cell, how to tell whether its value differs from the one it last rendered with, and its bit. *)
+and checking = Checking : 'cell * ('cell -> View.change) * sources -> checking
 
 (** Where an instance sits in the DOM when its output has no nodes. *)
 and region =
@@ -173,8 +200,20 @@ external audience : unit -> audience = "Set" [@@mel.new]
 external join : audience -> instance -> unit = "add" [@@mel.send]
 external member : audience -> instance -> bool = "has" [@@mel.send]
 external leave : audience -> instance -> unit = "delete" [@@mel.send]
-external each_member : audience -> ((instance -> unit)[@mel.uncurry]) -> unit = "forEach" [@@mel.send]
 external disband : audience -> unit = "clear" [@@mel.send]
+external readers : unit -> readers = "Map" [@@mel.new]
+external read_bits : readers -> instance -> sources Js.undefined = "get" [@@mel.send]
+external set_bits : readers -> instance -> sources -> unit = "set" [@@mel.send]
+external stop_reading : readers -> instance -> bool = "delete" [@@mel.send]
+external each_reader : readers -> ((sources -> instance -> unit)[@mel.uncurry]) -> unit = "forEach" [@@mel.send]
+external clear_readers : readers -> unit = "clear" [@@mel.send]
+
+let read readers instance bits =
+  match (Js.Undefined.toOption (read_bits readers instance), bits) with
+  | Some Every, _ -> ()
+  | Some (Bits known), Bits more when known lor more = known -> ()
+  | Some known, _ -> set_bits readers instance (union known bits)
+  | None, _ -> set_bits readers instance bits
 
 (** A JavaScript [Map] from a DOM node to the dirty instances that start at it. *)
 type starts
@@ -261,6 +300,18 @@ let front_node instance after =
 let patching = ref At_once
 
 let put_off = ref None_put_off
+let committed = audience ()
+let enqueued = ref 0
+
+(** How deep the mounts under way are nested. *)
+let mounting = ref 0
+
+(** Whether the effects of an instance's write go to the queues when it ends, or wait: in a pass of
+    pure instances, until the instances below it that the pass renders later have queued theirs, so
+    that the queues come out children first without sorting them. *)
+type deferral = Queue_now | Deferring of instance
+
+let deferral = ref Queue_now
 
 let instances =
   View.hosting
@@ -291,7 +342,7 @@ let instances =
               match ending with
               | Finishes hook -> finish hook
               | Leaves { consumers; known } ->
-                  leave consumers instance;
+                  ignore (stop_reading consumers instance);
                   leave known instance
               | Calls cleanup -> cleanup ())
             (List.rev instance.teardown)
@@ -303,13 +354,46 @@ let instances =
           View.release suspending.backup;
           instance.status <- Unmounted)
 
+(** Whether an instance that may read the page renders later in this flush: a pure child given new
+    props then waits for the next round, so that its writes do not land between two reads. *)
+type reads = Reads_ahead | No_reads_ahead
+
+let reads = ref No_reads_ahead
+
+let reading instance =
+  match instance.kind with
+  | Renders { component = { rendering = Component.Impure; _ }; _ } -> reads := Reads_ahead
+  | Renders _ | Provides _ | Catches _ | Suspends _ -> ()
+
 let mark_dirty instance =
+  reading instance;
+  instance.prepared <- Unprepared;
   match instance.status with
   | Clean ->
       instance.status <- Dirty Forced;
       dirty := instance :: !dirty
-  | Dirty (Stated _) -> instance.status <- Dirty Forced
+  | Dirty (Sourced _) -> instance.status <- Dirty Forced
   | Dirty Forced | Unmounted -> ()
+
+let sourced instance bits =
+  match (bits, instance.status) with
+  | Every, (Clean | Dirty (Sourced _)) -> instance.status <- Dirty Forced
+  | Bits _, Clean -> instance.status <- Dirty (Sourced { mask = bits; checks = [] })
+  | Bits _, Dirty (Sourced { mask; checks }) -> instance.status <- Dirty (Sourced { mask = union mask bits; checks })
+  | (Every | Bits _), (Dirty Forced | Unmounted) -> ()
+
+let mark_sourced instance bits =
+  reading instance;
+  instance.prepared <- Unprepared;
+  match instance.status with
+  | Clean ->
+      sourced instance bits;
+      dirty := instance :: !dirty
+  | Dirty _ | Unmounted -> sourced instance bits
+
+let changed_sources = ref Every
+
+let unchanged = View.host ~build:(fun [@u] _ -> View.nothing) ~patch:(fun [@u] _ _ -> None)
 
 let run_phases cleanups runs =
   let run_jobs phase jobs =
@@ -334,6 +418,15 @@ let run_phases cleanups runs =
   run_jobs Run pending_runs
 
 let render instance =
+  instance.prepared <- Unprepared;
+  let sources =
+    match instance.status with
+    | Dirty Forced | Clean | Unmounted -> Every
+    | Dirty (Sourced { mask; checks }) ->
+        List.fold_left
+          (fun found (Checking (cell, check, bit)) -> match check cell with View.Changed -> union found bit | View.Unchanged -> found)
+          mask checks
+  in
   instance.status <- Clean;
   instance.renders <- instance.renders + 1;
   match instance.kind with
@@ -341,7 +434,9 @@ let render instance =
       let rec attempt count =
         Hook.rewind instance.slots;
         rerendering := Once;
+        changed_sources := (match count with 1 -> sources | _ -> Every);
         let child = within rendering (Some instance) definition.render in
+        changed_sources := Every;
         match (!rerendering, count < 25) with
         | Once, _ -> child
         | Again, true -> attempt (count + 1)
@@ -356,16 +451,24 @@ let render instance =
       | Healthy | Caught _ | Struck _ -> catching.children
       | Failed error -> catching.recover error)
 
-let commit (position : Template.position) instance =
-  (match (Js.Null.toOption (View.front instance.output Js.null), instance.region) with
-  | Some _, Nodes | None, Marker _ -> ()
-  | Some _, Marker node ->
-      Dom_api.remove_child position.parent node;
-      instance.region <- Nodes
-  | None, Nodes ->
-      let node = Dom_api.create_text_node Dom_api.document "" in
-      View.insert position (Dom_api.to_node node);
-      instance.region <- Marker node);
+(** Whether an instance's write queued the effects of instances below it, which then come before its own. *)
+type nesting = Alone | Nested
+
+let held = ref []
+
+let enqueue instance nesting =
+  (match (!patching, instance.pending, nesting) with
+  | At_once, _, _ | Next_round, [], Alone -> ()
+  | Next_round, [], Nested -> join committed instance
+  | Next_round, _ :: _, (Alone | Nested) ->
+      let rec below ancestor =
+        match ancestor with
+        | None -> ()
+        | Some above -> ( match member committed above with true -> put_off := Some_put_off | false -> below above.parent)
+      in
+      below instance.parent;
+      join committed instance);
+  (match instance.pending with [] -> () | _ :: _ -> incr enqueued);
   List.iter
     (fun job ->
       match job with
@@ -382,19 +485,39 @@ let commit (position : Template.position) instance =
     (List.rev instance.pending);
   instance.pending <- []
 
+let commit ~since (position : Template.position) instance =
+  (match (Js.Null.toOption (View.front instance.output Js.null), instance.region) with
+  | Some _, Nodes | None, Marker _ -> ()
+  | Some _, Marker node ->
+      Dom_api.remove_child position.parent node;
+      instance.region <- Nodes
+  | None, Nodes ->
+      let node = Dom_api.create_text_node Dom_api.document "" in
+      View.insert position (Dom_api.to_node node);
+      instance.region <- Marker node);
+  let nesting = match !enqueued > since with true -> Nested | false -> Alone in
+  match !deferral with
+  | Deferring current when current == instance ->
+      (match nesting with Nested -> join committed instance | Alone -> ());
+      held := (instance, nesting) :: !held
+  | Deferring _ | Queue_now -> enqueue instance nesting
+
 let refresh (position : Template.position) instance =
   let at =
     match instance.region with
     | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
     | Nodes -> position
   in
+  let since = !enqueued in
   match
     let child = render instance in
-    within owner (Some instance) (fun () -> View.update at instance.output child)
+    match child == unchanged with
+    | true -> instance.output
+    | false -> within owner (Some instance) (fun () -> View.update at instance.output child)
   with
   | output ->
       instance.output <- output;
-      commit position instance
+      commit ~since position instance
   | exception error ->
       instance.pending <- [];
       !suspension.rescue While_rendering instance error [@u]
@@ -405,14 +528,16 @@ let wrote (position : Template.position) instance rendered =
     | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
     | Nodes -> position
   in
+  let since = !enqueued in
   match
     match rendered with
+    | Ok child when child == unchanged -> instance.output
     | Ok child -> within owner (Some instance) (fun () -> View.update at instance.output child)
     | Error error -> raise error
   with
   | output ->
       instance.output <- output;
-      commit position instance
+      commit ~since position instance
   | exception error ->
       instance.pending <- [];
       !suspension.rescue While_rendering instance error [@u]
@@ -494,6 +619,7 @@ let rec settle () =
                List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced) in
         let queued = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
         put_off := None_put_off;
+        disband committed;
         let waiting = ref [] in
         let carried = ref [] in
         let rec rendering round =
@@ -506,7 +632,8 @@ let rec settle () =
                     (fun instance ->
                       match instance.status with
                       | Dirty Forced -> true
-                      | Dirty (Stated _) -> List.memq instance !carried
+                      | Dirty (Sourced { mask = Bits 0; _ }) -> false
+                      | Dirty (Sourced _) -> true
                       | Clean | Unmounted -> false)
                     (!dirty @ !waiting)
                 in
@@ -516,8 +643,59 @@ let rec settle () =
           in
           match pending with
           | [] -> ()
-          | pending ->
+          | pending -> (
               dirty := [];
+              reads := No_reads_ahead;
+              List.iter reading !waiting;
+              let unchanged checks =
+                List.for_all
+                  (fun (Checking (cell, check, _)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
+                  checks
+              in
+              match
+                List.fold_left
+                  (fun found instance ->
+                    match (found, instance.kind) with
+                    | Component.Pure, Renders { component = { rendering = Component.Pure; _ }; _ } -> Component.Pure
+                    | (Component.Pure | Component.Impure), (Renders _ | Provides _ | Catches _ | Suspends _) -> Component.Impure)
+                  Component.Pure pending
+              with
+              | Component.Pure ->
+                  within patching Next_round (fun () ->
+                      let rec released next =
+                        match !held with
+                        | [] -> ()
+                        | (top, nesting) :: rest -> (
+                            let rec under ancestor =
+                              match ancestor with
+                              | None -> `Elsewhere
+                              | Some above -> ( match above == top with true -> `Under | false -> under above.parent)
+                            in
+                            match Option.fold ~none:`Elsewhere ~some:(fun next -> under next.parent) next with
+                            | `Under -> ()
+                            | `Elsewhere ->
+                                held := rest;
+                                enqueue top nesting;
+                                released next)
+                      in
+                      List.iter
+                        (fun (_, instance) ->
+                          match instance.status with
+                          | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks -> instance.status <- Clean
+                          | Dirty (Forced | Sourced _) -> (
+                              released (Some instance);
+                              let result = match render instance with child -> Ok child | exception error -> Error error in
+                              match instance.status with
+                              | Unmounted -> ()
+                              | Clean | Dirty _ -> within deferral (Deferring instance) (fun () -> wrote (position_of instance) instance result))
+                          | Clean | Unmounted -> ())
+                        (ordered
+                           (List.filter
+                              (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false)
+                              pending));
+                      released None);
+                  rendering `Later
+              | Component.Impure ->
               let round = audience () in
               List.iter
                 (fun instance -> match instance.status with Dirty _ -> join round instance | Clean | Unmounted -> ())
@@ -536,19 +714,24 @@ let rec settle () =
                     match (instance.status, topmost instance) with Dirty _, `Topmost -> true | (Dirty _ | Clean | Unmounted), _ -> false)
                   pending
               in
-              (match later with [] -> () | _ :: _ -> put_off := Some_put_off);
+              List.iter reading later;
               let roots = ordered roots in
               let rendered =
                 List.filter_map
                   (fun (_, instance) ->
                     match instance.status with
-                    | Dirty (Stated checks)
-                      when List.for_all
-                             (fun (Checking (cell, check)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
-                             checks ->
+                    | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks ->
                         instance.status <- Clean;
                         None
-                    | Dirty (Forced | Stated _) -> Some (instance, match render instance with child -> Ok child | exception error -> Error error)
+                    | Dirty (Forced | Sourced _) ->
+                        Some
+                          ( instance,
+                            match instance.prepared with
+                            | Prepared result ->
+                                instance.prepared <- Unprepared;
+                                instance.status <- Clean;
+                                result
+                            | Unprepared -> ( match render instance with child -> Ok child | exception error -> Error error) )
                     | Clean | Unmounted -> None)
                   roots
               in
@@ -563,7 +746,7 @@ let rec settle () =
               dirty :=
                 List.filter (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false) later
                 @ !dirty;
-              rendering `Later
+              rendering `Later)
         in
         rendering `First;
         dirty := !waiting @ !dirty;
@@ -706,6 +889,7 @@ let rec settle () =
                     in
                     queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)
               batches);
+        disband committed;
         View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
@@ -799,13 +983,30 @@ let born kind =
       pending = [];
       teardown = [];
       renders = 0;
+      providers = [];
+      prepared = Unprepared;
     }
   in
   instance
 
+(** Siblings that a patch builds from the last one: the place the last of them took, and the
+    effect queues before the first of them and after the last, so that their effects run in tree order. *)
+type 'job reversed_run = {
+  parent : Dom.node;
+  mutable front : Dom.node Js.null;
+  base : 'job list array;
+  mutable above : 'job list array;
+}
+
+let reversed : job reversed_run option ref = ref None
+let queues = [| layout_cleanups; layout_runs; passive_cleanups; passive_runs |]
+
 let mount_instance position kind =
   let instance = born kind in
-  (match !patching with Next_round -> put_off := Some_put_off | At_once -> ());
+  let since = !enqueued in
+  let outermost = !mounting in
+  let before = Array.map (fun queue -> !queue) queues in
+  incr mounting;
   (match
      let child = render instance in
      within owner (Some instance) (fun () ->
@@ -819,12 +1020,43 @@ let mount_instance position kind =
    with
   | output ->
       instance.output <- output;
-      commit position instance
+      commit ~since position instance
   | exception error ->
       instance.pending <- [];
-      commit position instance;
+      commit ~since position instance;
       !suspension.rescue While_rendering instance error [@u]);
-  View.live instances instance
+  decr mounting;
+  let live = View.live instances instance in
+  (match (!View.patch_order, outermost, !enqueued > since) with
+  | View.Out_of_order, 0, true ->
+      let rec until stop list taken =
+        match list == stop with true -> List.rev taken | false -> ( match list with job :: rest -> until stop rest (job :: taken) | [] -> List.rev taken)
+      in
+      let continued =
+        Option.bind !reversed (fun run ->
+            match
+              Dom_api.same run.parent position.parent
+              && Dom_api.same run.front position.before
+              && Array.for_all2 (fun above earlier -> above == earlier) run.above before
+            with
+            | true -> Some run
+            | false -> None)
+      in
+      (match continued with
+      | Some run ->
+          Array.iteri
+            (fun index queue ->
+              let block = until before.(index) !queue [] in
+              let earlier = until run.base.(index) before.(index) [] in
+              queue := earlier @ block @ run.base.(index))
+            queues;
+          run.front <- View.front live Js.null;
+          run.above <- Array.map (fun queue -> !queue) queues
+      | None ->
+          reversed :=
+            Some { parent = position.parent; front = View.front live Js.null; base = before; above = Array.map (fun queue -> !queue) queues })
+  | (View.In_document_order | View.Out_of_order), _, _ -> ());
+  live
 
 let component definition inputs render =
   View.host
@@ -838,13 +1070,29 @@ let component definition inputs render =
                 (match (instance.status, View.compare_inputs rendered.inputs inputs) with
                 | Clean, View.Unchanged -> ()
                 | (Clean | Dirty _ | Unmounted), _ -> (
+                    let bits =
+                      match Array.length inputs = Array.length rendered.inputs && Array.length inputs < 30 with
+                      | false -> Every
+                      | true ->
+                          let found = ref 0 in
+                          Array.iteri
+                            (fun index (View.Input next) ->
+                              let (View.Input last) = Array.unsafe_get rendered.inputs index in
+                              if not (Dom_api.same last next) then found := !found lor (1 lsl index))
+                            inputs;
+                          Bits !found
+                    in
                     rendered.inputs <- inputs;
                     rendered.render <- render;
-                    match (!patching, instance.status) with
-                    | Next_round, (Clean | Dirty _) ->
+                    match (!patching, instance.status, definition.rendering, !View.patch_order, !reads) with
+                    | Next_round, (Clean | Dirty _), Component.Impure, _, _
+                    | Next_round, (Clean | Dirty _), _, View.Out_of_order, _
+                    | Next_round, (Clean | Dirty _), _, _, Reads_ahead ->
                         put_off := Some_put_off;
-                        mark_dirty instance
-                    | (At_once | Next_round), _ -> refresh position instance));
+                        mark_sourced instance bits
+                    | (At_once | Next_round), _, (Component.Pure | Component.Impure), _, _ ->
+                        sourced instance bits;
+                        refresh position instance));
                 Some live
             | Renders _ | Provides _ | Catches _ | Suspends _ -> None)
         | None -> None)
@@ -853,7 +1101,7 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
  fun context value children ->
   View.host
     ~build:(fun [@u] position ->
-      mount_instance position (Provides { context; value; children; consumers = audience (); known = audience () }))
+      mount_instance position (Provides { context; value; children; consumers = readers (); known = audience () }))
     ~patch:
       (fun [@u] position live ->
         match View.hosted instances live with
@@ -864,8 +1112,23 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
                 | Some Equal ->
                     if not (Dom_api.same provision.value value) then (
                       provision.value <- value;
-                      each_member provision.consumers mark_dirty;
-                      disband provision.consumers);
+                      let marked = ref [] in
+                      each_reader provision.consumers (fun bits reader ->
+                          mark_sourced reader bits;
+                          marked := reader :: !marked);
+                      clear_readers provision.consumers;
+                      match !patching with
+                      | At_once -> ()
+                      | Next_round ->
+                          List.iter
+                            (fun reader ->
+                              match (reader.kind, reader.status) with
+                              | Renders { component = { rendering = Component.Impure; _ }; _ }, Dirty _ ->
+                                  let result = match render reader with child -> Ok child | exception error -> Error error in
+                                  reader.status <- Dirty Forced;
+                                  reader.prepared <- Prepared result
+                              | (Renders _ | Provides _ | Catches _ | Suspends _), (Clean | Dirty _ | Unmounted) -> ())
+                            (List.rev !marked));
                     provision.children <- children;
                     refresh position instance;
                     Some live
@@ -884,23 +1147,23 @@ let current () =
 
 let slot instance key init = Hook.take instance.slots key init
 
+let lane () =
+  Option.fold ~none:`Default
+    ~some:(fun event ->
+      match Dom_api.event_type event with
+      | "auxclick" | "beforeinput" | "blur" | "cancel" | "change" | "click" | "close" | "compositionend"
+      | "compositionstart" | "compositionupdate" | "contextmenu" | "copy" | "cut" | "dblclick" | "dragend"
+      | "dragstart" | "drop" | "focus" | "focusin" | "focusout" | "fullscreenchange" | "hashchange" | "input"
+      | "invalid" | "keydown" | "keypress" | "keyup" | "mousedown" | "mouseup" | "paste" | "pause" | "play"
+      | "pointercancel" | "pointerdown" | "pointerup" | "popstate" | "ratechange" | "reset" | "resize" | "seeked"
+      | "select" | "selectionchange" | "selectstart" | "submit" | "textInput" | "touchcancel" | "touchend"
+      | "touchstart" | "volumechange" ->
+          `Discrete
+      | _ -> `Default)
+    (Js.Undefined.toOption Dom_api.current_event)
+
 let queue_render () =
-  let lane =
-    Option.fold ~none:`Default
-      ~some:(fun event ->
-        match Dom_api.event_type event with
-        | "auxclick" | "beforeinput" | "blur" | "cancel" | "change" | "click" | "close" | "compositionend"
-        | "compositionstart" | "compositionupdate" | "contextmenu" | "copy" | "cut" | "dblclick" | "dragend"
-        | "dragstart" | "drop" | "focus" | "focusin" | "focusout" | "fullscreenchange" | "hashchange" | "input"
-        | "invalid" | "keydown" | "keypress" | "keyup" | "mousedown" | "mouseup" | "paste" | "pause" | "play"
-        | "pointercancel" | "pointerdown" | "pointerup" | "popstate" | "ratechange" | "reset" | "resize" | "seeked"
-        | "select" | "selectionchange" | "selectstart" | "submit" | "textInput" | "touchcancel" | "touchend"
-        | "touchstart" | "volumechange" ->
-            `Discrete
-        | _ -> `Default)
-      (Js.Undefined.toOption Dom_api.current_event)
-  in
-  match (!render_schedule, lane) with
+  match (!render_schedule, lane ()) with
   | Next_microtask, _ | Next_task, `Default -> ()
   | (Unqueued | Next_task), `Discrete ->
       render_schedule := Next_microtask;
@@ -913,6 +1176,10 @@ let queue_render () =
           settle ())
         0
 
+let settle_in_event () =
+  settle ();
+  match lane () with `Discrete -> Dom_api.queue_microtask run_passive | `Default -> ()
+
 let invalidate instance =
   match !rendering with
   | Some current when current == instance -> rerendering := Again
@@ -922,19 +1189,31 @@ let invalidate instance =
       mark_dirty instance;
       queue_render ()
 
-let invalidate_state instance cell check =
+let invalidate_state instance cell check bit =
   match !rendering with
   | Some current when current == instance -> rerendering := Again
   | Some _ ->
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
   | None ->
+      reading instance;
+      instance.prepared <- Unprepared;
       (match instance.status with
       | Clean ->
-          instance.status <- Dirty (Stated [ Checking (cell, check) ]);
+          instance.status <- Dirty (Sourced { mask = Bits 0; checks = [ Checking (cell, check, bit) ] });
           dirty := instance :: !dirty
-      | Dirty (Stated checks) -> instance.status <- Dirty (Stated (Checking (cell, check) :: checks))
+      | Dirty (Sourced { mask; checks }) -> instance.status <- Dirty (Sourced { mask; checks = Checking (cell, check, bit) :: checks })
       | Dirty Forced | Unmounted -> ());
       queue_render ()
+
+let cell_source instance =
+  match instance.kind with
+  | Renders { inputs; _ } -> (
+      let at = Array.length inputs + Hook.position instance.slots in
+      match at < 30 with true -> Bits (1 lsl at) | false -> Every)
+  | Provides _ | Catches _ | Suspends _ -> Every
+
+let changed () = !changed_sources
+let skip_hook () = match !rendering with Some instance -> Hook.skip instance.slots | None -> ()
 
 let after_commit instance timing phase work =
   instance.pending <- Work { owner = instance; timing; phase; work } :: instance.pending
@@ -962,25 +1241,41 @@ let put instance key value = Hook.put instance.slots key value
 
 let on_unmount instance cleanup = instance.teardown <- Calls cleanup :: instance.teardown
 
-let rec provided : type value. instance -> value Context.t -> instance option -> value =
- fun instance context ancestor ->
+let rec provided : type value. instance -> sources -> value Context.t -> instance option -> value =
+ fun instance bits context ancestor ->
   match ancestor with
   | None -> context.default
   | Some above -> (
       match above.kind with
-      | Provides provision -> (
+      | Provides provision when Dom_api.same provision.context.witness context.witness -> (
           match Type.Id.provably_equal provision.context.witness context.witness with
           | Some Equal ->
               if not (member provision.known instance) then (
                 join provision.known instance;
                 instance.teardown <-
                   Leaves { consumers = provision.consumers; known = provision.known } :: instance.teardown);
-              join provision.consumers instance;
+              instance.providers <- above :: instance.providers;
+              read provision.consumers instance bits;
               provision.value
-          | None -> provided instance context above.parent)
-      | Renders _ | Catches _ | Suspends _ -> provided instance context above.parent)
+          | None -> provided instance bits context above.parent)
+      | Provides _ | Renders _ | Catches _ | Suspends _ -> provided instance bits context above.parent)
 
-let consume instance context = provided instance context instance.parent
+let consume_source : type value. instance -> sources -> value Context.t -> value =
+ fun instance bits context ->
+  let rec known providers =
+    match providers with
+    | [] -> provided instance bits context instance.parent
+    | { kind = Provides provision; _ } :: rest when Dom_api.same provision.context.witness context.witness -> (
+        match Type.Id.provably_equal provision.context.witness context.witness with
+        | Some Equal ->
+            read provision.consumers instance bits;
+            provision.value
+        | None -> known rest)
+    | { kind = Provides _ | Renders _ | Catches _ | Suspends _; _ } :: rest -> known rest
+  in
+  known instance.providers
+
+let consume instance context = consume_source instance Every context
 
 let catch =
   let caught_boundaries = ref [] and struck_boundaries = ref [] and fallen_boundaries = ref [] in

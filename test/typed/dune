@@ -1,6 +1,7 @@
 ; The typed passes change only the sites they decide: TodoMVC (meltea-ppx), the dual suite and the reported apps
 ; (melact-ppx, which have no site whose answer differs from the untyped one) compile to the same JavaScript with
-; and without -typed. melact/ holds sites that only types decide.
+; and without -typed. The dual suite is compared under staged_pps both ways (staged/), since under staged_pps the
+; custom hooks of npm_hooks.mlx are read from its .cmi. melact/ holds sites that only types decide.
 
 (rule
  (alias runtest)
@@ -16,10 +17,10 @@
  (action
   (progn
    (diff
-    %{dep:../dual/melact/output/test/dual/melact/dual_test.mjs}
+    %{dep:staged/output/test/typed/staged/dual_test.mjs}
     %{dep:dual/output/test/typed/dual/dual_test.mjs})
    (diff
-    %{dep:../dual/melact/output/test/dual/melact/npm_hooks.mjs}
+    %{dep:staged/output/test/typed/staged/npm_hooks.mjs}
     %{dep:dual/output/test/typed/dual/npm_hooks.mjs})
    (diff
     %{dep:../regress/output/test/regress/Findings.mjs}
