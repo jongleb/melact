@@ -217,3 +217,74 @@ let () =
           let_law `Written (fun before after -> match before.near = after.near with true -> 1 | false -> 2));
       test_async "a value that reads mutable state while rendering is made again on every render" (fun () ->
           law `Reads_a_ref (fun _ _ -> 1)))
+
+(** A row as its parent makes it afresh on every render: the view reads [title] and [count] only. *)
+type entry = { title : string; count : int; note : string }
+
+let entry_renders = ref 0
+let entry_send = ref (fun (_ : entry -> entry) -> ())
+
+module Entry_view = struct
+  let[@react.component] make ~entry =
+    let marked, _ = React.useState (fun () -> "") in
+    incr entry_renders;
+    <p>(React.string (entry.title ^ string_of_int entry.count ^ marked))</p>
+end
+
+let noted entry = entry.title ^ ":" ^ entry.note
+
+module Entry_whole = struct
+  let[@react.component] make ~entry =
+    let marked, _ = React.useState (fun () -> "") in
+    <i>(React.string (noted entry ^ marked))</i>
+end
+
+module Entry_default = struct
+  let[@react.component] make ~entry ?(heading = entry.title) () =
+    let marked, _ = React.useState (fun () -> "") in
+    <s>(React.string (heading ^ marked))</s>
+end
+
+module Entry_parent = struct
+  let[@react.component] make () =
+    let entry, setEntry = React.useState (fun () -> { title = "a"; count = 0; note = "" }) in
+    entry_send := setEntry;
+    <div>
+      <Entry_view entry=({ title = entry.title; count = entry.count; note = entry.note }) />
+      <Entry_whole entry=({ title = entry.title; count = entry.count; note = entry.note }) />
+      <Entry_default entry=({ title = entry.title; count = entry.count; note = entry.note }) />
+    </div>
+end
+
+let () =
+  describe "a prop read only through its fields" (fun () ->
+      test_async "is guarded by those fields: a fresh record with the same fields does not render the child again" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:1 ~longest:12) (fun values ->
+                 let tape = tape values in
+                 let root = attached () in
+                 let client = ReactDOM.Client.createRoot root in
+                 let* () = act (fun () -> ReactDOM.Client.render client <Entry_parent />) in
+                 let rec step remaining current expected =
+                   match remaining with
+                   | 0 ->
+                       let shown = text_content root in
+                       let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                       expect (shown, !entry_renders)
+                       |. to_equal (current.title ^ string_of_int current.count ^ current.title ^ ":" ^ current.note ^ current.title, expected);
+                       Js.Promise.resolve ()
+                   | _ ->
+                       let next =
+                         match draw tape 3 with
+                         | 0 -> { current with title = [| "a"; "b" |].(draw tape 2) }
+                         | 1 -> { current with count = draw tape 3 }
+                         | _ -> { current with note = string_of_int (draw tape 1000) }
+                       in
+                       let* () = act (fun () -> !entry_send (fun _ -> next)) in
+                       step (remaining - 1) next
+                         (expected + match (String.equal current.title next.title, current.count = next.count) with true, true -> 0 | _ -> 1)
+                 in
+                 entry_renders := 0;
+                 let* () = Js.Promise.resolve () in
+                 step 8 { title = "a"; count = 0; note = "" } 0))
+            [%mel.obj { numRuns = 60 }]))

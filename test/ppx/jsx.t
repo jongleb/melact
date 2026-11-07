@@ -526,8 +526,7 @@ A component with optional, defaulted and children props, and its signature:
             (Melhole.View.pure __melhole_component_1
                [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
                                                           __melhole_prop_1);(
-                 Melhole.View.Input __melhole_prop_2);(Melhole.View.Input
-                                                         __melhole_prop_3)|]
+                 Melhole.View.Input __melhole_prop_3)|]
                (fun () ->
                   React.to_child
                     (React.of_child

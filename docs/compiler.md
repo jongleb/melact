@@ -576,6 +576,20 @@ clicks and prop changes, children's state stays with its key, and the `staged_pp
 spliced component, the `pps` build calls them all. Accepting any format version, ignoring a shadowed
 name, or not writing the module's own names as its paths each break it.
 
+### Props read through their fields
+
+A component compares its props with the ones of its last render, each with `===`. When the body
+uses a prop only as `p.f` (never `p` itself, never rebinding it), the compiler compares the fields
+it reads instead of the record: a parent that builds a fresh record with the same title and count
+on every render, as code that maps server data does, no longer renders a child that shows only the
+title and the count, and a prop the body never reads is not compared at all. React compares props
+by reference and cannot do this. The fields are read where the component is compiled, so a
+component of another module gets it too. A law makes a parent build a fresh three-field record on
+every change: a child that reads two fields renders only when one of them changed, a child that
+passes the whole record to a function renders on every change and shows the third field, and a
+child whose prop default reads a field follows it; comparing the record whole, or treating a whole
+use as a field use, break it.
+
 ## Values written in props
 
 reason-react code writes closures, style records, arrays, tuples and child elements straight into
