@@ -942,6 +942,15 @@ the passive effects of that commit run before the render it causes, as React 18 
 sync work, so a `useEffect` sees the page of its own commit: a popover hidden until its layout
 effect measured it is seen hidden; running them after the whole flush breaks a dual law.
 
+## Two copies on one page
+
+Two separately built apps on one page (a Meltea widget on a Melact site, two versions of the
+package in one bundle) each carry their own melhole and each listen on `document`. Every copy
+keeps its handlers on elements under its own property name (`$$melhole`, then `$$melhole2`, …,
+counted on `globalThis`), so a click reaches the handlers of the copy that rendered the element,
+once. A law mounts the same Meltea widget from two builds beside each other and nested, presses
+and types at random, and checks every count; sharing one name doubles the first press.
+
 ## Events and makeProps
 
 A handler prop compiles to `fun event -> handler (React.Event.ofNative event)`: `ofNative` is the
