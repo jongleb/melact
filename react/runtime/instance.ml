@@ -306,6 +306,15 @@ let enqueued = ref 0
 (** How deep the mounts under way are nested. *)
 let mounting = ref 0
 
+let tree_order = ref None
+let parent instance = instance.parent
+
+let last_node instance =
+  let last = ref None in
+  visit_nodes instance (fun [@u] node -> last := Some node);
+  let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
+  Option.map deepest !last
+
 (** Whether the effects of an instance's write go to the queues when it ends, or wait: in a pass of
     pure instances, until the instances below it that the pass renders later have queued theirs, so
     that the queues come out children first without sorting them. *)
@@ -621,7 +630,6 @@ let rec settle () =
         put_off := None_put_off;
         disband committed;
         let waiting = ref [] in
-        let carried = ref [] in
         let rec rendering round =
           let pending =
             match round with
@@ -742,7 +750,6 @@ let rec settle () =
                       | Unmounted -> ()
                       | Clean | Dirty _ -> wrote (position_of instance) instance result)
                     rendered);
-              carried := later;
               dirty :=
                 List.filter (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false) later
                 @ !dirty;
@@ -758,17 +765,7 @@ let rec settle () =
               let last = ref None in
               visit_nodes (host job) (fun [@u] node -> last := Some node);
               let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
-              let rec levels node inner =
-                let rec up at =
-                  match Js.Undefined.toOption (Dom_api.property (Dom_api.unsafe_element at) "$$melhole:anchor" : Dom.node Js.undefined) with
-                  | Some anchor -> Some anchor
-                  | None -> Option.bind (Dom_api.parent_node at) up
-                in
-                Option.fold ~none:(node :: inner) ~some:(fun anchor -> levels anchor (node :: inner)) (up node)
-              in
-              Option.fold ~none:(None, []) ~some:(fun node -> match levels (deepest node) [] with
-                | outer :: _ as all -> (Some outer, all)
-                | [] -> (None, [])) !last
+              Option.map deepest !last
             in
             let rec fresh old list oldest_first =
               match list == old with
@@ -778,7 +775,7 @@ let rec settle () =
             let old_layout_cleanups, old_layout_runs, old_passive_cleanups, old_passive_runs = queued in
             let batches =
               List.map
-                (fun (queue, old) -> (queue, old, List.map (fun job -> let outer, inner = ending job in (job, outer, ((host job).depth, inner))) (fresh old !queue [])))
+                (fun (queue, old) -> (queue, old, List.map (fun job -> (job, ending job, (host job).depth)) (fresh old !queue [])))
                 [
                   (layout_cleanups, old_layout_cleanups);
                   (layout_runs, old_layout_runs);
@@ -858,33 +855,13 @@ let rec settle () =
                 | _ :: _ :: _ ->
                     let ordered =
                       List.stable_sort
-                        (fun (first_job, first, (first_depth, first_levels)) (second_job, second, (second_depth, second_levels)) ->
-                          let rec by_levels first second =
-                            match (first, second) with
-                            | one :: rest, other :: others when Dom_api.same one other -> by_levels rest others
-                            | one :: _, other :: _ -> (
-                                match Dom_api.compare_document_position one other land 4 <> 0 with true -> -1 | false -> 1)
-                            | [], _ | _, [] -> 0
-                          in
-                          let kinship older younger =
-                            let rec up at =
-                              match at.parent with
-                              | None -> `Apart
-                              | Some parent when parent == older -> `Ancestor
-                              | Some parent -> up parent
-                            in
-                            up younger
-                          in
-                          match (kinship (host first_job) (host second_job), kinship (host second_job) (host first_job)) with
-                          | `Ancestor, _ -> 1
-                          | _, `Ancestor -> -1
-                          | `Apart, `Apart -> (
+                        (fun (first_job, first, first_depth) (second_job, second, second_depth) ->
+                          match Option.fold ~none:0 ~some:(fun order -> order (host first_job) (host second_job)) !tree_order with
+                          | 0 -> (
                               match earlier first second with
-                              | 0 -> (
-                                  match by_levels first_levels second_levels with
-                                  | 0 -> Int.compare second_depth first_depth
-                                  | order -> order)
-                              | order -> order))
+                              | 0 -> Int.compare second_depth first_depth
+                              | order -> order)
+                          | order -> order)
                         jobs
                     in
                     queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)
@@ -989,23 +966,22 @@ let born kind =
   in
   instance
 
-(** Siblings that a patch builds from the last one: the place the last of them took, and the
-    effect queues before the first of them and after the last, so that their effects run in tree order. *)
-type 'job reversed_run = {
+(** Siblings that one patch builds from the last one: where the last of them went, and the effect
+    queues below the first of them and above the last. *)
+type 'job siblings = {
   parent : Dom.node;
   mutable front : Dom.node Js.null;
-  base : 'job list array;
-  mutable above : 'job list array;
+  base : 'job list * 'job list * 'job list * 'job list;
+  mutable above : 'job list * 'job list * 'job list * 'job list;
 }
 
-let reversed : job reversed_run option ref = ref None
-let queues = [| layout_cleanups; layout_runs; passive_cleanups; passive_runs |]
+let siblings : job siblings option ref = ref None
+let queued () = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs)
 
 let mount_instance position kind =
   let instance = born kind in
   let since = !enqueued in
-  let outermost = !mounting in
-  let before = Array.map (fun queue -> !queue) queues in
+  let before = match (!View.patch_order, !mounting) with View.Out_of_order, 0 -> Some (queued ()) | _ -> None in
   incr mounting;
   (match
      let child = render instance in
@@ -1027,35 +1003,24 @@ let mount_instance position kind =
       !suspension.rescue While_rendering instance error [@u]);
   decr mounting;
   let live = View.live instances instance in
-  (match (!View.patch_order, outermost, !enqueued > since) with
-  | View.Out_of_order, 0, true ->
-      let rec until stop list taken =
-        match list == stop with true -> List.rev taken | false -> ( match list with job :: rest -> until stop rest (job :: taken) | [] -> List.rev taken)
-      in
-      let continued =
-        Option.bind !reversed (fun run ->
-            match
-              Dom_api.same run.parent position.parent
-              && Dom_api.same run.front position.before
-              && Array.for_all2 (fun above earlier -> above == earlier) run.above before
-            with
-            | true -> Some run
-            | false -> None)
-      in
-      (match continued with
-      | Some run ->
-          Array.iteri
-            (fun index queue ->
-              let block = until before.(index) !queue [] in
-              let earlier = until run.base.(index) before.(index) [] in
-              queue := earlier @ block @ run.base.(index))
-            queues;
-          run.front <- View.front live Js.null;
-          run.above <- Array.map (fun queue -> !queue) queues
-      | None ->
-          reversed :=
-            Some { parent = position.parent; front = View.front live Js.null; base = before; above = Array.map (fun queue -> !queue) queues })
-  | (View.In_document_order | View.Out_of_order), _, _ -> ());
+  (match (before, !enqueued > since) with
+  | Some before, true -> (
+      let front = View.front live Js.null in
+      let rec above stop list = match list == stop with true -> [] | false -> ( match list with job :: rest -> job :: above stop rest | [] -> []) in
+      match !siblings with
+      | Some ({ above = a1, a2, a3, a4; _ } as run)
+        when Dom_api.same run.parent position.parent && Dom_api.same run.front position.before
+             && (let e1, e2, e3, e4 = before in a1 == e1 && a2 == e2 && a3 == e3 && a4 == e4) ->
+          let b1, b2, b3, b4 = run.base and e1, e2, e3, e4 = before in
+          let splice queue base earlier = queue := above base earlier @ above earlier !queue @ base in
+          splice layout_cleanups b1 e1;
+          splice layout_runs b2 e2;
+          splice passive_cleanups b3 e3;
+          splice passive_runs b4 e4;
+          run.front <- front;
+          run.above <- queued ()
+      | Some _ | None -> siblings := Some { parent = position.parent; front; base = before; above = queued () })
+  | (Some _ | None), _ -> ());
   live
 
 let component definition inputs render =

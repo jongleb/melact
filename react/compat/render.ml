@@ -52,6 +52,40 @@ let hook : unit Hook.key = Hook.key ()
 (** A portal's children, mounted into its container. *)
 type portaled = { container : Dom.element; anchor : Dom.text; mutable content : View.live }
 
+let anchor_key = "$$react:anchor"
+
+let () =
+  Instance.tree_order :=
+    Some
+      (fun first second ->
+        let rec below older younger =
+          match Instance.parent younger with
+          | None -> `Apart
+          | Some parent when parent == older -> `Below
+          | Some parent -> below older parent
+        in
+        let rec levels node inner =
+          let rec up at =
+            match Raw.find (Raw.of_any at) anchor_key with
+            | Some anchor -> Some (Raw.to_any anchor : Dom.node)
+            | None -> Option.bind (Dom_api.parent_node at) up
+          in
+          Option.fold ~none:(node :: inner) ~some:(fun anchor -> levels anchor (node :: inner)) (up node)
+        in
+        let rec apart one other =
+          match (one, other) with
+          | a :: rest, b :: others when Dom_api.same a b -> apart rest others
+          | a :: _, b :: _ -> (match Dom_api.compare_document_position a b land 4 with 0 -> 1 | _ -> -1)
+          | [], _ | _, [] -> 0
+        in
+        match (below first second, below second first) with
+        | `Below, _ -> 1
+        | _, `Below -> -1
+        | `Apart, `Apart -> (
+            match (Instance.last_node first, Instance.last_node second) with
+            | Some one, Some other -> apart (levels one []) (levels other [])
+            | None, _ | _, None -> 0))
+
 let portals =
   View.hosting
     ~visit:(fun [@u] placed see -> see (Dom_api.to_node placed.anchor) [@u])
@@ -285,7 +319,7 @@ and portal content container =
   let inside = { Template.parent = Dom_api.to_node container; before = Js.null } in
   let bridged live anchor =
     View.visit live (fun [@u] node ->
-        Dom_api.set_property (Dom_api.unsafe_element node) "$$melhole:anchor" anchor;
+        Dom_api.set_property (Dom_api.unsafe_element node) anchor_key anchor;
         Synthetic.bridge node ~parent:(Dom_api.to_node anchor))
   in
   View.host
