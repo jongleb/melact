@@ -288,3 +288,63 @@ let () =
                  let* () = Js.Promise.resolve () in
                  step 8 { title = "a"; count = 0; note = "" } 0))
             [%mel.obj { numRuns = 60 }]))
+
+let chunk_send = ref (fun (_ : string array -> string array) -> ())
+
+module Chunk_row = struct
+  let[@react.component] make ~label =
+    let count, setCount = React.useState (fun () -> 0) in
+    <button onClick=(fun _ -> setCount (fun count -> count + 1))>(React.string (label ^ string_of_int count))</button>
+end
+
+module Chunk_list = struct
+  let[@react.component] make ~size =
+    let labels, setLabels = React.useState (fun () -> Array.init 12 (fun index -> "k" ^ string_of_int index)) in
+    chunk_send := setLabels;
+    <div>(MelactLayout.chunked ~size ~rowHeight:20 (React.array (Array.map (fun label -> <Chunk_row key=label label />) labels)))</div>
+end
+
+external query_buttons : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of_node : Dom.node -> Dom.element = "%identity"
+
+let () =
+  describe "rows in groups with content-visibility" (fun () ->
+      test_async "keep their state by key when they move within and across groups" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+                 let tape = tape values in
+                 let size = 1 + draw tape 5 in
+                 let root = attached () in
+                 let client = ReactDOM.Client.createRoot root in
+                 let* () = act (fun () -> ReactDOM.Client.render client <Chunk_list size />) in
+                 let counts = Hashtbl.create 16 in
+                 let count label = Option.value ~default:0 (Hashtbl.find_opt counts label) in
+                 let rec step remaining labels =
+                   match remaining with
+                   | 0 ->
+                       let shown = text_content root in
+                       let groups = Array.length (nodes (query_buttons root "[style*=content-visibility]")) in
+                       let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                       expect (shown, groups)
+                       |. to_equal
+                            ( String.concat "" (List.map (fun label -> label ^ string_of_int (count label)) (Array.to_list labels)),
+                              (Array.length labels + size - 1) / size );
+                       Js.Promise.resolve ()
+                   | _ -> (
+                       match draw tape 2 with
+                       | 0 ->
+                           let ranked = Array.map (fun label -> (draw tape 100, label)) labels in
+                           Array.stable_sort compare ranked;
+                           let next = Array.map snd ranked in
+                           let* () = act (fun () -> !chunk_send (fun _ -> next)) in
+                           step (remaining - 1) next
+                       | _ ->
+                           let buttons = Array.map element_of_node (nodes (query_buttons root "button")) in
+                           let index = draw tape (Array.length buttons) in
+                           let label = labels.(index) in
+                           Hashtbl.replace counts label (count label + 1);
+                           let* () = act (fun () -> click buttons.(index)) in
+                           step (remaining - 1) labels)
+                 in
+                 step 10 (Array.init 12 (fun index -> "k" ^ string_of_int index))))
+            [%mel.obj { numRuns = 60 }]))

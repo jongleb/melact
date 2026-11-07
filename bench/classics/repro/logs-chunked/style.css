@@ -1,0 +1,23 @@
+.logs { padding: 8px; font-size: 12px; }
+.log-toolbar, .filters-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.log-toolbar button.on { background: #2680c2; color: #fff; }
+#batches { margin-left: auto; }
+.level-filter { display: flex; gap: 8px; }
+.search { flex: 1; padding: 4px; }
+.log-view { height: 600px; overflow: auto; font-family: ui-monospace, Menlo, monospace; border: 1px solid #cbd2d9; white-space: pre; }
+.log-view.wrap { white-space: pre-wrap; word-break: break-all; }
+.log-line { padding: 0 6px; cursor: default; }
+.log-line > span { margin-right: 8px; }
+.log-line.selected { background: #dceefb; }
+.line-number { color: #9aa5b1; display: inline-block; width: 48px; text-align: right; }
+.level { font-weight: 600; display: inline-block; width: 44px; }
+.level-error .level { color: #e12d39; }
+.level-warn .level { color: #cb6e17; }
+.level-debug .level { color: #7b8794; }
+.source { color: #2680c2; }
+.tok-number { color: #9446ed; }
+.tok-path { color: #0f8a6b; }
+.tok-key { color: #7b8794; }
+.message > span { margin-right: 6px; }
+mark { background: #ffe58f; }
+.stats-bar { display: flex; gap: 12px; padding: 4px; border-top: 1px solid #cbd2d9; }

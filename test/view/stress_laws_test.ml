@@ -71,7 +71,70 @@ let counted : unit =
         }
       })()|}]
 
+external query_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+
+let small_edit tape words =
+  let count = List.length words in
+  match draw tape 5 with
+  | 0 -> List.rev words
+  | 1 ->
+      let at = draw tape (count + 1) in
+      List.filteri (fun index _ -> index < at) words @ [ "n" ^ string_of_int (draw tape 100000) ] @ List.filteri (fun index _ -> index >= at) words
+  | 2 -> List.filteri (fun index _ -> index <> draw tape (count + 1)) words
+  | 3 -> words @ List.init (1 + draw tape 5) (fun index -> "e" ^ string_of_int (draw tape 100000) ^ "-" ^ string_of_int index)
+  | _ ->
+      let ranked = List.map (fun word -> (draw tape 1000, word)) words in
+      List.map snd (List.stable_sort (fun (a, _) (b, _) -> compare a b) ranked)
+
 let () =
+  describe "A chunked list" (fun () ->
+      test "shows its rows in order, in groups of at most size, and every row that stays keeps its node, in any group"
+        (fun () ->
+          check
+            (property (tapes ~shortest:2 ~longest:40) (fun values ->
+                 let tape = tape values in
+                 let size = 1 + draw tape 7 in
+                 let chunked words =
+                   View.chunks ~size ~row_height:20 ~tag:"div"
+                     (View.keyed (List.map (fun word -> (word, line word)) words))
+                 in
+                 let root = create_element document "section" in
+                 let start = deduplicated (List.init (draw tape 30) (fun index -> "w" ^ string_of_int index)) in
+                 let mounted = View.mount (chunked start) ~parent:root ~before:None in
+                 let shape words =
+                   let groups = Array.map element_of (nodes (query_all root "section > div")) in
+                   let rows = Array.map (fun group -> Array.map element_of (nodes (query_all group "li"))) groups in
+                   ( text_content root = String.concat "" words,
+                     Array.length groups = (List.length words + size - 1) / size,
+                     Array.for_all (fun group -> Array.length group <= size && Array.length group > 0) rows,
+                     rows )
+                 in
+                 let rec run remaining words before =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let next = deduplicated (small_edit tape words) in
+                       View.patch mounted (chunked next);
+                       let in_order, counted, bounded, rows = shape next in
+                       let node_of rows_of word =
+                         Array.find_map (fun group -> Array.find_opt (fun row -> String.equal (text_content row) word) group) rows_of
+                       in
+                       let kept =
+                         List.for_all
+                           (fun word ->
+                             match List.mem word words with
+                             | true -> Option.equal same (node_of before word) (node_of rows word)
+                             | false -> true)
+                           next
+                       in
+                       (in_order && counted && bounded && kept) :: run (remaining - 1) next rows
+                 in
+                 let _, _, _, first_rows = shape start in
+                 let seen = run 6 start first_rows in
+                 View.unmount mounted;
+                 expect (List.for_all Fun.id seen, Js.String.length (inner_html root)) |. to_equal (true, 0)))
+            [%mel.obj { numRuns = 300 }]));
   describe "Filling an empty place" (fun () ->
       test "a place that showed nothing takes its first content with no clearing write, in any form" (fun () ->
           check

@@ -1,0 +1,292 @@
+external scroll_height : Dom.element -> int = "scrollHeight" [@@mel.get]
+external client_height : Dom.element -> int = "clientHeight" [@@mel.get]
+external set_scroll_top : Dom.element -> int -> unit = "scrollTop" [@@mel.set]
+
+(** How serious a log line is. *)
+type level = Debug | Info | Warn | Error
+
+(** One piece of a message, highlighted by what it is. *)
+type token = Word of string | Number of string | Path of string | Pair of string * string
+
+type line = { id : int; time : string; level : level; source : string; tokens : token array; text : string }
+
+(** Whether new lines arrive on their own. *)
+type live = Live | Paused
+
+(** Whether the view keeps the newest line in sight. *)
+type follow = Following | Detached
+
+(** How long lines are laid out. *)
+type wrap = Wrapped | Clipped
+
+(** Whether a line is in the selected range. *)
+type mark = Selected | Unselected
+
+(** The lines the user selected, by id: where the range started and where it ends. *)
+type selection = Nothing | Range of int * int
+
+(** A piece of text, and whether it matches the query. *)
+type piece = Hit of string | Miss of string
+
+type state = { lines : line array; next : int; batches : int }
+
+(** What the buffer can be asked to do. *)
+type action = Append
+
+let levels = [| Debug; Info; Warn; Error |]
+
+let level_name level = match level with Debug -> "DEBUG" | Info -> "INFO" | Warn -> "WARN" | Error -> "ERROR"
+
+let line_of id =
+  let seed = Classic.Seed.make ((id * 7919) + 13) in
+  let roll = Classic.Seed.next seed 20 in
+  let level = match roll with 0 | 1 -> Error | 2 | 3 | 4 -> Warn | 5 | 6 | 7 | 8 | 9 -> Debug | _ -> Info in
+  let source = Classic.Seed.pick seed [| "api"; "auth"; "db"; "cache"; "queue"; "billing"; "search"; "mailer" |] in
+  let seconds = 8 * 3600 + (id * 7 / 10) in
+  let pad width value = let text = string_of_int value in String.make (max 0 (width - String.length text)) '0' ^ text in
+  let time = pad 2 (seconds / 3600 mod 24) ^ ":" ^ pad 2 (seconds / 60 mod 60) ^ ":" ^ pad 2 (seconds mod 60) ^ "." ^ pad 3 (id * 37 mod 1000) in
+  let tokens =
+    [|
+      Word (Classic.Seed.pick seed [| "GET"; "POST"; "PUT"; "DELETE"; "retry"; "flush"; "commit"; "evict" |]);
+      Path ("/" ^ source ^ "/" ^ Classic.Seed.pick seed Classic.words ^ "/" ^ string_of_int (Classic.Seed.next seed 1000));
+      Number (string_of_int (Classic.Seed.pick seed [| 200; 200; 200; 201; 204; 304; 404; 500 |]));
+      Number (string_of_int (Classic.Seed.next seed 900) ^ "ms");
+      Pair ("user", Classic.Seed.pick seed Classic.words);
+      Word (Classic.sentence seed 3);
+    |]
+  in
+  let text =
+    tokens
+    |> Array.map (fun token -> match token with Word text | Number text | Path text -> text | Pair (key, value) -> key ^ "=" ^ value)
+    |> Array.to_list |> String.concat " "
+  in
+  { id; time; level; source; tokens; text = String.lowercase_ascii text }
+
+let initial = { lines = Array.init 5000 (fun index -> line_of (index + 1)); next = 5001; batches = 0 }
+
+let reduce state action =
+  match action with
+  | Append ->
+      let capacity = 10000 in
+      let added = Array.init 50 (fun index -> line_of (state.next + index)) in
+      let lines = Array.append state.lines added in
+      let excess = Array.length lines - capacity in
+      {
+        lines = (match excess > 0 with true -> Array.sub lines excess capacity | false -> lines);
+        next = state.next + 50;
+        batches = state.batches + 1;
+      }
+
+module Highlight = struct
+  let[@react.component] make ~text ~query =
+    match query with
+    | "" -> React.string text
+    | _ ->
+        let lower = String.lowercase_ascii text and length = String.length query in
+        let rec split from pieces =
+          match Js.String.indexOf ~search:query ~start:from lower with
+          | -1 -> List.rev (Miss (String.sub text from (String.length text - from)) :: pieces)
+          | at -> split (at + length) (Hit (String.sub text at length) :: Miss (String.sub text from (at - from)) :: pieces)
+        in
+        React.array
+          (Array.mapi
+             (fun index piece ->
+               match piece with
+               | Hit text -> <mark key=(string_of_int index)>(React.string text)</mark>
+               | Miss text -> <span key=(string_of_int index)>(React.string text)</span>)
+             (Array.of_list (split 0 [])))
+end
+
+module Log_line = struct
+  let[@react.component] make =
+    React.memo (fun ~line ~query ~mark ~onSelect ->
+        <div
+          className=
+            ("log-line level-" ^ String.lowercase_ascii (level_name line.level)
+            ^ match mark with Selected -> " selected" | Unselected -> "")
+          onClick=(fun event -> onSelect line.id (match React.Event.Mouse.shiftKey event with true -> `Extend | false -> `Start))>
+          <span className="line-number">(React.int line.id)</span>
+          <span className="time">(React.string line.time)</span>
+          <span className="level">(React.string (level_name line.level))</span>
+          <span className="source">(React.string line.source)</span>
+          <span className="message">
+            (React.array
+               (Array.mapi
+                  (fun index token ->
+                    match token with
+                    | Word text -> <span key=(string_of_int index) className="tok-word"><Highlight text query /></span>
+                    | Number text -> <span key=(string_of_int index) className="tok-number"><Highlight text query /></span>
+                    | Path text -> <span key=(string_of_int index) className="tok-path"><Highlight text query /></span>
+                    | Pair (key, value) ->
+                        <span key=(string_of_int index) className="tok-pair">
+                          <span className="tok-key">(React.string (key ^ "="))</span>
+                          <Highlight text=value query />
+                        </span>)
+                  line.tokens))
+          </span>
+        </div>)
+end
+
+module Level_filter = struct
+  let[@react.component] make ~hidden ~counts ~onToggle =
+    <div className="level-filter">
+      (React.array
+         (Array.mapi
+            (fun index level ->
+              <label key=(level_name level) className=("level-toggle level-" ^ String.lowercase_ascii (level_name level))>
+                <input type_="checkbox" checked=(not (List.mem level hidden)) onChange=(fun _ -> onToggle level) />
+                (React.string (level_name level ^ " (" ^ string_of_int counts.(index) ^ ")"))
+              </label>)
+            levels))
+    </div>
+end
+
+module Search = struct
+  let[@react.component] make ~query ~onQuery =
+    <input
+      className="search"
+      placeholder="Filter lines"
+      value=query
+      onChange=(fun event ->
+        let value = (React.Event.Form.target event)##value in
+        onQuery value) />
+end
+
+module Stats_bar = struct
+  let[@react.component] make ~counts ~total ~shown ~selected =
+    <footer className="stats-bar">
+      <span id="line-count">(React.string (string_of_int shown ^ " of " ^ string_of_int total ^ " lines"))</span>
+      (React.array
+         (Array.mapi
+            (fun index level ->
+              let share = match total with 0 -> 0 | _ -> counts.(index) * 100 / total in
+              <span key=(level_name level) className=("stat level-" ^ String.lowercase_ascii (level_name level))>
+                (React.string (level_name level ^ " " ^ string_of_int share ^ "%"))
+              </span>)
+            levels))
+      <span className="selected-count">(React.string (string_of_int selected ^ " selected"))</span>
+    </footer>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~batches ~live ~follow ~wrap ~onAppend ~onLive ~onFollow ~onWrap =
+    <div className="log-toolbar">
+      <button id="append" onClick=(fun _ -> onAppend ())>(React.string "Append 50")</button>
+      (match live with
+       | Paused -> <button id="live" onClick=(fun _ -> onLive Live)>(React.string "Live")</button>
+       | Live -> <button id="stop" onClick=(fun _ -> onLive Paused)>(React.string "Stop")</button>)
+      <button id="follow" className=(match follow with Following -> "on" | Detached -> "") onClick=(fun _ -> onFollow ())>
+        (React.string "Follow tail")
+      </button>
+      <button id="wrap" className=(match wrap with Wrapped -> "on" | Clipped -> "") onClick=(fun _ -> onWrap ())>
+        (React.string "Wrap lines")
+      </button>
+      <span id="batches">(React.int batches)</span>
+    </div>
+end
+
+module Log_view = struct
+  let[@react.component] make ~lines ~query ~selection ~follow ~wrap ~onDetach ~onSelect =
+    let view = React.useRef Js.Nullable.null in
+    React.useLayoutEffect2
+      (fun () ->
+        (match follow with
+         | Following -> Js.Nullable.toOption view.current |> Option.iter (fun element -> set_scroll_top element (scroll_height element))
+         | Detached -> ());
+        None)
+      (lines, follow);
+    <div
+      ref=(ReactDOM.Ref.domRef view)
+      className=(match wrap with Wrapped -> "log-view wrap" | Clipped -> "log-view")
+      onScroll=(fun _ ->
+        Js.Nullable.toOption view.current
+        |> Option.iter (fun element ->
+               match scroll_height element - client_height element - int_of_float (Classic.scroll_top element) > 40 with
+               | true -> onDetach ()
+               | false -> ()))>
+      (Chunking.rows (React.array
+         (Array.map
+            (fun line ->
+              <Log_line
+                key=(string_of_int line.id)
+                line
+                query
+                mark=(match selection with
+                      | Range (anchor, focus) when line.id >= min anchor focus && line.id <= max anchor focus -> Selected
+                      | Range _ | Nothing -> Unselected)
+                onSelect />)
+            lines)))
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    let hidden, setHidden = React.useState (fun () -> []) in
+    let query, setQuery = React.useState (fun () -> "") in
+    let live, setLive = React.useState (fun () -> Paused) in
+    let follow, setFollow = React.useState (fun () -> Following) in
+    let wrap, setWrap = React.useState (fun () -> Clipped) in
+    let selection, setSelection = React.useState (fun () -> Nothing) in
+    React.useEffect1
+      (fun () ->
+        match live with
+        | Live ->
+            let interval = Js.Global.setInterval ~f:(fun () -> dispatch Append) 100 in
+            Some (fun () -> Js.Global.clearInterval interval)
+        | Paused -> None)
+      [| live |];
+    let needle = String.lowercase_ascii (String.trim query) in
+    let shown =
+      React.useMemo3
+        (fun () ->
+          Js.Array.filter
+            ~f:(fun line ->
+              (not (List.mem line.level hidden)) && (needle = "" || Js.String.includes ~search:needle line.text))
+            state.lines)
+        (state.lines, hidden, needle)
+    in
+    let counts =
+      React.useMemo1
+        (fun () -> Array.map (fun level -> Js.Array.filter ~f:(fun line -> line.level = level) state.lines |> Array.length) levels)
+        [| state.lines |]
+    in
+    let onSelect =
+      React.useCallback0 (fun id gesture ->
+          setSelection (fun selection ->
+              match (gesture, selection) with
+              | `Extend, Range (anchor, _) -> Range (anchor, id)
+              | `Extend, Nothing | `Start, _ -> Range (id, id)))
+    in
+    let onDetach = React.useCallback0 (fun () -> setFollow (fun _ -> Detached)) in
+    let selected =
+      match selection with
+      | Nothing -> 0
+      | Range (anchor, focus) ->
+          Js.Array.filter ~f:(fun line -> line.id >= min anchor focus && line.id <= max anchor focus) shown |> Array.length
+    in
+    <div className="logs">
+      <Toolbar
+        batches=state.batches
+        live
+        follow
+        wrap
+        onAppend=(fun () -> dispatch Append)
+        onLive=(fun next -> setLive (fun _ -> next))
+        onFollow=(fun () -> setFollow (fun follow -> match follow with Following -> Detached | Detached -> Following))
+        onWrap=(fun () -> setWrap (fun wrap -> match wrap with Wrapped -> Clipped | Clipped -> Wrapped)) />
+      <div className="filters-row">
+        <Level_filter
+          hidden
+          counts
+          onToggle=(fun level ->
+            setHidden (fun hidden ->
+                match List.mem level hidden with true -> List.filter (fun other -> other <> level) hidden | false -> level :: hidden)) />
+        <Search query onQuery=(fun text -> setQuery (fun _ -> text)) />
+      </div>
+      <Log_view lines=shown query=needle selection follow wrap onDetach onSelect />
+      <Stats_bar counts total=(Array.length state.lines) shown=(Array.length shown) selected />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

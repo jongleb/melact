@@ -183,6 +183,27 @@ position but a hole on the element: the first write sets `textContent`, later wr
 HTML needs no markers around such a text, because the element already bounds it. Rows of another
 shape, or components such as Melact's `<Row>`, keep `View.each`.
 
+### Long lists in groups
+
+On a long page most of the work is the browser's: style, layout and paint of rows nobody sees.
+`content-visibility: auto` lets it skip an element out of view, but set on every row it halves the
+creation of 10,000 rows and makes updates slower (496 → 253 ms and 66.5 → 85.3 ms, Chrome 151, 4x
+CPU), because each row becomes its own containment. On groups of 100 rows it gives 65.5 ms and
+6.4 ms. `View.chunks`, offered as `Html.chunks` in Meltea and `MelactLayout.chunked` in Melact,
+cuts a keyed list into groups of `size` rows (default 100), each a wrapper (default `div`) with
+`content-visibility: auto; contain-intrinsic-size: auto <size × row height>px`. A group whose keys
+did not change patches its rows in place; when keys move, every row that stays is moved into its
+group with its node, its component instance and its state, and only new rows are made. It is a
+choice, not the default: the wrappers change the DOM, so selectors such as `:nth-child` and a
+`<ul>`'s content model see them, and a filter that removes most rows costs more than without groups.
+On the corpus's log viewer (a Melact build with groups against one without, 1x CPU, 5 runs):
+mount 300 → 75 ms, toggling line wrap 448 → 23 ms, selecting ranges 382 → 149 ms, clearing the
+query 698 → 272 ms, appending 30 batches 702 → 455 ms, and typing a query 95 → 128 ms. A law edits
+random keyed lists in groups of random sizes: rows show in order, groups hold at most `size` rows,
+and every row that stays keeps its node in whatever group it lands; a Melact law moves stateful rows
+within and across groups and they keep their counts. Making moved rows again, or rebuilding the
+groups, breaks them. Groups are written on the client only; a server page shows the rows ungrouped.
+
 ### Moves that keep state
 
 A keyed row that moves is moved with `parentNode.moveBefore` where the browser has it (Chrome 133,
