@@ -297,6 +297,14 @@ let patching = ref At_once
 
 let put_off = ref None_put_off
 let committed = audience ()
+let enqueued = ref 0
+
+(** Whether the effects of an instance's write go to the queues when it ends, or wait: in a pass of
+    pure instances, until the instances below it that the pass renders later have queued theirs, so
+    that the queues come out children first without sorting them. *)
+type deferral = Queue_now | Deferring of instance
+
+let deferral = ref Queue_now
 
 let instances =
   View.hosting
@@ -433,11 +441,16 @@ let render instance =
       | Healthy | Caught _ | Struck _ -> catching.children
       | Failed error -> catching.recover error)
 
-let commit (position : Template.position) instance =
-  (match (!patching, instance.pending) with
-  | At_once, _ -> ()
-  | Next_round, [] -> join committed instance
-  | Next_round, _ :: _ ->
+(** Whether an instance's write queued the effects of instances below it, which then come before its own. *)
+type nesting = Alone | Nested
+
+let held = ref []
+
+let enqueue instance nesting =
+  (match (!patching, instance.pending, nesting) with
+  | At_once, _, _ | Next_round, [], Alone -> ()
+  | Next_round, [], Nested -> join committed instance
+  | Next_round, _ :: _, (Alone | Nested) ->
       let rec below ancestor =
         match ancestor with
         | None -> ()
@@ -445,15 +458,7 @@ let commit (position : Template.position) instance =
       in
       below instance.parent;
       join committed instance);
-  (match (Js.Null.toOption (View.front instance.output Js.null), instance.region) with
-  | Some _, Nodes | None, Marker _ -> ()
-  | Some _, Marker node ->
-      Dom_api.remove_child position.parent node;
-      instance.region <- Nodes
-  | None, Nodes ->
-      let node = Dom_api.create_text_node Dom_api.document "" in
-      View.insert position (Dom_api.to_node node);
-      instance.region <- Marker node);
+  (match instance.pending with [] -> () | _ :: _ -> incr enqueued);
   List.iter
     (fun job ->
       match job with
@@ -470,12 +475,30 @@ let commit (position : Template.position) instance =
     (List.rev instance.pending);
   instance.pending <- []
 
+let commit ~since (position : Template.position) instance =
+  (match (Js.Null.toOption (View.front instance.output Js.null), instance.region) with
+  | Some _, Nodes | None, Marker _ -> ()
+  | Some _, Marker node ->
+      Dom_api.remove_child position.parent node;
+      instance.region <- Nodes
+  | None, Nodes ->
+      let node = Dom_api.create_text_node Dom_api.document "" in
+      View.insert position (Dom_api.to_node node);
+      instance.region <- Marker node);
+  let nesting = match !enqueued > since with true -> Nested | false -> Alone in
+  match !deferral with
+  | Deferring current when current == instance ->
+      (match nesting with Nested -> join committed instance | Alone -> ());
+      held := (instance, nesting) :: !held
+  | Deferring _ | Queue_now -> enqueue instance nesting
+
 let refresh (position : Template.position) instance =
   let at =
     match instance.region with
     | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
     | Nodes -> position
   in
+  let since = !enqueued in
   match
     let child = render instance in
     match child == unchanged with
@@ -484,7 +507,7 @@ let refresh (position : Template.position) instance =
   with
   | output ->
       instance.output <- output;
-      commit position instance
+      commit ~since position instance
   | exception error ->
       instance.pending <- [];
       !suspension.rescue While_rendering instance error [@u]
@@ -495,6 +518,7 @@ let wrote (position : Template.position) instance rendered =
     | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
     | Nodes -> position
   in
+  let since = !enqueued in
   match
     match rendered with
     | Ok child when child == unchanged -> instance.output
@@ -503,7 +527,7 @@ let wrote (position : Template.position) instance rendered =
   with
   | output ->
       instance.output <- output;
-      commit position instance
+      commit ~since position instance
   | exception error ->
       instance.pending <- [];
       !suspension.rescue While_rendering instance error [@u]
@@ -627,20 +651,38 @@ let rec settle () =
               with
               | Component.Pure ->
                   within patching Next_round (fun () ->
+                      let rec released next =
+                        match !held with
+                        | [] -> ()
+                        | (top, nesting) :: rest -> (
+                            let rec under ancestor =
+                              match ancestor with
+                              | None -> `Elsewhere
+                              | Some above -> ( match above == top with true -> `Under | false -> under above.parent)
+                            in
+                            match Option.fold ~none:`Elsewhere ~some:(fun next -> under next.parent) next with
+                            | `Under -> ()
+                            | `Elsewhere ->
+                                held := rest;
+                                enqueue top nesting;
+                                released next)
+                      in
                       List.iter
                         (fun (_, instance) ->
                           match instance.status with
                           | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks -> instance.status <- Clean
                           | Dirty (Forced | Sourced _) -> (
+                              released (Some instance);
                               let result = match render instance with child -> Ok child | exception error -> Error error in
                               match instance.status with
                               | Unmounted -> ()
-                              | Clean | Dirty _ -> wrote (position_of instance) instance result)
+                              | Clean | Dirty _ -> within deferral (Deferring instance) (fun () -> wrote (position_of instance) instance result))
                           | Clean | Unmounted -> ())
                         (ordered
                            (List.filter
                               (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false)
-                              pending)));
+                              pending));
+                      released None);
                   rendering `Later
               | Component.Impure ->
               let round = audience () in
@@ -895,6 +937,7 @@ let born kind =
 
 let mount_instance position kind =
   let instance = born kind in
+  let since = !enqueued in
   (match
      let child = render instance in
      within owner (Some instance) (fun () ->
@@ -908,10 +951,10 @@ let mount_instance position kind =
    with
   | output ->
       instance.output <- output;
-      commit position instance
+      commit ~since position instance
   | exception error ->
       instance.pending <- [];
-      commit position instance;
+      commit ~since position instance;
       !suspension.rescue While_rendering instance error [@u]);
   View.live instances instance
 
