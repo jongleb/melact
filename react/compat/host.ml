@@ -176,7 +176,10 @@ let write element space tag name previous value =
 
 let field props name = Raw.get props name
 
+let latest = "$$react:props"
+
 let values element tag ~mounting props =
+  Dom_api.set_property element latest props;
   let given name = Raw.present (field props name) in
   match tag with
   | "input" ->
@@ -188,7 +191,7 @@ let values element tag ~mounting props =
           | "number", true -> ()
           | _ -> Dom_api.set_property element "defaultValue" text);
           Dom_api.set_property element Events.controlled (fun _ ->
-              let shown = Raw.text_of (field props "value") in
+              let shown = Raw.text_of (field (Dom_api.property element latest) "value") in
               if not (String.equal (Dom_api.property element "value") shown) then Dom_api.set_property element "value" shown;
               Events.track element)
       | None, Some initial ->
@@ -199,7 +202,8 @@ let values element tag ~mounting props =
       | Some checked ->
           Dom_api.set_property element "checked" (match Raw.view checked with Flag true -> true | _ -> false);
           Dom_api.set_property element Events.controlled (fun _ ->
-              Dom_api.set_property element "checked" (match Raw.view (field props "checked") with Flag true -> true | _ -> false);
+              Dom_api.set_property element "checked"
+                (match Raw.view (field (Dom_api.property element latest) "checked") with Flag true -> true | _ -> false);
               Events.track element)
       | None -> (
           match (mounting, given "defaultChecked") with
