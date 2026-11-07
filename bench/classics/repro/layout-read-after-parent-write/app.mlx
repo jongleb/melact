@@ -1,0 +1,39 @@
+let selection_context = React.createContext 0
+
+(** Whether the parent also shows the selection in a text of its own. *)
+type echo = Shown | Hidden
+
+module Selection_provider = struct
+  let make = React.Context.provider selection_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Row = struct
+  let[@react.component] make = React.memo (fun ~id ->
+    let selected = React.useContext selection_context in
+    let row = React.useRef Js.Nullable.null in
+    let top = Js.Nullable.toOption row.current |> Option.fold ~none:0 ~some:Classic.offset_top in
+    <li ref=(ReactDOM.Ref.domRef row) className=(match (selected = id, top < 300) with
+      | true, _ -> "selected" | false, true -> "near" | false, false -> "")>
+      (React.int id)
+    </li>)
+end
+
+module App = struct
+  let[@react.component] make () =
+    let selected, setSelected = React.useState (fun () -> 0) in
+    let echo, setEcho = React.useState (fun () -> Hidden) in
+    <Selection_provider value=selected>
+      <button id="next" onClick=(fun _ -> setSelected (fun selected -> selected + 1))>(React.string "next")</button>
+      <button id="echo" onClick=(fun _ -> setEcho (fun _ -> Shown))>(React.string "echo")</button>
+      <p className="status">
+        (match echo with Shown -> React.string ("selected " ^ string_of_int selected) | Hidden -> React.null)
+      </p>
+      <ul>(Array.init 200 (fun id -> <Row key=(string_of_int id) id />) |> React.array)</ul>
+    </Selection_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

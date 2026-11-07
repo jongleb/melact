@@ -1,0 +1,354 @@
+(** Where a story points. *)
+type link = External of string | Self_post
+
+(** Whether the user upvoted a story. *)
+type vote = Voted | Not_voted
+
+type story = { id : int; title : string; link : link; points : int; by : string; age : int; descendants : int; vote : vote }
+
+type comment = { id : int; by : string; age : int; text : string; kids : comment array }
+
+(** Whether a comment shows its text and replies. *)
+type fold = Expanded | Collapsed
+
+(** A "collapse all" or "expand all" given to the top-level comments, numbered so a repeat is new. *)
+type command = Untouched | Fold_all of { fold : fold; generation : int }
+
+(** The reply box under a comment. *)
+type reply = Closed | Drafting of string
+
+(** The page the app shows. *)
+type route = Front of int | Item of int
+
+type state = { stories : story array; route : route }
+
+(** What the app's reducer does. *)
+type action = Upvote of int | Unvote of int | Hide of int | Show of route
+
+let per_page = 300
+
+let users =
+  let seed = Classic.Seed.make 3 in
+  Array.init 120 (fun index -> Classic.Seed.pick seed Classic.words ^ string_of_int (index * 7))
+
+let time_ago minutes =
+  match minutes with
+  | 1 -> "1 minute ago"
+  | _ when minutes < 60 -> string_of_int minutes ^ " minutes ago"
+  | _ when minutes < 120 -> "1 hour ago"
+  | _ when minutes < 1440 -> string_of_int (minutes / 60) ^ " hours ago"
+  | _ when minutes < 2880 -> "1 day ago"
+  | _ -> string_of_int (minutes / 1440) ^ " days ago"
+
+let initial =
+  let seed = Classic.Seed.make 1985 in
+  let domains = [| "github.com"; "nytimes.com"; "arxiv.org"; "lwn.net"; "ocaml.org"; "blog.janestreet.com"; "medium.com"; "acm.org" |] in
+  {
+    stories =
+      Array.init (per_page * 3) (fun index ->
+          let title = String.capitalize_ascii (Classic.sentence seed (4 + Classic.Seed.next seed 6)) in
+          let link =
+            match Classic.Seed.next seed 6 with
+            | 0 -> Self_post
+            | _ -> External (Classic.Seed.pick seed domains)
+          in
+          let points = 1 + Classic.Seed.next seed 900 in
+          let by = Classic.Seed.pick seed users in
+          let age = 1 + (index * 3) + Classic.Seed.next seed 50 in
+          let descendants = Classic.Seed.next seed 600 in
+          {
+            id = 40000000 + index;
+            title = (match link with Self_post -> "Ask HN: " ^ title | External _ -> title);
+            link;
+            points;
+            by;
+            age;
+            descendants;
+            vote = Not_voted;
+          });
+    route = Front 0;
+  }
+
+let reduce state action =
+  let change id update = Array.map (fun (story : story) -> match story.id = id with true -> update story | false -> story) in
+  match action with
+  | Upvote id -> { state with stories = change id (fun story -> { story with vote = Voted; points = story.points + 1 }) state.stories }
+  | Unvote id -> { state with stories = change id (fun story -> { story with vote = Not_voted; points = story.points - 1 }) state.stories }
+  | Hide id -> { state with stories = Js.Array.filter ~f:(fun (story : story) -> story.id <> id) state.stories }
+  | Show route -> { state with route }
+
+let user_context = React.createContext "pg"
+
+module User_provider = struct
+  let make = React.Context.provider user_context
+
+  external makeProps : value:string -> children:React.element -> unit -> < value : string ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Header = struct
+  let[@react.component] make ~dispatch =
+    let user = React.useContext user_context in
+    <table className="hn-header">
+      <tbody>
+        <tr>
+          <td className="logo"><span className="y">(React.string "Y")</span></td>
+          <td className="pagetop">
+            <b className="hnname"><a className="hn-home" onClick=(fun _ -> dispatch (Show (Front 0)))>(React.string "Hacker News")</a></b>
+            (React.array
+               (Array.map
+                  (fun label -> <React.Fragment key=label>(React.string " | ") <a>(React.string label)</a></React.Fragment>)
+                  [| "new"; "past"; "comments"; "ask"; "show"; "jobs"; "submit" |]))
+          </td>
+          <td className="pagetop user"><a>(React.string user)</a></td>
+        </tr>
+      </tbody>
+    </table>
+end
+
+module Vote_arrow = struct
+  let[@react.component] make ~(story : story) ~dispatch =
+    <td className="votelinks">
+      <a
+        className=(match story.vote with Voted -> "votearrow nosee" | Not_voted -> "votearrow")
+        title="upvote"
+        onClick=(fun _ -> match story.vote with Not_voted -> dispatch (Upvote story.id) | Voted -> ()) />
+    </td>
+end
+
+module Story_title = struct
+  let[@react.component] make ~(story : story) ~dispatch =
+    <td className="title">
+      (match story.link with
+       | External domain ->
+           <React.Fragment>
+             <a className="titlelink" href=("https://" ^ domain ^ "/" ^ string_of_int story.id)>(React.string story.title)</a>
+             <span className="sitebit">(React.string (" (" ^ domain ^ ")"))</span>
+           </React.Fragment>
+       | Self_post -> <a className="titlelink" onClick=(fun _ -> dispatch (Show (Item story.id)))>(React.string story.title)</a>)
+    </td>
+end
+
+module Subtext = struct
+  let[@react.component] make ~(story : story) ~dispatch =
+    <td className="subtext">
+      <span className="subline">
+        <span className="score">(React.string (string_of_int story.points ^ " points"))</span>
+        (React.string " by ")
+        <a className="hnuser">(React.string story.by)</a>
+        (React.string " ")
+        <span className="age" title=(string_of_int story.age)>(React.string (time_ago story.age))</span>
+        (match story.vote with
+         | Voted -> <React.Fragment>(React.string " | ")<a className="unvote" onClick=(fun _ -> dispatch (Unvote story.id))>(React.string "unvote")</a></React.Fragment>
+         | Not_voted -> React.null)
+        (React.string " | ")
+        <a className="hide-link" onClick=(fun _ -> dispatch (Hide story.id))>(React.string "hide")</a>
+        (React.string " | ")
+        <a className="comments-link" onClick=(fun _ -> dispatch (Show (Item story.id)))>
+          (React.string (match story.descendants with 0 -> "discuss" | 1 -> "1 comment" | count -> string_of_int count ^ "\u{a0}comments"))
+        </a>
+      </span>
+    </td>
+end
+
+module Story_row = struct
+  let[@react.component] make =
+    React.memo (fun ~(story : story) ~rank ~dispatch ->
+        <React.Fragment>
+          <tr className="athing">
+            <td className="rank">(React.string (string_of_int rank ^ "."))</td>
+            <Vote_arrow story dispatch />
+            <Story_title story dispatch />
+          </tr>
+          <tr>
+            <td colSpan=2 />
+            <Subtext story dispatch />
+          </tr>
+          <tr className="spacer" />
+        </React.Fragment>)
+end
+
+module Story_list = struct
+  let[@react.component] make ~stories ~page ~dispatch =
+    let shown = Js.Array.slice ~start:0 ~end_:((page + 1) * per_page) stories in
+    <table className="itemlist">
+      <tbody>
+        (shown
+        |> Array.mapi (fun index (story : story) -> <Story_row key=(string_of_int story.id) story rank=(index + 1) dispatch />)
+        |> React.array)
+        (match Array.length stories > Array.length shown with
+         | true ->
+             <tr className="morespace">
+               <td colSpan=2 />
+               <td><a className="morelink" onClick=(fun _ -> dispatch (Show (Front (page + 1))))>(React.string "More")</a></td>
+             </tr>
+         | false -> React.null)
+      </tbody>
+    </table>
+end
+
+module Reply_form = struct
+  let[@react.component] make ~draft ~onDraft ~onSubmit =
+    <form
+      className="reply-form"
+      onSubmit=(fun event ->
+        React.Event.Form.preventDefault event;
+        onSubmit ())>
+      <textarea
+        className="reply-input"
+        rows=4
+        cols=60
+        value=draft
+        onChange=(fun event -> onDraft (React.Event.Form.target event)##value) />
+      <br />
+      <button className="reply-submit" type_="submit">(React.string "reply")</button>
+    </form>
+end
+
+module rec Comment : sig
+  val make : comment:comment -> command:command -> React.element [@@react.component]
+end = struct
+  let[@react.component] make ~(comment : comment) ~command =
+    let user = React.useContext user_context in
+    let fold, setFold = React.useState (fun () -> Expanded) in
+    let reply, setReply = React.useState (fun () -> Closed) in
+    let added, setAdded = React.useState (fun () -> [||]) in
+    React.useEffect1
+      (fun () ->
+        (match command with Fold_all { fold; _ } -> setFold (fun _ -> fold) | Untouched -> ());
+        None)
+      [| command |];
+    let hidden =
+      React.useMemo1
+        (fun () ->
+          let rec count comment = Array.fold_left (fun total kid -> total + count kid) 1 comment.kids in
+          count comment)
+        [| comment |]
+    in
+    <div className="comtr" id=(string_of_int comment.id)>
+      <div className="comhead">
+        <a className="hnuser">(React.string comment.by)</a>
+        (React.string " ")
+        <span className="age">(React.string (time_ago comment.age))</span>
+        (React.string " ")
+        <a
+          className=(match fold with Expanded -> "togg" | Collapsed -> "togg collapsed")
+          onClick=(fun _ -> setFold (fun fold -> match fold with Expanded -> Collapsed | Collapsed -> Expanded))>
+          (React.string (match fold with Expanded -> "[\u{2013}]" | Collapsed -> "[" ^ string_of_int (hidden + Array.length added) ^ " more]"))
+        </a>
+      </div>
+      (match fold with
+       | Collapsed -> React.null
+       | Expanded ->
+           <div className="comment">
+             <div className="commtext">(React.string comment.text)</div>
+             (match reply with
+              | Closed -> <div className="reply"><a className="reply-link" onClick=(fun _ -> setReply (fun _ -> Drafting ""))>(React.string "reply")</a></div>
+              | Drafting draft ->
+                  <Reply_form
+                    draft
+                    onDraft=(fun text -> setReply (fun _ -> Drafting text))
+                    onSubmit=(fun () ->
+                      setAdded (fun added ->
+                          Array.append [| { id = (comment.id * 1000) + Array.length added + 1; by = user; age = 0; text = draft; kids = [||] } |] added);
+                      setReply (fun _ -> Closed)) />)
+             <div className="kids">
+               (Array.append added comment.kids
+               |> Array.map (fun kid -> <Comment key=(string_of_int kid.id) comment=kid command=Untouched />)
+               |> React.array)
+             </div>
+           </div>)
+    </div>
+end
+
+module Comment_tree = struct
+  let[@react.component] make ~comments =
+    let command, setCommand = React.useState (fun () -> Untouched) in
+    let order fold =
+      setCommand (fun command ->
+          Fold_all { fold; generation = (match command with Fold_all { generation; _ } -> generation + 1 | Untouched -> 1) })
+    in
+    <div className="comment-tree">
+      <div className="tree-tools">
+        <a id="collapse-top" onClick=(fun _ -> order Collapsed)>(React.string "collapse all top-level")</a>
+        (React.string " | ")
+        <a id="expand-top" onClick=(fun _ -> order Expanded)>(React.string "expand all top-level")</a>
+      </div>
+      (comments |> Array.map (fun comment -> <Comment key=(string_of_int comment.id) comment command />) |> React.array)
+    </div>
+end
+
+module Item_page = struct
+  let[@react.component] make ~(story : story) ~dispatch =
+    let user = React.useContext user_context in
+    let draft, setDraft = React.useState (fun () -> "") in
+    let thread, setThread =
+      React.useState (fun () ->
+          let seed = Classic.Seed.make (story.id mod 100000 * 7) in
+          let budget = ref 2000 in
+          let next = ref story.id in
+          let rec grow depth =
+            let wanted =
+              match depth with
+              | 0 -> 220
+              | 1 -> Classic.Seed.next seed 7
+              | 2 -> Classic.Seed.next seed 5
+              | 3 | 4 | 5 -> Classic.Seed.next seed 3
+              | _ -> 0
+            in
+            let count = min wanted !budget in
+            budget := !budget - count;
+            Array.init count (fun _ ->
+                next := !next + 1;
+                let id = !next in
+                let by = Classic.Seed.pick seed users in
+                let age = 1 + Classic.Seed.next seed 600 in
+                let text = String.capitalize_ascii (Classic.sentence seed (5 + Classic.Seed.next seed 40)) ^ "." in
+                let kids = grow (depth + 1) in
+                { id; by; age; text; kids })
+          in
+          grow 0)
+    in
+    <div className="item-page">
+      <table className="fatitem">
+        <tbody>
+          <Story_row story rank=0 dispatch />
+          <tr>
+            <td colSpan=2 />
+            <td>
+              <Reply_form
+                draft
+                onDraft=(fun text -> setDraft (fun _ -> text))
+                onSubmit=(fun () ->
+                  setThread (fun thread -> Array.append [| { id = story.id * 10; by = user; age = 0; text = draft; kids = [||] } |] thread);
+                  setDraft (fun _ -> "")) />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <Comment_tree comments=thread />
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    <User_provider value="pg">
+      <center>
+        <div className="hn">
+          <Header dispatch />
+          (match state.route with
+           | Front page -> <Story_list stories=state.stories page dispatch />
+           | Item id ->
+               Js.Array.find ~f:(fun (story : story) -> story.id = id) state.stories
+               |> Option.map (fun story -> <Item_page key=(string_of_int id) story dispatch />)
+               |> Option.value ~default:<p>(React.string "No such item.")</p>)
+          <div className="footer">
+            (React.string "Guidelines | FAQ | Lists | API | Security | Legal | Apply to YC | Contact")
+          </div>
+        </div>
+      </center>
+    </User_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

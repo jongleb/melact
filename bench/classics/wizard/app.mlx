@@ -1,0 +1,576 @@
+(** Whether a checkbox is ticked. *)
+type mark = Checked | Unchecked
+
+(** What a field holds. *)
+type value = Text of string | Check of mark
+
+(** What a field must satisfy. *)
+type rule = Optional | Required | Email | Min_length of int | Digits of int | Same_as of string | Must_check
+
+(** How a field is edited. *)
+type control =
+  | Text_input
+  | Password_input
+  | Number_input
+  | Text_area
+  | Select of string array
+  | Radio of string array
+  | Checkbox
+
+(** When a field is on the form. *)
+type condition = Always | When_equals of string * string | When_checked of string | When_unchecked of string
+
+type field = { name : string; label : string; control : control; rule : rule; condition : condition }
+
+type section = { heading : string; fields : field array }
+
+(** How a section is laid out. *)
+type look = Form_grid | Checkbox_group
+
+type step = { title : string; sections : (section * look) array }
+
+(** Why a field's value is not accepted. *)
+type problem = Missing | Bad_email | Too_short of int | Not_digits of int | Mismatch of string | Unchecked_box
+
+(** Whether the form was sent. *)
+type phase = Filling | Submitted
+
+type form = {
+  values : value Belt.Map.String.t;
+  touched : Belt.Set.String.t;
+  attempted : Belt.Set.Int.t;
+  step : int;
+  reached : int;
+  phase : phase;
+}
+
+(** What the form reducer can do. *)
+type action = Set_value of string * value | Touch of string | Next | Back | Go of int | Submit
+
+(** Where a step is, relative to the current one. *)
+type progress = Done_step | Current_step | Ahead
+
+type context = { form : form; dispatch : action -> unit }
+
+let steps =
+  let field ?(rule = Optional) ?(condition = Always) control name label = { name; label; control; rule; condition } in
+  let choices first rest = Array.append [| "" |] (Array.map (fun choice -> first ^ choice) rest) in
+  let countries = choices "" [| "Germany"; "France"; "Sweden"; "Norway"; "Spain"; "Italy"; "Poland"; "Portugal" |] in
+  let address prefix condition =
+    [|
+      field ~rule:Required ~condition Text_input (prefix ^ "_street") "Street";
+      field ~condition Text_input (prefix ^ "_line2") "Apartment, suite";
+      field ~rule:Required ~condition Text_input (prefix ^ "_city") "City";
+      field ~condition Text_input (prefix ^ "_region") "Region";
+      field ~rule:(Digits 5) ~condition Text_input (prefix ^ "_postal") "Postal code";
+      field ~rule:Required ~condition (Select countries) (prefix ^ "_country") "Country";
+      field ~condition Text_input (prefix ^ "_phone") "Phone";
+      field ~condition Text_input (prefix ^ "_contact") "Contact person";
+    |]
+  in
+  let seed = Classic.Seed.make 3 in
+  [|
+    {
+      title = "Account";
+      sections =
+        [|
+          ( {
+              heading = "Sign in";
+              fields =
+                [|
+                  field ~rule:(Min_length 3) Text_input "username" "Username";
+                  field ~rule:Email Text_input "email" "Email";
+                  field ~rule:(Min_length 8) Password_input "password" "Password";
+                  field ~rule:(Same_as "password") Password_input "password_confirm" "Confirm password";
+                |];
+            },
+            Form_grid );
+          ( {
+              heading = "Recovery";
+              fields =
+                [|
+                  field ~rule:Required (Select (choices "" [| "First pet"; "Birth city"; "Favourite teacher" |])) "question" "Security question";
+                  field ~rule:Required Text_input "answer" "Answer";
+                  field Text_input "referral" "How did you hear about us?";
+                  field Checkbox "newsletter" "Send me the newsletter";
+                |];
+            },
+            Form_grid );
+        |];
+    };
+    {
+      title = "Profile";
+      sections =
+        [|
+          ( {
+              heading = "Identity";
+              fields =
+                [|
+                  field ~rule:Required Text_input "first_name" "First name";
+                  field ~rule:Required Text_input "last_name" "Last name";
+                  field Text_input "display_name" "Display name";
+                  field (Radio [| "He"; "She"; "They"; "Other" |]) "pronouns" "Pronouns";
+                  field ~rule:(Digits 4) Number_input "birth_year" "Birth year";
+                  field ~rule:(Digits 10) Text_input "phone" "Phone";
+                  field (Select (choices "" [| "UTC"; "CET"; "EET"; "PST"; "EST" |])) "timezone" "Time zone";
+                  field (Select (choices "" [| "English"; "German"; "French"; "Swedish" |])) "language" "Language";
+                |];
+            },
+            Form_grid );
+          ( {
+              heading = "Work";
+              fields =
+                [|
+                  field Text_input "company" "Company";
+                  field Text_input "job_title" "Job title";
+                  field (Select (choices "" [| "Engineering"; "Design"; "Sales"; "Support"; "Finance" |])) "department" "Department";
+                  field Number_input "team_size" "Team size";
+                  field Number_input "experience" "Years of experience";
+                  field Text_input "manager" "Manager";
+                  field Text_input "office" "Office";
+                  field (Radio [| "Remote"; "Hybrid"; "Office" |]) "workplace" "Workplace";
+                |];
+            },
+            Form_grid );
+          ( {
+              heading = "Online";
+              fields =
+                Array.map
+                  (fun network -> field Text_input (String.lowercase_ascii network) network)
+                  [| "Website"; "GitHub"; "GitLab"; "Twitter"; "Mastodon"; "LinkedIn"; "Dribbble"; "Blog" |];
+            },
+            Form_grid );
+          ( {
+              heading = "About you";
+              fields =
+                Array.append
+                  [| field Text_area "bio" "Bio"; field Text_input "skills" "Skills"; field Text_input "interests" "Interests" |]
+                  (Array.init 9 (fun index ->
+                       field Text_input ("custom_" ^ string_of_int index) (String.capitalize_ascii (Classic.sentence seed 2))));
+            },
+            Form_grid );
+        |];
+    };
+    {
+      title = "Address";
+      sections =
+        [|
+          ({ heading = "Billing address"; fields = address "billing" Always }, Form_grid);
+          ( {
+              heading = "Shipping address";
+              fields =
+                Array.append [| field Checkbox "ship_same" "Same as billing" |] (address "shipping" (When_unchecked "ship_same"));
+            },
+            Form_grid );
+          ( {
+              heading = "Delivery";
+              fields =
+                [|
+                  field (Radio [| "Morning"; "Afternoon"; "Evening" |]) "delivery_window" "Delivery window";
+                  field Text_area "delivery_notes" "Notes for the courier";
+                  field Checkbox "gift" "This is a gift";
+                  field ~rule:Required ~condition:(When_checked "gift") Text_area "gift_message" "Gift message";
+                |];
+            },
+            Form_grid );
+        |];
+    };
+    {
+      title = "Preferences";
+      sections =
+        Array.append
+          [|
+            ( {
+                heading = "Display";
+                fields =
+                  [|
+                    field (Select (choices "" [| "Light"; "Dark"; "System" |])) "theme" "Theme";
+                    field (Select (choices "" [| "Compact"; "Comfortable" |])) "density" "Density";
+                    field (Select (choices "" [| "Daily"; "Weekly"; "Monthly" |])) "digest" "Digest";
+                    field (Select (choices "" [| "Monday"; "Wednesday"; "Friday" |])) "digest_day" "Digest day";
+                  |];
+              },
+              Form_grid );
+          |]
+          (Array.init 10 (fun group ->
+               ( {
+                   heading = String.capitalize_ascii (Classic.sentence seed 2);
+                   fields =
+                     Array.init 20 (fun index ->
+                         field Checkbox
+                           ("pref_" ^ string_of_int group ^ "_" ^ string_of_int index)
+                           (String.capitalize_ascii (Classic.sentence seed 3)));
+                 },
+                 Checkbox_group )));
+    };
+    {
+      title = "Payment";
+      sections =
+        [|
+          ( {
+              heading = "Method";
+              fields =
+                [|
+                  field ~rule:Required (Radio [| "Card"; "Invoice" |]) "method" "Payment method";
+                  field ~rule:Required ~condition:(When_equals ("method", "Card")) Text_input "card_name" "Name on card";
+                  field ~rule:(Digits 16) ~condition:(When_equals ("method", "Card")) Text_input "card_number" "Card number";
+                  field ~rule:Required ~condition:(When_equals ("method", "Card"))
+                    (Select (choices "" (Array.init 12 (fun month -> string_of_int (month + 1)))))
+                    "card_month" "Month";
+                  field ~rule:Required ~condition:(When_equals ("method", "Card"))
+                    (Select (choices "" (Array.init 8 (fun year -> string_of_int (2027 + year)))))
+                    "card_year" "Year";
+                  field ~rule:(Digits 3) ~condition:(When_equals ("method", "Card")) Password_input "card_cvc" "CVC";
+                  field ~rule:Required ~condition:(When_equals ("method", "Invoice")) Text_input "invoice_company" "Company";
+                  field ~condition:(When_equals ("method", "Invoice")) Text_input "invoice_vat" "VAT number";
+                  field ~condition:(When_equals ("method", "Invoice")) Text_input "invoice_po" "PO number";
+                  field ~rule:Email ~condition:(When_equals ("method", "Invoice")) Text_input "invoice_email" "Invoice email";
+                |];
+            },
+            Form_grid );
+          ( {
+              heading = "Confirm";
+              fields =
+                [|
+                  field Text_input "promo" "Promo code";
+                  field Text_area "order_notes" "Order notes";
+                  field ~rule:Must_check Checkbox "terms" "I accept the terms";
+                |];
+            },
+            Form_grid );
+        |];
+    };
+    { title = "Review"; sections = [||] };
+  |]
+
+let text_of values name =
+  match Belt.Map.String.get values name with Some (Text text) -> text | Some (Check _) | None -> ""
+
+let mark_of values name =
+  match Belt.Map.String.get values name with Some (Check mark) -> mark | Some (Text _) | None -> Unchecked
+
+let shown values field =
+  match field.condition with
+  | Always -> Some field
+  | When_equals (name, expected) when text_of values name = expected -> Some field
+  | When_checked name when mark_of values name = Checked -> Some field
+  | When_unchecked name when mark_of values name = Unchecked -> Some field
+  | When_equals _ | When_checked _ | When_unchecked _ -> None
+
+let problem values field =
+  let text = String.trim (text_of values field.name) in
+  let digits count =
+    match String.length text = count && String.for_all (fun c -> c >= '0' && c <= '9') text with
+    | true -> None
+    | false -> Some (Not_digits count)
+  in
+  match (field.rule, text) with
+  | Optional, _ -> None
+  | Must_check, _ -> ( match mark_of values field.name with Checked -> None | Unchecked -> Some Unchecked_box)
+  | (Required | Email | Min_length _ | Digits _ | Same_as _), "" -> Some Missing
+  | Required, _ -> None
+  | Email, _ -> ( match String.index_opt text '@' with Some at when at > 0 && String.contains_from text at '.' -> None | _ -> Some Bad_email)
+  | Min_length count, _ -> ( match String.length text >= count with true -> None | false -> Some (Too_short count))
+  | Digits count, _ -> digits count
+  | Same_as other, _ -> ( match text = String.trim (text_of values other) with true -> None | false -> Some (Mismatch other))
+
+let initial =
+  {
+    values = Belt.Map.String.fromArray [| ("ship_same", Check Checked); ("method", Text "Card") |];
+    touched = Belt.Set.String.empty;
+    attempted = Belt.Set.Int.empty;
+    step = 0;
+    reached = 0;
+    phase = Filling;
+  }
+
+let reduce form action =
+  match action with
+  | Set_value (name, value) -> { form with values = Belt.Map.String.set form.values name value }
+  | Touch name -> { form with touched = Belt.Set.String.add form.touched name }
+  | Next -> (
+      let invalid =
+        steps.(form.step).sections
+        |> Array.to_list
+        |> List.concat_map (fun (section, _) -> Array.to_list section.fields)
+        |> List.filter_map (shown form.values)
+        |> List.find_map (problem form.values)
+      in
+      match invalid with
+      | Some _ -> { form with attempted = Belt.Set.Int.add form.attempted form.step }
+      | None ->
+          let step = min (Array.length steps - 1) (form.step + 1) in
+          { form with step; reached = max form.reached step })
+  | Back -> { form with step = max 0 (form.step - 1) }
+  | Go step when step <= form.reached -> { form with step }
+  | Go _ -> form
+  | Submit -> { form with phase = Submitted }
+
+let form_context = React.createContext { form = initial; dispatch = (fun _ -> ()) }
+
+module Form_provider = struct
+  let make = React.Context.provider form_context
+
+  external makeProps :
+    value:context -> children:React.element -> unit -> < value : context ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Error_message = struct
+  let[@react.component] make ~problem =
+    <p className="field-error" role="alert">
+      (React.string
+         (match problem with
+          | Missing -> "This field is required"
+          | Bad_email -> "Enter a valid email address"
+          | Too_short count -> "Use at least " ^ string_of_int count ^ " characters"
+          | Not_digits count -> "Enter exactly " ^ string_of_int count ^ " digits"
+          | Mismatch other -> "Does not match " ^ other
+          | Unchecked_box -> "You must accept this"))
+    </p>
+end
+
+module Field = struct
+  let[@react.component] make ~field ~stepIndex =
+    let { form; dispatch } = React.useContext form_context in
+    let id = "field-" ^ field.name in
+    let text = text_of form.values field.name in
+    let error =
+      match Belt.Set.String.has form.touched field.name || Belt.Set.Int.has form.attempted stepIndex with
+      | true -> problem form.values field
+      | false -> None
+    in
+    let set value = dispatch (Set_value (field.name, value)) in
+    let onBlur _ = dispatch (Touch field.name) in
+    let onText event = set (Text (React.Event.Form.target event)##value) in
+    let control =
+      match field.control with
+      | Text_input -> <input id type_="text" className="text-input" value=text onChange=onText onBlur />
+      | Password_input -> <input id type_="password" className="text-input" value=text onChange=onText onBlur />
+      | Number_input -> <input id type_="number" className="text-input" value=text onChange=onText onBlur />
+      | Text_area -> <textarea id className="text-area" rows=3 value=text onChange=onText onBlur />
+      | Select options ->
+          <select id className="select" value=text onChange=onText onBlur>
+            (options
+            |> Array.map (fun option ->
+                   <option key=option value=option>(React.string (match option with "" -> "Choose…" | _ -> option))</option>)
+            |> React.array)
+          </select>
+      | Radio options ->
+          <div className="radio-group" role="radiogroup">
+            (options
+            |> Array.map (fun option ->
+                   <label key=option className="radio">
+                     <input
+                       type_="radio"
+                       name=field.name
+                       value=option
+                       checked=(text = option)
+                       onChange=(fun _ -> set (Text option))
+                       onBlur />
+                     (React.string option)
+                   </label>)
+            |> React.array)
+          </div>
+      | Checkbox ->
+          let mark = mark_of form.values field.name in
+          <input
+            id
+            type_="checkbox"
+            className="check-input"
+            checked=(mark = Checked)
+            onChange=(fun _ -> set (Check (match mark with Checked -> Unchecked | Unchecked -> Checked)))
+            onBlur />
+    in
+    <div className=(match (field.control, error) with Checkbox, _ -> "field checkbox-field" | _, Some _ -> "field invalid" | _, None -> "field")>
+      <label htmlFor=id className="field-label">
+        (React.string field.label)
+        (match field.rule with Optional -> React.null | _ -> <span className="required">(React.string " *")</span>)
+      </label>
+      control
+      (error |> Option.map (fun problem -> <Error_message problem />) |> Option.value ~default:React.null)
+    </div>
+end
+
+module Preference_group = struct
+  let[@react.component] make ~section ~stepIndex =
+    let { form; dispatch } = React.useContext form_context in
+    let selected =
+      Array.fold_left (fun count field -> match mark_of form.values field.name with Checked -> count + 1 | Unchecked -> count) 0 section.fields
+    in
+    <fieldset className="pref-group">
+      <legend>
+        (React.string section.heading)
+        <span className="pref-count">(React.string (string_of_int selected ^ " / " ^ string_of_int (Array.length section.fields)))</span>
+      </legend>
+      <button
+        type_="button"
+        className="select-all"
+        onClick=(fun _ -> Array.iter (fun field -> dispatch (Set_value (field.name, Check Checked))) section.fields)>
+        (React.string "Select all")
+      </button>
+      <div className="pref-grid">
+        (section.fields |> Array.map (fun field -> <Field key=field.name field stepIndex />) |> React.array)
+      </div>
+    </fieldset>
+end
+
+module Section_card = struct
+  let[@react.component] make ~section ~stepIndex =
+    let { form; _ } = React.useContext form_context in
+    <fieldset className="section-card">
+      <legend>(React.string section.heading)</legend>
+      <div className="field-grid">
+        (section.fields
+        |> Js.Array.filter ~f:(fun field -> Option.is_some (shown form.values field))
+        |> Array.map (fun field -> <Field key=field.name field stepIndex />)
+        |> React.array)
+      </div>
+    </fieldset>
+end
+
+module Step_pill = struct
+  let[@react.component] make ~index ~title ~progress ~onGo =
+    <li className=(match progress with Done_step -> "pill done" | Current_step -> "pill current" | Ahead -> "pill")>
+      <button className="pill-button" onClick=(fun _ -> onGo index)>
+        <span className="pill-number">(React.int (index + 1))</span>
+        (React.string title)
+      </button>
+    </li>
+end
+
+module Step_indicator = struct
+  let[@react.component] make ~current ~reached ~onGo =
+    <ol className="steps">
+      (steps
+      |> Array.mapi (fun index step ->
+             <Step_pill
+               key=step.title
+               index
+               title=step.title
+               progress=(match (index = current, index <= reached) with
+                         | true, _ -> Current_step
+                         | false, true -> Done_step
+                         | false, false -> Ahead)
+               onGo />)
+      |> React.array)
+    </ol>
+end
+
+module Review_row = struct
+  let[@react.component] make ~label ~shown =
+    <div className="review-row">
+      <dt>(React.string label)</dt>
+      <dd>(React.string (match shown with "" -> "—" | _ -> shown))</dd>
+    </div>
+end
+
+module Review = struct
+  let[@react.component] make ~onEdit =
+    let { form; _ } = React.useContext form_context in
+    <div className="review">
+      (steps
+      |> Js.Array.filter ~f:(fun step -> Array.length step.sections > 0)
+      |> Array.mapi (fun index step ->
+             <section key=step.title className="review-step">
+               <header>
+                 <h3>(React.string step.title)</h3>
+                 <button className="edit-step" onClick=(fun _ -> onEdit index)>(React.string "Edit")</button>
+               </header>
+               (step.sections
+               |> Array.map (fun (section, _) ->
+                      <dl key=section.heading className="review-section">
+                        <h4>(React.string section.heading)</h4>
+                        (section.fields
+                        |> Js.Array.filter ~f:(fun field -> Option.is_some (shown form.values field))
+                        |> Array.map (fun field ->
+                               <Review_row
+                                 key=field.name
+                                 label=field.label
+                                 shown=(match field.control with
+                                        | Checkbox -> ( match mark_of form.values field.name with Checked -> "Yes" | Unchecked -> "No")
+                                        | Password_input -> String.make (String.length (text_of form.values field.name)) '*'
+                                        | _ -> text_of form.values field.name) />)
+                        |> React.array)
+                      </dl>)
+               |> React.array)
+             </section>)
+      |> React.array)
+    </div>
+end
+
+module Navigation = struct
+  let[@react.component] make ~step ~onBack ~onNext ~onSubmit =
+    let last = Array.length steps - 1 in
+    <div className="wizard-nav">
+      (match step with 0 -> React.null | _ -> <button id="back" type_="button" onClick=(fun _ -> onBack ())>(React.string "Back")</button>)
+      <span className="nav-position">(React.string ("Step " ^ string_of_int (step + 1) ^ " of " ^ string_of_int (last + 1)))</span>
+      (match step = last with
+       | true -> <button id="submit" type_="button" className="primary" onClick=(fun _ -> onSubmit ())>(React.string "Submit")</button>
+       | false -> <button id="next" type_="button" className="primary" onClick=(fun _ -> onNext ())>(React.string "Next")</button>)
+    </div>
+end
+
+module Error_summary = struct
+  let[@react.component] make ~stepIndex =
+    let { form; _ } = React.useContext form_context in
+    let problems =
+      steps.(stepIndex).sections
+      |> Array.to_list
+      |> List.concat_map (fun (section, _) -> Array.to_list section.fields)
+      |> List.filter_map (shown form.values)
+      |> List.filter_map (fun field -> Option.map (fun _ -> field.label) (problem form.values field))
+    in
+    match (Belt.Set.Int.has form.attempted stepIndex, problems) with
+    | false, _ | true, [] -> React.null
+    | true, labels ->
+        <div className="error-summary" role="alert">
+          (React.string ("Please fix " ^ string_of_int (List.length labels) ^ " fields: " ^ String.concat ", " labels))
+        </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let form, dispatch = React.useReducer reduce initial in
+    let context = React.useMemo2 (fun () -> { form; dispatch }) (form, dispatch) in
+    let step = steps.(form.step) in
+    <Form_provider value=context>
+      <div className="wizard">
+        <h1>(React.string "Create your account")</h1>
+        (match form.phase with
+         | Submitted ->
+             <div id="done" className="submitted">
+               <h2>(React.string "Thank you!")</h2>
+               <p>
+                 (React.string
+                    ("We received " ^ string_of_int (Belt.Map.String.size form.values) ^ " answers from "
+                    ^ text_of form.values "first_name" ^ "."))
+               </p>
+             </div>
+         | Filling ->
+             <div className="wizard-body">
+               <Step_indicator current=form.step reached=form.reached onGo=(fun index -> dispatch (Go index)) />
+               <h2 className="step-title">(React.string step.title)</h2>
+               <Error_summary stepIndex=form.step />
+               (match Array.length step.sections with
+                | 0 -> <Review onEdit=(fun index -> dispatch (Go index)) />
+                | _ ->
+                    <form className="step-form" onSubmit=(fun event -> React.Event.Form.preventDefault event)>
+                      (step.sections
+                      |> Array.map (fun (section, look) ->
+                             match look with
+                             | Form_grid -> <Section_card key=section.heading section stepIndex=form.step />
+                             | Checkbox_group -> <Preference_group key=section.heading section stepIndex=form.step />)
+                      |> React.array)
+                    </form>)
+               <Navigation
+                 step=form.step
+                 onBack=(fun () -> dispatch Back)
+                 onNext=(fun () -> dispatch Next)
+                 onSubmit=(fun () -> dispatch Submit) />
+             </div>)
+      </div>
+    </Form_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

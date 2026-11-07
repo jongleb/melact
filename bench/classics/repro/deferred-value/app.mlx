@@ -1,0 +1,25 @@
+let titles = Array.init 5000 (fun index -> "track " ^ string_of_int index ^ " " ^ Classic.words.(index mod 42))
+
+module Results = struct
+  let[@react.component] make =
+    React.memo (fun ~query ->
+        let shown = Js.Array.filter ~f:(fun title -> Js.String.includes ~search:query title) titles in
+        <ul>(shown |> Array.map (fun title -> <li key=title>(React.string title)</li>) |> React.array)</ul>)
+end
+
+module App = struct
+  let[@react.component] make () =
+    let query, setQuery = React.useState (fun () -> "") in
+    let deferred = React.useDeferredValue query ~initialValue:query in
+    <div>
+      <input
+        id="search"
+        value=query
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setQuery (fun _ -> value)) />
+      <Results query=deferred />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

@@ -1,0 +1,194 @@
+(** Whether a todo is done. *)
+type status = Active | Completed
+
+type todo = { id : int; title : string; status : status }
+
+(** Which todos the list shows. *)
+type filter = All | Only_active | Only_completed
+
+(** What the reducer can do to the list. *)
+type action =
+  | Add of string
+  | Toggle of int
+  | Toggle_all of status
+  | Rename of int * string
+  | Destroy of int
+  | Clear_completed
+
+(** Whether a row shows its edit field. *)
+type mode = Viewing | Editing
+
+let initial =
+  let seed = Classic.Seed.make 7 in
+  List.init 5000 (fun index ->
+      {
+        id = index + 1;
+        title = Classic.sentence seed 4;
+        status = (match Classic.Seed.next seed 3 with 0 -> Completed | _ -> Active);
+      })
+
+let reduce todos action =
+  match action with
+  | Add title ->
+      let id = List.fold_left (fun top todo -> max top todo.id) 0 todos + 1 in
+      todos @ [ { id; title; status = Active } ]
+  | Toggle id ->
+      List.map
+        (fun todo ->
+          match todo.id = id with
+          | true -> { todo with status = (match todo.status with Active -> Completed | Completed -> Active) }
+          | false -> todo)
+        todos
+  | Toggle_all status -> List.map (fun todo -> { todo with status }) todos
+  | Rename (id, title) -> List.map (fun todo -> match todo.id = id with true -> { todo with title } | false -> todo) todos
+  | Destroy id -> List.filter (fun todo -> todo.id <> id) todos
+  | Clear_completed -> List.filter (fun todo -> todo.status = Active) todos
+
+module Header = struct
+  let[@react.component] make ~onAdd =
+    let draft, setDraft = React.useState (fun () -> "") in
+    <header className="header">
+      <h1>(React.string "todos")</h1>
+      <input
+        className="new-todo"
+        placeholder="What needs to be done?"
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value))
+        onKeyDown=(fun event ->
+          match React.Event.Keyboard.key event with
+          | "Enter" -> (
+              match String.trim draft with
+              | "" -> ()
+              | title ->
+                  onAdd title;
+                  setDraft (fun _ -> ""))
+          | _ -> ()) />
+    </header>
+end
+
+module Todo_item = struct
+  let[@react.component] make ~todo ~dispatch =
+    let mode, setMode = React.useState (fun () -> Viewing) in
+    let draft, setDraft = React.useState (fun () -> todo.title) in
+    let field = React.useRef Js.Nullable.null in
+    React.useEffect1
+      (fun () ->
+        (match mode with
+         | Editing ->
+             Js.Nullable.toOption field.current
+             |> Option.iter Classic.focus
+         | Viewing -> ());
+        None)
+      [| mode |];
+    let finish () =
+      setMode (fun _ -> Viewing);
+      match String.trim draft with "" -> dispatch (Destroy todo.id) | title -> dispatch (Rename (todo.id, title))
+    in
+    <li
+      className=
+        (String.concat " "
+           [ (match todo.status with Completed -> "completed" | Active -> "");
+             (match mode with Editing -> "editing" | Viewing -> "") ])>
+      <div className="view">
+        <input
+          className="toggle"
+          type_="checkbox"
+          checked=(todo.status = Completed)
+          onChange=(fun _ -> dispatch (Toggle todo.id)) />
+        <label
+          onDoubleClick=(fun _ ->
+            setDraft (fun _ -> todo.title);
+            setMode (fun _ -> Editing))>
+          (React.string todo.title)
+        </label>
+        <button className="destroy" onClick=(fun _ -> dispatch (Destroy todo.id)) />
+      </div>
+      (match mode with
+       | Editing ->
+           <input
+             ref=(ReactDOM.Ref.domRef field)
+             className="edit"
+             value=draft
+             onChange=(fun event ->
+               let value = (React.Event.Form.target event)##value in
+               setDraft (fun _ -> value))
+             onBlur=(fun _ -> finish ())
+             onKeyDown=(fun event ->
+               match React.Event.Keyboard.key event with
+               | "Enter" -> finish ()
+               | "Escape" -> setMode (fun _ -> Viewing)
+               | _ -> ()) />
+       | Viewing -> React.null)
+    </li>
+end
+
+module Filter_link = struct
+  let[@react.component] make ~label ~target ~filter ~onFilter =
+    <li>
+      <a
+        href="#"
+        className=(match filter = target with true -> "selected" | false -> "")
+        onClick=(fun event ->
+          React.Event.Mouse.preventDefault event;
+          onFilter target)>
+        (React.string label)
+      </a>
+    </li>
+end
+
+module Footer = struct
+  let[@react.component] make ~active ~completed ~filter ~onFilter ~onClear =
+    <footer className="footer">
+      <span className="todo-count">
+        <strong>(React.int active)</strong>
+        (React.string (match active with 1 -> " item left" | _ -> " items left"))
+      </span>
+      <ul className="filters">
+        <Filter_link label="All" target=All filter onFilter />
+        <Filter_link label="Active" target=Only_active filter onFilter />
+        <Filter_link label="Completed" target=Only_completed filter onFilter />
+      </ul>
+      (match completed with
+       | 0 -> React.null
+       | _ -> <button className="clear-completed" onClick=(fun _ -> onClear ())>(React.string "Clear completed")</button>)
+    </footer>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let todos, dispatch = React.useReducer reduce initial in
+    let filter, setFilter = React.useState (fun () -> All) in
+    let shown =
+      React.useMemo2
+        (fun () ->
+          List.filter
+            (fun todo ->
+              match (filter, todo.status) with
+              | All, _ | Only_active, Active | Only_completed, Completed -> true
+              | Only_active, Completed | Only_completed, Active -> false)
+            todos)
+        (todos, filter)
+    in
+    let active = List.length (List.filter (fun todo -> todo.status = Active) todos) in
+    let completed = List.length todos - active in
+    <section className="todoapp">
+      <Header onAdd=(fun title -> dispatch (Add title)) />
+      <section className="main">
+        <input
+          id="toggle-all"
+          className="toggle-all"
+          type_="checkbox"
+          checked=(active = 0)
+          onChange=(fun _ -> dispatch (Toggle_all (match active with 0 -> Active | _ -> Completed))) />
+        <label htmlFor="toggle-all">(React.string "Mark all as complete")</label>
+        <ul className="todo-list">
+          (shown |> Array.of_list |> Array.map (fun todo -> <Todo_item key=(string_of_int todo.id) todo dispatch />) |> React.array)
+        </ul>
+      </section>
+      <Footer active completed filter onFilter=(fun next -> setFilter (fun _ -> next)) onClear=(fun () -> dispatch Clear_completed) />
+    </section>
+end
+
+let () = Classic.start (fun () -> <App />)

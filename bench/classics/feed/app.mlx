@@ -1,0 +1,329 @@
+type observer
+type sighting
+type rect
+
+external make_observer : (sighting array -> observer -> unit) -> < root : Dom.element Js.Nullable.t ; rootMargin : string > Js.t -> observer
+  = "IntersectionObserver"
+[@@mel.new]
+
+external observe : observer -> Dom.element -> unit = "observe" [@@mel.send]
+external disconnect : observer -> unit = "disconnect" [@@mel.send]
+external is_intersecting : sighting -> bool = "isIntersecting" [@@mel.get]
+external bounding_rect : Dom.element -> rect = "getBoundingClientRect" [@@mel.send]
+external rect_bottom : rect -> float = "bottom" [@@mel.get]
+external rect_right : rect -> float = "right" [@@mel.get]
+external set_scroll_top : Dom.element -> float -> unit = "scrollTop" [@@mel.set]
+external add_listener : Dom.document -> string -> (Dom.mouseEvent -> unit) -> unit = "addEventListener" [@@mel.send]
+external remove_listener : Dom.document -> string -> (Dom.mouseEvent -> unit) -> unit = "removeEventListener" [@@mel.send]
+external event_target : Dom.mouseEvent -> Dom.node = "target" [@@mel.get]
+external contains : Dom.element -> Dom.node -> bool = "contains" [@@mel.send]
+
+(** Whether the user liked a post. *)
+type like = Liked | Not_liked
+
+(** What a post shows above its text. *)
+type media = Text_only | Photo of { width : int; height : int; hue : int }
+
+type person = { name : string; hue : int }
+
+type post = { id : int; author : person; minutes : int; text : string; media : media; likes : int; like : like; comments : int; shares : int }
+
+(** Whether a post is in the feed or replaced by its "hidden" notice. *)
+type visibility = Shown | Hidden
+
+(** The top bar, tall at the top of the feed and compact once scrolled. *)
+type bar = Tall | Compact
+
+(** Whether a photo has come near the viewport, so it is drawn. *)
+type sight = Seen | Not_seen
+
+(** Whether a post's menu is open. *)
+type menu = Menu_closed | Menu_open
+
+(** Where an open menu sits on the page, once measured. *)
+type placement = Unplaced | Placed_at of { top : float; left : float }
+
+(** What the feed's reducer does. *)
+type action = Load_more | Toggle_like of int | Publish of string
+
+type state = { posts : post array; next : int }
+
+let people =
+  let seed = Classic.Seed.make 5 in
+  Array.init 60 (fun index ->
+      { name = String.capitalize_ascii (Classic.Seed.pick seed Classic.words) ^ " " ^ String.capitalize_ascii (Classic.Seed.pick seed Classic.words); hue = index * 29 mod 360 })
+
+let post_at index =
+  let seed = Classic.Seed.make ((index * 7919) + 13) in
+  let author = Classic.Seed.pick seed people in
+  let text = String.capitalize_ascii (Classic.sentence seed (8 + Classic.Seed.next seed 40)) ^ "." in
+  let media =
+    match Classic.Seed.next seed 3 with
+    | 0 -> Text_only
+    | _ -> Photo { width = 4 + Classic.Seed.next seed 4; height = 3 + Classic.Seed.next seed 3; hue = Classic.Seed.next seed 360 }
+  in
+  let likes = Classic.Seed.next seed 500 in
+  let comments = Classic.Seed.next seed 80 in
+  let shares = Classic.Seed.next seed 20 in
+  { id = index + 1; author; minutes = 5 + (index * 11); text; media; likes; like = Not_liked; comments; shares }
+
+let reduce state action =
+  match action with
+  | Load_more -> { posts = Array.append state.posts (Array.init 100 (fun offset -> post_at (state.next + offset))); next = state.next + 100 }
+  | Toggle_like id ->
+      {
+        state with
+        posts =
+          Array.map
+            (fun post ->
+              match (post.id = id, post.like) with
+              | true, Liked -> { post with like = Not_liked; likes = post.likes - 1 }
+              | true, Not_liked -> { post with like = Liked; likes = post.likes + 1 }
+              | false, _ -> post)
+            state.posts;
+      }
+  | Publish text ->
+      {
+        posts = Array.append [| { id = -state.next; author = people.(0); minutes = 0; text; media = Text_only; likes = 0; like = Not_liked; comments = 0; shares = 0 } |] state.posts;
+        next = state.next + 1;
+      }
+
+module Avatar = struct
+  let[@react.component] make ~person ~size =
+    <span
+      className="avatar"
+      style=(ReactDOM.Style.make ~width:(string_of_int size ^ "px") ~height:(string_of_int size ^ "px")
+               ~backgroundColor:("hsl(" ^ string_of_int person.hue ^ ", 50%, 55%)") ())>
+      (React.string (String.sub person.name 0 1))
+    </span>
+end
+
+module Top_bar = struct
+  let[@react.component] make ~bar =
+    <header className=(match bar with Tall -> "top-bar tall" | Compact -> "top-bar compact")>
+      <span className="logo">(React.string "friendface")</span>
+      <input className="search" placeholder="Search" />
+      <nav className="tabs">
+        (React.array (Array.map (fun label -> <a key=label className="tab">(React.string label)</a>) [| "Home"; "Watch"; "Groups"; "Gaming" |]))
+      </nav>
+    </header>
+end
+
+module Stories = struct
+  let[@react.component] make () =
+    <div className="stories">
+      (React.array (Array.map (fun person -> <div key=person.name className="story"><Avatar person size=56 /><span>(React.string person.name)</span></div>) (Array.sub people 1 12)))
+    </div>
+end
+
+module Composer = struct
+  let[@react.component] make ~dispatch =
+    let draft, setDraft = React.useState (fun () -> "") in
+    <div className="composer">
+      <Avatar person=people.(0) size=40 />
+      <input
+        className="composer-input"
+        placeholder="What's on your mind?"
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value))
+        onKeyDown=(fun event ->
+          match (React.Event.Keyboard.key event, String.trim draft) with
+          | "Enter", "" -> ()
+          | "Enter", text ->
+              dispatch (Publish text);
+              setDraft (fun _ -> "")
+          | _ -> ()) />
+    </div>
+end
+
+module Post_menu = struct
+  let[@react.component] make ~anchor ~onHide ~onClose =
+    let placement, setPlacement = React.useState (fun () -> Unplaced) in
+    let box = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        let outside event =
+          match Js.Nullable.toOption box.React.current with
+          | Some element when contains element (event_target event) -> ()
+          | Some _ | None -> onClose ()
+        in
+        add_listener Classic.document "mousedown" outside;
+        Some (fun () -> remove_listener Classic.document "mousedown" outside));
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption anchor.React.current
+        |> Option.iter (fun element ->
+               let rect = bounding_rect element in
+               setPlacement (fun _ -> Placed_at { top = rect_bottom rect; left = rect_right rect -. 180. }));
+        None)
+      [| anchor |];
+    match (placement, Classic.element_by_id Classic.document "portal") with
+    | Placed_at { top; left }, Some target ->
+        ReactDOM.createPortal
+          <div ref=(ReactDOM.Ref.domRef box) className="menu" style=(ReactDOM.Style.make ~top:(Js.Float.toString top ^ "px") ~left:(Js.Float.toString left ^ "px") ())>
+            <button className="menu-hide" onClick=(fun _ -> onHide ())>(React.string "Hide post")</button>
+            <button className="menu-save" onClick=(fun _ -> onClose ())>(React.string "Save post")</button>
+            <button className="menu-close" onClick=(fun _ -> onClose ())>(React.string "Cancel")</button>
+          </div>
+          target
+    | Unplaced, _ | _, None -> React.null
+end
+
+module Media = struct
+  let[@react.component] make ~media =
+    let frame = React.useRef Js.Nullable.null in
+    let sight, setSight = React.useState (fun () -> Not_seen) in
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption frame.React.current
+        |> Option.map (fun element ->
+               let observer =
+                 make_observer
+                   (fun sightings observer ->
+                     match Array.exists is_intersecting sightings with
+                     | true ->
+                         setSight (fun _ -> Seen);
+                         disconnect observer
+                     | false -> ())
+                   [%mel.obj { root = Js.Nullable.null; rootMargin = "200px" }]
+               in
+               observe observer element;
+               fun () -> disconnect observer));
+    match media with
+    | Text_only -> React.null
+    | Photo { width; height; hue } ->
+        <div
+          ref=(ReactDOM.Ref.domRef frame)
+          className="photo"
+          style=(ReactDOM.Style.make ~paddingTop:(Js.Float.toString (float_of_int height /. float_of_int width *. 100.) ^ "%") ())>
+          (match sight with
+           | Seen -> <div className="picture" style=(ReactDOM.Style.make ~backgroundColor:("hsl(" ^ string_of_int hue ^ ", 40%, 75%)") ()) />
+           | Not_seen -> React.null)
+        </div>
+end
+
+module Post_actions = struct
+  let[@react.component] make ~post ~dispatch =
+    <div className="post-actions">
+      <div className="counts">
+        <span className="like-count">(React.string ("\u{1F44D} " ^ string_of_int post.likes))</span>
+        <span className="comment-count">(React.string (string_of_int post.comments ^ " comments \u{b7} " ^ string_of_int post.shares ^ " shares"))</span>
+      </div>
+      <div className="buttons">
+        <button className=(match post.like with Liked -> "like-button liked" | Not_liked -> "like-button") onClick=(fun _ -> dispatch (Toggle_like post.id))>
+          (React.string "Like")
+        </button>
+        <button className="comment-button">(React.string "Comment")</button>
+        <button className="share-button">(React.string "Share")</button>
+      </div>
+    </div>
+end
+
+module Post = struct
+  let[@react.component] make =
+    React.memo (fun ~post ~dispatch ->
+        let visibility, setVisibility = React.useState (fun () -> Shown) in
+        let menu, setMenu = React.useState (fun () -> Menu_closed) in
+        let anchor = React.useRef Js.Nullable.null in
+        match visibility with
+        | Hidden ->
+            <article className="post hidden-post">
+              <span>(React.string "Post hidden. You won't see this post in your feed.")</span>
+              <button className="undo" onClick=(fun _ -> setVisibility (fun _ -> Shown))>(React.string "Undo")</button>
+            </article>
+        | Shown ->
+            <article className="post">
+              <div className="post-header">
+                <Avatar person=post.author size=40 />
+                <div className="byline">
+                  <a className="author">(React.string post.author.name)</a>
+                  <span className="when">
+                    (React.string
+                       (match post.minutes with
+                        | 0 -> "Just now"
+                        | minutes when minutes < 60 -> string_of_int minutes ^ "m"
+                        | minutes when minutes < 1440 -> string_of_int (minutes / 60) ^ "h"
+                        | minutes -> string_of_int (minutes / 1440) ^ "d"))
+                  </span>
+                </div>
+                <button ref=(ReactDOM.Ref.domRef anchor) className="post-menu-button" onClick=(fun _ -> setMenu (fun _ -> Menu_open))>
+                  (React.string "\u{22ef}")
+                </button>
+              </div>
+              <p className="post-text">(React.string post.text)</p>
+              <Media media=post.media />
+              <Post_actions post dispatch />
+              (match menu with
+               | Menu_open ->
+                   <Post_menu
+                     anchor
+                     onHide=(fun () ->
+                       setMenu (fun _ -> Menu_closed);
+                       setVisibility (fun _ -> Hidden))
+                     onClose=(fun () -> setMenu (fun _ -> Menu_closed)) />
+               | Menu_closed -> React.null)
+            </article>)
+end
+
+module Feed = struct
+  let[@react.component] make ~posts ~dispatch ~onBar ~box =
+    let sentinel = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        match (Js.Nullable.toOption box.React.current, Js.Nullable.toOption sentinel.React.current) with
+        | Some root, Some target ->
+            let observer =
+              make_observer
+                (fun sightings _ ->
+                  match Array.exists is_intersecting sightings with true -> dispatch Load_more | false -> ())
+                [%mel.obj { root = Js.Nullable.return root; rootMargin = "0px" }]
+            in
+            observe observer target;
+            Some (fun () -> disconnect observer)
+        | _ -> None);
+    <div
+      ref=(ReactDOM.Ref.domRef box)
+      className="feed-scroll"
+      onScroll=(fun _ ->
+        Js.Nullable.toOption box.React.current
+        |> Option.iter (fun element -> onBar (match Classic.scroll_top element > 80. with true -> Compact | false -> Tall)))>
+      <Stories />
+      <Composer dispatch />
+      (posts |> Array.map (fun post -> <Post key=(string_of_int post.id) post dispatch />) |> React.array)
+      <div ref=(ReactDOM.Ref.domRef sentinel) className="sentinel">(React.string "Loading more posts\u{2026}")</div>
+    </div>
+end
+
+module Contacts = struct
+  let[@react.component] make () =
+    <aside className="contacts">
+      <h3>(React.string "Contacts")</h3>
+      <ul>
+        (React.array
+           (Array.map
+              (fun person -> <li key=person.name className="contact"><Avatar person size=28 /><span>(React.string person.name)</span></li>)
+              (Array.sub people 1 40)))
+      </ul>
+    </aside>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce { posts = Array.init 300 post_at; next = 300 } in
+    let bar, setBar = React.useState (fun () -> Tall) in
+    let box = React.useRef Js.Nullable.null in
+    <div className="feed-app">
+      <Top_bar bar />
+      <main className="feed-layout">
+        <Feed posts=state.posts dispatch onBar=(fun next -> setBar (fun _ -> next)) box />
+        <Contacts />
+      </main>
+      (match bar with
+       | Compact ->
+           <button id="back-to-top" onClick=(fun _ -> Js.Nullable.toOption box.current |> Option.iter (fun element -> set_scroll_top element 0.))>
+             (React.string "\u{2191} New posts")
+           </button>
+       | Tall -> React.null)
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

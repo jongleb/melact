@@ -1,0 +1,28 @@
+.hn { width: 85%; background: #f6f6ef; text-align: left; font: 10pt Verdana, Geneva, sans-serif; color: #828282; }
+.hn-header { width: 100%; background: #ff6600; border-spacing: 0; padding: 2px; }
+.hn-header .y { border: 1px solid #fff; color: #fff; padding: 0 4px; font-weight: bold; }
+.hnname a { color: #000; cursor: pointer; }
+.pagetop a { color: #000; margin: 0 2px; }
+.pagetop.user { text-align: right; }
+.itemlist, .fatitem { border-spacing: 0; padding: 4px 0; }
+.rank { text-align: right; vertical-align: top; color: #828282; }
+.votelinks { vertical-align: top; width: 14px; }
+.votearrow { display: inline-block; width: 10px; height: 10px; border: 0; margin: 3px 2px 6px; background: linear-gradient(135deg, transparent 50%, #9a9a9a 50%); transform: rotate(-135deg) scale(.7); cursor: pointer; }
+.votearrow.nosee { visibility: hidden; }
+.titlelink { color: #000; font-size: 10pt; text-decoration: none; }
+.sitebit { font-size: 8pt; }
+.subtext { font-size: 7pt; }
+.subtext a { color: #828282; cursor: pointer; }
+.spacer { height: 5px; }
+.morelink { color: #000; cursor: pointer; }
+.comment-tree { padding: 8px 12px; }
+.tree-tools a { cursor: pointer; text-decoration: underline; }
+.comtr { margin: 8px 0; }
+.comhead { font-size: 8pt; }
+.comhead a { color: #828282; cursor: pointer; }
+.comment { font-size: 9pt; color: #000; }
+.commtext { margin: 2px 0 4px; }
+.reply a { font-size: 7pt; color: #000; text-decoration: underline; cursor: pointer; }
+.kids { margin-left: 40px; }
+.reply-input { font-family: monospace; }
+.footer { border-top: 2px solid #ff6600; padding: 12px; text-align: center; }

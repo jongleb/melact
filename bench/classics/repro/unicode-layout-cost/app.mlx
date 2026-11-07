@@ -1,0 +1,26 @@
+(** Which rows the list shows. *)
+type shown = Rows_shown | Rows_hidden
+
+module Row = struct
+  let[@react.component] make ~index =
+    <li className="row">
+      <span className="name">(React.string ("card " ^ string_of_int index))</span>
+      <button className="next">(React.string {js|→|js})</button>
+      <span className="described">(React.string {js|≡|js})</span>
+    </li>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let shown, setShown = React.useState (fun () -> Rows_shown) in
+    <div>
+      <button id="toggle" onClick=(fun _ -> setShown (fun shown -> match shown with Rows_shown -> Rows_hidden | Rows_hidden -> Rows_shown))>
+        (React.string "toggle")
+      </button>
+      (match shown with
+       | Rows_shown -> <ul>(Array.init 3000 (fun index -> <Row key=(string_of_int index) index />) |> React.array)</ul>
+       | Rows_hidden -> React.null)
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

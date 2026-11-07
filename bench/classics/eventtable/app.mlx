@@ -1,0 +1,548 @@
+external scroll_into_view : Dom.element -> (_[@mel.as {json|{"block":"nearest"}|json}]) -> unit = "scrollIntoView"
+[@@mel.send]
+
+(** A browser [ResizeObserver]. *)
+type resize_observer
+
+(** One observed element's new size. *)
+type resize_entry
+
+external resize_observer : (resize_entry array -> unit) -> resize_observer = "ResizeObserver" [@@mel.new]
+external observe : resize_observer -> Dom.element -> unit = "observe" [@@mel.send]
+external disconnect : resize_observer -> unit = "disconnect" [@@mel.send]
+external content_rect : resize_entry -> < width : float > Js.t = "contentRect" [@@mel.get]
+
+(** How loud an event is. *)
+type level = Debug | Info | Warn | Error
+
+type attribute = { name : string; value : string }
+
+type event = {
+  id : int;
+  timestamp : int;  (** Milliseconds since midnight. *)
+  level : level;
+  service : string;
+  message : string;
+  duration : int;  (** Milliseconds. *)
+  attributes : attribute array;
+  stack : string array;
+}
+
+(** Whether a row shows its details. *)
+type fold = Expanded | Collapsed
+
+(** The last "Expand all" or "Collapse all", and how many there were. *)
+type bulk = { fold : fold; generation : int }
+
+(** The event picked with the mouse or the keyboard. *)
+type selection = Unselected | Selected of int
+
+(** How a row is painted. *)
+type highlight = Highlighted | Plain
+
+(** The colour scheme. *)
+type theme = Light | Dark
+
+(** A column the table sorts by. *)
+type column = Time | Level | Service | Message | Duration
+
+type direction = Ascending | Descending
+type sort = { column : column; direction : direction }
+
+(** The lowest level the table shows. *)
+type threshold = Everything | At_least of level
+
+(** Pixel widths of the columns, derived from the table's width. *)
+type widths = { time_px : int; level_px : int; service_px : int; message_px : int; duration_px : int }
+
+(** What the body of the table lists: a minute's header while sorted by time, or an event. *)
+type line = Minute of { label : string; count : int } | Entry of event
+
+(** Where the keyboard moves the selection. *)
+type step = Next | Previous
+
+let severity level = match level with Debug -> 0 | Info -> 1 | Warn -> 2 | Error -> 3
+let level_name level = match level with Debug -> "debug" | Info -> "info" | Warn -> "warn" | Error -> "error"
+let theme_class theme = match theme with Light -> "light" | Dark -> "dark"
+let two number = (match number < 10 with true -> "0" | false -> "") ^ string_of_int number
+let minute_of timestamp = two (timestamp / 3_600_000) ^ ":" ^ two (timestamp / 60_000 mod 60)
+
+let format_time timestamp =
+  let millis = timestamp mod 1000 in
+  minute_of timestamp ^ ":" ^ two (timestamp / 1000 mod 60) ^ "." ^ (match millis < 100 with true -> "0" | false -> "") ^ two millis
+
+let px width = string_of_int width ^ "px"
+
+let events =
+  let seed = Classic.Seed.make 2024 in
+  let services =
+    [| "api-gateway"; "auth"; "billing"; "catalog"; "checkout"; "inventory"; "notifications"; "search"; "shipping"; "users" |]
+  in
+  let keys = [| "http.method"; "http.status"; "user.id"; "region"; "host"; "trace.id"; "span.id"; "db.statement"; "retry" |] in
+  let clock = ref (9 * 3_600_000) in
+  Array.init 400 (fun index ->
+      clock := !clock + 50 + Classic.Seed.next seed 1500;
+      let level =
+        match Classic.Seed.next seed 20 with 0 | 1 -> Error | 2 | 3 | 4 -> Warn | 5 | 6 | 7 | 8 -> Debug | _ -> Info
+      in
+      let service = Classic.Seed.pick seed services in
+      {
+        id = index + 1;
+        timestamp = !clock;
+        level;
+        service;
+        message = Classic.sentence seed (4 + Classic.Seed.next seed 8);
+        duration = 1 + Classic.Seed.next seed 2500;
+        attributes =
+          Array.init (3 + Classic.Seed.next seed 3) (fun _ ->
+              { name = Classic.Seed.pick seed keys; value = Classic.sentence seed 2 });
+        stack =
+          Array.init (2 + Classic.Seed.next seed 4) (fun _ ->
+              service ^ "." ^ Classic.Seed.pick seed Classic.words ^ " (" ^ Classic.Seed.pick seed Classic.words ^ ".ml:"
+              ^ string_of_int (1 + Classic.Seed.next seed 400) ^ ")");
+      })
+
+let theme_context = React.createContext Light
+
+let columns_context =
+  React.createContext { time_px = 110; level_px = 70; service_px = 140; message_px = 700; duration_px = 90 }
+
+let selection_context = React.createContext Unselected
+let rerender_context = React.createContext 0
+let bulk_context = React.createContext { fold = Collapsed; generation = 0 }
+
+module Theme_provider = struct
+  let make = React.Context.provider theme_context
+
+  external makeProps : value:theme -> children:React.element -> unit -> < value : theme ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Columns_provider = struct
+  let make = React.Context.provider columns_context
+
+  external makeProps :
+    value:widths -> children:React.element -> unit -> < value : widths ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Selection_provider = struct
+  let make = React.Context.provider selection_context
+
+  external makeProps :
+    value:selection -> children:React.element -> unit -> < value : selection ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Rerender_provider = struct
+  let make = React.Context.provider rerender_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Bulk_provider = struct
+  let make = React.Context.provider bulk_context
+
+  external makeProps : value:bulk -> children:React.element -> unit -> < value : bulk ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Level_badge = struct
+  let[@react.component] make = React.memo (fun ~level ->
+    <span className=("badge badge-" ^ level_name level)>(React.string (String.uppercase_ascii (level_name level)))</span>)
+end
+
+module Toolbar = struct
+  let[@react.component] make ~threshold ~onThreshold ~onExpandAll ~onCollapseAll ~onRerender ~onTheme =
+    <div className="toolbar">
+      <button id="expand-all" onClick=(fun _ -> onExpandAll ())>(React.string "Expand all")</button>
+      <button id="collapse-all" onClick=(fun _ -> onCollapseAll ())>(React.string "Collapse all")</button>
+      <button id="force-rerender" onClick=(fun _ -> onRerender ())>(React.string "Force rerender")</button>
+      <button id="theme" onClick=(fun _ -> onTheme ())>(React.string "Theme")</button>
+      <label className="threshold">
+        (React.string "Level ")
+        <select
+          className="level-filter"
+          value=(match threshold with Everything -> "all" | At_least level -> level_name level)
+          onChange=(fun event ->
+            onThreshold
+              (match (React.Event.Form.target event)##value with
+               | "debug" -> At_least Debug
+               | "info" -> At_least Info
+               | "warn" -> At_least Warn
+               | "error" -> At_least Error
+               | _ -> Everything))>
+          <option value="all">(React.string "all")</option>
+          <option value="debug">(React.string "debug+")</option>
+          <option value="info">(React.string "info+")</option>
+          <option value="warn">(React.string "warn+")</option>
+          <option value="error">(React.string "error")</option>
+        </select>
+      </label>
+    </div>
+end
+
+module Header_cell = struct
+  let[@react.component] make ~label ~column ~width ~sort ~onSort =
+    <span
+      className="header-cell"
+      style=(ReactDOM.Style.make ~width:(px width) ())
+      onClick=(fun _ -> onSort column)>
+      (React.string label)
+      (match sort.column = column with
+       | true -> <span className="arrow">(React.string (match sort.direction with Ascending -> {js| ▲|js} | Descending -> {js| ▼|js}))</span>
+       | false -> React.null)
+    </span>
+end
+
+module Table_header = struct
+  let[@react.component] make ~sort ~onSort =
+    let widths = React.useContext columns_context in
+    <div className="table-header">
+      <span className="header-gutter" />
+      <Header_cell label="Time" column=Time width=widths.time_px sort onSort />
+      <Header_cell label="Level" column=Level width=widths.level_px sort onSort />
+      <Header_cell label="Service" column=Service width=widths.service_px sort onSort />
+      <Header_cell label="Message" column=Message width=widths.message_px sort onSort />
+      <Header_cell label="Duration" column=Duration width=widths.duration_px sort onSort />
+    </div>
+end
+
+module Minute_header = struct
+  let[@react.component] make ~label ~count =
+    let theme = React.useContext theme_context in
+    <div className=("minute-header " ^ theme_class theme)>
+      <strong>(React.string label)</strong>
+      <span className="minute-count">(React.string (string_of_int count ^ " events"))</span>
+    </div>
+end
+
+module Attribute_table = struct
+  let[@react.component] make ~attributes =
+    <table className="attributes">
+      <tbody>
+        (attributes
+        |> Array.mapi (fun index attribute ->
+               <tr key=(string_of_int index)>
+                 <td className="attribute-name">(React.string attribute.name)</td>
+                 <td className="attribute-value">(React.string attribute.value)</td>
+               </tr>)
+        |> React.array)
+      </tbody>
+    </table>
+end
+
+module Stack_trace = struct
+  let[@react.component] make ~frames =
+    match frames with
+    | [||] -> React.null
+    | frames ->
+        <ol className="stack">
+          (frames |> Array.mapi (fun index frame -> <li key=(string_of_int index)>(React.string frame)</li>) |> React.array)
+        </ol>
+end
+
+module Event_details = struct
+  let[@react.component] make ~event =
+    let theme = React.useContext theme_context in
+    <div className=("event-details " ^ theme_class theme)>
+      <div className="details-heading">
+        (React.string ("Event #" ^ string_of_int event.id ^ " from " ^ event.service))
+      </div>
+      <Attribute_table attributes=event.attributes />
+      <Stack_trace frames=event.stack />
+    </div>
+end
+
+module Event_row = struct
+  let[@react.component] make =
+    React.memo (fun ~event ~onSelect ->
+        let theme = React.useContext theme_context in
+        let widths = React.useContext columns_context in
+        let selection = React.useContext selection_context in
+        let _ = React.useContext rerender_context in
+        let bulk = React.useContext bulk_context in
+        let fold, setFold = React.useState (fun () -> bulk.fold) in
+        React.useEffect1
+          (fun () ->
+            setFold (fun _ -> bulk.fold);
+            None)
+          [| bulk.generation |];
+        let row = React.useRef Js.Nullable.null in
+        let top = Js.Nullable.toOption row.current |> Option.fold ~none:0 ~some:Classic.offset_top in
+        let highlight = match selection with Selected id when id = event.id -> Highlighted | Selected _ | Unselected -> Plain in
+        React.useLayoutEffect1
+          (fun () ->
+            (match highlight with
+             | Highlighted -> Js.Nullable.toOption row.current |> Option.iter scroll_into_view
+             | Plain -> ());
+            None)
+          [| highlight |];
+        <div
+          ref=(ReactDOM.Ref.domRef row)
+          className=
+            ("event-row " ^ theme_class theme ^ " level-" ^ level_name event.level
+            ^ (match highlight with Highlighted -> " selected" | Plain -> "")
+            ^ (match fold with Expanded -> " expanded" | Collapsed -> "")
+            ^ match top < 600 with true -> " first-screen" | false -> "")
+          onClick=(fun _ -> onSelect event.id)>
+          <div className="cells">
+            <button
+              className="toggle"
+              onClick=(fun click ->
+                React.Event.Mouse.stopPropagation click;
+                setFold (fun fold -> match fold with Expanded -> Collapsed | Collapsed -> Expanded))>
+              (React.string (match fold with Expanded -> {js|▾|js} | Collapsed -> {js|▸|js}))
+            </button>
+            <span className="cell time" style=(ReactDOM.Style.make ~width:(px widths.time_px) ())>
+              (React.string (format_time event.timestamp))
+            </span>
+            <span className="cell level" style=(ReactDOM.Style.make ~width:(px widths.level_px) ())>
+              <Level_badge level=event.level />
+            </span>
+            <span className="cell service" style=(ReactDOM.Style.make ~width:(px widths.service_px) ())>
+              (React.string event.service)
+            </span>
+            <span className="cell message" style=(ReactDOM.Style.make ~width:(px widths.message_px) ())>
+              (React.string event.message)
+            </span>
+            <span className="cell duration" style=(ReactDOM.Style.make ~width:(px widths.duration_px) ())>
+              (React.string (string_of_int event.duration ^ " ms"))
+            </span>
+          </div>
+          (match fold with Expanded -> <Event_details event /> | Collapsed -> React.null)
+        </div>)
+end
+
+module Event_table = struct
+  let[@react.component] make ~lines ~sort ~onSort ~onSelect ~onMove ~onWidth =
+    let container = React.useRef Js.Nullable.null in
+    React.useLayoutEffect0 (fun () ->
+        let observer =
+          resize_observer (fun entries ->
+              Array.iter (fun entry -> onWidth (int_of_float (content_rect entry)##width)) entries)
+        in
+        Js.Nullable.toOption container.current |> Option.iter (observe observer);
+        Some (fun () -> disconnect observer));
+    <div className="event-table" ref=(ReactDOM.Ref.domRef container)>
+      <Table_header sort onSort />
+      <div
+        className="event-body"
+        tabIndex=0
+        onKeyDown=(fun key ->
+          match React.Event.Keyboard.key key with
+          | "ArrowDown" ->
+              React.Event.Keyboard.preventDefault key;
+              onMove Next
+          | "ArrowUp" ->
+              React.Event.Keyboard.preventDefault key;
+              onMove Previous
+          | _ -> ())>
+        (lines
+        |> Array.map (fun line ->
+               match line with
+               | Minute { label; count } -> <Minute_header key=("minute-" ^ label) label count />
+               | Entry event -> <Event_row key=(string_of_int event.id) event onSelect />)
+        |> React.array)
+      </div>
+    </div>
+end
+
+module Error_row = struct
+  let[@react.component] make ~event ~bulk =
+    let fold, setFold = React.useState (fun () -> bulk.fold) in
+    React.useEffect1
+      (fun () ->
+        setFold (fun _ -> bulk.fold);
+        None)
+      [| bulk.generation |];
+    let row = React.useRef Js.Nullable.null in
+    let top = Js.Nullable.toOption row.current |> Option.fold ~none:0 ~some:Classic.offset_top in
+    <li
+      ref=(ReactDOM.Ref.domRef row)
+      className=
+        ("error-row"
+        ^ (match fold with Expanded -> " expanded" | Collapsed -> "")
+        ^ match top < 200 with true -> " in-view" | false -> "")>
+      <button
+        className="error-toggle"
+        onClick=(fun _ -> setFold (fun fold -> match fold with Expanded -> Collapsed | Collapsed -> Expanded))>
+        (React.string (match fold with Expanded -> "-" | Collapsed -> "+"))
+      </button>
+      <span className="error-time">(React.string (format_time event.timestamp))</span>
+      <span className="error-service">(React.string event.service)</span>
+      <span className="error-message">(React.string event.message)</span>
+      (match fold with Expanded -> <Stack_trace frames=event.stack /> | Collapsed -> React.null)
+    </li>
+end
+
+module Error_panel = struct
+  let[@react.component] make ~errors ~bulk =
+    <section className="error-panel">
+      <h3>(React.string ("Errors (" ^ string_of_int (Array.length errors) ^ ")"))</h3>
+      <ul className="error-list">
+        (errors |> Array.map (fun event -> <Error_row key=(string_of_int event.id) event bulk />) |> React.array)
+      </ul>
+    </section>
+end
+
+module Status_bar = struct
+  let[@react.component] make ~shown ~errors ~width ~selection =
+    <div className="status-bar">
+      <span className="shown">(React.string (string_of_int shown ^ " events"))</span>
+      <span className="errors">(React.string (string_of_int errors ^ " errors"))</span>
+      <span className="width">(React.string ("table " ^ px width))</span>
+      <span className="selected">
+        (React.string (match selection with Selected id -> "event #" ^ string_of_int id | Unselected -> "nothing selected"))
+      </span>
+    </div>
+end
+
+module Inspector = struct
+  let[@react.component] make ~event ~onClose =
+    let theme = React.useContext theme_context in
+    Classic.element_by_id Classic.document "portal"
+    |> Option.fold ~none:React.null ~some:(fun target ->
+           ReactDOM.createPortal
+             <aside className=("inspector " ^ theme_class theme)>
+               <header>
+                 <Level_badge level=event.level />
+                 <strong>(React.string (" " ^ event.service ^ " at " ^ format_time event.timestamp))</strong>
+                 <button className="close" onClick=(fun _ -> onClose ())>(React.string "Close")</button>
+               </header>
+               <p className="inspector-message">(React.string event.message)</p>
+               <Attribute_table attributes=event.attributes />
+               <Stack_trace frames=event.stack />
+             </aside>
+             target)
+end
+
+module App = struct
+  let[@react.component] make () =
+    let theme, setTheme = React.useState (fun () -> Light) in
+    let width, setWidth = React.useState (fun () -> 0) in
+    let selection, setSelection = React.useState (fun () -> Unselected) in
+    let tick, setTick = React.useState (fun () -> 0) in
+    let threshold, setThreshold = React.useState (fun () -> Everything) in
+    let bulk, dispatchBulk =
+      React.useReducer (fun bulk fold -> { fold; generation = bulk.generation + 1 }) { fold = Collapsed; generation = 0 }
+    in
+    let sort, sortBy =
+      React.useReducer
+        (fun sort column ->
+          match sort.column = column with
+          | true -> { sort with direction = (match sort.direction with Ascending -> Descending | Descending -> Ascending) }
+          | false -> { column; direction = Ascending })
+        { column = Time; direction = Ascending }
+    in
+    let widths =
+      React.useMemo1
+        (fun () ->
+          let fixed = 110 + 70 + 140 + 90 + 40 in
+          { time_px = 110; level_px = 70; service_px = 140; message_px = max 160 (width - fixed); duration_px = 90 })
+        [| width |]
+    in
+    let shown =
+      React.useMemo2
+        (fun () ->
+          let kept =
+            Js.Array.filter
+              ~f:(fun event ->
+                match threshold with Everything -> true | At_least level -> severity event.level >= severity level)
+              events
+          in
+          let compare_by left right =
+            match sort.column with
+            | Time -> compare left.timestamp right.timestamp
+            | Level -> compare (severity left.level) (severity right.level)
+            | Service -> compare left.service right.service
+            | Message -> compare left.message right.message
+            | Duration -> compare left.duration right.duration
+          in
+          let ordered = Array.copy kept in
+          Array.stable_sort
+            (fun left right ->
+              match sort.direction with
+              | Ascending -> compare_by left right
+              | Descending -> compare_by right left)
+            ordered;
+          ordered)
+        (threshold, sort)
+    in
+    let lines =
+      React.useMemo2
+        (fun () ->
+          match sort.column with
+          | Time ->
+              shown
+              |> Array.to_list
+              |> List.fold_left
+                   (fun groups event ->
+                     match groups with
+                     | (label, members) :: rest when label = minute_of event.timestamp -> (label, event :: members) :: rest
+                     | _ -> (minute_of event.timestamp, [ event ]) :: groups)
+                   []
+              |> List.rev_map (fun (label, members) ->
+                     Minute { label; count = List.length members } :: List.rev_map (fun event -> Entry event) members)
+              |> List.concat |> Array.of_list
+          | Level | Service | Message | Duration -> Array.map (fun event -> Entry event) shown)
+        (shown, sort.column)
+    in
+    let onSelect = React.useCallback0 (fun id -> setSelection (fun _ -> Selected id)) in
+    let onMove step =
+      setSelection (fun selection ->
+          let at =
+            match selection with
+            | Unselected -> -1
+            | Selected id ->
+                Js.Array.findIndex ~f:(fun event -> event.id = id) shown
+          in
+          let last = Array.length shown - 1 in
+          match last with
+          | -1 -> Unselected
+          | _ -> Selected shown.(match step with Next -> min last (at + 1) | Previous -> max 0 (at - 1)).id)
+    in
+    let errors = React.useMemo1 (fun () -> Js.Array.filter ~f:(fun event -> event.level = Error) shown) [| shown |] in
+    let picked =
+      match selection with
+      | Selected id -> Js.Array.find ~f:(fun event -> event.id = id) events
+      | Unselected -> None
+    in
+    <Theme_provider value=theme>
+      <Columns_provider value=widths>
+        <Selection_provider value=selection>
+          <Rerender_provider value=tick>
+            <Bulk_provider value=bulk>
+              <div className=("event-app " ^ theme_class theme)>
+                <Toolbar
+                  threshold
+                  onThreshold=(fun next -> setThreshold (fun _ -> next))
+                  onExpandAll=(fun () -> dispatchBulk Expanded)
+                  onCollapseAll=(fun () -> dispatchBulk Collapsed)
+                  onRerender=(fun () -> setTick (fun tick -> tick + 1))
+                  onTheme=(fun () -> setTheme (fun theme -> match theme with Light -> Dark | Dark -> Light)) />
+                <Event_table
+                  lines
+                  sort
+                  onSort=sortBy
+                  onSelect
+                  onMove
+                  onWidth=(fun next -> setWidth (fun _ -> next)) />
+                <Status_bar shown=(Array.length shown) errors=(Array.length errors) width selection />
+                <Error_panel errors bulk />
+                (picked
+                |> Option.fold ~none:React.null ~some:(fun event ->
+                       <Inspector event onClose=(fun () -> setSelection (fun _ -> Unselected)) />))
+              </div>
+            </Bulk_provider>
+          </Rerender_provider>
+        </Selection_provider>
+      </Columns_provider>
+    </Theme_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

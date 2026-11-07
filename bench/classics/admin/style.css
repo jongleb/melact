@@ -1,0 +1,28 @@
+.users-page { max-width: 1100px; margin: 0 auto; padding: 12px 16px; }
+.users-page h1 { font-size: 22px; margin: 4px 0 12px; }
+.admin-toolbar { display: flex; gap: 10px; align-items: center; }
+.admin-toolbar #search { flex: 1; padding: 6px 8px; font: inherit; }
+.primary { background: #0969da; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; }
+.danger { background: #cf222e; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; }
+.users { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.users th, .users td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eaeef2; }
+.users .num { text-align: right; color: #57606a; }
+.user-name { font-weight: 600; }
+.user-email { color: #57606a; font-size: 12px; }
+.user-row.disabled { opacity: .55; }
+.actions { display: flex; gap: 6px; justify-content: flex-end; }
+.role { padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+.role-admin { background: #ffebe9; } .role-editor { background: #ddf4ff; } .role-viewer { background: #eaeef2; } .role-guest { background: #fff8c5; }
+.pager { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 10px; }
+.overlay { position: fixed; inset: 0; background: rgba(27,31,36,.5); display: flex; align-items: center; justify-content: center; }
+.modal { background: #fff; border-radius: 8px; width: 440px; padding: 16px 20px; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; }
+.modal-header h2 { font-size: 18px; margin: 0; }
+.field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.field input, .field select { font: inherit; padding: 6px 8px; }
+.field.invalid input { border: 1px solid #cf222e; }
+.field-error { color: #cf222e; font-size: 12px; margin: 0; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.toast-stack { position: fixed; right: 16px; bottom: 48px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast { display: flex; gap: 12px; align-items: center; background: #24292f; color: #fff; padding: 8px 12px; border-radius: 6px; min-width: 240px; }
+.toast .dismiss { margin-left: auto; background: none; border: 0; color: #fff; }

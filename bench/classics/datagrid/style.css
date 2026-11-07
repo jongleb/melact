@@ -1,0 +1,27 @@
+.datagrid-app { display: flex; flex-direction: column; height: 880px; font-size: 13px; }
+.grid-page { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.grid-toolbar { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-bottom: 1px solid #d0d7de; }
+.pager { display: flex; gap: 4px; margin-left: auto; }
+.pager .page.current { background: #0969da; color: #fff; }
+.table-scroll { flex: 1; overflow: auto; }
+.data-grid { width: 100%; border-collapse: collapse; }
+.data-grid th, .data-grid td { padding: 3px 8px; border-bottom: 1px solid #eaeef2; text-align: left; white-space: nowrap; }
+.data-grid thead th { position: sticky; top: 0; background: #f6f8fa; }
+.data-grid thead tr.filters th { top: 26px; }
+.data-grid th.sortable { cursor: pointer; user-select: none; }
+.data-grid .filter { width: 100%; min-width: 60px; font: inherit; }
+.data-grid .num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-grid tr.picked { background: #ddf4ff; }
+.badge { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 11px; }
+.badge-active { background: #dafbe1; color: #116329; }
+.badge-pending { background: #fff8c5; color: #7d4e00; }
+.badge-suspended { background: #ffebe9; color: #a40e26; }
+.badge-closed { background: #eaeef2; color: #57606a; }
+.summary { display: flex; align-items: center; gap: 16px; padding: 6px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa; }
+.status-count { display: inline-flex; gap: 4px; margin-right: 8px; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 380px; overflow: auto; background: #fff; box-shadow: -4px 0 16px rgba(0,0,0,.15); padding: 12px 16px; }
+.drawer header { display: flex; justify-content: space-between; align-items: center; }
+.drawer dl { display: grid; grid-template-columns: 90px 1fr; gap: 4px 8px; }
+.transactions { width: 100%; border-collapse: collapse; }
+.transactions td { padding: 2px 4px; border-bottom: 1px solid #eee; }
+.transactions tr.refund { color: #a40e26; }

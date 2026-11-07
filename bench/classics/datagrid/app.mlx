@@ -1,0 +1,439 @@
+(** Where an account stands. *)
+type status = Active | Pending | Suspended | Closed
+
+type person = {
+  id : int;
+  name : string;
+  email : string;
+  country : string;
+  amount : float;
+  status : status;
+  joined : string;
+}
+
+type column = Id | Name | Email | Country | Amount | Status | Joined
+
+type order = Ascending | Descending
+
+(** How the rows are ordered. *)
+type sort = Unsorted | Sorted of column * order
+
+(** Whether a row is in the selection. *)
+type pick = Picked | Unpicked
+
+(** Which person the drawer shows. *)
+type drawer = Shut | Showing of int
+
+let columns = [| Id; Name; Email; Country; Amount; Status; Joined |]
+let page_size = 1000
+
+let status_name status =
+  match status with Active -> "active" | Pending -> "pending" | Suspended -> "suspended" | Closed -> "closed"
+
+let money amount = "$" ^ Js.Float.toFixed ~digits:2 amount
+
+let people =
+  let seed = Classic.Seed.make 2024 in
+  let first =
+    [| "Ada"; "Ben"; "Chloe"; "Dmitri"; "Elena"; "Farid"; "Grace"; "Hugo"; "Ines"; "Jonas"; "Kira"; "Liam"; "Maya";
+       "Nils"; "Olga"; "Pablo"; "Quinn"; "Rosa"; "Sven"; "Tara"; "Umar"; "Vera"; "Wen"; "Yara"; "Zoe" |]
+  in
+  let last =
+    [| "Andersen"; "Brown"; "Costa"; "Dubois"; "Eriksen"; "Fischer"; "Garcia"; "Horvat"; "Ivanova"; "Jensen";
+       "Kowalski"; "Lopez"; "Muller"; "Nakamura"; "Okafor"; "Petrov"; "Rossi"; "Silva"; "Tanaka"; "Weber" |]
+  in
+  let countries =
+    [| "Argentina"; "Brazil"; "Canada"; "Denmark"; "Egypt"; "France"; "Germany"; "India"; "Japan"; "Kenya";
+       "Mexico"; "Norway"; "Poland"; "Spain"; "Sweden"; "Turkey"; "Ukraine"; "Vietnam" |]
+  in
+  let domains = [| "example.com"; "mail.test"; "corp.local"; "post.example" |] in
+  Array.init 10000 (fun index ->
+      let given = Classic.Seed.pick seed first and family = Classic.Seed.pick seed last in
+      let month = Classic.Seed.next seed 12 + 1 and day = Classic.Seed.next seed 28 + 1 in
+      {
+        id = index + 1;
+        name = given ^ " " ^ family;
+        email =
+          String.lowercase_ascii given ^ "." ^ String.lowercase_ascii family ^ string_of_int (index mod 97) ^ "@"
+          ^ Classic.Seed.pick seed domains;
+        country = Classic.Seed.pick seed countries;
+        amount = float_of_int (Classic.Seed.next seed 1000000) /. 100.;
+        status = [| Active; Active; Active; Pending; Suspended; Closed |].(Classic.Seed.next seed 6);
+        joined =
+          string_of_int (2015 + Classic.Seed.next seed 10)
+          ^ (match month < 10 with true -> "-0" | false -> "-")
+          ^ string_of_int month
+          ^ (match day < 10 with true -> "-0" | false -> "-")
+          ^ string_of_int day;
+      })
+
+let column_title column =
+  match column with
+  | Id -> "ID"
+  | Name -> "Name"
+  | Email -> "Email"
+  | Country -> "Country"
+  | Amount -> "Amount"
+  | Status -> "Status"
+  | Joined -> "Joined"
+
+let column_text person column =
+  match column with
+  | Id -> string_of_int person.id
+  | Name -> person.name
+  | Email -> person.email
+  | Country -> person.country
+  | Amount -> money person.amount
+  | Status -> status_name person.status
+  | Joined -> person.joined
+
+(** What changes the selection. *)
+type selecting = Toggle of int | Pick_all of int array | Drop_all
+
+(** The selection, shared through context with everything that summarises it. *)
+type selection = { picked : Belt.Set.Int.t; change : selecting -> unit }
+
+let selection_context = React.createContext { picked = Belt.Set.Int.empty; change = (fun _ -> ()) }
+
+module Selection_context_provider = struct
+  let make = React.Context.provider selection_context
+
+  external makeProps :
+    value:selection -> children:React.element -> unit -> < value : selection ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Selection_provider = struct
+  let[@react.component] make ~children =
+    let picked, change =
+      React.useReducer
+        (fun picked selecting ->
+          match selecting with
+          | Toggle id -> (
+              match Belt.Set.Int.has picked id with
+              | true -> Belt.Set.Int.remove picked id
+              | false -> Belt.Set.Int.add picked id)
+          | Pick_all ids -> Belt.Set.Int.mergeMany picked ids
+          | Drop_all -> Belt.Set.Int.empty)
+        Belt.Set.Int.empty
+    in
+    let value = React.useMemo2 (fun () -> { picked; change }) (picked, change) in
+    <Selection_context_provider value>children</Selection_context_provider>
+end
+
+(** What the grid's own controls change. *)
+type grid_action =
+  | Sort_by of column
+  | Filter of column * string
+  | Clear_filters
+  | Go_to of int
+  | Open of int
+  | Close
+
+type grid = { sort : sort; filters : (column * string) list; page : int; drawer : drawer }
+
+module Status_badge = struct
+  let[@react.component] make ~status =
+    <span className=("badge badge-" ^ status_name status)>(React.string (status_name status))</span>
+end
+
+module Header_cell = struct
+  let[@react.component] make ~column ~sort ~onSort =
+    <th
+      className="sortable"
+      onClick=(fun _ -> onSort column)
+      ariaSort=
+        (match sort with
+         | Sorted (by, Ascending) when by = column -> "ascending"
+         | Sorted (by, Descending) when by = column -> "descending"
+         | Sorted _ | Unsorted -> "none")>
+      (React.string (column_title column))
+      <span className="sort-mark">
+        (React.string
+           (match sort with
+            | Sorted (by, Ascending) when by = column -> " \xe2\x96\xb2"
+            | Sorted (by, Descending) when by = column -> " \xe2\x96\xbc"
+            | Sorted _ | Unsorted -> ""))
+      </span>
+    </th>
+end
+
+module Filter_cell = struct
+  let[@react.component] make ~column ~value ~onFilter =
+    <th>
+      <input
+        className=("filter filter-" ^ String.lowercase_ascii (column_title column))
+        placeholder=("Filter " ^ String.lowercase_ascii (column_title column))
+        value
+        onChange=(fun event -> onFilter column (React.Event.Form.target event)##value) />
+    </th>
+end
+
+module Grid_row = struct
+  let[@react.component] make =
+    React.memo (fun ~person ~pick ~onToggle ~onOpen ->
+        <tr className=(match pick with Picked -> "row picked" | Unpicked -> "row")>
+          <td>
+            <input
+              className="row-select"
+              type_="checkbox"
+              checked=(match pick with Picked -> true | Unpicked -> false)
+              onChange=(fun _ -> onToggle person.id) />
+          </td>
+          <td className="num">(React.int person.id)</td>
+          <td><a className="open-detail" href="#" onClick=(fun event ->
+            React.Event.Mouse.preventDefault event;
+            onOpen person.id)>(React.string person.name)</a></td>
+          <td>(React.string person.email)</td>
+          <td>(React.string person.country)</td>
+          <td className="num">(React.string (money person.amount))</td>
+          <td><Status_badge status=person.status /></td>
+          <td>(React.string person.joined)</td>
+        </tr>)
+end
+
+module Pager = struct
+  let[@react.component] make ~page ~pages ~onPage =
+    <nav className="pager">
+      <button id="prev-page" disabled=(page = 0) onClick=(fun _ -> onPage (page - 1))>(React.string "Previous")</button>
+      (React.array
+         (Array.init pages (fun index ->
+              <button
+                key=(string_of_int index)
+                className=(match index = page with true -> "page current" | false -> "page")
+                onClick=(fun _ -> onPage index)>
+                (React.int (index + 1))
+              </button>)))
+      <button id="next-page" disabled=(page >= pages - 1) onClick=(fun _ -> onPage (page + 1))>(React.string "Next")</button>
+    </nav>
+end
+
+module Summary = struct
+  let[@react.component] make () =
+    let { picked; change } = React.useContext selection_context in
+    let ids = Belt.Set.Int.toArray picked in
+    let total = Array.fold_left (fun sum id -> sum +. people.(id - 1).amount) 0. ids in
+    let by_status status = Array.length (Js.Array.filter ~f:(fun id -> people.(id - 1).status = status) ids) in
+    <footer className="summary">
+      <span id="selected-count">(React.string (string_of_int (Array.length ids) ^ " selected"))</span>
+      <span id="selected-total">(React.string ("Total " ^ money total))</span>
+      <span className="by-status">
+        (React.array
+           (Array.map
+              (fun status ->
+                <span key=(status_name status) className="status-count">
+                  <Status_badge status />
+                  (React.int (by_status status))
+                </span>)
+              [| Active; Pending; Suspended; Closed |]))
+      </span>
+      <button id="clear-selection" disabled=(Array.length ids = 0) onClick=(fun _ -> change Drop_all)>
+        (React.string "Clear selection")
+      </button>
+    </footer>
+end
+
+module Detail_drawer = struct
+  let[@react.component] make ~person ~onClose =
+    let transactions =
+      React.useMemo1
+        (fun () ->
+          let seed = Classic.Seed.make person.id in
+          Array.init 25 (fun index ->
+              ( index,
+                Classic.sentence seed 3,
+                float_of_int (Classic.Seed.next seed 50000) /. 100.,
+                match Classic.Seed.next seed 4 with 0 -> "refund" | _ -> "charge" )))
+        [| person |]
+    in
+    let { picked; change } = React.useContext selection_context in
+    <aside className="drawer">
+      <header>
+        <h2 id="drawer-title">(React.string person.name)</h2>
+        <button id="close-drawer" onClick=(fun _ -> onClose ())>(React.string "Close")</button>
+      </header>
+      <dl>
+        <dt>(React.string "Email")</dt>
+        <dd>(React.string person.email)</dd>
+        <dt>(React.string "Country")</dt>
+        <dd>(React.string person.country)</dd>
+        <dt>(React.string "Balance")</dt>
+        <dd>(React.string (money person.amount))</dd>
+        <dt>(React.string "Status")</dt>
+        <dd><Status_badge status=person.status /></dd>
+        <dt>(React.string "Joined")</dt>
+        <dd>(React.string person.joined)</dd>
+      </dl>
+      <label className="drawer-pick">
+        <input
+          type_="checkbox"
+          checked=(Belt.Set.Int.has picked person.id)
+          onChange=(fun _ -> change (Toggle person.id)) />
+        (React.string " Selected")
+      </label>
+      <h3>(React.string "Recent transactions")</h3>
+      <table className="transactions">
+        <tbody>
+          (React.array
+             (Array.map
+                (fun (index, memo, value, kind) ->
+                  <tr key=(string_of_int index) className=kind>
+                    <td>(React.string memo)</td>
+                    <td>(React.string kind)</td>
+                    <td className="num">(React.string (money value))</td>
+                  </tr>)
+                transactions))
+        </tbody>
+      </table>
+    </aside>
+end
+
+module Grid = struct
+  let[@react.component] make () =
+    let { picked; change } = React.useContext selection_context in
+    let grid, dispatch =
+      React.useReducer
+        (fun grid action ->
+          match action with
+          | Sort_by column ->
+              let sort =
+                match grid.sort with
+                | Sorted (by, Ascending) when by = column -> Sorted (column, Descending)
+                | Sorted _ | Unsorted -> Sorted (column, Ascending)
+              in
+              { grid with sort; page = 0 }
+          | Filter (column, text) ->
+              {
+                grid with
+                filters =
+                  (column, text) :: List.filter (fun (other, _) -> other <> column) grid.filters
+                  |> List.filter (fun (_, text) -> text <> "");
+                page = 0;
+              }
+          | Clear_filters -> { grid with filters = []; page = 0 }
+          | Go_to page -> { grid with page }
+          | Open id -> { grid with drawer = Showing id }
+          | Close -> { grid with drawer = Shut })
+        { sort = Unsorted; filters = []; page = 0; drawer = Shut }
+    in
+    let matching =
+      React.useMemo1
+        (fun () ->
+          let needles = List.map (fun (column, text) -> (column, String.lowercase_ascii text)) grid.filters in
+          Js.Array.filter
+            ~f:(fun person ->
+              List.for_all
+                (fun (column, needle) ->
+                  Js.String.includes ~search:needle (String.lowercase_ascii (column_text person column)))
+                needles)
+            people)
+        [| grid.filters |]
+    in
+    let ordered =
+      React.useMemo2
+        (fun () ->
+          match grid.sort with
+          | Unsorted -> matching
+          | Sorted (column, order) ->
+              let compare_people left right =
+                match column with
+                | Id -> compare left.id right.id
+                | Amount -> compare left.amount right.amount
+                | Status -> compare left.status right.status
+                | Name | Email | Country | Joined -> compare (column_text left column) (column_text right column)
+              in
+              let sorted = Array.copy matching in
+              Array.stable_sort
+                (fun left right ->
+                  match order with
+                  | Ascending -> compare_people left right
+                  | Descending -> compare_people right left)
+                sorted;
+              sorted)
+        (matching, grid.sort)
+    in
+    let pages = max 1 ((Array.length ordered + page_size - 1) / page_size) in
+    let shown =
+      React.useMemo2
+        (fun () ->
+          Js.Array.slice ~start:(grid.page * page_size) ~end_:((grid.page + 1) * page_size) ordered)
+        (ordered, grid.page)
+    in
+    let onToggle = React.useCallback1 (fun id -> change (Toggle id)) [| change |] in
+    let onOpen = React.useCallback0 (fun id -> dispatch (Open id)) in
+    let onSort = React.useCallback0 (fun column -> dispatch (Sort_by column)) in
+    let onFilter = React.useCallback0 (fun column text -> dispatch (Filter (column, text))) in
+    let all_picked = Js.Array.every ~f:(fun person -> Belt.Set.Int.has picked person.id) ordered in
+    let portal = Classic.element_by_id Classic.document "portal" in
+    <div className="grid-page">
+      <div className="grid-toolbar">
+        <span id="match-count">(React.string (string_of_int (Array.length ordered) ^ " of 10000 people"))</span>
+        <button id="clear-filters" onClick=(fun _ -> dispatch Clear_filters)>(React.string "Clear filters")</button>
+        <Pager page=grid.page pages onPage=(fun page -> dispatch (Go_to page)) />
+      </div>
+      <div className="table-scroll">
+        <table className="data-grid">
+          <thead>
+            <tr>
+              <th>
+                <input
+                  id="select-all"
+                  type_="checkbox"
+                  checked=(all_picked && Array.length ordered > 0)
+                  onChange=(fun _ ->
+                    match all_picked with
+                    | true -> change Drop_all
+                    | false -> change (Pick_all (Array.map (fun person -> person.id) ordered))) />
+              </th>
+              (React.array
+                 (Array.map
+                    (fun column -> <Header_cell key=(column_title column) column sort=grid.sort onSort />)
+                    columns))
+            </tr>
+            <tr className="filters">
+              <th />
+              (React.array
+                 (Array.map
+                    (fun column ->
+                      <Filter_cell
+                        key=(column_title column)
+                        column
+                        value=(Option.value ~default:"" (List.assoc_opt column grid.filters))
+                        onFilter />)
+                    columns))
+            </tr>
+          </thead>
+          <tbody>
+            (React.array
+               (Array.map
+                  (fun person ->
+                    <Grid_row
+                      key=(string_of_int person.id)
+                      person
+                      pick=(match Belt.Set.Int.has picked person.id with true -> Picked | false -> Unpicked)
+                      onToggle
+                      onOpen />)
+                  shown))
+          </tbody>
+        </table>
+      </div>
+      (match (grid.drawer, portal) with
+       | Showing id, Some target ->
+           ReactDOM.createPortal
+             <Detail_drawer key=(string_of_int id) person=people.(id - 1) onClose=(fun () -> dispatch Close) />
+             target
+       | Showing _, None | Shut, _ -> React.null)
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    <Selection_provider>
+      <div className="datagrid-app">
+        <Grid />
+        <Summary />
+      </div>
+    </Selection_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

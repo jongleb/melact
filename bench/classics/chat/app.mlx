@@ -1,0 +1,402 @@
+external scroll_height : Dom.element -> int = "scrollHeight" [@@mel.get]
+external set_scroll_top : Dom.element -> int -> unit = "scrollTop" [@@mel.set]
+
+type channel = { id : int; name : string; topic : string; unread : int }
+
+type member = { handle : string; full_name : string; hue : int }
+
+type reaction = { emoji : string; count : int; mine : mine }
+
+(** Whether the signed-in user is among those who reacted. *)
+and mine = Reacted | Not_reacted
+
+type message = { id : int; author : member; day : int; minute : int; text : string; reactions : reaction array; replies : message array }
+
+(** The thread panel on the right. *)
+type thread = No_thread | Thread_of of int
+
+(** Whether the signed-in user has an unsent draft. *)
+type typing = Typing | Idle
+
+(** How a message starts: with its author's name and avatar, or as a continuation of the one above. *)
+type head = With_header | Continuation
+
+(** One line of the message list. *)
+type line = Day_line of int | Message_line of message * head
+
+type state = { channels : channel array; active : int; messages : message array Belt.Map.Int.t; thread : thread; query : string }
+
+(** What the app's reducer does. *)
+type action =
+  | Switch of int
+  | Send of string
+  | Toggle_reaction of int * string
+  | Open_thread of int
+  | Close_thread
+  | Reply of int * string
+  | Search of string
+
+let members =
+  let seed = Classic.Seed.make 77 in
+  Array.init 50 (fun index ->
+      let first = Classic.Seed.pick seed Classic.words and last = Classic.Seed.pick seed Classic.words in
+      { handle = first ^ "." ^ last ^ string_of_int index; full_name = String.capitalize_ascii first ^ " " ^ String.capitalize_ascii last; hue = index * 47 mod 360 })
+
+let emojis = [| "\u{1F44D}"; "\u{1F389}"; "\u{1F440}"; "\u{2764}\u{FE0F}"; "\u{1F602}"; "\u{1F680}" |]
+
+let history channel =
+  let seed = Classic.Seed.make ((channel * 104729) + 1) in
+  let minute = ref 0 in
+  Array.init 3000 (fun index ->
+      minute := !minute + Classic.Seed.next seed 9;
+      let author = members.(Classic.Seed.next seed 12 + (channel mod 7 * 5)) in
+      let text = String.capitalize_ascii (Classic.sentence seed (3 + Classic.Seed.next seed 25)) in
+      let reactions =
+        match Classic.Seed.next seed 5 with
+        | 0 ->
+            Array.init (1 + Classic.Seed.next seed 3) (fun slot ->
+                { emoji = emojis.(slot); count = 1 + Classic.Seed.next seed 6; mine = Not_reacted })
+        | _ -> [||]
+      in
+      let replies =
+        match Classic.Seed.next seed 12 with
+        | 0 ->
+            Array.init (1 + Classic.Seed.next seed 5) (fun reply ->
+                {
+                  id = (channel * 1000000) + (index * 10) + reply + 500000;
+                  author = Classic.Seed.pick seed members;
+                  day = !minute / 600;
+                  minute = (!minute mod 600) + reply + 1;
+                  text = Classic.sentence seed (4 + Classic.Seed.next seed 10);
+                  reactions = [||];
+                  replies = [||];
+                })
+        | _ -> [||]
+      in
+      { id = (channel * 1000000) + index; author; day = !minute / 600; minute = !minute mod 600; text; reactions; replies })
+
+let me = members.(0)
+
+let reduce state action =
+  let edit_active update = { state with messages = Belt.Map.Int.update state.messages state.active (Option.map update) } in
+  let edit_message id update =
+    edit_active (Array.map (fun message -> match message.id = id with true -> update message | false -> message))
+  in
+  match action with
+  | Switch id ->
+      {
+        active = id;
+        thread = No_thread;
+        query = "";
+        channels = Array.map (fun (channel : channel) -> match channel.id = id with true -> { channel with unread = 0 } | false -> channel) state.channels;
+        messages =
+          (match Belt.Map.Int.has state.messages id with true -> state.messages | false -> Belt.Map.Int.set state.messages id (history id));
+      }
+  | Send text ->
+      edit_active (fun messages ->
+          let last = messages.(Array.length messages - 1) in
+          Array.append messages
+            [| { id = last.id + 1; author = me; day = last.day; minute = last.minute + 1; text; reactions = [||]; replies = [||] } |])
+  | Toggle_reaction (id, emoji) ->
+      edit_message id (fun message ->
+          match Js.Array.find ~f:(fun reaction -> reaction.emoji = emoji) message.reactions with
+          | None -> { message with reactions = Array.append message.reactions [| { emoji; count = 1; mine = Reacted } |] }
+          | Some { mine = Reacted; count = 1; _ } ->
+              { message with reactions = Js.Array.filter ~f:(fun reaction -> reaction.emoji <> emoji) message.reactions }
+          | Some _ ->
+              {
+                message with
+                reactions =
+                  Array.map
+                    (fun reaction ->
+                      match (reaction.emoji = emoji, reaction.mine) with
+                      | true, Reacted -> { reaction with count = reaction.count - 1; mine = Not_reacted }
+                      | true, Not_reacted -> { reaction with count = reaction.count + 1; mine = Reacted }
+                      | false, _ -> reaction)
+                    message.reactions;
+              })
+  | Open_thread id -> { state with thread = Thread_of id }
+  | Close_thread -> { state with thread = No_thread }
+  | Reply (id, text) ->
+      edit_message id (fun message ->
+          {
+            message with
+            replies =
+              Array.append message.replies
+                [| { id = message.id + 500000 + 90 + Array.length message.replies; author = me; day = message.day; minute = message.minute; text; reactions = [||]; replies = [||] } |];
+          })
+  | Search query -> { state with query }
+
+let me_context = React.createContext me
+
+module Me_provider = struct
+  let make = React.Context.provider me_context
+
+  external makeProps : value:member -> children:React.element -> unit -> < value : member ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Avatar = struct
+  let[@react.component] make ~member =
+    <span className="avatar" style=(ReactDOM.Style.make ~backgroundColor:("hsl(" ^ string_of_int member.hue ^ ", 45%, 50%)") ())>
+      (React.string (String.sub member.full_name 0 1))
+    </span>
+end
+
+module Top_bar = struct
+  let[@react.component] make ~query ~dispatch =
+    let me = React.useContext me_context in
+    <header className="top-bar">
+      <input
+        className="search"
+        placeholder="Search messages"
+        value=query
+        onChange=(fun event -> dispatch (Search (React.Event.Form.target event)##value)) />
+      <Avatar member=me />
+    </header>
+end
+
+module Channel_item = struct
+  let[@react.component] make =
+    React.memo (fun ~(channel : channel) ~selected ~dispatch ->
+        <li
+          className=
+            (match (selected, channel.unread) with
+             | `Selected, _ -> "channel active"
+             | `Unselected, 0 -> "channel"
+             | `Unselected, _ -> "channel unread")
+          onClick=(fun _ -> dispatch (Switch channel.id))>
+          <span className="hash">(React.string "#")</span>
+          <span className="channel-name">(React.string channel.name)</span>
+          (match channel.unread with 0 -> React.null | count -> <span className="badge">(React.int count)</span>)
+        </li>)
+end
+
+module Sidebar = struct
+  let[@react.component] make ~channels ~active ~dispatch =
+    <nav className="sidebar">
+      <h2 className="workspace">(React.string "Melange Guild")</h2>
+      <h3>(React.string "Channels")</h3>
+      <ul className="channels">
+        (channels
+        |> Array.map (fun (channel : channel) ->
+               <Channel_item
+                 key=(string_of_int channel.id)
+                 channel
+                 selected=(match channel.id = active with true -> `Selected | false -> `Unselected)
+                 dispatch />)
+        |> React.array)
+      </ul>
+    </nav>
+end
+
+module Reactions = struct
+  let[@react.component] make ~message ~dispatch =
+    match message.reactions with
+    | [||] -> React.null
+    | reactions ->
+        <div className="reactions">
+          (reactions
+          |> Array.map (fun reaction ->
+                 <button
+                   key=reaction.emoji
+                   className=(match reaction.mine with Reacted -> "reaction mine" | Not_reacted -> "reaction")
+                   onClick=(fun _ -> dispatch (Toggle_reaction (message.id, reaction.emoji)))>
+                   (React.string (reaction.emoji ^ " " ^ string_of_int reaction.count))
+                 </button>)
+          |> React.array)
+        </div>
+end
+
+module Message = struct
+  let[@react.component] make =
+    React.memo (fun ~message ~head ~dispatch ->
+        let clock minute =
+          let hour = (8 + (minute / 60)) mod 24 in
+          let shown = match hour mod 12 with 0 -> 12 | other -> other in
+          string_of_int shown ^ ":"
+          ^ (match minute mod 60 with small when small < 10 -> "0" ^ string_of_int small | large -> string_of_int large)
+          ^ match hour < 12 with true -> " AM" | false -> " PM"
+        in
+        <div className=(match head with With_header -> "message" | Continuation -> "message continued") id=("m" ^ string_of_int message.id)>
+          (match head with
+           | With_header -> <Avatar member=message.author />
+           | Continuation -> <span className="gutter-time">(React.string (clock message.minute))</span>)
+          <div className="message-body">
+            (match head with
+             | With_header ->
+                 <div className="message-head">
+                   <span className="sender">(React.string message.author.full_name)</span>
+                   <span className="time">(React.string (clock message.minute))</span>
+                 </div>
+             | Continuation -> React.null)
+            <div className="text">(React.string message.text)</div>
+            <Reactions message dispatch />
+            (match message.replies with
+             | [||] -> React.null
+             | replies ->
+                 <a className="reply-count" onClick=(fun _ -> dispatch (Open_thread message.id))>
+                   (React.string (match Array.length replies with 1 -> "1 reply" | count -> string_of_int count ^ " replies"))
+                 </a>)
+          </div>
+          <div className="message-actions">
+            <button className="add-reaction" onClick=(fun _ -> dispatch (Toggle_reaction (message.id, emojis.(0))))>(React.string "+\u{1F642}")</button>
+            <button className="reply-in-thread" onClick=(fun _ -> dispatch (Open_thread message.id))>(React.string "\u{1F4AC}")</button>
+          </div>
+        </div>)
+end
+
+module Day_divider = struct
+  let[@react.component] make ~day =
+    let names = [| "Monday"; "Tuesday"; "Wednesday"; "Thursday"; "Friday"; "Saturday"; "Sunday" |] in
+    <div className="day-divider"><span>(React.string (names.(day mod 7) ^ ", day " ^ string_of_int (day + 1)))</span></div>
+end
+
+module Message_list = struct
+  let[@react.component] make ~messages ~active ~query ~dispatch =
+    let box = React.useRef Js.Nullable.null in
+    let lines =
+      React.useMemo2
+        (fun () ->
+          let shown =
+            match query with "" -> messages | _ -> Js.Array.filter ~f:(fun message -> Js.String.includes ~search:query message.text) messages
+          in
+          let lines = [||] in
+          Array.iteri
+            (fun index message ->
+              let previous = match index with 0 -> None | _ -> Some shown.(index - 1) in
+              (match previous with
+               | Some (previous : message) when previous.day = message.day -> ()
+               | Some _ | None -> ignore (Js.Array.push ~value:(Day_line message.day) lines));
+              let head =
+                match previous with
+                | Some previous when previous.author == message.author && previous.day = message.day && message.minute - previous.minute < 5 ->
+                    Continuation
+                | Some _ | None -> With_header
+              in
+              ignore (Js.Array.push ~value:(Message_line (message, head)) lines))
+            shown;
+          lines)
+        (messages, query)
+    in
+    React.useLayoutEffect2
+      (fun () ->
+        Js.Nullable.toOption box.current |> Option.iter (fun element -> set_scroll_top element (scroll_height element));
+        None)
+      (Array.length lines, active);
+    <div ref=(ReactDOM.Ref.domRef box) className="message-list">
+      (lines
+      |> Array.map (fun line ->
+             match line with
+             | Day_line day -> <Day_divider key=("day" ^ string_of_int day) day />
+             | Message_line (message, head) -> <Message key=(string_of_int message.id) message head dispatch />)
+      |> React.array)
+    </div>
+end
+
+module Composer = struct
+  let[@react.component] make ~placeholder ~onSend ~onTyping =
+    let draft, setDraft = React.useState (fun () -> "") in
+    let typing = match draft with "" -> Idle | _ -> Typing in
+    React.useEffect1
+      (fun () ->
+        onTyping typing;
+        None)
+      [| typing |];
+    <div className="composer">
+      <textarea
+        placeholder
+        rows=2
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value))
+        onKeyDown=(fun event ->
+          match (React.Event.Keyboard.key event, React.Event.Keyboard.shiftKey event, String.trim draft) with
+          | "Enter", false, "" -> React.Event.Keyboard.preventDefault event
+          | "Enter", false, text ->
+              React.Event.Keyboard.preventDefault event;
+              onSend text;
+              setDraft (fun _ -> "")
+          | _ -> ()) />
+      <button className="send" onClick=(fun _ -> match String.trim draft with "" -> () | text -> onSend text; setDraft (fun _ -> ""))>
+        (React.string "Send")
+      </button>
+    </div>
+end
+
+module Typing_indicator = struct
+  let[@react.component] make ~typing =
+    let me = React.useContext me_context in
+    <div className="typing">
+      (match typing with Typing -> React.string (me.full_name ^ " is typing\u{2026}") | Idle -> React.string "\u{a0}")
+    </div>
+end
+
+module Thread_panel = struct
+  let[@react.component] make ~message ~dispatch =
+    <aside className="thread-panel">
+      <header className="thread-header">
+        <strong>(React.string "Thread")</strong>
+        <button className="close-thread" onClick=(fun _ -> dispatch Close_thread)>(React.string "\u{2715}")</button>
+      </header>
+      <div className="thread-messages">
+        <Message message head=With_header dispatch />
+        <div className="thread-count">(React.string (string_of_int (Array.length message.replies) ^ " replies"))</div>
+        (message.replies |> Array.map (fun reply -> <Message key=(string_of_int reply.id) message=reply head=With_header dispatch />) |> React.array)
+      </div>
+      <Composer placeholder="Reply\u{2026}" onSend=(fun text -> dispatch (Reply (message.id, text))) onTyping=(fun _ -> ()) />
+    </aside>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch =
+      React.useReducerWithMapState reduce 40 (fun count ->
+          let seed = Classic.Seed.make 9 in
+          {
+            channels =
+              Array.init count (fun id ->
+                  {
+                    id;
+                    name = Classic.Seed.pick seed Classic.words ^ "-" ^ Classic.Seed.pick seed Classic.words;
+                    topic = Classic.sentence seed 6;
+                    unread = (match Classic.Seed.next seed 3 with 0 -> 0 | _ -> Classic.Seed.next seed 40);
+                  });
+            active = 0;
+            messages = Belt.Map.Int.set Belt.Map.Int.empty 0 (history 0);
+            thread = No_thread;
+            query = "";
+          })
+    in
+    let typing, setTyping = React.useState (fun () -> Idle) in
+    let messages = Option.value ~default:[||] (Belt.Map.Int.get state.messages state.active) in
+    let channel = state.channels.(state.active) in
+    <Me_provider value=me>
+      <div className="chat-app">
+        <Sidebar channels=state.channels active=state.active dispatch />
+        <main className="channel">
+          <Top_bar query=state.query dispatch />
+          <header className="channel-header">
+            <strong>(React.string ("# " ^ channel.name))</strong>
+            <span className="topic">(React.string channel.topic)</span>
+          </header>
+          <Message_list messages active=state.active query=state.query dispatch />
+          <Composer
+            key=(string_of_int state.active)
+            placeholder=("Message #" ^ channel.name)
+            onSend=(fun text -> dispatch (Send text))
+            onTyping=(fun next -> setTyping (fun _ -> next)) />
+          <Typing_indicator typing />
+        </main>
+        (match state.thread with
+         | No_thread -> React.null
+         | Thread_of id ->
+             Js.Array.find ~f:(fun message -> message.id = id) messages
+             |> Option.map (fun message -> <Thread_panel message dispatch />)
+             |> Option.value ~default:React.null)
+      </div>
+    </Me_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

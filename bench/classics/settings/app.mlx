@@ -1,0 +1,361 @@
+(** An on/off setting's state. *)
+type switch = On | Off
+
+(** How a setting is edited, with its default. *)
+type kind =
+  | Toggle of switch
+  | Choice of { options : string array; default : string }
+  | Count of { low : int; high : int; default : int }
+  | Free_text of string
+  | Options of { options : string array; default : string }
+
+type setting = { key : string; title : string; description : string; kind : kind }
+
+type section = { section_id : string; heading : string; settings : setting array }
+
+type tab = { tab_id : string; label : string; sections : section array }
+
+(** A value the user set. *)
+type value = Switch of switch | Text of string | Number of int
+
+(** What the settings reducer can do. *)
+type action = Set of string * value | Reset of string array
+
+type store = { values : value Belt.Map.String.t; dispatch : action -> unit }
+
+(** Whether a section shows its settings. *)
+type fold = Expanded | Collapsed
+
+(** Whether a tab is the one on screen. *)
+type visibility = Visible | Hidden
+
+(** A piece of a title, matching the search or not. *)
+type piece = Match of string | Rest of string
+
+let tabs =
+  let seed = Classic.Seed.make 8 in
+  let labels =
+    [| "General"; "Editor"; "Workbench"; "Files"; "Search"; "Terminal"; "Git"; "Extensions"; "Accessibility"; "Notifications";
+       "Privacy"; "Advanced" |]
+  in
+  Array.mapi
+    (fun tab_index label ->
+      {
+        tab_id = String.lowercase_ascii label;
+        label;
+        sections =
+          Array.init 10 (fun section_index ->
+              let section_id = String.lowercase_ascii label ^ "." ^ string_of_int section_index in
+              {
+                section_id;
+                heading = String.capitalize_ascii (Classic.sentence seed 2);
+                settings =
+                  Array.init
+                    (10 + Classic.Seed.next seed 11)
+                    (fun index ->
+                      {
+                        key = section_id ^ "." ^ string_of_int index;
+                        title = String.capitalize_ascii (Classic.sentence seed (2 + Classic.Seed.next seed 2));
+                        description = String.capitalize_ascii (Classic.sentence seed (6 + Classic.Seed.next seed 8)) ^ ".";
+                        kind =
+                          (match Classic.Seed.next seed 10 with
+                           | 0 | 1 | 2 | 3 -> Toggle (match Classic.Seed.next seed 2 with 0 -> On | _ -> Off)
+                           | 4 | 5 ->
+                               let options = Array.init (3 + Classic.Seed.next seed 4) (fun _ -> Classic.Seed.pick seed Classic.words) in
+                               Choice { options = Array.of_list (List.sort_uniq compare (Array.to_list options)); default = options.(0) }
+                           | 6 -> Count { low = 0; high = 100 * (tab_index + 1); default = Classic.Seed.next seed 50 }
+                           | 7 | 8 -> Free_text (Classic.Seed.pick seed Classic.words)
+                           | _ -> Options { options = [| "off"; "on"; "auto" |]; default = "auto" });
+                      });
+              });
+      })
+    labels
+
+let default_value kind =
+  match kind with
+  | Toggle switch -> Switch switch
+  | Choice { default; _ } | Options { default; _ } -> Text default
+  | Count { default; _ } -> Number default
+  | Free_text default -> Text default
+
+let modified values setting =
+  Option.bind (Belt.Map.String.get values setting.key) (fun value ->
+      match value = default_value setting.kind with true -> None | false -> Some setting)
+
+let count_modified values settings =
+  Array.fold_left (fun count setting -> Option.fold ~none:count ~some:(fun _ -> count + 1) (modified values setting)) 0 settings
+
+let reduce values action =
+  match action with
+  | Set (key, value) -> Belt.Map.String.set values key value
+  | Reset keys -> Belt.Map.String.removeMany values keys
+
+let store_context = React.createContext { values = Belt.Map.String.empty; dispatch = (fun _ -> ()) }
+
+module Store_provider = struct
+  let make = React.Context.provider store_context
+
+  external makeProps :
+    value:store -> children:React.element -> unit -> < value : store ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Highlighted = struct
+  let[@react.component] make ~text ~query =
+    let pieces =
+      match query with
+      | "" -> [ Rest text ]
+      | _ ->
+          let lower = String.lowercase_ascii text and size = String.length query in
+          let rec split from pieces =
+            match Js.String.indexOf ~search:query ~start:from lower with
+            | -1 -> List.rev (Rest (String.sub text from (String.length text - from)) :: pieces)
+            | at -> split (at + size) (Match (String.sub text at size) :: Rest (String.sub text from (at - from)) :: pieces)
+          in
+          split 0 []
+    in
+    <span className="highlighted">
+      (pieces
+      |> List.mapi (fun index piece ->
+             match piece with
+             | Match part -> <mark key=(string_of_int index)>(React.string part)</mark>
+             | Rest part -> <span key=(string_of_int index)>(React.string part)</span>)
+      |> Array.of_list |> React.array)
+    </span>
+end
+
+module Setting_row = struct
+  let[@react.component] make ~setting ~query =
+    let { values; dispatch } = React.useContext store_context in
+    let value = Option.value ~default:(default_value setting.kind) (Belt.Map.String.get values setting.key) in
+    let set value = dispatch (Set (setting.key, value)) in
+    let id = "setting-" ^ setting.key in
+    let control =
+      match (setting.kind, value) with
+      | Toggle _, Switch switch ->
+          <label className="switch">
+            <input
+              id
+              type_="checkbox"
+              className="toggle-input"
+              checked=(switch = On)
+              onChange=(fun _ -> set (Switch (match switch with On -> Off | Off -> On))) />
+            <span className="slider" />
+          </label>
+      | Choice { options; _ }, Text chosen ->
+          <select
+            id
+            className="choice-input"
+            value=chosen
+            onChange=(fun event -> set (Text (React.Event.Form.target event)##value))>
+            (options |> Array.map (fun option -> <option key=option value=option>(React.string option)</option>) |> React.array)
+          </select>
+      | Count { low; high; _ }, Number amount ->
+          <input
+            id
+            type_="number"
+            className="count-input"
+            min=(string_of_int low)
+            max=(string_of_int high)
+            value=(string_of_int amount)
+            onChange=(fun event ->
+              (React.Event.Form.target event)##value
+              |> int_of_string_opt
+              |> Option.iter (fun amount -> set (Number (max low (min high amount))))) />
+      | Free_text _, Text typed ->
+          <input id type_="text" className="text-input" value=typed onChange=(fun event -> set (Text (React.Event.Form.target event)##value)) />
+      | Options { options; _ }, Text chosen ->
+          <div className="radio-row" role="radiogroup">
+            (options
+            |> Array.map (fun option ->
+                   <label key=option className="radio-option">
+                     <input
+                       type_="radio"
+                       name=setting.key
+                       className="radio-input"
+                       value=option
+                       checked=(chosen = option)
+                       onChange=(fun _ -> set (Text option)) />
+                     (React.string option)
+                   </label>)
+            |> React.array)
+          </div>
+      | _ -> React.null
+    in
+    let changed = modified values setting in
+    <div className=(match changed with Some _ -> "setting modified" | None -> "setting")>
+      <div className="setting-text">
+        <label className="setting-title" htmlFor=id>
+          <Highlighted text=setting.title query />
+          (changed |> Option.map (fun _ -> <span className="modified-badge">(React.string "Modified")</span>) |> Option.value ~default:React.null)
+        </label>
+        <p className="setting-description"><Highlighted text=setting.description query /></p>
+      </div>
+      <div className="setting-control">control</div>
+    </div>
+end
+
+module Section = struct
+  let[@react.component] make ~section ~fold ~onFold =
+    let { values; dispatch } = React.useContext store_context in
+    let changed = count_modified values section.settings in
+    <section className=(match fold with Expanded -> "accordion open" | Collapsed -> "accordion")>
+      <header className="accordion-header">
+        <button className="accordion-toggle" onClick=(fun _ -> onFold section.section_id)>
+          <span className="chevron">(React.string (match fold with Expanded -> "▾" | Collapsed -> "▸"))</span>
+          (React.string section.heading)
+          <span className="setting-count">(React.int (Array.length section.settings))</span>
+        </button>
+        (match changed with
+         | 0 -> React.null
+         | count -> <span className="section-modified">(React.string (string_of_int count ^ " modified"))</span>)
+        <button
+          className="reset-section"
+          disabled=(changed = 0)
+          onClick=(fun _ -> dispatch (Reset (Array.map (fun setting -> setting.key) section.settings)))>
+          (React.string "Reset section")
+        </button>
+      </header>
+      (match fold with
+       | Collapsed -> React.null
+       | Expanded ->
+           <div className="accordion-body">
+             (section.settings |> Array.map (fun setting -> <Setting_row key=setting.key setting query="" />) |> React.array)
+           </div>)
+    </section>
+end
+
+module Tab_panel = struct
+  let[@react.component] make ~tab ~visibility =
+    let opened, setOpened =
+      React.useState (fun () -> Belt.Set.String.fromArray (Array.map (fun section -> section.section_id) (Array.sub tab.sections 0 3)))
+    in
+    let onFold =
+      React.useCallback0 (fun id ->
+          setOpened (fun opened ->
+              match Belt.Set.String.has opened id with
+              | true -> Belt.Set.String.remove opened id
+              | false -> Belt.Set.String.add opened id))
+    in
+    <div className="tab-panel" role="tabpanel" hidden=(visibility = Hidden)>
+      <div className="panel-actions">
+        <h2>(React.string tab.label)</h2>
+        <button
+          className="expand-all"
+          onClick=(fun _ -> setOpened (fun _ -> Belt.Set.String.fromArray (Array.map (fun section -> section.section_id) tab.sections)))>
+          (React.string "Expand all")
+        </button>
+        <button className="collapse-all" onClick=(fun _ -> setOpened (fun _ -> Belt.Set.String.empty))>(React.string "Collapse all")</button>
+      </div>
+      (tab.sections
+      |> Array.map (fun section ->
+             <Section
+               key=section.section_id
+               section
+               fold=(match Belt.Set.String.has opened section.section_id with true -> Expanded | false -> Collapsed)
+               onFold />)
+      |> React.array)
+    </div>
+end
+
+module Tab_button = struct
+  let[@react.component] make ~tab ~visibility ~onSelect =
+    let { values; _ } = React.useContext store_context in
+    let changed = Array.fold_left (fun count section -> count + count_modified values section.settings) 0 tab.sections in
+    <button
+      id=("tab-" ^ tab.tab_id)
+      role="tab"
+      className=(match visibility with Visible -> "tab active" | Hidden -> "tab")
+      onClick=(fun _ -> onSelect tab.tab_id)>
+      (React.string tab.label)
+      (match changed with 0 -> React.null | count -> <span className="tab-badge">(React.int count)</span>)
+    </button>
+end
+
+module Search_results = struct
+  let[@react.component] make ~query =
+    let found =
+      React.useMemo1
+        (fun () ->
+          let needle = String.lowercase_ascii query in
+          let hits text = Js.String.includes ~search:needle (String.lowercase_ascii text) in
+          tabs
+          |> Array.to_list
+          |> List.concat_map (fun tab ->
+                 tab.sections
+                 |> Array.to_list
+                 |> List.filter_map (fun section ->
+                        match Js.Array.filter ~f:(fun setting -> hits setting.title || hits setting.description) section.settings with
+                        | [||] -> None
+                        | settings -> Some (tab, section, settings)))
+          |> Array.of_list)
+        [| query |]
+    in
+    let total = Array.fold_left (fun total (_, _, settings) -> total + Array.length settings) 0 found in
+    <div className="search-results">
+      <p id="result-count">(React.string (string_of_int total ^ " settings found"))</p>
+      (found
+      |> Array.map (fun (tab, section, settings) ->
+             <section key=section.section_id className="result-group">
+               <h3>(React.string (tab.label ^ " › " ^ section.heading))</h3>
+               (settings |> Array.map (fun setting -> <Setting_row key=setting.key setting query=(String.lowercase_ascii query) />) |> React.array)
+             </section>)
+      |> React.array)
+    </div>
+end
+
+module Search_box = struct
+  let[@react.component] make ~query ~onQuery =
+    <div className="search-box">
+      <input
+        id="search"
+        type_="search"
+        placeholder="Search settings"
+        value=query
+        onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <button id="clear-search" onClick=(fun _ -> onQuery "")>(React.string "Clear")</button>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let values, dispatch = React.useReducer reduce Belt.Map.String.empty in
+    let active, setActive = React.useState (fun () -> tabs.(0).tab_id) in
+    let query, setQuery = React.useState (fun () -> "") in
+    let store = React.useMemo1 (fun () -> { values; dispatch }) [| values |] in
+    let onSelect = React.useCallback0 (fun id -> setActive (fun _ -> id)) in
+    let searching = String.trim query in
+    <Store_provider value=store>
+      <div className="settings-app">
+        <header className="settings-header">
+          <h1>(React.string "Settings")</h1>
+          <Search_box query onQuery=(fun next -> setQuery (fun _ -> next)) />
+          <span id="modified-total">(React.string (string_of_int (Belt.Map.String.size values) ^ " changed"))</span>
+        </header>
+        <div className="settings-body">
+          <nav className="tab-list" role="tablist">
+            (tabs
+            |> Array.map (fun tab ->
+                   <Tab_button
+                     key=tab.tab_id
+                     tab
+                     visibility=(match tab.tab_id = active with true -> Visible | false -> Hidden)
+                     onSelect />)
+            |> React.array)
+          </nav>
+          <main className="panels">
+            (match searching with "" -> React.null | _ -> <Search_results query=searching />)
+            (tabs
+            |> Array.map (fun tab ->
+                   <Tab_panel
+                     key=tab.tab_id
+                     tab
+                     visibility=(match (searching, tab.tab_id = active) with "", true -> Visible | _ -> Hidden) />)
+            |> React.array)
+          </main>
+        </div>
+      </div>
+    </Store_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

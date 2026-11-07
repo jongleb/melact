@@ -1,0 +1,349 @@
+(** Where a node hangs in the tree. *)
+type parent = Root | Inside of int
+
+(** A folder lists its children's ids; a file has an extension and a size. *)
+type kind = Folder of int array | File of { extension : string; size : int }
+
+type node = { id : int; parent : parent; depth : int; name : string; kind : kind }
+
+(** How a row's folder is drawn. *)
+type fold = Opened | Closed | Not_a_folder
+
+(** The node the keyboard and the mouse act on. *)
+type selection = Nothing | Selected of int
+
+(** How a row is painted. *)
+type highlight = Highlighted | Plain
+
+(** Whether a row shows its name or the rename field. *)
+type mode = Viewing | Renaming
+
+(** What the tree reducer does. *)
+type action =
+  | Toggle of int
+  | Open of int
+  | Close of int
+  | Expand_all
+  | Collapse_all
+  | Rename of int * string
+
+type tree = { expanded : Belt.Set.Int.t; names : string Belt.Map.Int.t }
+
+let nodes =
+  let seed = Classic.Seed.make 8000 in
+  let extensions = [| "ml"; "mli"; "mlx"; "js"; "ts"; "json"; "md"; "css"; "png"; "svg"; "txt"; "lock" |] in
+  let drafts = [||] in
+  let children = [||] in
+  let add parent depth shape =
+    let id = Js.Array.length drafts in
+    let name =
+      match shape with
+      | `Folder -> Classic.Seed.pick seed Classic.words ^ "_" ^ string_of_int id
+      | `File ->
+          Classic.Seed.pick seed Classic.words ^ "_" ^ Classic.Seed.pick seed Classic.words ^ "_" ^ string_of_int id
+    in
+    ignore (Js.Array.push ~value:(id, parent, depth, name, shape) drafts);
+    ignore (Js.Array.push ~value:[] children);
+    id
+  in
+  let root = add Root 0 `Folder in
+  let queue = Queue.create () in
+  Queue.add (root, 0) queue;
+  while Js.Array.length drafts < 8000 && not (Queue.is_empty queue) do
+    let folder, depth = Queue.pop queue in
+    let count = 3 + Classic.Seed.next seed 10 in
+    for _ = 1 to min count (8000 - Js.Array.length drafts) do
+      let shape = match depth < 6 && Classic.Seed.next seed 100 < 42 with true -> `Folder | false -> `File in
+      let id = add (Inside folder) (depth + 1) shape in
+      children.(folder) <- id :: children.(folder);
+      match shape with `Folder -> Queue.add (id, depth + 1) queue | `File -> ()
+    done
+  done;
+  Array.map
+    (fun (id, parent, depth, name, shape) ->
+      match shape with
+      | `Folder -> { id; parent; depth; name; kind = Folder (Array.of_list (List.rev children.(id))) }
+      | `File ->
+          let extension = Classic.Seed.pick seed extensions in
+          { id; parent; depth; name = name ^ "." ^ extension; kind = File { extension; size = 200 + Classic.Seed.next seed 90_000 } })
+    drafts
+
+let selection_context = React.createContext Nothing
+
+module Selection_provider = struct
+  let make = React.Context.provider selection_context
+
+  external makeProps :
+    value:selection -> children:React.element -> unit -> < value : selection ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+let name_of tree node = Belt.Map.Int.getWithDefault tree.names node.id node.name
+
+let rec ancestors node found =
+  match node.parent with Root -> node :: found | Inside above -> ancestors nodes.(above) (node :: found)
+
+module Icon = struct
+  let[@react.component] make ~kind ~fold =
+    let glyph, tone =
+      match (kind, fold) with
+      | Folder _, Opened -> ("D", "icon-folder-open")
+      | Folder _, (Closed | Not_a_folder) -> ("D", "icon-folder")
+      | File { extension = "ml" | "mli" | "mlx"; _ }, _ -> ("M", "icon-ocaml")
+      | File { extension = "js" | "ts"; _ }, _ -> ("J", "icon-script")
+      | File { extension = "json" | "lock"; _ }, _ -> ("{", "icon-data")
+      | File { extension = "md" | "txt"; _ }, _ -> ("T", "icon-text")
+      | File { extension = "css"; _ }, _ -> ("#", "icon-style")
+      | File { extension = "png" | "svg"; _ }, _ -> ("I", "icon-image")
+      | File _, _ -> ("F", "icon-file")
+    in
+    <span className=("icon " ^ tone)>(React.string glyph)</span>
+end
+
+module Rename_field = struct
+  let[@react.component] make ~initial ~onDone ~onCancel =
+    let draft, setDraft = React.useState (fun () -> initial) in
+    let field = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption field.current |> Option.iter Classic.focus;
+        None);
+    <input
+      ref=(ReactDOM.Ref.domRef field)
+      className="rename"
+      value=draft
+      onClick=(fun click -> React.Event.Mouse.stopPropagation click)
+      onChange=(fun event ->
+        let value = (React.Event.Form.target event)##value in
+        setDraft (fun _ -> value))
+      onKeyDown=(fun event ->
+        React.Event.Keyboard.stopPropagation event;
+        match React.Event.Keyboard.key event with
+        | "Enter" -> onDone draft
+        | "Escape" -> onCancel ()
+        | _ -> ())
+      onBlur=(fun _ -> onDone draft) />
+end
+
+module Tree_row = struct
+  let[@react.component] make =
+    React.memo (fun ~node ~name ~fold ~dispatch ~onSelect ->
+        let selection = React.useContext selection_context in
+        let mode, setMode = React.useState (fun () -> Viewing) in
+        let highlight = match selection with Selected id when id = node.id -> Highlighted | Selected _ | Nothing -> Plain in
+        <div
+          className=
+            ("tree-row"
+            ^ (match node.kind with Folder _ -> " folder" | File _ -> " file")
+            ^ (match fold with Opened -> " open" | Closed | Not_a_folder -> "")
+            ^ match highlight with Highlighted -> " selected" | Plain -> "")
+          style=(ReactDOM.Style.make ~paddingLeft:(string_of_int ((node.depth * 14) + 4) ^ "px") ())
+          onClick=(fun _ ->
+            onSelect node.id;
+            match node.kind with Folder _ -> dispatch (Toggle node.id) | File _ -> ())
+          onDoubleClick=(fun _ -> match node.kind with File _ -> setMode (fun _ -> Renaming) | Folder _ -> ())>
+          <span className="twisty">
+            (React.string (match fold with Opened -> {js|▾|js} | Closed -> {js|▸|js} | Not_a_folder -> ""))
+          </span>
+          <Icon kind=node.kind fold />
+          (match mode with
+           | Renaming ->
+               <Rename_field
+                 initial=name
+                 onDone=(fun next ->
+                   setMode (fun _ -> Viewing);
+                   match String.trim next with "" -> () | next -> dispatch (Rename (node.id, next)))
+                 onCancel=(fun () -> setMode (fun _ -> Viewing)) />
+           | Viewing -> <span className="name">(React.string name)</span>)
+        </div>)
+end
+
+module Breadcrumbs = struct
+  let[@react.component] make ~tree ~onSelect =
+    let selection = React.useContext selection_context in
+    <nav className="breadcrumbs">
+      (match selection with
+       | Nothing -> React.string "No file selected"
+       | Selected id ->
+           ancestors nodes.(id) []
+           |> List.map (fun node ->
+                  <span key=(string_of_int node.id) className="crumb" onClick=(fun _ -> onSelect node.id)>
+                    (React.string (name_of tree node))
+                  </span>)
+           |> Array.of_list |> React.array)
+    </nav>
+end
+
+module Details = struct
+  let[@react.component] make ~tree =
+    let selection = React.useContext selection_context in
+    let format_size size =
+      match size >= 1024 with true -> string_of_int (size / 1024) ^ " KB" | false -> string_of_int size ^ " B"
+    in
+    let summary =
+      React.useMemo1
+        (fun () ->
+          match selection with
+          | Nothing -> None
+          | Selected id ->
+              let rec measure node (files, bytes) =
+                match node.kind with
+                | File { size; _ } -> (files + 1, bytes + size)
+                | Folder children -> Array.fold_left (fun total child -> measure nodes.(child) total) (files, bytes) children
+              in
+              Some (nodes.(id), measure nodes.(id) (0, 0)))
+        [| selection |]
+    in
+    <aside className="details">
+      (summary
+      |> Option.fold ~none:(<p className="empty">(React.string "Select a file to see its details")</p>)
+           ~some:(fun (node, (files, bytes)) ->
+             <div>
+               <h3>(React.string (name_of tree node))</h3>
+               <dl>
+                 <dt>(React.string "Kind")</dt>
+                 <dd>
+                   (React.string
+                      (match node.kind with Folder _ -> "Folder" | File { extension; _ } -> String.uppercase_ascii extension ^ " file"))
+                 </dd>
+                 <dt>(React.string "Path")</dt>
+                 <dd>(React.string (ancestors node [] |> List.map (name_of tree) |> String.concat "/"))</dd>
+                 <dt>(React.string "Files")</dt>
+                 <dd>(React.int files)</dd>
+                 <dt>(React.string "Size")</dt>
+                 <dd>(React.string (format_size bytes))</dd>
+                 <dt>(React.string "Depth")</dt>
+                 <dd>(React.int node.depth)</dd>
+               </dl>
+             </div>))
+    </aside>
+end
+
+module Explorer_toolbar = struct
+  let[@react.component] make ~query ~onQuery ~dispatch ~shown =
+    <div className="explorer-toolbar">
+      <input
+        id="tree-filter"
+        placeholder="Filter by name"
+        value=query
+        onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <button id="clear-filter" onClick=(fun _ -> onQuery "")>(React.string "Clear")</button>
+      <button id="expand-all" onClick=(fun _ -> dispatch Expand_all)>(React.string "Expand all")</button>
+      <button id="collapse-all" onClick=(fun _ -> dispatch Collapse_all)>(React.string "Collapse all")</button>
+      <span className="shown">(React.string (string_of_int shown ^ " items"))</span>
+    </div>
+end
+
+module Tree_view = struct
+  let[@react.component] make ~rows ~tree ~dispatch ~onSelect ~onKey =
+    <div className="tree-view" tabIndex=0 onKeyDown=(fun event ->
+        match React.Event.Keyboard.key event with
+        | ("ArrowDown" | "ArrowUp" | "ArrowLeft" | "ArrowRight") as key ->
+            React.Event.Keyboard.preventDefault event;
+            onKey key
+        | _ -> ())>
+      (rows
+      |> Array.map (fun (node, fold) ->
+             <Tree_row key=(string_of_int node.id) node name=(name_of tree node) fold dispatch onSelect />)
+      |> React.array)
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let tree, dispatch =
+      React.useReducer
+        (fun tree action ->
+          match action with
+          | Toggle id -> (
+              match Belt.Set.Int.has tree.expanded id with
+              | true -> { tree with expanded = Belt.Set.Int.remove tree.expanded id }
+              | false -> { tree with expanded = Belt.Set.Int.add tree.expanded id })
+          | Open id -> { tree with expanded = Belt.Set.Int.add tree.expanded id }
+          | Close id -> { tree with expanded = Belt.Set.Int.remove tree.expanded id }
+          | Expand_all ->
+              {
+                tree with
+                expanded =
+                  nodes
+                  |> Array.to_list
+                  |> List.filter_map (fun node -> match node.kind with Folder _ -> Some node.id | File _ -> None)
+                  |> Array.of_list |> Belt.Set.Int.fromArray;
+              }
+          | Collapse_all -> { tree with expanded = Belt.Set.Int.fromArray [| 0 |] }
+          | Rename (id, name) -> { tree with names = Belt.Map.Int.set tree.names id name })
+        {
+          expanded =
+            nodes
+            |> Js.Array.filter ~f:(fun node -> match node.kind with Folder _ -> node.depth < 4 | File _ -> false)
+            |> Array.map (fun node -> node.id)
+            |> Belt.Set.Int.fromArray;
+          names = Belt.Map.Int.empty;
+        }
+    in
+    let selection, setSelection = React.useState (fun () -> Nothing) in
+    let query, setQuery = React.useState (fun () -> "") in
+    let rows =
+      React.useMemo2
+        (fun () ->
+          let shown = [||] in
+          let keep node fold = ignore (Js.Array.push ~value:(node, fold) shown) in
+          (match String.lowercase_ascii (String.trim query) with
+           | "" ->
+               let rec walk node =
+                 match node.kind with
+                 | File _ -> keep node Not_a_folder
+                 | Folder children -> (
+                     match Belt.Set.Int.has tree.expanded node.id with
+                     | true ->
+                         keep node Opened;
+                         Array.iter (fun child -> walk nodes.(child)) children
+                     | false -> keep node Closed)
+               in
+               walk nodes.(0)
+           | needle ->
+               let rec matching node =
+                 let own = Js.String.includes ~search:needle (String.lowercase_ascii (name_of tree node)) in
+                 match (node.kind, own) with
+                 | File _, true -> [ (node, Not_a_folder) ]
+                 | File _, false -> []
+                 | Folder children, _ -> (
+                     match (Array.to_list children |> List.concat_map (fun child -> matching nodes.(child)), own) with
+                     | [], false -> []
+                     | below, (true | false) -> (node, Opened) :: below)
+               in
+               List.iter (fun (node, fold) -> keep node fold) (matching nodes.(0)));
+          shown)
+        (tree, query)
+    in
+    let onSelect = React.useCallback0 (fun id -> setSelection (fun _ -> Selected id)) in
+    let onKey key =
+      let at =
+        match selection with
+        | Nothing -> -1
+        | Selected id -> Js.Array.findIndex ~f:(fun (node, _) -> node.id = id) rows
+      in
+      let last = Array.length rows - 1 in
+      let pick index = setSelection (fun _ -> Selected (fst rows.(max 0 (min last index))).id) in
+      let current = match at with -1 -> None | index -> Some rows.(index) in
+      match (key, current) with
+      | "ArrowDown", _ -> pick (at + 1)
+      | "ArrowUp", _ -> pick (at - 1)
+      | "ArrowRight", Some (node, Closed) -> dispatch (Open node.id)
+      | "ArrowRight", Some (_, Opened) -> pick (at + 1)
+      | "ArrowLeft", Some (node, Opened) -> dispatch (Close node.id)
+      | "ArrowLeft", Some ({ parent = Inside above; _ }, (Closed | Not_a_folder)) -> setSelection (fun _ -> Selected above)
+      | _ -> ()
+    in
+    <Selection_provider value=selection>
+      <div className="explorer">
+        <Explorer_toolbar query onQuery=(fun text -> setQuery (fun _ -> text)) dispatch shown=(Array.length rows) />
+        <Breadcrumbs tree onSelect />
+        <div className="explorer-body">
+          <Tree_view rows tree dispatch onSelect onKey />
+          <Details tree />
+        </div>
+      </div>
+    </Selection_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

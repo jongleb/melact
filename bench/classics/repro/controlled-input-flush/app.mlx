@@ -1,0 +1,18 @@
+module App = struct
+  let[@react.component] make () =
+    let draft, setDraft = React.useState (fun () -> "") in
+    let saved, setSaved = React.useState (fun () -> "nothing") in
+    <div>
+      <input
+        id="field"
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value))
+        onKeyDown=(fun event ->
+          match React.Event.Keyboard.key event with "Enter" -> setSaved (fun _ -> draft) | _ -> ()) />
+      <p id="saved">(React.string saved)</p>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

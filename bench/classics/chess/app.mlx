@@ -1,0 +1,577 @@
+external add_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external remove_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "removeEventListener"
+[@@mel.send]
+
+external key_of : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+type color = White | Black
+
+type kind = King | Queen | Rook | Bishop | Knight | Pawn
+
+type piece = { color : color; kind : kind }
+
+(** A castling move a side may still make. *)
+type castle = White_short | White_long | Black_short | Black_long
+
+type position = { board : piece option array; turn : color; castling : castle list; en_passant : int option }
+
+type move = { from : int; target : int; promotion : kind option }
+
+type played = { move : move; san : string; captured : piece option }
+
+type game = { positions : position array; moves : played array; cursor : int; selected : int option }
+
+(** What the game reducer can do. *)
+type action = Click_square of int | Jump of int | Step of int | Next
+
+(** Which side of the board is at the bottom. *)
+type orientation = White_bottom | Black_bottom
+
+(** Whether the board shows file and rank letters. *)
+type coordinates = Shown | Hidden
+
+type settings = { orientation : orientation; coordinates : coordinates }
+
+(** How a square stands out. *)
+type highlight = Plain | Selected_square | Last_move
+
+(** Whether the selected piece can go to a square. *)
+type target = No_target | Move_target | Capture_target
+
+(** Whether the user circled a square with a right click. *)
+type mark = Unmarked | Circled
+
+(** Whether a square holds a king in check. *)
+type check = Safe | Checked
+
+type variation = { line : string; score : float }
+
+let file square = square mod 8
+
+let rank square = square / 8
+
+let square_name square = String.make 1 (Char.chr (97 + file square)) ^ string_of_int (rank square + 1)
+
+let opponent color = match color with White -> Black | Black -> White
+
+let offset square (files, ranks) =
+  let next_file = file square + files and next_rank = rank square + ranks in
+  match next_file >= 0 && next_file < 8 && next_rank >= 0 && next_rank < 8 with
+  | true -> Some ((next_rank * 8) + next_file)
+  | false -> None
+
+let knight_steps = [ (1, 2); (2, 1); (2, -1); (1, -2); (-1, -2); (-2, -1); (-2, 1); (-1, 2) ]
+
+let king_steps = [ (1, 0); (1, 1); (0, 1); (-1, 1); (-1, 0); (-1, -1); (0, -1); (1, -1) ]
+
+let straight = [ (1, 0); (0, 1); (-1, 0); (0, -1) ]
+
+let diagonal = [ (1, 1); (-1, 1); (-1, -1); (1, -1) ]
+
+let attacked board square by =
+  let holds target kinds = Option.fold ~none:false ~some:(fun piece -> piece.color = by && List.mem piece.kind kinds) board.(target) in
+  let hit steps kinds = List.exists (fun step -> Option.fold ~none:false ~some:(fun target -> holds target kinds) (offset square step)) steps in
+  let rec ray from step kinds =
+    Option.fold ~none:false
+      ~some:(fun target -> match board.(target) with None -> ray target step kinds | Some _ -> holds target kinds)
+      (offset from step)
+  in
+  let behind = match by with White -> -1 | Black -> 1 in
+  hit knight_steps [ Knight ]
+  || hit king_steps [ King ]
+  || hit [ (-1, behind); (1, behind) ] [ Pawn ]
+  || List.exists (fun step -> ray square step [ Rook; Queen ]) straight
+  || List.exists (fun step -> ray square step [ Bishop; Queen ]) diagonal
+
+let king_square board color =
+  let found = ref 0 in
+  Array.iteri (fun square piece -> match piece with Some { color = owner; kind = King } when owner = color -> found := square | _ -> ()) board;
+  !found
+
+let apply position move =
+  let board = Array.copy position.board in
+  let moving = board.(move.from) in
+  let captured =
+    match (moving, board.(move.target)) with
+    | Some { kind = Pawn; _ }, None when file move.from <> file move.target ->
+        let behind = (rank move.from * 8) + file move.target in
+        let pawn = board.(behind) in
+        board.(behind) <- None;
+        pawn
+    | _, taken -> taken
+  in
+  board.(move.target) <- Option.map (fun piece -> Option.fold ~none:piece ~some:(fun kind -> { piece with kind }) move.promotion) moving;
+  board.(move.from) <- None;
+  (match moving with
+   | Some { kind = King; _ } when move.target - move.from = 2 ->
+       board.(move.target - 1) <- board.(move.target + 1);
+       board.(move.target + 1) <- None
+   | Some { kind = King; _ } when move.from - move.target = 2 ->
+       board.(move.target + 1) <- board.(move.target - 2);
+       board.(move.target - 2) <- None
+   | _ -> ());
+  let touched square = square = move.from || square = move.target in
+  let castling =
+    List.filter
+      (fun castle ->
+        match castle with
+        | White_short -> not (touched 4 || touched 7)
+        | White_long -> not (touched 4 || touched 0)
+        | Black_short -> not (touched 60 || touched 63)
+        | Black_long -> not (touched 60 || touched 56))
+      position.castling
+  in
+  let en_passant =
+    match moving with
+    | Some { kind = Pawn; _ } when abs (move.target - move.from) = 16 -> Some ((move.target + move.from) / 2)
+    | _ -> None
+  in
+  ({ board; turn = opponent position.turn; castling; en_passant }, captured)
+
+let legal position =
+  let board = position.board and turn = position.turn in
+  let free target = Option.is_none board.(target) in
+  let enemy target = Option.fold ~none:false ~some:(fun piece -> piece.color <> turn) board.(target) in
+  let plain from target = { from; target; promotion = None } in
+  let pseudo =
+    List.concat
+      (List.init 64 (fun from ->
+           match board.(from) with
+           | Some piece when piece.color = turn -> (
+               let steps list = List.filter_map (fun step -> Option.bind (offset from step) (fun target -> match free target || enemy target with true -> Some (plain from target) | false -> None)) list in
+               let rays list =
+                 List.concat_map
+                   (fun step ->
+                     let rec walk at found =
+                       match offset at step with
+                       | Some target when free target -> walk target (plain from target :: found)
+                       | Some target when enemy target -> plain from target :: found
+                       | Some _ | None -> found
+                     in
+                     walk from [])
+                   list
+               in
+               match piece.kind with
+               | Knight -> steps knight_steps
+               | King ->
+                   let home, short, long = match turn with White -> (4, White_short, White_long) | Black -> (60, Black_short, Black_long) in
+                   let safe squares = List.for_all (fun square -> not (attacked board square (opponent turn))) squares in
+                   steps king_steps
+                   @ (match from = home && List.mem short position.castling && free (home + 1) && free (home + 2) && safe [ home; home + 1; home + 2 ] with
+                      | true -> [ plain home (home + 2) ]
+                      | false -> [])
+                   @ (match from = home && List.mem long position.castling && free (home - 1) && free (home - 2) && free (home - 3) && safe [ home; home - 1; home - 2 ] with
+                      | true -> [ plain home (home - 2) ]
+                      | false -> [])
+               | Rook -> rays straight
+               | Bishop -> rays diagonal
+               | Queen -> rays (straight @ diagonal)
+               | Pawn ->
+                   let ahead, start, last = match turn with White -> (1, 1, 7) | Black -> (-1, 6, 0) in
+                   let promote target = { from; target; promotion = (match rank target = last with true -> Some Queen | false -> None) } in
+                   let forward =
+                     Option.fold ~none:[]
+                       ~some:(fun one ->
+                         match free one with
+                         | false -> []
+                         | true ->
+                             promote one
+                             :: (match rank from = start with
+                                 | true -> Option.fold ~none:[] ~some:(fun two -> match free two with true -> [ plain from two ] | false -> []) (offset one (0, ahead))
+                                 | false -> []))
+                       (offset from (0, ahead))
+                   in
+                   forward
+                   @ List.filter_map
+                       (fun side ->
+                         Option.bind (offset from (side, ahead)) (fun target ->
+                             match enemy target || position.en_passant = Some target with true -> Some (promote target) | false -> None))
+                       [ -1; 1 ])
+           | Some _ | None -> []))
+  in
+  List.filter (fun move -> let after, _ = apply position move in not (attacked after.board (king_square after.board turn) after.turn)) pseudo
+
+let notate position moves move =
+  let letter kind = match kind with King -> "K" | Queen -> "Q" | Rook -> "R" | Bishop -> "B" | Knight -> "N" | Pawn -> "" in
+  let after, captured = apply position move in
+  let suffix =
+    match attacked after.board (king_square after.board after.turn) position.turn with
+    | true -> (match legal after with [] -> "#" | _ -> "+")
+    | false -> ""
+  in
+  let body =
+    match position.board.(move.from) with
+    | Some { kind = King; _ } when move.target - move.from = 2 -> "O-O"
+    | Some { kind = King; _ } when move.from - move.target = 2 -> "O-O-O"
+    | Some { kind = Pawn; _ } ->
+        (match captured with Some _ -> String.make 1 (square_name move.from).[0] ^ "x" | None -> "")
+        ^ square_name move.target
+        ^ Option.fold ~none:"" ~some:(fun kind -> "=" ^ letter kind) move.promotion
+    | Some { kind; _ } ->
+        let rivals =
+          List.filter
+            (fun other ->
+              other.target = move.target && other.from <> move.from
+              && Option.map (fun piece -> piece.kind) position.board.(other.from) = Some kind)
+            moves
+        in
+        let name = square_name move.from in
+        let which =
+          match rivals with
+          | [] -> ""
+          | _ when List.for_all (fun other -> file other.from <> file move.from) rivals -> String.make 1 name.[0]
+          | _ when List.for_all (fun other -> rank other.from <> rank move.from) rivals -> String.make 1 name.[1]
+          | _ -> name
+        in
+        letter kind ^ which ^ (match captured with Some _ -> "x" | None -> "") ^ square_name move.target
+    | None -> "?"
+  in
+  (body ^ suffix, captured, after)
+
+let value kind = match kind with King -> 0 | Queen -> 9 | Rook -> 5 | Bishop -> 3 | Knight -> 3 | Pawn -> 1
+
+let material board =
+  Array.fold_left
+    (fun sum piece -> Option.fold ~none:sum ~some:(fun piece -> match piece.color with White -> sum + value piece.kind | Black -> sum - value piece.kind) piece)
+    0 board
+
+let start =
+  let back = [| Rook; Knight; Bishop; Queen; King; Bishop; Knight; Rook |] in
+  {
+    board =
+      Array.init 64 (fun square ->
+          match rank square with
+          | 0 -> Some { color = White; kind = back.(file square) }
+          | 1 -> Some { color = White; kind = Pawn }
+          | 6 -> Some { color = Black; kind = Pawn }
+          | 7 -> Some { color = Black; kind = back.(file square) }
+          | _ -> None);
+    turn = White;
+    castling = [ White_short; White_long; Black_short; Black_long ];
+    en_passant = None;
+  }
+
+let script =
+  let seed = Classic.Seed.make 1858 in
+  let rec play position moves count found =
+    match (count, moves) with
+    | 0, _ | _, [] -> Array.of_list (List.rev found)
+    | _, _ ->
+        let captures = List.filter (fun move -> Option.is_some position.board.(move.target)) moves in
+        let pool = Array.of_list (match (captures, Classic.Seed.next seed 3) with [], _ | _, 0 -> moves | _, _ -> captures) in
+        let move = Classic.Seed.pick seed pool in
+        let after, _ = apply position move in
+        play after (legal after) (count - 1) (move :: found)
+  in
+  play start (legal start) 80 []
+
+let reduce game action =
+  let position = game.positions.(game.cursor) in
+  let play game move =
+    let san, captured, after = notate position (legal position) move in
+    {
+      positions = Array.append (Array.sub game.positions 0 (game.cursor + 1)) [| after |];
+      moves = Array.append (Array.sub game.moves 0 game.cursor) [| { move; san; captured } |];
+      cursor = game.cursor + 1;
+      selected = None;
+    }
+  in
+  match action with
+  | Click_square square -> (
+      let chosen =
+        Option.bind game.selected (fun from -> List.find_opt (fun move -> move.from = from && move.target = square) (legal position))
+      in
+      match (chosen, position.board.(square)) with
+      | Some move, _ -> play game move
+      | None, Some piece when piece.color = position.turn && game.selected <> Some square -> { game with selected = Some square }
+      | None, _ -> { game with selected = None })
+  | Jump ply -> { game with cursor = max 0 (min (Array.length game.moves) ply); selected = None }
+  | Step step -> { game with cursor = max 0 (min (Array.length game.moves) (game.cursor + step)); selected = None }
+  | Next -> (
+      match game.cursor < Array.length game.moves with
+      | true -> { game with cursor = game.cursor + 1; selected = None }
+      | false -> (
+          match game.cursor < Array.length script with true -> play game script.(game.cursor) | false -> game))
+
+let settings_context = React.createContext { orientation = White_bottom; coordinates = Shown }
+
+module Settings_provider = struct
+  let make = React.Context.provider settings_context
+
+  external makeProps :
+    value:settings -> children:React.element -> unit -> < value : settings ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Piece = struct
+  let[@react.component] make ~piece =
+    let glyph =
+      match (piece.color, piece.kind) with
+      | White, King -> {js|♔|js}
+      | White, Queen -> {js|♕|js}
+      | White, Rook -> {js|♖|js}
+      | White, Bishop -> {js|♗|js}
+      | White, Knight -> {js|♘|js}
+      | White, Pawn -> {js|♙|js}
+      | Black, King -> {js|♚|js}
+      | Black, Queen -> {js|♛|js}
+      | Black, Rook -> {js|♜|js}
+      | Black, Bishop -> {js|♝|js}
+      | Black, Knight -> {js|♞|js}
+      | Black, Pawn -> {js|♟|js}
+    in
+    <span className=(match piece.color with White -> "piece white" | Black -> "piece black")>(React.string glyph)</span>
+end
+
+module Square = struct
+  let[@react.component] make =
+    React.memo (fun ~square ~piece ~highlight ~target ~check ~mark ~onSquare ~onMark ->
+        let { orientation; coordinates } = React.useContext settings_context in
+        let bottom, left = match orientation with White_bottom -> (0, 0) | Black_bottom -> (7, 7) in
+        <div
+          id=("sq-" ^ square_name square)
+          className=
+            (String.concat " "
+               [ "square";
+                 (match (file square + rank square) mod 2 with 0 -> "dark" | _ -> "light");
+                 (match highlight with Plain -> "" | Selected_square -> "selected" | Last_move -> "last-move");
+                 (match target with No_target -> "" | Move_target -> "target" | Capture_target -> "target capture");
+                 (match check with Safe -> "" | Checked -> "check");
+                 (match mark with Unmarked -> "" | Circled -> "circled") ])
+          onClick=(fun _ -> onSquare square)
+          onContextMenu=(fun mouse ->
+            React.Event.Mouse.preventDefault mouse;
+            onMark square)>
+          (Option.fold ~none:React.null ~some:(fun piece -> <Piece piece />) piece)
+          (match (coordinates, rank square = bottom) with
+           | Shown, true -> <span className="coord file-coord">(React.string (String.make 1 (square_name square).[0]))</span>
+           | _ -> React.null)
+          (match (coordinates, file square = left) with
+           | Shown, true -> <span className="coord rank-coord">(React.int (rank square + 1))</span>
+           | _ -> React.null)
+        </div>)
+end
+
+module Board = struct
+  let[@react.component] make ~position ~last ~selected ~orientation ~onSquare =
+    let marks, setMarks = React.useState (fun () -> []) in
+    React.useEffect1
+      (fun () ->
+        setMarks (fun _ -> []);
+        None)
+      [| position |];
+    let onMark =
+      React.useCallback0 (fun square ->
+          setMarks (fun marks -> match List.mem square marks with true -> List.filter (fun other -> other <> square) marks | false -> square :: marks))
+    in
+    let targets =
+      React.useMemo2
+        (fun () -> Option.fold ~none:[] ~some:(fun from -> List.filter (fun move -> move.from = from) (legal position)) selected)
+        (position, selected)
+    in
+    let checked =
+      match attacked position.board (king_square position.board position.turn) (opponent position.turn) with
+      | true -> Some (king_square position.board position.turn)
+      | false -> None
+    in
+    let order =
+      Array.init 64 (fun index ->
+          match orientation with
+          | White_bottom -> ((7 - (index / 8)) * 8) + (index mod 8)
+          | Black_bottom -> ((index / 8) * 8) + (7 - (index mod 8)))
+    in
+    <div className="board">
+      (React.array
+         (Array.map
+            (fun square ->
+              <Square
+                key=(string_of_int square)
+                square
+                piece=position.board.(square)
+                highlight=
+                  (match (selected, last) with
+                   | Some chosen, _ when chosen = square -> Selected_square
+                   | _, Some move when move.from = square || move.target = square -> Last_move
+                   | _ -> Plain)
+                target=
+                  (match List.exists (fun move -> move.target = square) targets with
+                   | false -> No_target
+                   | true -> (match position.board.(square) with Some _ -> Capture_target | None -> Move_target))
+                check=(match checked with Some king when king = square -> Checked | _ -> Safe)
+                mark=(match List.mem square marks with true -> Circled | false -> Unmarked)
+                onSquare
+                onMark />)
+            order))
+    </div>
+end
+
+module Eval_bar = struct
+  let[@react.component] make ~score =
+    let white = Js.Math.max_float 2. (Js.Math.min_float 98. (50. +. (score *. 5.))) in
+    <div className="eval-bar">
+      <div className="eval-white" style=(ReactDOM.Style.make ~height:(Js.Float.toFixed ~digits:1 white ^ "%") ()) />
+      <span className="eval-score">(React.string ((match score >= 0. with true -> "+" | false -> "") ^ Js.Float.toFixed ~digits:1 score))</span>
+    </div>
+end
+
+module Captured = struct
+  let[@react.component] make ~moves ~cursor =
+    let taken color =
+      Array.sub moves 0 cursor
+      |> Array.to_list
+      |> List.filter_map (fun played -> Option.bind played.captured (fun piece -> match piece.color = color with true -> Some piece | false -> None))
+      |> List.sort (fun left right -> compare (value right.kind) (value left.kind))
+    in
+    let row color =
+      <div className="captured-row">
+        (React.array (Array.of_list (List.mapi (fun index piece -> <Piece key=(string_of_int index) piece />) (taken color))))
+      </div>
+    in
+    <div className="captured">(row Black)(row White)</div>
+end
+
+module Move_list = struct
+  let[@react.component] make ~moves ~cursor ~onJump =
+    <ol className="move-list">
+      (React.array
+         (Array.init ((Array.length moves + 1) / 2) (fun pair ->
+              let ply index =
+                match index < Array.length moves with
+                | true ->
+                    <button className=(match cursor = index + 1 with true -> "ply current" | false -> "ply") onClick=(fun _ -> onJump (index + 1))>
+                      (React.string moves.(index).san)
+                    </button>
+                | false -> React.null
+              in
+              <li key=(string_of_int pair)>
+                <span className="number">(React.string (string_of_int (pair + 1) ^ "."))</span>
+                (ply (pair * 2))
+                (ply ((pair * 2) + 1))
+              </li>)))
+    </ol>
+end
+
+module Variation_row = struct
+  let[@react.component] make =
+    React.memo (fun ~index ~variation ->
+        <li className="variation">
+          <span className="rank">(React.int (index + 1))</span>
+          <span className=(match variation.score >= 0. with true -> "score plus" | false -> "score minus")>
+            (React.string (Js.Float.toFixed ~digits:2 variation.score))
+          </span>
+          <span className="line">(React.string variation.line)</span>
+        </li>)
+end
+
+module Analysis = struct
+  let[@react.component] make ~position ~cursor =
+    let variations =
+      React.useMemo1
+        (fun () ->
+          let moves = Array.of_list (legal position) in
+          match moves with
+          | [||] -> [||]
+          | _ ->
+              let firsts =
+                Array.map
+                  (fun move ->
+                    let san, _, after = notate position (Array.to_list moves) move in
+                    (san, after, legal after))
+                  moves
+              in
+              let found =
+                Array.init 200 (fun index ->
+                    let seed = Classic.Seed.make ((cursor * 1000) + index) in
+                    let noise = float_of_int (Classic.Seed.next seed 60 - 30) /. 100. in
+                    let san, after, replies = firsts.(index mod Array.length moves) in
+                    match replies with
+                    | [] -> { line = san; score = float_of_int (material after.board) +. noise }
+                    | _ ->
+                        let reply = List.nth replies (index / Array.length moves mod List.length replies) in
+                        let answer, _, final = notate after replies reply in
+                        { line = san ^ " " ^ answer; score = float_of_int (material final.board) +. noise })
+              in
+              Array.stable_sort
+                (fun left right -> match position.turn with White -> compare right.score left.score | Black -> compare left.score right.score)
+                found;
+              found)
+        [| position |]
+    in
+    <section className="analysis">
+      <header>
+        <h3>(React.string "Analysis")</h3>
+        <span className="book">
+          (React.string "Book move: ")
+          <span id="hint">(React.string (match cursor < Array.length script with true -> square_name script.(cursor).from ^ square_name script.(cursor).target | false -> "-"))</span>
+        </span>
+      </header>
+      <ol className="variations">
+        (React.array (Array.mapi (fun index variation -> <Variation_row key=(string_of_int index) index variation />) variations))
+      </ol>
+    </section>
+end
+
+module Controls = struct
+  let[@react.component] make ~dispatch ~onFlip ~coordinates ~onCoordinates =
+    <div className="controls">
+      <button id="first" onClick=(fun _ -> dispatch (Jump 0))>(React.string {js|⏮|js})</button>
+      <button id="back" onClick=(fun _ -> dispatch (Step (-1)))>(React.string {js|◀|js})</button>
+      <button id="next" onClick=(fun _ -> dispatch Next)>(React.string {js|▶|js})</button>
+      <button id="last" onClick=(fun _ -> dispatch (Jump max_int))>(React.string {js|⏭|js})</button>
+      <button id="flip" onClick=(fun _ -> onFlip ())>(React.string "Flip board")</button>
+      <label>
+        <input
+          id="coordinates"
+          type_="checkbox"
+          checked=(coordinates = Shown)
+          onChange=(fun _ -> onCoordinates ()) />
+        (React.string "Coordinates")
+      </label>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let game, dispatch = React.useReducer reduce { positions = [| start |]; moves = [||]; cursor = 0; selected = None } in
+    let orientation, setOrientation = React.useState (fun () -> White_bottom) in
+    let coordinates, setCoordinates = React.useState (fun () -> Shown) in
+    React.useEffect0 (fun () ->
+        let listener event =
+          match key_of event with "ArrowRight" -> dispatch (Step 1) | "ArrowLeft" -> dispatch (Step (-1)) | _ -> ()
+        in
+        add_key_listener Classic.document "keydown" listener;
+        Some (fun () -> remove_key_listener Classic.document "keydown" listener));
+    let settings = React.useMemo2 (fun () -> { orientation; coordinates }) (orientation, coordinates) in
+    let position = game.positions.(game.cursor) in
+    let last = match game.cursor with 0 -> None | cursor -> Some game.moves.(cursor - 1).move in
+    let onSquare = React.useCallback0 (fun square -> dispatch (Click_square square)) in
+    <Settings_provider value=settings>
+      <div className="chess">
+        <Eval_bar score=(float_of_int (material position.board)) />
+        <div className="board-column">
+          <Captured moves=game.moves cursor=game.cursor />
+          <Board position last selected=game.selected orientation onSquare />
+          <Controls
+            dispatch
+            onFlip=(fun () -> setOrientation (fun side -> match side with White_bottom -> Black_bottom | Black_bottom -> White_bottom))
+            coordinates
+            onCoordinates=(fun () -> setCoordinates (fun shown -> match shown with Shown -> Hidden | Hidden -> Shown)) />
+        </div>
+        <aside className="side">
+          <div className="status">
+            (React.string
+               (match (position.turn, legal position) with
+                | White, [] | Black, [] -> "Game over"
+                | White, _ -> "White to move"
+                | Black, _ -> "Black to move"))
+          </div>
+          <Move_list moves=game.moves cursor=game.cursor onJump=(fun ply -> dispatch (Jump ply)) />
+          <Analysis position cursor=game.cursor />
+        </aside>
+      </div>
+    </Settings_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

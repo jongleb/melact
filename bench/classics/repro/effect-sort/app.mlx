@@ -1,0 +1,50 @@
+(** Which rows the list shows. *)
+type filter = Everything | Every_ninth
+
+(** Whether the rows call [useEffect]. *)
+type kind = Without_effect | With_effect
+
+module Plain_row = struct
+  let[@react.component] make = React.memo (fun ~id -> <div className="row">(React.int id)</div>)
+end
+
+module Effect_row = struct
+  let[@react.component] make =
+    React.memo (fun ~id ->
+        React.useEffect1 (fun () -> None) [| id |];
+        <div className="row">(React.int id)</div>)
+end
+
+module Summary = struct
+  let[@react.component] make ~total =
+    let renders = React.useRef 0 in
+    renders.current <- renders.current + 1;
+    <p className="summary">(React.string (string_of_int total ^ " rows"))</p>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let filter, setFilter = React.useState (fun () -> Everything) in
+    let kind, setKind = React.useState (fun () -> Without_effect) in
+    let shown =
+      let ids = Array.init 5000 (fun id -> id) in
+      match filter with Everything -> ids | Every_ninth -> Js.Array.filter ~f:(fun id -> id mod 9 = 0) ids
+    in
+    <div>
+      <button id="filter" onClick=(fun _ -> setFilter (fun filter -> match filter with Everything -> Every_ninth | Every_ninth -> Everything))>
+        (React.string "filter")
+      </button>
+      <button id="effect" onClick=(fun _ -> setKind (fun _ -> With_effect))>(React.string "effect")</button>
+      <Summary total=(Array.length shown) />
+      <div className="list">
+        (shown
+        |> Array.map (fun id ->
+               match kind with
+               | Without_effect -> <Plain_row key=(string_of_int id) id />
+               | With_effect -> <Effect_row key=(string_of_int id) id />)
+        |> React.array)
+      </div>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

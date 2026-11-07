@@ -1,0 +1,524 @@
+external add_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external remove_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "removeEventListener"
+[@@mel.send]
+
+external set_scroll_top : Dom.element -> float -> unit = "scrollTop" [@@mel.set]
+
+type rect
+
+external bounding_rect : Dom.element -> rect = "getBoundingClientRect" [@@mel.send]
+
+external rect_top : rect -> float = "top" [@@mel.get]
+
+external rect_right : rect -> float = "right" [@@mel.get]
+
+external window_height : int = "innerHeight" [@@mel.scope "window"]
+
+external window_width : int = "innerWidth" [@@mel.scope "window"]
+
+external offset_width : Dom.element -> int = "offsetWidth" [@@mel.get]
+
+external key_of : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+(** One of the user's calendars. *)
+type calendar = Work | Personal | Family | Team | Holidays | Birthdays
+
+type event = { id : int; title : string; calendar : calendar; day : int; start : int; minutes : int }
+
+(** What the page shows around the cursor day. *)
+type view = Month | Week | Day
+
+(** What the events reducer can do. *)
+type action = Add of event | Later of int
+
+(** The slot a new event is being created in. *)
+type draft = No_draft | Draft of int * int * anchor
+
+(** Where the create popover points: at a clicked slot, or the middle of the page. *)
+and anchor = Centered | Beside of float * float
+
+(** Where the popover sits, once its layout effect measured it. *)
+type placement = Unplaced | Placed of int * int
+
+(** Whether a month cell belongs to the month shown. *)
+type place = Inside | Outside
+
+(** How many event rows a month cell has room for, once measured. *)
+type fit = Unmeasured | Fits of int
+
+(** Whether a calendar's events are shown. *)
+type shown = Shown | Hidden
+
+type calendars = { hidden : calendar list; toggle : calendar -> unit }
+
+(** An event placed in a day column: its column and the number of columns. *)
+type placed = { event : event; column : int; columns : int }
+
+let calendars = [| Work; Personal; Family; Team; Holidays; Birthdays |]
+
+let calendar_name calendar =
+  match calendar with
+  | Work -> "Work"
+  | Personal -> "Personal"
+  | Family -> "Family"
+  | Team -> "Team"
+  | Holidays -> "Holidays"
+  | Birthdays -> "Birthdays"
+
+let calendar_class calendar = "cal-" ^ String.lowercase_ascii (calendar_name calendar)
+
+let month_names =
+  [| "January"; "February"; "March"; "April"; "May"; "June"; "July"; "August"; "September"; "October"; "November"; "December" |]
+
+let month_firsts =
+  Array.fold_left (fun (firsts, next) length -> (Array.append firsts [| next |], next + length)) ([||], 0)
+    [| 31; 28; 31; 30; 31; 30; 31; 31; 30; 31; 30; 31 |]
+  |> fst
+
+let month_of day =
+  Array.fold_left (fun found first -> match day >= first with true -> found + 1 | false -> found) (-1) month_firsts
+
+let weekday day = (day + 3) mod 7
+
+let weekday_names = [| "Mon"; "Tue"; "Wed"; "Thu"; "Fri"; "Sat"; "Sun" |]
+
+let today = 64
+
+let hour_height = 48
+
+let clock minute = Printf.sprintf "%d:%02d" (minute / 60) (minute mod 60)
+
+let day_label day =
+  let month = month_of day in
+  String.sub month_names.(month) 0 3 ^ " " ^ string_of_int (day - month_firsts.(month) + 1)
+
+let initial =
+  let seed = Classic.Seed.make 31 in
+  Array.init 1200 (fun index ->
+      {
+        id = index + 1;
+        title = String.capitalize_ascii (Classic.sentence seed (1 + Classic.Seed.next seed 3));
+        calendar = Classic.Seed.pick seed calendars;
+        day = Classic.Seed.next seed 181;
+        start = (7 * 60) + (15 * Classic.Seed.next seed 48);
+        minutes = 30 + (15 * Classic.Seed.next seed 11);
+      })
+
+let reduce events action =
+  match action with
+  | Add event -> Array.append events [| event |]
+  | Later id -> Array.map (fun event -> match event.id = id with true -> { event with start = min (23 * 60) (event.start + 60) } | false -> event) events
+
+let calendars_context = React.createContext { hidden = []; toggle = (fun _ -> ()) }
+
+module Calendars_provider = struct
+  let make = React.Context.provider calendars_context
+
+  external makeProps :
+    value:calendars -> children:React.element -> unit -> < value : calendars ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module View_switch = struct
+  let[@react.component] make ~view ~onView =
+    <div className="view-switch">
+      (React.array
+         (Array.map
+            (fun (target, label) ->
+              <button
+                key=label
+                id=("view-" ^ String.lowercase_ascii label)
+                className=(match view = target with true -> "active" | false -> "")
+                onClick=(fun _ -> onView target)>
+                (React.string label)
+              </button>)
+            [| (Day, "Day"); (Week, "Week"); (Month, "Month") |]))
+    </div>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~view ~cursor ~onView ~onStep ~onToday =
+    let title =
+      match view with
+      | Month -> month_names.(month_of cursor) ^ " 2026"
+      | Week ->
+          let monday = cursor - weekday cursor in
+          day_label monday ^ {js| – |js} ^ day_label (monday + 6) ^ ", 2026"
+      | Day -> weekday_names.(weekday cursor) ^ ", " ^ day_label cursor ^ ", 2026"
+    in
+    <header className="toolbar">
+      <h1>(React.string "Calendar")</h1>
+      <button id="today" onClick=(fun _ -> onToday ())>(React.string "Today")</button>
+      <button id="prev" onClick=(fun _ -> onStep (-1))>(React.string {js|‹|js})</button>
+      <button id="next" onClick=(fun _ -> onStep 1)>(React.string {js|›|js})</button>
+      <h2 className="title">(React.string title)</h2>
+      <View_switch view onView />
+    </header>
+end
+
+module Mini_calendar = struct
+  let[@react.component] make ~cursor ~counts ~onPick =
+    let month = month_of cursor in
+    let first = month_firsts.(month) in
+    let start = first - weekday first in
+    let length = (match month + 1 < Array.length month_firsts with true -> month_firsts.(month + 1) | false -> 365) - first in
+    <div className="mini-calendar">
+      <div className="mini-title">(React.string (month_names.(month) ^ " 2026"))</div>
+      <div className="mini-grid">
+        (React.array (Array.map (fun name -> <span key=name className="mini-weekday">(React.string (String.sub name 0 1))</span>) weekday_names))
+        (React.array
+           (Array.init 42 (fun offset ->
+                let day = start + offset in
+                <button
+                  key=(string_of_int offset)
+                  className=
+                    (String.concat " "
+                       [ "mini-day";
+                         (match day >= first && day < first + length with true -> "" | false -> "outside");
+                         (match day = today with true -> "today" | false -> "");
+                         (match day = cursor with true -> "selected" | false -> "");
+                         (match day >= 0 && day < 365 && counts.(day) > 0 with true -> "busy" | false -> "") ])
+                  onClick=(fun _ -> onPick day)>
+                  (React.int (day - month_firsts.(month_of (max 0 day)) + 1))
+                </button>)))
+      </div>
+    </div>
+end
+
+module Calendar_list = struct
+  let[@react.component] make () =
+    let { hidden; toggle } = React.useContext calendars_context in
+    <div className="calendar-list">
+      <h3>(React.string "My calendars")</h3>
+      (React.array
+         (Array.map
+            (fun calendar ->
+              let shown = match List.mem calendar hidden with true -> Hidden | false -> Shown in
+              <label key=(calendar_name calendar) className=("calendar-toggle " ^ calendar_class calendar)>
+                <input type_="checkbox" checked=(shown = Shown) onChange=(fun _ -> toggle calendar) />
+                (React.string (calendar_name calendar))
+              </label>)
+            calendars))
+    </div>
+end
+
+module Event_chip = struct
+  let[@react.component] make ~event =
+    <div className=("chip " ^ calendar_class event.calendar) title=event.title>
+      <span className="dot" />
+      <span className="chip-time">(React.string (clock event.start))</span>
+      <span className="chip-title">(React.string event.title)</span>
+    </div>
+end
+
+module Month_cell = struct
+  let[@react.component] make =
+    React.memo (fun ~day ~place ~events ~onMore ~onCreate ->
+        let cell = React.useRef Js.Nullable.null in
+        let fit, setFit = React.useState (fun () -> Unmeasured) in
+        React.useLayoutEffect1
+          (fun () ->
+            Js.Nullable.toOption cell.current
+            |> Option.iter (fun element ->
+                   let rows = (Classic.offset_height element - 22) / 18 in
+                   setFit (fun _ -> Fits (max 1 rows)));
+            None)
+          [| events |];
+        let count = List.length events in
+        let shown =
+          match fit with
+          | Unmeasured -> count
+          | Fits rows when count <= rows -> count
+          | Fits rows -> max 0 (rows - 1)
+        in
+        <div
+          ref=(ReactDOM.Ref.domRef cell)
+          className=
+            (String.concat " "
+               [ "month-cell"; (match place with Inside -> "" | Outside -> "outside"); (match day = today with true -> "today" | false -> "") ])
+          onClick=(fun _ -> onCreate day (9 * 60) Centered)>
+          <div className="cell-date">(React.int (day - month_firsts.(month_of (max 0 day)) + 1))</div>
+          (React.array (Array.of_list (List.filteri (fun index _ -> index < shown) events |> List.map (fun event -> <Event_chip key=(string_of_int event.id) event />))))
+          (match count > shown with
+           | true ->
+               <button
+                 className="more"
+                 onClick=(fun mouse ->
+                   React.Event.Mouse.stopPropagation mouse;
+                   onMore day)>
+                 (React.string ("+" ^ string_of_int (count - shown) ^ " more"))
+               </button>
+           | false -> React.null)
+        </div>)
+end
+
+module Month_view = struct
+  let[@react.component] make ~cursor ~byDay ~onMore ~onCreate =
+    let month = month_of cursor in
+    let first = month_firsts.(month) in
+    let start = first - weekday first in
+    <div className="month-view">
+      <div className="weekday-row">
+        (React.array (Array.map (fun name -> <div key=name className="weekday">(React.string name)</div>) weekday_names))
+      </div>
+      <div className="month-grid">
+        (React.array
+           (Array.init 42 (fun offset ->
+                let day = start + offset in
+                <Month_cell
+                  key=(string_of_int day)
+                  day
+                  place=(match month_of (max 0 day) = month with true -> Inside | false -> Outside)
+                  events=(match day >= 0 && day < 365 with true -> byDay.(day) | false -> [])
+                  onMore
+                  onCreate />)))
+      </div>
+    </div>
+end
+
+module Event_block = struct
+  let[@react.component] make ~placed ~dispatch =
+    let { event; column; columns } = placed in
+    <div
+      className=("event-block " ^ calendar_class event.calendar)
+      style=(ReactDOM.Style.make
+               ~top:(string_of_int (event.start * hour_height / 60) ^ "px")
+               ~height:(string_of_int (max 18 ((event.minutes * hour_height / 60) - 2)) ^ "px")
+               ~left:(Js.Float.toString (float_of_int column *. 100. /. float_of_int columns) ^ "%")
+               ~width:(Js.Float.toString (100. /. float_of_int columns) ^ "%")
+               ())
+      onClick=(fun mouse -> React.Event.Mouse.stopPropagation mouse)>
+      <div className="block-title">(React.string event.title)</div>
+      <div className="block-time">(React.string (clock event.start ^ {js| – |js} ^ clock (event.start + event.minutes)))</div>
+      <button className="later" title="Move one hour later" onClick=(fun _ -> dispatch (Later event.id))>(React.string "+1h")</button>
+    </div>
+end
+
+module Day_column = struct
+  let[@react.component] make =
+    React.memo (fun ~day ~events ~onCreate ~dispatch ->
+        let placed =
+          React.useMemo1
+            (fun () ->
+              let sorted = List.sort (fun left right -> compare (left.start, left.id) (right.start, right.id)) events in
+              let close cluster columns = List.rev_map (fun (event, column) -> { event; column; columns }) cluster in
+              let rec walk events cluster ends finished =
+                match events with
+                | [] -> List.rev_append (close cluster (List.length ends)) finished
+                | event :: rest -> (
+                    match List.for_all (fun ending -> ending <= event.start) ends with
+                    | true when cluster <> [] ->
+                        walk rest [ (event, 0) ] [ event.start + event.minutes ] (List.rev_append (close cluster (List.length ends)) finished)
+                    | _ ->
+                        let free = List.find_index (fun ending -> ending <= event.start) ends in
+                        Option.fold
+                          ~none:(walk rest ((event, List.length ends) :: cluster) (ends @ [ event.start + event.minutes ]) finished)
+                          ~some:(fun column ->
+                            walk rest ((event, column) :: cluster)
+                              (List.mapi (fun index ending -> match index = column with true -> event.start + event.minutes | false -> ending) ends)
+                              finished)
+                          free)
+              in
+              walk sorted [] [] [] |> Array.of_list)
+            [| events |]
+        in
+        <div className=(match day = today with true -> "day-column today" | false -> "day-column")>
+          (React.array
+             (Array.init 24 (fun hour ->
+                  <div
+                    key=(string_of_int hour)
+                    className="slot"
+                    onClick=(fun mouse ->
+                      let rect = bounding_rect (React.Event.Mouse.currentTarget mouse |> Obj.magic) in
+                      onCreate day (hour * 60) (Beside (rect_right rect, rect_top rect))) />)))
+          (React.array (Array.map (fun placed -> <Event_block key=(string_of_int placed.event.id) placed dispatch />) placed))
+          (match day = today with
+           | true -> <div className="now-line" style=(ReactDOM.Style.make ~top:(string_of_int (10 * hour_height + 24) ^ "px") ()) />
+           | false -> React.null)
+        </div>)
+end
+
+module Time_view = struct
+  let[@react.component] make ~days ~byDay ~onCreate ~dispatch =
+    let scroller = React.useRef Js.Nullable.null in
+    React.useLayoutEffect0 (fun () ->
+        Js.Nullable.toOption scroller.current |> Option.iter (fun element -> set_scroll_top element (float_of_int (8 * hour_height)));
+        None);
+    <div className="time-view">
+      <div className="time-head">
+        <div className="gutter-head" />
+        (React.array
+           (Array.map
+              (fun day ->
+                <div key=(string_of_int day) className=(match day = today with true -> "column-head today" | false -> "column-head")>
+                  <span className="head-weekday">(React.string weekday_names.(weekday day))</span>
+                  <span className="head-date">(React.int (day - month_firsts.(month_of day) + 1))</span>
+                </div>)
+              days))
+      </div>
+      <div className="time-body" ref=(ReactDOM.Ref.domRef scroller)>
+        <div className="gutter">
+          (React.array (Array.init 24 (fun hour -> <div key=(string_of_int hour) className="hour-label">(React.string (clock (hour * 60)))</div>)))
+        </div>
+        (React.array
+           (Array.map
+              (fun day -> <Day_column key=(string_of_int day) day events=(match day < 365 with true -> byDay.(day) | false -> []) onCreate dispatch />)
+              days))
+      </div>
+    </div>
+end
+
+module Create_popover = struct
+  let[@react.component] make ~day ~minute ~anchor ~onSave ~onClose =
+    let { hidden; _ } = React.useContext calendars_context in
+    let title, setTitle = React.useState (fun () -> "") in
+    let calendar, setCalendar = React.useState (fun () -> Work) in
+    let placement, setPlacement = React.useState (fun () -> Unplaced) in
+    let field = React.useRef Js.Nullable.null in
+    let box = React.useRef Js.Nullable.null in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption box.current
+        |> Option.iter (fun element ->
+               let height = Classic.offset_height element and width = offset_width element in
+               let top, left =
+                 match anchor with
+                 | Centered -> ((window_height - height) / 3, (window_width - width) / 2)
+                 | Beside (right, top) ->
+                     let left = int_of_float right + 8 in
+                     ( max 8 (min (int_of_float top) (window_height - height - 8)),
+                       match left + width > window_width with true -> left - width - 16 - 120 | false -> left )
+               in
+               setPlacement (fun _ -> Placed (top, left)));
+        None)
+      [| anchor |];
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption field.current |> Option.iter Classic.focus;
+        let listener event = match key_of event with "Escape" -> onClose () | _ -> () in
+        add_key_listener Classic.document "keydown" listener;
+        Some (fun () -> remove_key_listener Classic.document "keydown" listener));
+    Option.fold ~none:React.null
+      ~some:(fun target ->
+        ReactDOM.createPortal
+          <div className="popover-layer" onClick=(fun _ -> onClose ())>
+            <form
+              ref=(ReactDOM.Ref.domRef box)
+              className="popover"
+              style=(match placement with
+                     | Unplaced -> ReactDOM.Style.make ~visibility:"hidden" ~top:"0px" ~left:"0px" ()
+                     | Placed (top, left) -> ReactDOM.Style.make ~top:(string_of_int top ^ "px") ~left:(string_of_int left ^ "px") ())
+              onClick=(fun mouse -> React.Event.Mouse.stopPropagation mouse)
+              onSubmit=(fun event ->
+                React.Event.Form.preventDefault event;
+                onSave (match String.trim title with "" -> "(No title)" | text -> text) calendar)>
+              <input
+                ref=(ReactDOM.Ref.domRef field)
+                className="title-input"
+                placeholder="Add title"
+                value=title
+                onChange=(fun event ->
+                  let value = (React.Event.Form.target event)##value in
+                  setTitle (fun _ -> value)) />
+              <div className="when">
+                (React.string (weekday_names.(weekday day) ^ ", " ^ day_label day ^ {js| · |js} ^ clock minute ^ {js| – |js} ^ clock (minute + 60)))
+              </div>
+              <select
+                className="calendar-select"
+                value=(calendar_name calendar)
+                onChange=(fun event ->
+                  let value = (React.Event.Form.target event)##value in
+                  Array.find_opt (fun option -> calendar_name option = value) calendars
+                  |> Option.iter (fun picked -> setCalendar (fun _ -> picked)))>
+                (React.array
+                   (Array.map
+                      (fun option -> <option key=(calendar_name option) value=(calendar_name option)>(React.string (calendar_name option))</option>)
+                      (Js.Array.filter ~f:(fun option -> not (List.mem option hidden)) calendars)))
+              </select>
+              <div className="popover-actions">
+                <button type_="button" className="cancel" onClick=(fun _ -> onClose ())>(React.string "Cancel")</button>
+                <button type_="submit" className="save">(React.string "Save")</button>
+              </div>
+            </form>
+          </div>
+          target)
+      (Classic.element_by_id Classic.document "portal")
+end
+
+module App = struct
+  let[@react.component] make () =
+    let events, dispatch = React.useReducer reduce initial in
+    let view, setView = React.useState (fun () -> Month) in
+    let cursor, setCursor = React.useState (fun () -> today) in
+    let hidden, setHidden = React.useState (fun () -> []) in
+    let draft, setDraft = React.useState (fun () -> No_draft) in
+    let toggle =
+      React.useCallback0 (fun calendar ->
+          setHidden (fun hidden ->
+              match List.mem calendar hidden with true -> List.filter (fun other -> other <> calendar) hidden | false -> calendar :: hidden))
+    in
+    let context = React.useMemo1 (fun () -> { hidden; toggle }) [| hidden |] in
+    let byDay =
+      React.useMemo2
+        (fun () ->
+          let days = Array.make 365 [] in
+          Array.iter
+            (fun event ->
+              match List.mem event.calendar hidden with
+              | true -> ()
+              | false -> days.(event.day) <- event :: days.(event.day))
+            events;
+          Array.map (fun day -> List.sort (fun left right -> compare (left.start, left.id) (right.start, right.id)) day) days)
+        (events, hidden)
+    in
+    let counts = React.useMemo1 (fun () -> Array.map List.length byDay) [| byDay |] in
+    let onCreate = React.useCallback0 (fun day minute anchor -> setDraft (fun _ -> Draft (day, minute, anchor))) in
+    let onMore =
+      React.useCallback0 (fun day ->
+          setCursor (fun _ -> day);
+          setView (fun _ -> Day))
+    in
+    let onStep step =
+      setCursor (fun cursor ->
+          match view with
+          | Month ->
+              let month = max 0 (min 11 (month_of cursor + step)) in
+              month_firsts.(month)
+          | Week -> max 0 (min 364 (cursor + (7 * step)))
+          | Day -> max 0 (min 364 (cursor + step)))
+    in
+    <Calendars_provider value=context>
+      <div className="calendar-app">
+        <Toolbar view cursor onView=(fun next -> setView (fun _ -> next)) onStep onToday=(fun () -> setCursor (fun _ -> today)) />
+        <div className="layout">
+          <aside className="sidebar">
+            <button className="create" onClick=(fun _ -> onCreate cursor (9 * 60) Centered)>(React.string "+ Create")</button>
+            <Mini_calendar cursor counts onPick=(fun day -> setCursor (fun _ -> day)) />
+            <Calendar_list />
+          </aside>
+          <main className="main">
+            (match view with
+             | Month -> <Month_view cursor byDay onMore onCreate />
+             | Week ->
+                 let monday = cursor - weekday cursor in
+                 <Time_view days=(Array.init 7 (fun offset -> monday + offset)) byDay onCreate dispatch />
+             | Day -> <Time_view days=[| cursor |] byDay onCreate dispatch />)
+          </main>
+        </div>
+        (match draft with
+         | No_draft -> React.null
+         | Draft (day, minute, anchor) ->
+             <Create_popover
+               day
+               minute
+               anchor
+               onSave=(fun title calendar ->
+                 dispatch (Add { id = Array.length events + 1; title; calendar; day; start = minute; minutes = 60 });
+                 setDraft (fun _ -> No_draft))
+               onClose=(fun () -> setDraft (fun _ -> No_draft)) />)
+      </div>
+    </Calendars_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

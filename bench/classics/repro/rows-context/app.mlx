@@ -1,0 +1,46 @@
+(** The colour scheme, shared through context. *)
+type theme = Light | Dark
+
+let theme_context = React.createContext Light
+
+module Theme_provider = struct
+  let make = React.Context.provider theme_context
+
+  external makeProps :
+    value:theme -> children:React.element -> unit -> < value : theme ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Cell = struct
+  let[@react.component] make ~row ~theme =
+    <li className=(match theme with Light -> "light" | Dark -> "dark")>(React.int row)</li>
+end
+
+module Grid = struct
+  let[@react.component] make () =
+    let theme = React.useContext theme_context in
+    <ul id="grid">
+      (React.array
+         (Array.map
+            (fun row ->
+              <li key=(string_of_int row) className=(match theme with Light -> "light" | Dark -> "dark")>
+                (React.int row)
+              </li>)
+            [| 1; 2; 3 |]))
+      (React.array (Array.map (fun row -> <Cell key=(string_of_int row) row theme />) [| 4; 5; 6 |]))
+    </ul>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let theme, setTheme = React.useState (fun () -> Light) in
+    <Theme_provider value=theme>
+      <button id="theme" onClick=(fun _ -> setTheme (fun theme -> match theme with Light -> Dark | Dark -> Light))>
+        (React.string "Theme")
+      </button>
+      <Grid />
+    </Theme_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

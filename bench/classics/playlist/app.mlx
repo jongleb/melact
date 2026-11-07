@@ -1,0 +1,491 @@
+external scroll_into_view : Dom.element -> < block : string > Js.t -> unit = "scrollIntoView" [@@mel.send]
+
+external add_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external remove_key_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "removeEventListener"
+[@@mel.send]
+
+external key_of : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+external target_tag : Dom.keyboardEvent -> string = "tagName" [@@mel.get] [@@mel.scope "target"]
+
+external prevent_key : Dom.keyboardEvent -> unit = "preventDefault" [@@mel.send]
+
+(** Whether the user likes a track. *)
+type like = Liked | Not_liked
+
+type track = { id : int; title : string; artist : string; album : string; duration : int; hue : int; like : like }
+
+(** Whether the current track is running. *)
+type motion = Running | Halted
+
+(** The track in the player and how far it got, in seconds. *)
+type playback = Stopped | Current of int * int * motion
+
+(** The column the playlist was last sorted by. *)
+type column = Title | Artist | Album | Duration
+
+(** Which way a sort goes. *)
+type direction = Ascending | Descending
+
+type sort = Playlist_order | Sorted of column * direction
+
+(** The modifier held while clicking a row. *)
+type modifier = Plain | Toggle | Range
+
+(** Where a dragged row would land. *)
+type indicator = No_drop | Drop_before of int
+
+module Ids = Set.Make (Int)
+
+type state = {
+  tracks : track array;
+  playback : playback;
+  selection : Ids.t;
+  anchor : int option;
+  indicator : indicator;
+  sort : sort;
+  shuffles : int;
+}
+
+(** What the playlist reducer can do. *)
+type action =
+  | Play of int
+  | Toggle_play
+  | Tick
+  | Next
+  | Previous
+  | Like of int
+  | Click of int * modifier
+  | Hover_drop of int
+  | Clear_drop
+  | Drop of int * int
+  | Sort of column
+  | Shuffle
+  | Remove_selected
+
+(** The track the whole page highlights. *)
+type now = Nothing_playing | Now of int * motion
+
+(** Whether the list shows the results for the latest search text yet. *)
+type freshness = Fresh | Stale
+
+(** Whether a row is part of the selection. *)
+type selected = Selected | Unselected
+
+(** Whether a row shows the insert line above it. *)
+type insert = Insert_here | No_insert
+
+let initial =
+  let seed = Classic.Seed.make 23 in
+  let artists = Array.init 120 (fun _ -> String.capitalize_ascii (Classic.sentence seed 2)) in
+  let albums = Array.init 300 (fun _ -> String.capitalize_ascii (Classic.sentence seed (1 + Classic.Seed.next seed 3))) in
+  {
+    tracks =
+      Array.init 2000 (fun index ->
+          {
+            id = index + 1;
+            title = String.capitalize_ascii (Classic.sentence seed (1 + Classic.Seed.next seed 4));
+            artist = Classic.Seed.pick seed artists;
+            album = Classic.Seed.pick seed albums;
+            duration = 95 + Classic.Seed.next seed 300;
+            hue = Classic.Seed.next seed 360;
+            like = (match Classic.Seed.next seed 7 with 0 -> Liked | _ -> Not_liked);
+          });
+    playback = Stopped;
+    selection = Ids.empty;
+    anchor = None;
+    indicator = No_drop;
+    sort = Playlist_order;
+    shuffles = 0;
+  }
+
+let clock seconds = Printf.sprintf "%d:%02d" (seconds / 60) (seconds mod 60)
+
+let reduce state action =
+  let position id = Js.Array.findIndex ~f:(fun track -> track.id = id) state.tracks in
+  let step offset =
+    match state.playback with
+    | Stopped -> state
+    | Current (id, _, motion) ->
+        let count = Array.length state.tracks in
+        let next = state.tracks.((position id + offset + count) mod count) in
+        { state with playback = Current (next.id, 0, motion) }
+  in
+  match action with
+  | Play id -> { state with playback = Current (id, 0, Running) }
+  | Toggle_play -> (
+      match state.playback with
+      | Stopped -> (
+          match state.tracks with [||] -> state | tracks -> { state with playback = Current (tracks.(0).id, 0, Running) })
+      | Current (id, at, Running) -> { state with playback = Current (id, at, Halted) }
+      | Current (id, at, Halted) -> { state with playback = Current (id, at, Running) })
+  | Tick -> (
+      match state.playback with
+      | Current (id, at, Running) -> (
+          match Array.find_opt (fun track -> track.id = id) state.tracks with
+          | Some track when at + 5 >= track.duration -> step 1
+          | Some _ | None -> { state with playback = Current (id, at + 5, Running) })
+      | Current (_, _, Halted) | Stopped -> state)
+  | Next -> step 1
+  | Previous -> step (-1)
+  | Like id ->
+      {
+        state with
+        tracks =
+          Array.map
+            (fun track ->
+              match track.id = id with
+              | true -> { track with like = (match track.like with Liked -> Not_liked | Not_liked -> Liked) }
+              | false -> track)
+            state.tracks;
+      }
+  | Click (id, Plain) -> { state with selection = Ids.singleton id; anchor = Some id }
+  | Click (id, Toggle) ->
+      {
+        state with
+        selection = (match Ids.mem id state.selection with true -> Ids.remove id state.selection | false -> Ids.add id state.selection);
+        anchor = Some id;
+      }
+  | Click (id, Range) ->
+      let from = Option.fold ~none:(position id) ~some:position state.anchor and upto = position id in
+      let low = min from upto and high = max from upto in
+      {
+        state with
+        selection = Ids.of_list (Array.to_list (Array.map (fun track -> track.id) (Array.sub state.tracks low (high - low + 1))));
+      }
+  | Hover_drop id -> (
+      match state.indicator with Drop_before current when current = id -> state | _ -> { state with indicator = Drop_before id })
+  | Clear_drop -> (match state.indicator with No_drop -> state | Drop_before _ -> { state with indicator = No_drop })
+  | Drop (dragged, before) -> (
+      match dragged = before with
+      | true -> { state with indicator = No_drop }
+      | false ->
+          let moved = Array.find_opt (fun track -> track.id = dragged) state.tracks in
+          let rest = Js.Array.filter ~f:(fun track -> track.id <> dragged) state.tracks in
+          let at = Js.Array.findIndex ~f:(fun track -> track.id = before) rest in
+          Option.fold ~none:{ state with indicator = No_drop }
+            ~some:(fun moved ->
+              {
+                state with
+                tracks = Array.concat [ Array.sub rest 0 at; [| moved |]; Array.sub rest at (Array.length rest - at) ];
+                indicator = No_drop;
+                sort = Playlist_order;
+              })
+            moved)
+  | Sort column ->
+      let direction =
+        match state.sort with Sorted (current, Ascending) when current = column -> Descending | _ -> Ascending
+      in
+      let compare_by left right =
+        match column with
+        | Title -> compare left.title right.title
+        | Artist -> compare (left.artist, left.album) (right.artist, right.album)
+        | Album -> compare left.album right.album
+        | Duration -> compare left.duration right.duration
+      in
+      let sorted = Array.copy state.tracks in
+      Array.stable_sort
+        (fun left right -> match direction with Ascending -> compare_by left right | Descending -> compare_by right left)
+        sorted;
+      { state with tracks = sorted; sort = Sorted (column, direction) }
+  | Shuffle ->
+      let seed = Classic.Seed.make (101 + state.shuffles) in
+      let shuffled = Array.copy state.tracks in
+      for index = Array.length shuffled - 1 downto 1 do
+        let other = Classic.Seed.next seed (index + 1) in
+        let kept = shuffled.(index) in
+        shuffled.(index) <- shuffled.(other);
+        shuffled.(other) <- kept
+      done;
+      { state with tracks = shuffled; sort = Playlist_order; shuffles = state.shuffles + 1 }
+  | Remove_selected ->
+      {
+        state with
+        tracks = Js.Array.filter ~f:(fun track -> not (Ids.mem track.id state.selection)) state.tracks;
+        selection = Ids.empty;
+        anchor = None;
+      }
+
+let now_context = React.createContext Nothing_playing
+
+module Now_provider = struct
+  let make = React.Context.provider now_context
+
+  external makeProps : value:now -> children:React.element -> unit -> < value : now ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Cover = struct
+  let[@react.component] make ~hue ~size =
+    <div
+      className="cover"
+      style=(ReactDOM.Style.make ~width:size ~height:size
+               ~background:("linear-gradient(135deg, hsl(" ^ string_of_int hue ^ ", 70%, 55%), hsl(" ^ string_of_int ((hue + 60) mod 360) ^ ", 70%, 35%))")
+               ())
+    />
+end
+
+module Like_button = struct
+  let[@react.component] make ~like ~onToggle =
+    <button
+      className=(match like with Liked -> "like liked" | Not_liked -> "like")
+      title=(match like with Liked -> "Remove from Liked Songs" | Not_liked -> "Save to Liked Songs")
+      onClick=(fun event ->
+        React.Event.Mouse.stopPropagation event;
+        onToggle ())>
+      (React.string (match like with Liked -> {js|♥|js} | Not_liked -> {js|♡|js}))
+    </button>
+end
+
+module Track_row = struct
+  let[@react.component] make =
+    React.memo (fun ~track ~index ~selected ~insert ~dispatch ->
+        let now = React.useContext now_context in
+        let playing = match now with Now (id, motion) when id = track.id -> Some motion | _ -> None in
+        let row = React.useRef Js.Nullable.null in
+        let started = Option.fold ~none:"" ~some:(fun motion -> match motion with Running -> "running" | Halted -> "halted") playing in
+        React.useEffect1
+          (fun () ->
+            (match started with
+             | "running" -> Js.Nullable.toOption row.current |> Option.iter (fun element -> scroll_into_view element [%mel.obj { block = "nearest" }])
+             | _ -> ());
+            None)
+          [| started |];
+        <li
+          ref=(ReactDOM.Ref.domRef row)
+          className=
+            (String.concat " "
+               [ "track";
+                 (match selected with Selected -> "selected" | Unselected -> "");
+                 Option.fold ~none:"" ~some:(fun _ -> "playing") playing;
+                 (match insert with Insert_here -> "drop-before" | No_insert -> "") ])
+          draggable=true
+          onClick=(fun event ->
+            let modifier =
+              match (React.Event.Mouse.shiftKey event, React.Event.Mouse.ctrlKey event || React.Event.Mouse.metaKey event) with
+              | true, _ -> Range
+              | false, true -> Toggle
+              | false, false -> Plain
+            in
+            dispatch (Click (track.id, modifier)))
+          onDoubleClick=(fun _ -> dispatch (Play track.id))
+          onDragStart=(fun event ->
+            ignore ((React.Event.Drag.dataTransfer event)##setData "text/plain" (string_of_int track.id)))
+          onDragOver=(fun event ->
+            React.Event.Drag.preventDefault event;
+            dispatch (Hover_drop track.id))
+          onDrop=(fun event ->
+            React.Event.Drag.preventDefault event;
+            (React.Event.Drag.dataTransfer event)##getData "text/plain"
+            |> int_of_string_opt
+            |> Option.iter (fun dragged -> dispatch (Drop (dragged, track.id))))
+          onDragEnd=(fun _ -> dispatch Clear_drop)>
+          <span className="index">
+            (Option.fold ~none:(React.int (index + 1))
+               ~some:(fun motion ->
+                 <span className=(match motion with Running -> "equalizer running" | Halted -> "equalizer")>
+                   <i />
+                   <i />
+                   <i />
+                 </span>)
+               playing)
+          </span>
+          <Cover hue=track.hue size="36px" />
+          <span className="title-cell">
+            <span className="title">(React.string track.title)</span>
+            <span className="artist">(React.string track.artist)</span>
+          </span>
+          <span className="album">(React.string track.album)</span>
+          <Like_button like=track.like onToggle=(fun () -> dispatch (Like track.id)) />
+          <span className="duration">(React.string (clock track.duration))</span>
+        </li>)
+end
+
+module Sort_header = struct
+  let[@react.component] make ~label ~column ~sort ~dispatch =
+    <button
+      className=(match sort with Sorted (current, _) when current = column -> "sort-header active" | _ -> "sort-header")
+      onClick=(fun _ -> dispatch (Sort column))>
+      (React.string label)
+      (match sort with
+       | Sorted (current, Ascending) when current = column -> React.string {js| ▲|js}
+       | Sorted (current, Descending) when current = column -> React.string {js| ▼|js}
+       | _ -> React.null)
+    </button>
+end
+
+module Track_list = struct
+  let[@react.component] make ~tracks ~freshness ~selection ~indicator ~sort ~dispatch =
+    <section className=(match freshness with Fresh -> "track-list" | Stale -> "track-list stale")>
+      <div className="list-header">
+        <span className="index">(React.string "#")</span>
+        <Sort_header label="Title" column=Title sort dispatch />
+        <Sort_header label="Artist" column=Artist sort dispatch />
+        <Sort_header label="Album" column=Album sort dispatch />
+        <Sort_header label="Duration" column=Duration sort dispatch />
+      </div>
+      <ol className="tracks" onDragLeave=(fun _ -> ())>
+        (React.array
+           (Array.mapi
+              (fun index track ->
+                <Track_row
+                  key=(string_of_int track.id)
+                  track
+                  index
+                  selected=(match Ids.mem track.id selection with true -> Selected | false -> Unselected)
+                  insert=(match indicator with Drop_before id when id = track.id -> Insert_here | _ -> No_insert)
+                  dispatch />)
+              tracks))
+      </ol>
+    </section>
+end
+
+module Progress = struct
+  let[@react.component] make ~at ~duration =
+    let percent = float_of_int at *. 100. /. float_of_int (max 1 duration) in
+    <div className="progress">
+      <span className="elapsed">(React.string (clock at))</span>
+      <div className="bar">
+        <div className="fill" style=(ReactDOM.Style.make ~width:(Js.Float.toFixed ~digits:2 percent ^ "%") ()) />
+      </div>
+      <span className="total">(React.string (clock duration))</span>
+    </div>
+end
+
+module Player_bar = struct
+  let[@react.component] make ~track ~at ~motion ~dispatch =
+    <footer className="player">
+      (Option.fold ~none:<div className="now-info empty">(React.string "Nothing playing")</div>
+         ~some:(fun track ->
+           <div className="now-info">
+             <Cover hue=track.hue size="56px" />
+             <div>
+               <div className="now-title">(React.string track.title)</div>
+               <div className="now-artist">(React.string track.artist)</div>
+             </div>
+           </div>)
+         track)
+      <div className="controls">
+        <button id="previous" onClick=(fun _ -> dispatch Previous)>(React.string {js|⏮|js})</button>
+        <button id="play" onClick=(fun _ -> dispatch Toggle_play)>
+          (React.string (match motion with Running -> {js|⏸|js} | Halted -> {js|▶|js}))
+        </button>
+        <button id="next" onClick=(fun _ -> dispatch Next)>(React.string {js|⏭|js})</button>
+        <button id="tick" onClick=(fun _ -> dispatch Tick)>(React.string "+5s")</button>
+      </div>
+      <Progress at duration=(Option.fold ~none:0 ~some:(fun track -> track.duration) track) />
+    </footer>
+end
+
+module Queue_item = struct
+  let[@react.component] make ~track ~dispatch =
+    <li className="queue-item" onDoubleClick=(fun _ -> dispatch (Play track.id))>
+      <Cover hue=track.hue size="32px" />
+      <div>
+        <div className="queue-title">(React.string track.title)</div>
+        <div className="queue-artist">(React.string track.artist)</div>
+      </div>
+    </li>
+end
+
+module Queue = struct
+  let[@react.component] make ~tracks ~current ~dispatch =
+    let upcoming =
+      React.useMemo2
+        (fun () ->
+          let count = Array.length tracks in
+          let start = Option.fold ~none:0 ~some:(fun id -> 1 + Js.Array.findIndex ~f:(fun track -> track.id = id) tracks) current in
+          Array.init (min 20 count) (fun offset -> tracks.((start + offset) mod count)))
+        (tracks, current)
+    in
+    <aside className="queue">
+      <h2>(React.string "Next up")</h2>
+      <ul>(React.array (Array.map (fun track -> <Queue_item key=(string_of_int track.id) track dispatch />) upcoming))</ul>
+    </aside>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~count ~picked ~liked ~query ~onQuery ~dispatch =
+    <div className="toolbar">
+      <h1>(React.string "Road trip")</h1>
+      <input
+        id="search"
+        type_="search"
+        placeholder="Search in playlist"
+        value=query
+        onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <span className="summary">(React.string (string_of_int count ^ " songs, " ^ string_of_int liked ^ " liked"))</span>
+      <button id="shuffle" onClick=(fun _ -> dispatch Shuffle)>(React.string "Shuffle")</button>
+      <button id="remove-selected" disabled=(picked = 0) onClick=(fun _ -> dispatch Remove_selected)>
+        (React.string ("Remove " ^ string_of_int picked))
+      </button>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let state, dispatch = React.useReducer reduce initial in
+    React.useEffect0 (fun () ->
+        let listener event =
+          match (key_of event, target_tag event) with
+          | " ", ("INPUT" | "TEXTAREA") -> ()
+          | " ", _ ->
+              prevent_key event;
+              dispatch Toggle_play
+          | "ArrowRight", _ -> dispatch Tick
+          | _ -> ()
+        in
+        add_key_listener Classic.document "keydown" listener;
+        Some (fun () -> remove_key_listener Classic.document "keydown" listener));
+    let current, at, motion =
+      match state.playback with Stopped -> (None, 0, Halted) | Current (id, at, motion) -> (Some id, at, motion)
+    in
+    let now =
+      React.useMemo2
+        (fun () -> Option.fold ~none:Nothing_playing ~some:(fun id -> Now (id, motion)) current)
+        (current, motion)
+    in
+    let track =
+      React.useMemo2 (fun () -> Option.bind current (fun id -> Array.find_opt (fun track -> track.id = id) state.tracks)) (current, state.tracks)
+    in
+    let query, setQuery = React.useState (fun () -> "") in
+    let deferred = React.useDeferredValue query ~initialValue:query in
+    let shown =
+      React.useMemo2
+        (fun () ->
+          match String.trim deferred with
+          | "" -> state.tracks
+          | text ->
+              let needle = String.lowercase_ascii text in
+              Js.Array.filter
+                ~f:(fun track ->
+                  Js.String.includes ~search:needle (String.lowercase_ascii track.title)
+                  || Js.String.includes ~search:needle (String.lowercase_ascii track.artist))
+                state.tracks)
+        (state.tracks, deferred)
+    in
+    let liked = React.useMemo1 (fun () -> Js.Array.filter ~f:(fun track -> track.like = Liked) state.tracks |> Array.length) [| state.tracks |] in
+    <Now_provider value=now>
+      <div className="playlist">
+        <main>
+          <Toolbar
+            count=(Array.length state.tracks)
+            picked=(Ids.cardinal state.selection)
+            liked
+            query
+            onQuery=(fun text -> setQuery (fun _ -> text))
+            dispatch />
+          <Track_list
+            tracks=shown
+            freshness=(match query = deferred with true -> Fresh | false -> Stale)
+            selection=state.selection indicator=state.indicator sort=state.sort dispatch />
+        </main>
+        <Queue tracks=state.tracks current dispatch />
+        <Player_bar track at motion dispatch />
+      </div>
+    </Now_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

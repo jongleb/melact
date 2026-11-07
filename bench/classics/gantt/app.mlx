@@ -1,0 +1,430 @@
+external set_scroll_top : Dom.element -> float -> unit = "scrollTop" [@@mel.set]
+
+external set_scroll_left : Dom.element -> float -> unit = "scrollLeft" [@@mel.set]
+
+type resize_observer
+
+external resize_observer : (unit -> unit) -> resize_observer = "ResizeObserver" [@@mel.new]
+
+external observe : resize_observer -> Dom.element -> unit = "observe" [@@mel.send]
+
+external disconnect : resize_observer -> unit = "disconnect" [@@mel.send]
+
+(** How many pixels a day takes on the timeline. *)
+type zoom = Day | Week | Month
+
+type task = { id : int; name : string; group : int; start : int; length : int; progress : int; depends : int list }
+
+type group = { key : int; title : string }
+
+(** What the task reducer can do. *)
+type action = Shift of int | Extend of int
+
+(** A line of the table and of the timeline. *)
+type row = Group_line of group * task array | Task_line of task
+
+(** Whether the task table is on the page. *)
+type panel = Panel_shown | Panel_hidden
+
+(** Whether a group shows its tasks. *)
+type fold = Expanded | Collapsed
+
+(** Whether a row or a bar is selected. *)
+type picked = Picked | Not_picked
+
+(** How a click changes the selection. *)
+type pick = Only_this | Also_this
+
+module Ids = Set.Make (Int)
+
+let days = 181
+
+let row_height = 30
+
+let day_width zoom = match zoom with Day -> 28 | Week -> 8 | Month -> 3
+
+let month_starts = [| (0, "January"); (31, "February"); (59, "March"); (90, "April"); (120, "May"); (151, "June") |]
+
+let date_label day =
+  Array.fold_left
+    (fun found (first, name) -> match day >= first with true -> String.sub name 0 3 ^ " " ^ string_of_int (day - first + 1) | false -> found)
+    "" month_starts
+
+let groups =
+  let seed = Classic.Seed.make 5 in
+  Array.init 30 (fun key -> { key; title = "Phase " ^ string_of_int (key + 1) ^ ": " ^ String.capitalize_ascii (Classic.sentence seed 2) })
+
+let initial =
+  let seed = Classic.Seed.make 17 in
+  Array.init 300 (fun index ->
+      let group = index / 10 in
+      let start = min (days - 20) ((group * 5) + Classic.Seed.next seed 25) in
+      {
+        id = index + 1;
+        name = String.capitalize_ascii (Classic.sentence seed (2 + Classic.Seed.next seed 3));
+        group;
+        start;
+        length = 2 + Classic.Seed.next seed 18;
+        progress = Classic.Seed.next seed 101;
+        depends =
+          (match (index mod 10, Classic.Seed.next seed 3) with
+           | 0, _ -> []
+           | _, 0 -> []
+           | _, 1 -> [ index ]
+           | _, _ -> [ index; max 1 (index - 12) ]);
+      })
+
+let reduce tasks action =
+  Array.map
+    (fun task ->
+      match action with
+      | Shift id when id = task.id -> { task with start = min (days - 1) (task.start + 1) }
+      | Extend id when id = task.id -> { task with length = task.length + 1 }
+      | Shift _ | Extend _ -> task)
+    tasks
+
+module Zoom_button = struct
+  let[@react.component] make ~label ~target ~zoom ~onZoom =
+    <button
+      id=("zoom-" ^ String.lowercase_ascii label)
+      className=(match zoom = target with true -> "zoom active" | false -> "zoom")
+      onClick=(fun _ -> onZoom target)>
+      (React.string label)
+    </button>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~zoom ~onZoom ~onCollapseAll ~onExpandAll ~onTable ~picked ~visible =
+    <div className="toolbar">
+      <h1>(React.string "Release plan")</h1>
+      <div className="zooms">
+        <Zoom_button label="Day" target=Day zoom onZoom />
+        <Zoom_button label="Week" target=Week zoom onZoom />
+        <Zoom_button label="Month" target=Month zoom onZoom />
+      </div>
+      <button id="collapse-all" onClick=(fun _ -> onCollapseAll ())>(React.string "Collapse all")</button>
+      <button id="expand-all" onClick=(fun _ -> onExpandAll ())>(React.string "Expand all")</button>
+      <button id="toggle-table" onClick=(fun _ -> onTable ())>(React.string "Task table")</button>
+      <span className="picked">(React.string (string_of_int picked ^ " selected"))</span>
+      <span className="visible">(React.string ("about " ^ string_of_int visible ^ " days visible"))</span>
+    </div>
+end
+
+module Group_row = struct
+  let[@react.component] make ~group ~members ~fold ~onFold =
+    let first = Array.fold_left (fun low task -> min low task.start) days members in
+    let last = Array.fold_left (fun high task -> max high (task.start + task.length)) 0 members in
+    let progress =
+      Array.fold_left (fun sum task -> sum + task.progress) 0 members / max 1 (Array.length members)
+    in
+    <div className="table-row group-row">
+      <span className="name">
+        <button className="fold" onClick=(fun _ -> onFold group.key)>
+          (React.string (match fold with Expanded -> {js|▾|js} | Collapsed -> {js|▸|js}))
+        </button>
+        (React.string group.title)
+      </span>
+      <span className="start">(React.string (date_label first))</span>
+      <span className="end">(React.string (date_label last))</span>
+      <span className="progress">(React.string (string_of_int progress ^ "%"))</span>
+    </div>
+end
+
+module Task_row = struct
+  let[@react.component] make ~task ~picked ~onPick ~dispatch =
+    <div
+      className=(match picked with Picked -> "table-row task-row selected" | Not_picked -> "table-row task-row")
+      onClick=(fun event -> onPick task.id (match React.Event.Mouse.ctrlKey event with true -> Also_this | false -> Only_this))>
+      <span className="name">(React.string task.name)</span>
+      <span className="start">(React.string (date_label task.start))</span>
+      <span className="end">(React.string (date_label (task.start + task.length)))</span>
+      <span className="progress">
+        <progress max="100" value=(string_of_int task.progress) />
+      </span>
+      <span className="actions">
+        <button
+          className="shift"
+          title="Move one day later"
+          onClick=(fun event ->
+            React.Event.Mouse.stopPropagation event;
+            dispatch (Shift task.id))>
+          (React.string {js|⇢|js})
+        </button>
+        <button
+          className="extend"
+          title="Make one day longer"
+          onClick=(fun event ->
+            React.Event.Mouse.stopPropagation event;
+            dispatch (Extend task.id))>
+          (React.string "+")
+        </button>
+      </span>
+    </div>
+end
+
+module Task_table = struct
+  let[@react.component] make ~rows ~folds ~selection ~scrollTop ~onFold ~onPick ~dispatch =
+    let body = React.useRef Js.Nullable.null in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption body.current |> Option.iter (fun element -> set_scroll_top element scrollTop);
+        None)
+      [| scrollTop |];
+    <section className="task-table">
+      <div className="table-head">
+        <span>(React.string "Task")</span>
+        <span>(React.string "Start")</span>
+        <span>(React.string "End")</span>
+        <span>(React.string "Done")</span>
+        <span />
+      </div>
+      <div className="table-body" ref=(ReactDOM.Ref.domRef body)>
+        (React.array
+           (Array.map
+              (fun row ->
+                match row with
+                | Group_line (group, members) ->
+                    <Group_row
+                      key=("g" ^ string_of_int group.key)
+                      group
+                      members
+                      fold=(match Ids.mem group.key folds with true -> Collapsed | false -> Expanded)
+                      onFold />
+                | Task_line task ->
+                    <Task_row
+                      key=(string_of_int task.id)
+                      task
+                      picked=(match Ids.mem task.id selection with true -> Picked | false -> Not_picked)
+                      onPick
+                      dispatch />)
+              rows))
+      </div>
+    </section>
+end
+
+module Timeline_header = struct
+  let[@react.component] make ~zoom =
+    let scale = day_width zoom in
+    let cell key left width label =
+      <div
+        key
+        className="header-cell"
+        style=(ReactDOM.Style.make ~left:(string_of_int (left * scale) ^ "px") ~width:(string_of_int (width * scale) ^ "px") ())>
+        (React.string label)
+      </div>
+    in
+    <div className="timeline-header" style=(ReactDOM.Style.make ~width:(string_of_int (days * scale) ^ "px") ())>
+      <div className="header-line months">
+        (React.array
+           (Array.mapi
+              (fun index (first, name) ->
+                let next = match index + 1 < Array.length month_starts with true -> fst month_starts.(index + 1) | false -> days in
+                cell name first (next - first) (match zoom with Month -> String.sub name 0 3 | Day | Week -> name ^ " 2026"))
+              month_starts))
+      </div>
+      <div className="header-line weeks">
+        (React.array
+           (Array.init ((days + 6) / 7) (fun week ->
+                cell (string_of_int week) (week * 7) (min 7 (days - (week * 7)))
+                  (match zoom with Month -> string_of_int (week + 1) | Day | Week -> "W" ^ string_of_int (week + 1)))))
+      </div>
+      (match zoom with
+       | Day ->
+           <div className="header-line days">
+             (React.array
+                (Array.init days (fun day ->
+                     cell (string_of_int day) day 1
+                       (Array.fold_left (fun found (first, _) -> match day >= first with true -> string_of_int (day - first + 1) | false -> found) "" month_starts))))
+           </div>
+       | Week | Month -> React.null)
+    </div>
+end
+
+module Grid_lines = struct
+  let[@react.component] make ~zoom ~height =
+    let scale = day_width zoom in
+    let lines =
+      match zoom with
+      | Day -> Array.init days (fun day -> day)
+      | Week -> Array.init ((days + 6) / 7) (fun week -> week * 7)
+      | Month -> Array.map fst month_starts
+    in
+    <div className="grid-lines" style=(ReactDOM.Style.make ~height:(string_of_int height ^ "px") ())>
+      (React.array
+         (Array.map
+            (fun day ->
+              <div
+                key=(string_of_int day)
+                className=(match day mod 7 with 5 | 6 -> "grid-line weekend" | _ -> "grid-line")
+                style=(ReactDOM.Style.make ~left:(string_of_int (day * scale) ^ "px") ~width:(string_of_int scale ^ "px") ()) />)
+            lines))
+    </div>
+end
+
+module Task_bar = struct
+  let[@react.component] make =
+    React.memo (fun ~task ~line ~scale ~picked ~onPick ->
+        <div
+          className=(match picked with Picked -> "bar selected" | Not_picked -> "bar")
+          title=(task.name ^ ": " ^ date_label task.start ^ {js| – |js} ^ date_label (task.start + task.length))
+          style=(ReactDOM.Style.make
+                   ~top:(string_of_int ((line * row_height) + 6) ^ "px")
+                   ~left:(string_of_int (task.start * scale) ^ "px")
+                   ~width:(string_of_int (max 2 (task.length * scale)) ^ "px")
+                   ())
+          onClick=(fun event -> onPick task.id (match React.Event.Mouse.ctrlKey event with true -> Also_this | false -> Only_this))>
+          <div className="bar-progress" style=(ReactDOM.Style.make ~width:(string_of_int task.progress ^ "%") ()) />
+          <span className="bar-label">(React.string task.name)</span>
+        </div>)
+end
+
+module Summary_bar = struct
+  let[@react.component] make ~members ~line ~scale =
+    let first = Array.fold_left (fun low task -> min low task.start) days members in
+    let last = Array.fold_left (fun high task -> max high (task.start + task.length)) 0 members in
+    <div
+      className="summary-bar"
+      style=(ReactDOM.Style.make
+               ~top:(string_of_int ((line * row_height) + 11) ^ "px")
+               ~left:(string_of_int (first * scale) ^ "px")
+               ~width:(string_of_int ((last - first) * scale) ^ "px")
+               ())
+    />
+end
+
+module Dependency_links = struct
+  let[@react.component] make ~rows ~scale ~width ~height =
+    let paths =
+      React.useMemo2
+        (fun () ->
+          let lines = Array.make 301 None in
+          Array.iteri (fun line row -> match row with Task_line task -> lines.(task.id) <- Some (line, task) | Group_line _ -> ()) rows;
+          Array.to_list rows
+          |> List.concat_map (fun row ->
+                 match row with
+                 | Group_line _ -> []
+                 | Task_line task ->
+                     List.filter_map
+                       (fun before ->
+                         Option.bind lines.(task.id) (fun (line, _) ->
+                             Option.map
+                               (fun (from, source) ->
+                                 let x1 = (source.start + source.length) * scale and y1 = (from * row_height) + (row_height / 2) in
+                                 let x2 = task.start * scale and y2 = (line * row_height) + (row_height / 2) in
+                                 let bend = max (x1 + 6) (x2 - 6) in
+                                 ( string_of_int before ^ "-" ^ string_of_int task.id,
+                                   Printf.sprintf "M %d %d H %d V %d H %d" x1 y1 bend y2 (x2 - 1) ))
+                               lines.(before)))
+                       task.depends)
+          |> Array.of_list)
+        (rows, scale)
+    in
+    <svg className="links" width=(string_of_int width) height=(string_of_int height)>
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 z" fill="#6b7a90" />
+        </marker>
+      </defs>
+      (React.array (Array.map (fun (key, d) -> <path key d className="link" fill="none" markerEnd="url(#arrow)" />) paths))
+    </svg>
+end
+
+module Timeline = struct
+  let[@react.component] make ~rows ~zoom ~selection ~onPick ~onScroll ~onMeasure =
+    let scale = day_width zoom in
+    let pane = React.useRef Js.Nullable.null in
+    React.useLayoutEffect0 (fun () ->
+        Js.Nullable.toOption pane.current
+        |> Option.map (fun element ->
+               let observer = resize_observer (fun () -> onMeasure (Classic.client_width element)) in
+               observe observer element;
+               fun () -> disconnect observer));
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption pane.current
+        |> Option.iter (fun element -> set_scroll_left element (float_of_int ((64 * scale) - (Classic.client_width element / 3))));
+        None)
+      [| scale |];
+    let width = days * scale and height = Array.length rows * row_height in
+    <section className="timeline" ref=(ReactDOM.Ref.domRef pane) onScroll=(fun event -> onScroll (React.Event.UI.target event)##scrollTop)>
+      <Timeline_header zoom />
+      <div className="timeline-body" style=(ReactDOM.Style.make ~width:(string_of_int width ^ "px") ~height:(string_of_int height ^ "px") ())>
+        <Grid_lines zoom height />
+        (React.array
+           (Array.mapi
+              (fun line row ->
+                match row with
+                | Group_line (group, members) -> <Summary_bar key=("g" ^ string_of_int group.key) members line scale />
+                | Task_line task ->
+                    <Task_bar
+                      key=(string_of_int task.id)
+                      task
+                      line
+                      scale
+                      picked=(match Ids.mem task.id selection with true -> Picked | false -> Not_picked)
+                      onPick />)
+              rows))
+        <Dependency_links rows scale width height />
+        <div className="today" style=(ReactDOM.Style.make ~left:(string_of_int (64 * scale) ^ "px") ()) title="Today" />
+      </div>
+    </section>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let tasks, dispatch = React.useReducer reduce initial in
+    let zoom, setZoom = React.useState (fun () -> Day) in
+    let table, setTable = React.useState (fun () -> Panel_shown) in
+    let folds, setFolds = React.useState (fun () -> Ids.empty) in
+    let selection, setSelection = React.useState (fun () -> Ids.empty) in
+    let scrollTop, setScrollTop = React.useState (fun () -> 0.) in
+    let paneWidth, setPaneWidth = React.useState (fun () -> 0) in
+    let rows =
+      React.useMemo2
+        (fun () ->
+          Array.to_list groups
+          |> List.concat_map (fun group ->
+                 let members = Js.Array.filter ~f:(fun task -> task.group = group.key) tasks in
+                 Group_line (group, members)
+                 :: (match Ids.mem group.key folds with
+                     | true -> []
+                     | false -> Array.to_list (Array.map (fun task -> Task_line task) members)))
+          |> Array.of_list)
+        (tasks, folds)
+    in
+    let onFold =
+      React.useCallback0 (fun key ->
+          setFolds (fun folds -> match Ids.mem key folds with true -> Ids.remove key folds | false -> Ids.add key folds))
+    in
+    let onPick =
+      React.useCallback0 (fun id pick ->
+          setSelection (fun selection ->
+              match pick with
+              | Only_this -> Ids.singleton id
+              | Also_this -> (match Ids.mem id selection with true -> Ids.remove id selection | false -> Ids.add id selection)))
+    in
+    <div className="gantt">
+      <Toolbar
+        zoom
+        onZoom=(fun next -> setZoom (fun _ -> next))
+        onCollapseAll=(fun () -> setFolds (fun _ -> Ids.of_list (Array.to_list (Array.map (fun group -> group.key) groups))))
+        onExpandAll=(fun () -> setFolds (fun _ -> Ids.empty))
+        onTable=(fun () -> setTable (fun table -> match table with Panel_shown -> Panel_hidden | Panel_hidden -> Panel_shown))
+        picked=(Ids.cardinal selection)
+        visible=(paneWidth / day_width zoom) />
+      <div className="panes">
+        (match table with
+         | Panel_shown -> <Task_table rows folds selection scrollTop onFold onPick dispatch />
+         | Panel_hidden -> React.null)
+        <Timeline
+          rows
+          zoom
+          selection
+          onPick
+          onScroll=(fun top -> setScrollTop (fun _ -> top))
+          onMeasure=(fun width -> setPaneWidth (fun _ -> width)) />
+      </div>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

@@ -1,0 +1,44 @@
+let tick_context = React.createContext 0
+
+module Tick_provider = struct
+  let make = React.Context.provider tick_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module rec Nested : sig
+  val make : depth:int -> React.element [@@react.component]
+end = struct
+  let[@react.component] make ~depth =
+    let _ = React.useContext tick_context in
+    <div className="nested">
+      <span>(React.int depth)</span>
+      (match depth < 6 with
+       | true -> Array.init 5 (fun index -> <Nested key=(string_of_int index) depth=(depth + 1) />) |> React.array
+       | false -> React.null)
+    </div>
+end
+
+module Flat = struct
+  let[@react.component] make ~index =
+    let _ = React.useContext tick_context in
+    <div className="flat"><span>(React.int index)</span></div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let nested, setNested = React.useState (fun () -> 0) in
+    let flat, setFlat = React.useState (fun () -> 0) in
+    <div>
+      <button id="nested" onClick=(fun _ -> setNested (fun tick -> tick + 1))>(React.string "bump nested")</button>
+      <button id="flat" onClick=(fun _ -> setFlat (fun tick -> tick + 1))>(React.string "bump flat")</button>
+      <Tick_provider value=nested><Nested depth=0 /></Tick_provider>
+      <Tick_provider value=flat>
+        (Array.init 19531 (fun index -> <Flat key=(string_of_int index) index />) |> React.array)
+      </Tick_provider>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

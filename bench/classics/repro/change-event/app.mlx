@@ -1,0 +1,25 @@
+module App = struct
+  let[@react.component] make () =
+    let colour, setColour = React.useState (fun () -> "red") in
+    let name, setName = React.useState (fun () -> "") in
+    <div>
+      <select
+        id="colour"
+        value=colour
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setColour (fun _ -> value))>
+        <option value="red">(React.string "red")</option>
+        <option value="green">(React.string "green")</option>
+      </select>
+      <input
+        id="name"
+        value=name
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setName (fun _ -> value)) />
+      <p id="shown">(React.string (colour ^ " " ^ name))</p>
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

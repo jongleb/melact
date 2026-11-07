@@ -1,0 +1,634 @@
+external scroll_into_view : Dom.element -> unit = "scrollIntoView" [@@mel.send]
+
+(** One line of a hunk: kept, added or removed, with the numbers it has on each side. *)
+type line =
+  | Context of { old_line : int; new_line : int; text : string }
+  | Added of { new_line : int; text : string }
+  | Removed of { old_line : int; text : string }
+
+type hunk = { header : string; lines : line array }
+
+(** What happened to a file. *)
+type status = Modified | Created | Renamed
+
+type file = { path : string; directory : string; status : status; hunks : hunk array; additions : int; deletions : int }
+
+(** One side of a split row. *)
+type cell = Blank | Filled of line
+
+type row = { left : cell; right : cell }
+
+(** How hunks are drawn. *)
+type layout = Unified | Split
+
+(** Whether changes in indentation alone are shown. *)
+type whitespace = Show_whitespace | Hide_whitespace
+
+type settings = { layout : layout; whitespace : whitespace }
+
+(** Whether a file shows its hunks. *)
+type fold = Expanded | Collapsed
+
+(** Whether a file was marked as viewed. *)
+type viewed = Viewed | Unviewed
+
+(** The line a comment is being written on. *)
+type composer = Closed | Composing of { path : string; line : string }
+
+(** The composer as one line sees it. *)
+type composing = Here | Elsewhere
+
+(** A highlighted piece of source. *)
+type token = Keyword of string | Literal of string | Number of string | Word of string | Punctuation of string
+
+type review = {
+  collapsed : Belt.Set.String.t;
+  viewed : Belt.Set.String.t;
+  comments : string array Belt.Map.String.t Belt.Map.String.t;
+  composer : composer;
+}
+
+(** What the review reducer can do. *)
+type action =
+  | Collapse_all
+  | Expand_all
+  | Toggle_fold of string
+  | Toggle_viewed of string
+  | Compose of string * string
+  | Cancel_compose
+  | Submit of string * string * string
+
+let files =
+  let seed = Classic.Seed.make 5 in
+  let next bound = Classic.Seed.next seed bound in
+  let word () = Classic.Seed.pick seed Classic.words in
+  let code () =
+    match next 10 with
+    | 0 -> "const " ^ word () ^ " = " ^ string_of_int (next 1000) ^ ";"
+    | 1 -> "  return " ^ word () ^ "(" ^ word () ^ ", \"" ^ word () ^ "\");"
+    | 2 -> "function " ^ word () ^ "(" ^ word () ^ ", " ^ word () ^ ") {"
+    | 3 -> "}"
+    | 4 -> "  if (" ^ word () ^ " > " ^ string_of_int (next 100) ^ ") {"
+    | 5 -> "import { " ^ word () ^ ", " ^ word () ^ " } from \"./" ^ word () ^ "\";"
+    | 6 -> "    " ^ word () ^ "." ^ word () ^ "(\"" ^ word () ^ "\", " ^ string_of_int (next 50) ^ ");"
+    | 7 -> "  let " ^ word () ^ " = new " ^ String.capitalize_ascii (word ()) ^ "();"
+    | 8 -> "  // " ^ Classic.sentence seed 5
+    | _ -> "export default " ^ word () ^ ";"
+  in
+  let directories = [| "src/components"; "src/lib"; "src/api"; "src/hooks"; "test" |] in
+  Array.init 30 (fun index ->
+      let directory = directories.(index mod 5) in
+      let old_line = ref (1 + next 20) and new_line = ref 0 in
+      new_line := !old_line;
+      let additions = ref 0 and deletions = ref 0 in
+      let hunks =
+        Array.init (4 + next 3) (fun _ ->
+            let old_start = !old_line and new_start = !new_line in
+            let lines = ref [] in
+            let context () =
+              lines := Context { old_line = !old_line; new_line = !new_line; text = code () } :: !lines;
+              incr old_line;
+              incr new_line
+            in
+            let removed text =
+              lines := Removed { old_line = !old_line; text } :: !lines;
+              incr old_line;
+              incr deletions
+            in
+            let added text =
+              lines := Added { new_line = !new_line; text } :: !lines;
+              incr new_line;
+              incr additions
+            in
+            for _ = 1 to 3 do
+              context ()
+            done;
+            for _ = 1 to 8 + next 4 do
+              (match next 4 with
+               | 0 ->
+                   let text = code () in
+                   removed text;
+                   added ("  " ^ text)
+               | 1 ->
+                   for _ = 1 to 1 + next 5 do
+                     added (code ())
+                   done
+               | 2 ->
+                   for _ = 1 to 1 + next 3 do
+                     removed (code ())
+                   done
+               | _ ->
+                   let count = 1 + next 3 in
+                   for _ = 1 to count do
+                     removed (code ())
+                   done;
+                   for _ = 1 to count do
+                     added (code ())
+                   done);
+              for _ = 1 to next 3 do
+                context ()
+              done
+            done;
+            for _ = 1 to 3 do
+              context ()
+            done;
+            let header =
+              "@@ -" ^ string_of_int old_start ^ "," ^ string_of_int (!old_line - old_start) ^ " +" ^ string_of_int new_start
+              ^ "," ^ string_of_int (!new_line - new_start) ^ " @@ function " ^ word () ^ "()"
+            in
+            let gap = 10 + next 40 in
+            old_line := !old_line + gap;
+            new_line := !new_line + gap;
+            { header; lines = Array.of_list (List.rev !lines) })
+      in
+      {
+        path = directory ^ "/" ^ word () ^ "_" ^ word () ^ (match index mod 3 with 0 -> ".ts" | 1 -> ".tsx" | _ -> ".js");
+        directory;
+        status = (match index mod 7 with 0 -> Created | 3 -> Renamed | _ -> Modified);
+        hunks;
+        additions = !additions;
+        deletions = !deletions;
+      })
+
+let line_key line =
+  match line with
+  | Context { new_line; _ } | Added { new_line; _ } -> "R" ^ string_of_int new_line
+  | Removed { old_line; _ } -> "L" ^ string_of_int old_line
+
+let no_comments = Belt.Map.String.empty
+
+let reduce review action =
+  let flip set path =
+    match Belt.Set.String.has set path with
+    | true -> Belt.Set.String.remove set path
+    | false -> Belt.Set.String.add set path
+  in
+  match action with
+  | Collapse_all -> { review with collapsed = Belt.Set.String.fromArray (Array.map (fun file -> file.path) files) }
+  | Expand_all -> { review with collapsed = Belt.Set.String.empty }
+  | Toggle_fold path -> { review with collapsed = flip review.collapsed path }
+  | Toggle_viewed path -> (
+      match Belt.Set.String.has review.viewed path with
+      | true -> { review with viewed = Belt.Set.String.remove review.viewed path; collapsed = Belt.Set.String.remove review.collapsed path }
+      | false -> { review with viewed = Belt.Set.String.add review.viewed path; collapsed = Belt.Set.String.add review.collapsed path })
+  | Compose (path, line) -> { review with composer = Composing { path; line } }
+  | Cancel_compose -> { review with composer = Closed }
+  | Submit (path, line, text) ->
+      let mine = Belt.Map.String.getWithDefault review.comments path no_comments in
+      let thread = Belt.Map.String.getWithDefault mine line [||] in
+      {
+        review with
+        composer = Closed;
+        comments = Belt.Map.String.set review.comments path (Belt.Map.String.set mine line (Array.append thread [| text |]));
+      }
+
+let settings_context = React.createContext { layout = Unified; whitespace = Show_whitespace }
+
+module Settings_provider = struct
+  let make = React.Context.provider settings_context
+
+  external makeProps :
+    value:settings -> children:React.element -> unit -> < value : settings ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Code = struct
+  let[@react.component] make =
+    React.memo (fun ~text ->
+        let tokens =
+          React.useMemo1
+            (fun () ->
+              let length = String.length text in
+              let is_word c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c = '_' in
+              let rec span stop position = match position < length && stop text.[position] with true -> span stop (position + 1) | false -> position in
+              let rec scan position tokens =
+                match position >= length with
+                | true -> Array.of_list (List.rev tokens)
+                | false -> (
+                    let take finish make = scan finish (make (String.sub text position (finish - position)) :: tokens) in
+                    match text.[position] with
+                    | '"' ->
+                        let finish = min length (span (fun c -> c <> '"') (position + 1) + 1) in
+                        take finish (fun piece -> Literal piece)
+                    | '0' .. '9' -> take (span is_word position) (fun piece -> Number piece)
+                    | c when is_word c ->
+                        take (span is_word position) (fun piece ->
+                            match piece with
+                            | "const" | "let" | "function" | "return" | "if" | "import" | "from" | "export" | "default" | "new" ->
+                                Keyword piece
+                            | _ -> Word piece)
+                    | ' ' -> take (span (fun c -> c = ' ') position) (fun piece -> Punctuation piece)
+                    | _ -> take (position + 1) (fun piece -> Punctuation piece))
+              in
+              scan 0 [])
+            [| text |]
+        in
+        <span className="code">
+          (tokens
+          |> Array.mapi (fun index token ->
+                 let key = string_of_int index in
+                 match token with
+                 | Keyword piece -> <span key className="tk-keyword">(React.string piece)</span>
+                 | Literal piece -> <span key className="tk-string">(React.string piece)</span>
+                 | Number piece -> <span key className="tk-number">(React.string piece)</span>
+                 | Word piece -> <span key className="tk-word">(React.string piece)</span>
+                 | Punctuation piece -> <span key className="tk-punct">(React.string piece)</span>)
+          |> React.array)
+        </span>)
+end
+
+module Comment_form = struct
+  let[@react.component] make ~onSubmit ~onCancel =
+    let draft, setDraft = React.useState (fun () -> "") in
+    let field = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption field.current |> Option.iter Classic.focus;
+        None);
+    <form
+      className="comment-form"
+      onSubmit=(fun event ->
+        React.Event.Form.preventDefault event;
+        match String.trim draft with "" -> () | text -> onSubmit text)>
+      <textarea
+        ref=(ReactDOM.Ref.domRef field)
+        className="comment-field"
+        placeholder="Leave a comment"
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value)) />
+      <div className="form-actions">
+        <button type_="button" className="comment-cancel" onClick=(fun _ -> onCancel ())>(React.string "Cancel")</button>
+        <button type_="submit" className="comment-submit" disabled=(String.trim draft = "")>(React.string "Comment")</button>
+      </div>
+    </form>
+end
+
+module Thread = struct
+  let[@react.component] make ~path ~line ~thread ~composing ~dispatch =
+    <div className="thread">
+      (thread
+      |> Array.mapi (fun index text ->
+             <div key=(string_of_int index) className="comment">
+               <span className="comment-author">(React.string "reviewer")</span>
+               <p className="comment-body">(React.string text)</p>
+             </div>)
+      |> React.array)
+      (match composing with
+       | Here ->
+           <Comment_form
+             onSubmit=(fun text -> dispatch (Submit (path, line, text)))
+             onCancel=(fun () -> dispatch Cancel_compose) />
+       | Elsewhere -> React.null)
+    </div>
+end
+
+module Unified_line = struct
+  let[@react.component] make =
+    React.memo (fun ~path ~line ~thread ~composing ~dispatch ->
+        let key = line_key line in
+        let change, old_number, new_number, sign, text =
+          match line with
+          | Context { old_line; new_line; text } -> ("context", string_of_int old_line, string_of_int new_line, " ", text)
+          | Added { new_line; text } -> ("added", "", string_of_int new_line, "+", text)
+          | Removed { old_line; text } -> ("removed", string_of_int old_line, "", "-", text)
+        in
+        React.array
+          [|
+            <tr key="line" className=("diff-line " ^ change)>
+              <td className="num">(React.string old_number)</td>
+              <td className="num">(React.string new_number)</td>
+              <td className="add-cell">
+                <button className="add-comment" onClick=(fun _ -> dispatch (Compose (path, key)))>(React.string "+")</button>
+              </td>
+              <td className="code-cell">
+                <span className="sign">(React.string sign)</span>
+                <Code text />
+              </td>
+            </tr>;
+            (match (thread, composing) with
+             | None, Elsewhere -> React.null
+             | _ ->
+                 <tr key="thread" className="thread-row">
+                   <td colSpan=4>
+                     <Thread path line=key thread=(Option.value ~default:[||] thread) composing dispatch />
+                   </td>
+                 </tr>);
+          |])
+end
+
+module Split_line = struct
+  let[@react.component] make =
+    React.memo (fun ~path ~row ~lineKey ~thread ~composing ~dispatch ->
+        let side cell =
+          match cell with
+          | Blank -> ("empty", "", "")
+          | Filled (Context { old_line; text; _ }) -> ("context", string_of_int old_line, text)
+          | Filled (Removed { old_line; text }) -> ("removed", string_of_int old_line, text)
+          | Filled (Added { new_line; text }) -> ("added", string_of_int new_line, text)
+        in
+        let right_number = match row.right with Filled (Context { new_line; _ }) -> string_of_int new_line | _ -> "" in
+        let left_change, left_number, left_text = side row.left in
+        let right_change, added_number, right_text = side row.right in
+        React.array
+          [|
+            <tr key="line" className="split-row">
+              <td className=("num " ^ left_change)>(React.string left_number)</td>
+              <td className=("code-cell " ^ left_change)>
+                (match row.left with Blank -> React.null | Filled _ -> <Code text=left_text />)
+              </td>
+              <td className="add-cell">
+                <button className="add-comment" onClick=(fun _ -> dispatch (Compose (path, lineKey)))>(React.string "+")</button>
+              </td>
+              <td className=("num " ^ right_change)>
+                (React.string (match right_number with "" -> added_number | number -> number))
+              </td>
+              <td className=("code-cell " ^ right_change)>
+                (match row.right with Blank -> React.null | Filled _ -> <Code text=right_text />)
+              </td>
+            </tr>;
+            (match (thread, composing) with
+             | None, Elsewhere -> React.null
+             | _ ->
+                 <tr key="thread" className="thread-row">
+                   <td colSpan=5>
+                     <Thread path line=lineKey thread=(Option.value ~default:[||] thread) composing dispatch />
+                   </td>
+                 </tr>);
+          |])
+end
+
+module Hunk = struct
+  let[@react.component] make =
+    React.memo (fun ~path ~hunk ~comments ~composer ~dispatch ->
+        let settings = React.useContext settings_context in
+        let rows =
+          React.useMemo1
+            (fun () ->
+              let flush removed added rows =
+                let removed = Array.of_list (List.rev removed) and added = Array.of_list (List.rev added) in
+                let count = max (Array.length removed) (Array.length added) in
+                List.rev_append
+                  (List.init count (fun index ->
+                       {
+                         left = (match index < Array.length removed with true -> Filled removed.(index) | false -> Blank);
+                         right = (match index < Array.length added with true -> Filled added.(index) | false -> Blank);
+                       }))
+                  rows
+              in
+              let rec pair lines removed added rows =
+                match lines with
+                | [] -> Array.of_list (List.rev (flush removed added rows))
+                | (Removed _ as line) :: rest -> (
+                    match added with
+                    | [] -> pair rest (line :: removed) added rows
+                    | _ -> pair rest [ line ] [] (flush removed added rows))
+                | (Added _ as line) :: rest -> pair rest removed (line :: added) rows
+                | (Context _ as line) :: rest ->
+                    pair rest [] [] ({ left = Filled line; right = Filled line } :: flush removed added rows)
+              in
+              pair (Array.to_list hunk.lines) [] [] [])
+            [| hunk |]
+        in
+        let composing key = match composer with Composing { path = open_path; line } when open_path = path && line = key -> Here | _ -> Elsewhere in
+        <tbody className="hunk">
+          <tr className="hunk-header">
+            <td colSpan=(match settings.layout with Unified -> 4 | Split -> 5)>(React.string hunk.header)</td>
+          </tr>
+          (match settings.layout with
+           | Unified ->
+               hunk.lines
+               |> Array.map (fun line ->
+                      let key = line_key line in
+                      <Unified_line
+                        key
+                        path
+                        line
+                        thread=(Belt.Map.String.get comments key)
+                        composing=(composing key)
+                        dispatch />)
+               |> React.array
+           | Split ->
+               rows
+               |> Array.map (fun row ->
+                      let key =
+                        match (row.right, row.left) with
+                        | Filled line, _ | Blank, Filled line -> line_key line
+                        | Blank, Blank -> "blank"
+                      in
+                      <Split_line
+                        key
+                        path
+                        row
+                        lineKey=key
+                        thread=(Belt.Map.String.get comments key)
+                        composing=(composing key)
+                        dispatch />)
+               |> React.array)
+        </tbody>)
+end
+
+module Diff_bar = struct
+  let[@react.component] make ~additions ~deletions =
+    let total = max 1 (additions + deletions) in
+    let green = additions * 5 / total in
+    <span className="diff-bar">
+      (Array.init 5 (fun index ->
+           <span
+             key=(string_of_int index)
+             className=(match index < green with true -> "bar-add" | false -> "bar-del") />)
+      |> React.array)
+    </span>
+end
+
+module File_diff = struct
+  let[@react.component] make =
+    React.memo (fun ~index ~file ~fold ~viewed ~comments ~composer ~dispatch ->
+        let settings = React.useContext settings_context in
+        let hunks =
+          React.useMemo2
+            (fun () ->
+              match settings.whitespace with
+              | Show_whitespace -> file.hunks
+              | Hide_whitespace ->
+                  Array.map
+                    (fun hunk ->
+                      let rec squash lines =
+                        match lines with
+                        | Removed { old_line; text = before } :: Added { new_line; text } :: rest
+                          when String.trim before = String.trim text ->
+                            Context { old_line; new_line; text } :: squash rest
+                        | line :: rest -> line :: squash rest
+                        | [] -> []
+                      in
+                      { hunk with lines = Array.of_list (squash (Array.to_list hunk.lines)) })
+                    file.hunks)
+            (file, settings.whitespace)
+        in
+        <section id=("file-" ^ string_of_int index) className=(match viewed with Viewed -> "file viewed" | Unviewed -> "file")>
+          <header className="file-header">
+            <button className="fold-file" onClick=(fun _ -> dispatch (Toggle_fold file.path))>
+              (React.string (match fold with Expanded -> "▾" | Collapsed -> "▸"))
+            </button>
+            <span className=(match file.status with Created -> "status created" | Renamed -> "status renamed" | Modified -> "status modified")>
+              (React.string (match file.status with Created -> "A" | Renamed -> "R" | Modified -> "M"))
+            </span>
+            <span className="file-path">(React.string file.path)</span>
+            <span className="file-stats">
+              <span className="adds">(React.string ("+" ^ string_of_int file.additions))</span>
+              <span className="dels">(React.string ("-" ^ string_of_int file.deletions))</span>
+            </span>
+            <Diff_bar additions=file.additions deletions=file.deletions />
+            <label className="viewed-label">
+              <input
+                type_="checkbox"
+                className="viewed-toggle"
+                checked=(viewed = Viewed)
+                onChange=(fun _ -> dispatch (Toggle_viewed file.path)) />
+              (React.string "Viewed")
+            </label>
+          </header>
+          (match fold with
+           | Collapsed -> React.null
+           | Expanded ->
+               <table className=(match settings.layout with Unified -> "diff-table unified" | Split -> "diff-table split")>
+                 (hunks
+                 |> Array.mapi (fun number hunk ->
+                        <Hunk key=(string_of_int number) path=file.path hunk comments composer dispatch />)
+                 |> React.array)
+               </table>)
+        </section>)
+end
+
+module Tree_file = struct
+  let[@react.component] make ~index ~file ~viewed ~onOpen =
+    <li className=(match viewed with Viewed -> "tree-file viewed" | Unviewed -> "tree-file")>
+      <a className="tree-link" onClick=(fun _ -> onOpen index)>
+        (React.string (List.nth (List.rev (String.split_on_char '/' file.path)) 0))
+      </a>
+      <span className="tree-counts">
+        <span className="adds">(React.int file.additions)</span>
+        <span className="dels">(React.int file.deletions)</span>
+      </span>
+    </li>
+end
+
+module File_tree = struct
+  let[@react.component] make ~viewed ~onOpen =
+    let filter, setFilter = React.useState (fun () -> "") in
+    let groups =
+      React.useMemo1
+        (fun () ->
+          let shown =
+            files
+            |> Array.mapi (fun index file -> (index, file))
+            |> Js.Array.filter ~f:(fun (_, file) -> Js.String.includes ~search:(String.lowercase_ascii filter) file.path)
+          in
+          Belt.Array.reduce shown [] (fun groups (index, file) ->
+              match List.assoc_opt file.directory groups with
+              | Some _ -> List.map (fun (directory, entries) -> match directory = file.directory with true -> (directory, entries @ [ (index, file) ]) | false -> (directory, entries)) groups
+              | None -> groups @ [ (file.directory, [ (index, file) ]) ])
+          |> Array.of_list)
+        [| filter |]
+    in
+    <aside className="file-tree">
+      <input
+        id="tree-filter"
+        placeholder="Filter changed files"
+        value=filter
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setFilter (fun _ -> value)) />
+      (groups
+      |> Array.map (fun (directory, entries) ->
+             <div key=directory className="tree-dir">
+               <div className="tree-dir-name">(React.string directory)</div>
+               <ul>
+                 (entries
+                 |> Array.of_list
+                 |> Array.map (fun (index, file) ->
+                        <Tree_file
+                          key=file.path
+                          index
+                          file
+                          viewed=(match Belt.Set.String.has viewed file.path with true -> Viewed | false -> Unviewed)
+                          onOpen />)
+                 |> React.array)
+               </ul>
+             </div>)
+      |> React.array)
+    </aside>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~layout ~onLayout ~whitespace ~onWhitespace ~onCollapseAll ~onExpandAll ~viewed =
+    <div className="diff-toolbar">
+      <div className="segmented">
+        <button id="layout-unified" className=(match layout with Unified -> "active" | Split -> "") onClick=(fun _ -> onLayout Unified)>
+          (React.string "Unified")
+        </button>
+        <button id="layout-split" className=(match layout with Split -> "active" | Unified -> "") onClick=(fun _ -> onLayout Split)>
+          (React.string "Split")
+        </button>
+      </div>
+      <label>
+        <input
+          id="hide-whitespace"
+          type_="checkbox"
+          checked=(whitespace = Hide_whitespace)
+          onChange=(fun _ -> onWhitespace (match whitespace with Show_whitespace -> Hide_whitespace | Hide_whitespace -> Show_whitespace)) />
+        (React.string "Hide whitespace")
+      </label>
+      <button id="collapse-all" onClick=(fun _ -> onCollapseAll ())>(React.string "Collapse all")</button>
+      <button id="expand-all" onClick=(fun _ -> onExpandAll ())>(React.string "Expand all")</button>
+      <span id="viewed-progress">
+        (React.string (string_of_int viewed ^ " / " ^ string_of_int (Array.length files) ^ " files viewed"))
+      </span>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let review, dispatch =
+      React.useReducer reduce
+        { collapsed = Belt.Set.String.empty; viewed = Belt.Set.String.empty; comments = Belt.Map.String.empty; composer = Closed }
+    in
+    let layout, setLayout = React.useState (fun () -> Unified) in
+    let whitespace, setWhitespace = React.useState (fun () -> Show_whitespace) in
+    let settings = React.useMemo2 (fun () -> { layout; whitespace }) (layout, whitespace) in
+    let onOpen =
+      React.useCallback0 (fun index ->
+          Classic.element_by_id Classic.document ("file-" ^ string_of_int index) |> Option.iter scroll_into_view)
+    in
+    <Settings_provider value=settings>
+      <div className="diff-app">
+        <Toolbar
+          layout
+          onLayout=(fun next -> setLayout (fun _ -> next))
+          whitespace
+          onWhitespace=(fun next -> setWhitespace (fun _ -> next))
+          onCollapseAll=(fun () -> dispatch Collapse_all)
+          onExpandAll=(fun () -> dispatch Expand_all)
+          viewed=(Belt.Set.String.size review.viewed) />
+        <div className="diff-body">
+          <File_tree viewed=review.viewed onOpen />
+          <main className="files">
+            (files
+            |> Array.mapi (fun index file ->
+                   <File_diff
+                     key=file.path
+                     index
+                     file
+                     fold=(match Belt.Set.String.has review.collapsed file.path with true -> Collapsed | false -> Expanded)
+                     viewed=(match Belt.Set.String.has review.viewed file.path with true -> Viewed | false -> Unviewed)
+                     comments=(Belt.Map.String.getWithDefault review.comments file.path no_comments)
+                     composer=review.composer
+                     dispatch />)
+            |> React.array)
+          </main>
+        </div>
+      </div>
+    </Settings_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

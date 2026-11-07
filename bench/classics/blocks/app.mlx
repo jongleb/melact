@@ -1,0 +1,545 @@
+(** A rectangle from [getBoundingClientRect]. *)
+type rect = { top : float; left : float; bottom : float }
+
+external bounding_rect : Dom.element -> rect = "getBoundingClientRect" [@@mel.send]
+
+(** Whether a to-do is done. *)
+type check = Checked | Unchecked
+
+(** Whether a toggle shows its children. *)
+type fold = Expanded | Collapsed
+
+(** What a block is. A toggle owns its children. *)
+type kind =
+  | Paragraph
+  | Heading_1
+  | Heading_2
+  | Todo of check
+  | Bullet
+  | Toggle of { fold : fold; children : block array }
+  | Quote
+  | Divider
+  | Callout
+
+and block = { id : int; kind : kind; text : string }
+
+(** What the page reducer can do. *)
+type action =
+  | Edit of int * string
+  | Retype of int * kind
+  | Check of int
+  | Fold of int
+  | Insert_after of int * block
+  | Remove of int
+  | Move of int * int
+
+(** The slash menu, opened by typing "/" in a block. *)
+type menu = Menu_closed | Menu_open of { block : int; choice : int }
+
+(** The slash menu as one block sees it. *)
+type own_menu = Menu_here of int | No_menu
+
+(** The block a dragged block would be dropped before. *)
+type over = No_target | Over of int
+
+(** Whether a block shows the drop line. *)
+type drop = Drop_before | No_drop
+
+(** A block to focus once the page has rendered. *)
+type focus = Nowhere | Focus_on of int
+
+(** Where the slash menu is drawn. *)
+type placement = Unplaced | Placed of { top : float; left : float }
+
+type actions = {
+  edit : int -> string -> unit;
+  enter : block -> unit;
+  erase : int -> unit;
+  check : int -> unit;
+  fold : int -> unit;
+  retype : int -> kind -> unit;
+  choose : int -> unit;
+  close_menu : unit -> unit;
+  register : int -> Dom.element Js.nullable -> unit;
+  element : int -> Dom.element option;
+  drag_start : int -> unit;
+  drag_over : int -> unit;
+  drop : int -> unit;
+  drag_end : unit -> unit;
+  jump : int -> unit;
+}
+
+let menu_items =
+  [|
+    ("Text", Paragraph);
+    ("Heading 1", Heading_1);
+    ("Heading 2", Heading_2);
+    ("To-do list", Todo Unchecked);
+    ("Bulleted list", Bullet);
+    ("Toggle list", Toggle { fold = Expanded; children = [||] });
+    ("Quote", Quote);
+    ("Divider", Divider);
+    ("Callout", Callout);
+  |]
+
+let slash_query text =
+  match String.length text > 0 && text.[0] = '/' with
+  | true -> Some (String.lowercase_ascii (String.sub text 1 (String.length text - 1)))
+  | false -> None
+
+let matching query =
+  Js.Array.filter ~f:(fun (label, _) -> Js.String.includes ~search:query (String.lowercase_ascii label)) menu_items
+
+let initial =
+  let seed = Classic.Seed.make 21 in
+  let next_id = ref 0 in
+  let fresh kind words =
+    incr next_id;
+    { id = !next_id; kind; text = String.capitalize_ascii (Classic.sentence seed words) }
+  in
+  let leaf () =
+    match Classic.Seed.next seed 12 with
+    | 0 | 1 | 2 | 3 -> fresh Paragraph (6 + Classic.Seed.next seed 12)
+    | 4 -> fresh Heading_2 3
+    | 5 | 6 -> fresh (Todo (match Classic.Seed.next seed 3 with 0 -> Checked | _ -> Unchecked)) 5
+    | 7 | 8 -> fresh Bullet 6
+    | 9 -> fresh Quote 10
+    | 10 -> fresh Divider 0
+    | _ -> fresh Callout 8
+  in
+  let rec build count blocks =
+    match count >= 800 with
+    | true -> Array.of_list (List.rev blocks)
+    | false -> (
+        match Classic.Seed.next seed 10 with
+        | 0 ->
+            let toggle = fresh Paragraph 4 in
+            let children = Array.init 4 (fun _ -> leaf ()) in
+            build (count + 5) ({ toggle with kind = Toggle { fold = Expanded; children } } :: blocks)
+        | 1 when count mod 3 = 0 -> build (count + 1) (fresh Heading_1 3 :: blocks)
+        | _ -> build (count + 1) (leaf () :: blocks))
+  in
+  build 0 []
+
+let rec flatten depth blocks =
+  Array.to_list blocks
+  |> List.concat_map (fun block ->
+         (block, depth)
+         :: (match block.kind with Toggle { fold = Expanded; children } -> flatten (depth + 1) children | _ -> []))
+
+let reduce blocks action =
+  let rec rewrite change blocks =
+    let next =
+      Array.map
+        (fun block ->
+          change
+            (match block.kind with
+             | Toggle { fold; children } -> (
+                 let rewritten = rewrite change children in
+                 match rewritten == children with
+                 | true -> block
+                 | false -> { block with kind = Toggle { fold; children = rewritten } })
+             | _ -> block))
+        blocks
+      |> Array.to_list |> Array.concat
+    in
+    match Array.length next = Array.length blocks && Array.for_all2 ( == ) next blocks with
+    | true -> blocks
+    | false -> next
+  in
+  let replace id change = rewrite (fun block -> match block.id = id with true -> change block | false -> [| block |]) blocks in
+  let rec find id blocks =
+    Array.find_map
+      (fun block ->
+        match block.id = id with
+        | true -> Some block
+        | false -> ( match block.kind with Toggle { children; _ } -> find id children | _ -> None))
+      blocks
+  in
+  match action with
+  | Edit (id, text) -> replace id (fun block -> [| { block with text } |])
+  | Retype (id, kind) ->
+      replace id (fun block ->
+          match (block.kind, kind) with
+          | Toggle _, Toggle _ -> [| { block with text = "" } |]
+          | Toggle { children; _ }, _ -> Array.append [| { block with kind; text = "" } |] children
+          | _ -> [| { block with kind; text = "" } |])
+  | Check id ->
+      replace id (fun block ->
+          match block.kind with
+          | Todo Checked -> [| { block with kind = Todo Unchecked } |]
+          | Todo Unchecked -> [| { block with kind = Todo Checked } |]
+          | _ -> [| block |])
+  | Fold id ->
+      replace id (fun block ->
+          match block.kind with
+          | Toggle { fold = Expanded; children } -> [| { block with kind = Toggle { fold = Collapsed; children } } |]
+          | Toggle { fold = Collapsed; children } -> [| { block with kind = Toggle { fold = Expanded; children } } |]
+          | _ -> [| block |])
+  | Insert_after (id, fresh) -> replace id (fun block -> [| block; fresh |])
+  | Remove id -> replace id (fun _ -> [||])
+  | Move (source, target) ->
+      find source blocks
+      |> Option.fold ~none:blocks ~some:(fun moving ->
+             match (source = target, find target [| moving |]) with
+             | false, None ->
+                 rewrite
+                   (fun block ->
+                     match (block.id = source, block.id = target) with
+                     | true, _ -> [||]
+                     | false, true -> [| moving; block |]
+                     | false, false -> [| block |])
+                   blocks
+             | _ -> blocks)
+
+let actions_context =
+  React.createContext
+    {
+      edit = (fun _ _ -> ());
+      enter = (fun _ -> ());
+      erase = (fun _ -> ());
+      check = (fun _ -> ());
+      fold = (fun _ -> ());
+      retype = (fun _ _ -> ());
+      choose = (fun _ -> ());
+      close_menu = (fun () -> ());
+      register = (fun _ _ -> ());
+      element = (fun _ -> None);
+      drag_start = (fun _ -> ());
+      drag_over = (fun _ -> ());
+      drop = (fun _ -> ());
+      drag_end = (fun () -> ());
+      jump = (fun _ -> ());
+    }
+
+module Actions_provider = struct
+  let make = React.Context.provider actions_context
+
+  external makeProps :
+    value:actions -> children:React.element -> unit -> < value : actions ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Block = struct
+  let[@react.component] make =
+    React.memo (fun ~block ~depth ~menu ~drop ->
+        let actions = React.useContext actions_context in
+        let onKeyDown event =
+          let key = React.Event.Keyboard.key event in
+          let choices = Option.fold ~none:0 ~some:(fun query -> Array.length (matching query)) (slash_query block.text) in
+          match (menu, key) with
+          | Menu_here choice, "ArrowDown" ->
+              React.Event.Keyboard.preventDefault event;
+              actions.choose (min (choices - 1) (choice + 1))
+          | Menu_here choice, "ArrowUp" ->
+              React.Event.Keyboard.preventDefault event;
+              actions.choose (max 0 (choice - 1))
+          | Menu_here choice, "Enter" ->
+              React.Event.Keyboard.preventDefault event;
+              slash_query block.text
+              |> Option.map matching
+              |> Option.iter (fun items ->
+                     match choice < Array.length items with
+                     | true -> actions.retype block.id (snd items.(choice))
+                     | false -> actions.close_menu ())
+          | Menu_here _, "Escape" -> actions.close_menu ()
+          | No_menu, "Enter" ->
+              React.Event.Keyboard.preventDefault event;
+              actions.enter block
+          | No_menu, "Backspace" when block.text = "" ->
+              React.Event.Keyboard.preventDefault event;
+              actions.erase block.id
+          | _ -> ()
+        in
+        let placeholder = match menu with Menu_here _ -> "Filter blocks…" | No_menu -> "Type '/' for commands" in
+        let field =
+          match block.kind with
+          | Paragraph | Quote | Callout ->
+              <textarea
+                ref=(ReactDOM.Ref.callbackDomRef (fun element -> actions.register block.id element))
+                className="block-text"
+                rows=1
+                placeholder
+                value=block.text
+                onChange=(fun event -> actions.edit block.id (React.Event.Form.target event)##value)
+                onKeyDown />
+          | Heading_1 | Heading_2 | Todo _ | Bullet | Toggle _ | Divider ->
+              <input
+                ref=(ReactDOM.Ref.callbackDomRef (fun element -> actions.register block.id element))
+                className="block-text"
+                placeholder
+                value=block.text
+                onChange=(fun event -> actions.edit block.id (React.Event.Form.target event)##value)
+                onKeyDown />
+        in
+        let kind_name, body =
+          match block.kind with
+          | Paragraph -> ("paragraph", field)
+          | Heading_1 -> ("heading-1", field)
+          | Heading_2 -> ("heading-2", field)
+          | Todo check ->
+              ( (match check with Checked -> "todo done" | Unchecked -> "todo"),
+                <div className="todo-row">
+                  <input
+                    type_="checkbox"
+                    className="todo-check"
+                    checked=(check = Checked)
+                    onChange=(fun _ -> actions.check block.id) />
+                  field
+                </div> )
+          | Bullet -> ("bullet", <div className="bullet-row"><span className="bullet-dot">(React.string "•")</span>field</div>)
+          | Toggle { fold; children } ->
+              ( "toggle",
+                <div className="toggle-row">
+                  <button className="fold-button" onClick=(fun _ -> actions.fold block.id)>
+                    (React.string (match fold with Expanded -> "▾" | Collapsed -> "▸"))
+                  </button>
+                  field
+                  <span className="child-count">(React.int (Array.length children))</span>
+                </div> )
+          | Quote -> ("quote", field)
+          | Divider -> ("divider", <hr />)
+          | Callout -> ("callout", <div className="callout-row"><span className="callout-icon">(React.string "💡")</span>field</div>)
+        in
+        <div
+          className=("block block-" ^ kind_name ^ match drop with Drop_before -> " drop-before" | No_drop -> "")
+          style=(ReactDOM.Style.make ~paddingLeft:(string_of_int (depth * 24) ^ "px") ())
+          onDragOver=(fun event ->
+            React.Event.Drag.preventDefault event;
+            actions.drag_over block.id)
+          onDrop=(fun event ->
+            React.Event.Drag.preventDefault event;
+            actions.drop block.id)>
+          <span
+            className="drag-handle"
+            draggable=true
+            onDragStart=(fun _ -> actions.drag_start block.id)
+            onDragEnd=(fun _ -> actions.drag_end ())>
+            (React.string "⋮⋮")
+          </span>
+          body
+        </div>)
+end
+
+module Slash_menu = struct
+  let[@react.component] make ~anchor ~query ~choice =
+    let actions = React.useContext actions_context in
+    let placement, setPlacement = React.useState (fun () -> Unplaced) in
+    React.useLayoutEffect1
+      (fun () ->
+        actions.element anchor
+        |> Option.iter (fun element ->
+               let rect = bounding_rect element in
+               setPlacement (fun _ -> Placed { top = rect.bottom +. 4.; left = rect.left }));
+        None)
+      [| anchor |];
+    let items = matching query in
+    let style =
+      match placement with
+      | Unplaced -> ReactDOM.Style.make ~visibility:"hidden" ()
+      | Placed { top; left } ->
+          ReactDOM.Style.make ~top:(Js.Float.toString top ^ "px") ~left:(Js.Float.toString left ^ "px") ()
+    in
+    <div className="slash-menu" style>
+      <div className="slash-title">(React.string "Basic blocks")</div>
+      <ul>
+        (items
+        |> Array.mapi (fun index (label, kind) ->
+               <li
+                 key=label
+                 className=(match index = choice with true -> "slash-item active" | false -> "slash-item")
+                 onMouseDown=(fun event ->
+                   React.Event.Mouse.preventDefault event;
+                   actions.retype anchor kind)>
+                 (React.string label)
+               </li>)
+        |> React.array)
+      </ul>
+      (match Array.length items with 0 -> <div className="slash-empty">(React.string "No results")</div> | _ -> React.null)
+    </div>
+end
+
+module Outline = struct
+  let[@react.component] make =
+    React.memo (fun ~headings ->
+        let actions = React.useContext actions_context in
+        <aside className="outline">
+          <h4>(React.string "On this page")</h4>
+          <ul>
+            (headings
+            |> Array.map (fun block ->
+                   <li key=(string_of_int block.id) className=(match block.kind with Heading_1 -> "outline-1" | _ -> "outline-2")>
+                     <a className="outline-link" onClick=(fun _ -> actions.jump block.id)>
+                       (React.string (match block.text with "" -> "Untitled" | text -> text))
+                     </a>
+                   </li>)
+            |> React.array)
+          </ul>
+        </aside>)
+end
+
+module Page_footer = struct
+  let[@react.component] make ~blocks =
+    let total, words =
+      React.useMemo1
+        (fun () ->
+          let rec count blocks =
+            Array.fold_left
+              (fun (total, words) block ->
+                let inner =
+                  match block.kind with Toggle { children; _ } -> count children | _ -> (0, 0)
+                in
+                ( total + 1 + fst inner,
+                  words + snd inner + List.length (List.filter (fun word -> word <> "") (String.split_on_char ' ' block.text)) ))
+              (0, 0) blocks
+          in
+          count blocks)
+        [| blocks |]
+    in
+    <footer className="page-footer">
+      <span id="block-count">(React.string (string_of_int total ^ " blocks"))</span>
+      <span>(React.string (string_of_int words ^ " words"))</span>
+    </footer>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let blocks, dispatch = React.useReducer reduce initial in
+    let title, setTitle = React.useState (fun () -> "Engineering handbook") in
+    let menu, setMenu = React.useState (fun () -> Menu_closed) in
+    let over, setOver = React.useState (fun () -> No_target) in
+    let inputs = React.useRef (Belt.MutableMap.Int.make ()) in
+    let latest = React.useRef blocks in
+    let pending = React.useRef Nowhere in
+    let dragged = React.useRef None in
+    let next_id = React.useRef 100000 in
+    React.useLayoutEffect1
+      (fun () ->
+        latest.current <- blocks;
+        None)
+      [| blocks |];
+    React.useEffect1
+      (fun () ->
+        (match pending.current with
+         | Focus_on id ->
+             pending.current <- Nowhere;
+             Belt.MutableMap.Int.get inputs.current id |> Option.iter Classic.focus
+         | Nowhere -> ());
+        None)
+      [| blocks |];
+    let actions =
+      React.useMemo0 (fun () ->
+          {
+            edit =
+              (fun id text ->
+                dispatch (Edit (id, text));
+                setMenu (fun menu ->
+                    match (slash_query text, menu) with
+                    | Some _, Menu_open { block; _ } when block = id -> menu
+                    | Some _, _ -> Menu_open { block = id; choice = 0 }
+                    | None, Menu_open { block; _ } when block = id -> Menu_closed
+                    | None, _ -> menu));
+            enter =
+              (fun block ->
+                next_id.current <- next_id.current + 1;
+                let kind = match block.kind with Todo _ -> Todo Unchecked | Bullet -> Bullet | _ -> Paragraph in
+                pending.current <- Focus_on next_id.current;
+                dispatch (Insert_after (block.id, { id = next_id.current; kind; text = "" })));
+            erase =
+              (fun id ->
+                let rec previous rows =
+                  match rows with
+                  | (before, _) :: (current, _) :: _ when current.id = id -> Some before.id
+                  | _ :: rest -> previous rest
+                  | [] -> None
+                in
+                pending.current <- Option.fold ~none:Nowhere ~some:(fun before -> Focus_on before) (previous (flatten 0 latest.current));
+                dispatch (Remove id));
+            check = (fun id -> dispatch (Check id));
+            fold = (fun id -> dispatch (Fold id));
+            retype =
+              (fun id kind ->
+                pending.current <- Focus_on id;
+                setMenu (fun _ -> Menu_closed);
+                dispatch (Retype (id, kind)));
+            choose = (fun choice -> setMenu (fun menu -> match menu with Menu_open open_ -> Menu_open { open_ with choice } | Menu_closed -> menu));
+            close_menu = (fun () -> setMenu (fun _ -> Menu_closed));
+            register =
+              (fun id element ->
+                match Js.Nullable.toOption element with
+                | Some element -> Belt.MutableMap.Int.set inputs.current id element
+                | None -> Belt.MutableMap.Int.remove inputs.current id);
+            element = (fun id -> Belt.MutableMap.Int.get inputs.current id);
+            drag_start =
+              (fun id ->
+                dragged.current <- Some id;
+                setOver (fun _ -> No_target));
+            drag_over = (fun id -> setOver (fun over -> match over with Over current when current = id -> over | _ -> Over id));
+            drop =
+              (fun id ->
+                dragged.current |> Option.iter (fun source -> dispatch (Move (source, id)));
+                dragged.current <- None;
+                setOver (fun _ -> No_target));
+            drag_end =
+              (fun () ->
+                dragged.current <- None;
+                setOver (fun _ -> No_target));
+            jump = (fun id -> Belt.MutableMap.Int.get inputs.current id |> Option.iter Classic.focus);
+          })
+    in
+    let rows = React.useMemo1 (fun () -> Array.of_list (flatten 0 blocks)) [| blocks |] in
+    let headings =
+      React.useMemo1
+        (fun () ->
+          let rec collect blocks =
+            Array.to_list blocks
+            |> List.concat_map (fun block ->
+                   (match block.kind with Heading_1 | Heading_2 -> [ block ] | _ -> [])
+                   @ match block.kind with Toggle { children; _ } -> collect children | _ -> [])
+          in
+          Array.of_list (collect blocks))
+        [| blocks |]
+    in
+    let open_menu =
+      match menu with
+      | Menu_open { block; choice } ->
+          Array.find_map (fun (row, _) -> match row.id = block with true -> Some (row, choice) | false -> None) rows
+      | Menu_closed -> None
+    in
+    <Actions_provider value=actions>
+      <div className="blocks-app">
+        <Outline headings />
+        <main className="page">
+          <input
+            className="page-title"
+            value=title
+            onChange=(fun event ->
+              let value = (React.Event.Form.target event)##value in
+              setTitle (fun _ -> value)) />
+          <div className="page-blocks">
+            (rows
+            |> Array.map (fun (block, depth) ->
+                   <Block
+                     key=(string_of_int block.id)
+                     block
+                     depth
+                     menu=(match menu with Menu_open { block = id; choice } when id = block.id -> Menu_here choice | _ -> No_menu)
+                     drop=(match over with Over id when id = block.id -> Drop_before | _ -> No_drop) />)
+            |> React.array)
+          </div>
+          <Page_footer blocks />
+        </main>
+        (match (open_menu, Classic.element_by_id Classic.document "portal") with
+         | Some (block, choice), Some target ->
+             ReactDOM.createPortal
+               <Slash_menu
+                 anchor=block.id
+                 query=(Option.value ~default:"" (slash_query block.text))
+                 choice />
+               target
+         | _ -> React.null)
+      </div>
+    </Actions_provider>
+end
+
+let () = Classic.start (fun () -> <App />)

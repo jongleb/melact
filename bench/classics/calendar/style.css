@@ -1,0 +1,51 @@
+.calendar-app { display: flex; flex-direction: column; height: 100vh; }
+.calendar-app .toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid #dadce0; }
+.calendar-app .toolbar h1 { font-size: 20px; margin: 0 24px 0 0; color: #5f6368; }
+.calendar-app .toolbar .title { font-size: 20px; font-weight: 400; margin: 0; flex: 1; }
+.view-switch button { border: 1px solid #dadce0; background: #fff; padding: 4px 12px; }
+.view-switch button.active { background: #e8f0fe; color: #1967d2; }
+.layout { display: flex; flex: 1; min-height: 0; }
+.sidebar { width: 256px; flex: none; padding: 12px; overflow-y: auto; }
+.create { border-radius: 24px; border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.3); padding: 12px 20px; background: #fff; }
+.mini-calendar { margin: 16px 0; }
+.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; font-size: 11px; text-align: center; }
+.mini-day { border: 0; background: none; border-radius: 50%; width: 26px; height: 26px; font-size: 11px; }
+.mini-day.outside { color: #9aa0a6; }
+.mini-day.busy { font-weight: 700; }
+.mini-day.today { background: #1a73e8; color: #fff; }
+.mini-day.selected { background: #d2e3fc; }
+.calendar-toggle { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.month-view { display: flex; flex-direction: column; flex: 1; }
+.weekday-row { display: grid; grid-template-columns: repeat(7, 1fr); }
+.weekday { text-align: center; font-size: 11px; color: #70757a; padding: 4px; }
+.month-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(6, 1fr); border-left: 1px solid #dadce0; }
+.month-cell { border-right: 1px solid #dadce0; border-bottom: 1px solid #dadce0; padding: 2px 4px; overflow: hidden; min-height: 0; }
+.month-cell.outside { background: #f8f9fa; color: #9aa0a6; }
+.month-cell.today .cell-date { background: #1a73e8; color: #fff; border-radius: 50%; width: 22px; text-align: center; }
+.cell-date { font-size: 12px; }
+.chip { height: 18px; display: flex; gap: 4px; align-items: center; font-size: 11px; white-space: nowrap; overflow: hidden; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: currentColor; }
+.chip-time { color: #70757a; }
+.more { border: 0; background: none; font-size: 11px; font-weight: 600; padding: 0; }
+.cal-work { color: #039be5; } .cal-personal { color: #33b679; } .cal-family { color: #f4511e; }
+.cal-team { color: #8e24aa; } .cal-holidays { color: #0b8043; } .cal-birthdays { color: #e67c73; }
+.time-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.time-head { display: flex; border-bottom: 1px solid #dadce0; }
+.gutter-head, .gutter { width: 56px; flex: none; }
+.column-head { flex: 1; text-align: center; padding: 4px; }
+.column-head.today .head-date { color: #1a73e8; font-weight: 700; }
+.head-weekday { display: block; font-size: 11px; color: #70757a; }
+.head-date { font-size: 22px; }
+.time-body { display: flex; flex: 1; overflow-y: auto; }
+.hour-label { height: 48px; font-size: 10px; color: #70757a; text-align: right; padding-right: 6px; }
+.day-column { flex: 1; position: relative; border-left: 1px solid #dadce0; }
+.slot { height: 48px; border-bottom: 1px solid #f1f3f4; }
+.event-block { position: absolute; border-radius: 4px; background: currentColor; overflow: hidden; padding: 2px 4px; border: 1px solid #fff; }
+.block-title, .block-time { color: #fff; font-size: 11px; white-space: nowrap; overflow: hidden; }
+.later { position: absolute; right: 2px; bottom: 2px; font-size: 10px; border: 0; padding: 0 3px; }
+.now-line { position: absolute; left: 0; right: 0; height: 2px; background: #ea4335; }
+.popover-layer { position: fixed; inset: 0; }
+.popover { position: absolute; width: 420px; background: #fff; border-radius: 8px; box-shadow: 0 24px 38px rgba(0,0,0,.2); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.title-input { font-size: 20px; border: 0; border-bottom: 1px solid #dadce0; }
+.popover-actions { display: flex; justify-content: flex-end; gap: 8px; }

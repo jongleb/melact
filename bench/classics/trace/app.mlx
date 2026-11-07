@@ -1,0 +1,455 @@
+external scroll_into_view : Dom.element -> (_[@mel.as {json|{"block":"nearest"}|json}]) -> unit = "scrollIntoView"
+[@@mel.send]
+
+(** A browser [ResizeObserver]. *)
+type resize_observer
+
+(** One observed element's new size. *)
+type resize_entry
+
+external resize_observer : (resize_entry array -> unit) -> resize_observer = "ResizeObserver" [@@mel.new]
+external observe : resize_observer -> Dom.element -> unit = "observe" [@@mel.send]
+external disconnect : resize_observer -> unit = "disconnect" [@@mel.send]
+external content_rect : resize_entry -> < width : float > Js.t = "contentRect" [@@mel.get]
+
+(** Where a span hangs in the trace. *)
+type parent = Root | Child_of of int
+
+(** How a span ended. *)
+type status = Succeeded | Failed
+
+type tag = { key : string; value : string }
+type log = { at : int; message : string }
+
+type span = {
+  id : int;
+  parent : parent;
+  depth : int;
+  service : string;
+  operation : string;
+  start : int;  (** Microseconds since the trace started. *)
+  duration : int;  (** Microseconds. *)
+  status : status;
+  tags : tag array;
+  logs : log array;
+}
+
+(** Whether a span's children are listed. *)
+type fold = Leaf | Opened | Closed
+
+(** How the hovered span and its critical path are painted. *)
+type emphasis = Hovered | On_path | Normal
+
+(** The span under the mouse. *)
+type hover = Nobody | Hovering of int
+
+(** The span whose details are open. *)
+type selection = Unpicked | Picked of int
+
+(** Whether a span matches the search. *)
+type matching = Matches | Misses
+
+(** Whether a row shows its span's tags and logs. *)
+type detail = Shown | Hidden
+
+(** What the collapse reducer does. *)
+type collapse = Toggle of int | Collapse_all | Expand_all
+
+let total = 1_200_000
+
+let services =
+  [| "frontend"; "api-gateway"; "auth"; "cart"; "catalog"; "payments"; "postgres"; "redis"; "search"; "shipping" |]
+
+let spans =
+  let seed = Classic.Seed.make 99 in
+  let operations =
+    [| "GET /api/cart"; "POST /checkout"; "SELECT orders"; "authorize"; "cache.get"; "render"; "publish"; "query";
+       "resolve"; "validate"; "grpc.Call"; "serialize" |]
+  in
+  let make id parent depth start duration =
+    {
+      id;
+      parent;
+      depth;
+      service = Classic.Seed.pick seed services;
+      operation = Classic.Seed.pick seed operations;
+      start;
+      duration;
+      status = (match Classic.Seed.next seed 12 with 0 -> Failed | _ -> Succeeded);
+      tags =
+        Array.init (3 + Classic.Seed.next seed 4) (fun _ ->
+            { key = Classic.Seed.pick seed [| "http.url"; "component"; "db.type"; "peer.service"; "span.kind"; "error" |];
+              value = Classic.sentence seed 2 });
+      logs =
+        Array.init (Classic.Seed.next seed 4) (fun _ ->
+            { at = start + Classic.Seed.next seed (duration + 1); message = Classic.sentence seed 4 });
+    }
+  in
+  let made = Array.make 200 (make 0 Root 0 0 total) in
+  for id = 1 to 199 do
+    let rec choose () =
+      let candidate =
+        match Classic.Seed.next seed 2 with
+        | 0 -> id - 1 - Classic.Seed.next seed (min id 4)
+        | _ -> Classic.Seed.next seed id
+      in
+      match made.(candidate).depth < 8 with true -> candidate | false -> choose ()
+    in
+    let above = made.(choose ()) in
+    let start = above.start + Classic.Seed.next seed ((above.duration * 3 / 4) + 1) in
+    let duration = 1 + Classic.Seed.next seed (above.start + above.duration - start) in
+    made.(id) <- make id (Child_of above.id) (above.depth + 1) start duration
+  done;
+  made
+
+let children =
+  let lists = Array.make (Array.length spans) [] in
+  Array.iter
+    (fun span -> match span.parent with Child_of above -> lists.(above) <- span :: lists.(above) | Root -> ())
+    spans;
+  Array.map
+    (fun list ->
+      list |> List.sort (fun left right -> compare left.start right.start) |> List.map (fun span -> span.id) |> Array.of_list)
+    lists
+
+let two number = (match number < 10 with true -> "0" | false -> "") ^ string_of_int number
+
+let format_duration micros =
+  match micros >= 1_000_000, micros >= 1000 with
+  | true, _ -> string_of_int (micros / 1_000_000) ^ "." ^ two (micros / 10_000 mod 100) ^ "s"
+  | false, true -> string_of_int (micros / 1000) ^ "." ^ two (micros / 10 mod 100) ^ "ms"
+  | false, false -> string_of_int micros ^ {js|μs|js}
+
+let percent part =
+  let points = part * 100 / (total / 100) in
+  string_of_int (points / 100) ^ "." ^ two (points mod 100) ^ "%"
+
+let service_colour service =
+  let palette = [| "#3b82f6"; "#10b981"; "#f59e0b"; "#ef4444"; "#8b5cf6"; "#ec4899"; "#14b8a6"; "#f97316"; "#6366f1"; "#84cc16" |] in
+  palette.(Js.Array.findIndex ~f:(fun known -> known = service) services)
+
+module Toolbar = struct
+  let[@react.component] make ~query ~onQuery ~matches ~onCollapseAll ~onExpandAll =
+    <div className="trace-toolbar">
+      <input
+        className="trace-search"
+        placeholder="Find in trace"
+        value=query
+        onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <button id="clear-search" onClick=(fun _ -> onQuery "")>(React.string "Clear")</button>
+      <span className="match-count">
+        (match query with "" -> React.null | _ -> React.string (string_of_int matches ^ " matches"))
+      </span>
+      <button id="collapse-all" onClick=(fun _ -> onCollapseAll ())>(React.string "Collapse all")</button>
+      <button id="expand-all" onClick=(fun _ -> onExpandAll ())>(React.string "Expand all")</button>
+    </div>
+end
+
+module Trace_summary = struct
+  let[@react.component] make () =
+    let root = spans.(0) in
+    let depth = Array.fold_left (fun deepest span -> max deepest span.depth) 0 spans in
+    let used = Js.Array.filter ~f:(fun service -> Js.Array.some ~f:(fun span -> span.service = service) spans) services in
+    <div className="trace-summary">
+      <h2>(React.string (root.service ^ ": " ^ root.operation))</h2>
+      <dl>
+        <dt>(React.string "Duration")</dt>
+        <dd>(React.string (format_duration root.duration))</dd>
+        <dt>(React.string "Services")</dt>
+        <dd>(React.int (Array.length used))</dd>
+        <dt>(React.string "Depth")</dt>
+        <dd>(React.int (depth + 1))</dd>
+        <dt>(React.string "Total spans")</dt>
+        <dd>(React.int (Array.length spans))</dd>
+      </dl>
+    </div>
+end
+
+module Minimap = struct
+  let[@react.component] make = React.memo (fun ~matches ->
+    <div className="minimap">
+      (spans
+      |> Array.map (fun span ->
+             <div
+               key=(string_of_int span.id)
+               className=(match Belt.Set.Int.has matches span.id with true -> "minimap-bar matched" | false -> "minimap-bar")
+               style=(ReactDOM.Style.make
+                        ~top:(string_of_int (span.id * 100 / Array.length spans) ^ "%")
+                        ~left:(percent span.start)
+                        ~width:(percent span.duration)
+                        ~backgroundColor:(service_colour span.service)
+                        ()) />)
+      |> React.array)
+    </div>)
+end
+
+module Ruler = struct
+  let[@react.component] make ~ticks ~labelWidth =
+    <div className="ruler">
+      <div className="ruler-label" style=(ReactDOM.Style.make ~width:(string_of_int labelWidth ^ "px") ())>
+        (React.string "Service & operation")
+      </div>
+      <div className="ruler-ticks">
+        (Array.init (ticks + 1) (fun index ->
+             <span key=(string_of_int index) className="tick" style=(ReactDOM.Style.make ~left:(percent (total * index / ticks)) ())>
+               (React.string (format_duration (total * index / ticks)))
+             </span>)
+        |> React.array)
+      </div>
+    </div>
+end
+
+module Tag_table = struct
+  let[@react.component] make ~tags =
+    <table className="tags">
+      <tbody>
+        (tags
+        |> Array.mapi (fun index tag ->
+               <tr key=(string_of_int index)>
+                 <td className="tag-key">(React.string tag.key)</td>
+                 <td className="tag-value">(React.string tag.value)</td>
+               </tr>)
+        |> React.array)
+      </tbody>
+    </table>
+end
+
+module Log_list = struct
+  let[@react.component] make ~logs =
+    match logs with
+    | [||] -> <p className="no-logs">(React.string "No logs")</p>
+    | logs ->
+        <ul className="logs">
+          (logs
+          |> Array.mapi (fun index log ->
+                 <li key=(string_of_int index)>
+                   <span className="log-at">(React.string (format_duration log.at))</span>
+                   (React.string (" " ^ log.message))
+                 </li>)
+          |> React.array)
+        </ul>
+end
+
+module Span_detail = struct
+  let[@react.component] make ~span =
+    <div className="span-detail">
+      <div className="detail-heading">
+        <strong>(React.string span.operation)</strong>
+        (React.string (" in " ^ span.service ^ ", started at " ^ format_duration span.start ^ ", took " ^ format_duration span.duration))
+      </div>
+      <Tag_table tags=span.tags />
+      <Log_list logs=span.logs />
+    </div>
+end
+
+module Span_label = struct
+  let[@react.component] make ~span ~fold ~onToggle =
+    <div className="span-label">
+      (Array.init span.depth (fun level -> <span key=(string_of_int level) className="indent" />) |> React.array)
+      (match fold with
+       | Leaf -> <span className="span-toggle-space" />
+       | Opened | Closed ->
+           <button
+             className=(match fold with Closed -> "span-toggle collapsed" | Opened | Leaf -> "span-toggle")
+             onClick=(fun click ->
+               React.Event.Mouse.stopPropagation click;
+               onToggle span.id)>
+             (React.string (match fold with Closed -> "+" | Opened | Leaf -> "-"))
+           </button>)
+      <span className="span-service" style=(ReactDOM.Style.make ~borderLeftColor:(service_colour span.service) ())>
+        (React.string span.service)
+      </span>
+      <span className="span-name">(React.string span.operation)</span>
+      (match fold with
+       | Closed -> <span className="hidden-count">(React.int (Array.length children.(span.id)))</span>
+       | Opened | Leaf -> React.null)
+    </div>
+end
+
+module Span_bar = struct
+  let[@react.component] make ~span =
+    <div className="span-track">
+      <div
+        className=(match span.status with Failed -> "span-bar failed" | Succeeded -> "span-bar")
+        style=(ReactDOM.Style.make
+                 ~left:(percent span.start)
+                 ~width:(percent span.duration)
+                 ~backgroundColor:(service_colour span.service)
+                 ()) />
+      <span className="span-duration" style=(ReactDOM.Style.make ~left:(percent (span.start + span.duration)) ())>
+        (React.string (format_duration span.duration))
+      </span>
+    </div>
+end
+
+module Span_row = struct
+  let[@react.component] make =
+    React.memo (fun ~span ~fold ~emphasis ~matching ~detail ~labelWidth ~onToggle ~onHover ~onSelect ->
+        <div
+          id=("span-" ^ string_of_int span.id)
+          className=
+            ("span-row"
+            ^ (match emphasis with Hovered -> " hovered" | On_path -> " on-path" | Normal -> "")
+            ^ (match matching with Matches -> " matched" | Misses -> "")
+            ^ match detail with Shown -> " selected" | Hidden -> "")
+          onMouseEnter=(fun _ -> onHover (Hovering span.id))
+          onMouseLeave=(fun _ -> onHover Nobody)
+          onClick=(fun _ -> onSelect span.id)>
+          <div className="span-line">
+            <div className="span-label-cell" style=(ReactDOM.Style.make ~width:(string_of_int labelWidth ^ "px") ())>
+              <Span_label span fold onToggle />
+            </div>
+            <Span_bar span />
+          </div>
+          (match detail with Shown -> <Span_detail span /> | Hidden -> React.null)
+        </div>)
+end
+
+module Trace_view = struct
+  let[@react.component] make ~rows ~collapsed ~hover ~path ~matches ~selection ~onToggle ~onHover ~onSelect =
+    let container = React.useRef Js.Nullable.null in
+    let label = React.useRef Js.Nullable.null in
+    let width, setWidth = React.useState (fun () -> 1200) in
+    let labelWidth, setLabelWidth = React.useState (fun () -> 360) in
+    React.useLayoutEffect0 (fun () ->
+        let observer =
+          resize_observer (fun entries ->
+              Array.iter (fun entry -> setWidth (fun _ -> int_of_float (content_rect entry)##width)) entries)
+        in
+        Js.Nullable.toOption container.current |> Option.iter (observe observer);
+        Some (fun () -> disconnect observer));
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption label.current |> Option.iter (fun element -> setLabelWidth (fun _ -> Classic.client_width element));
+        None)
+      [| width |];
+    React.useLayoutEffect1
+      (fun () ->
+        (match selection with
+         | Picked id ->
+             Classic.element_by_id Classic.document ("span-" ^ string_of_int id) |> Option.iter scroll_into_view
+         | Unpicked -> ());
+        None)
+      [| selection |];
+    <div className="trace-view" ref=(ReactDOM.Ref.domRef container)>
+      <div className="label-measure" ref=(ReactDOM.Ref.domRef label) />
+      <Ruler ticks=(max 2 ((width - labelWidth) / 120)) labelWidth />
+      <div className="span-rows">
+        (rows
+        |> Array.map (fun span ->
+               <Span_row
+                 key=(string_of_int span.id)
+                 span
+                 fold=(match (children.(span.id), Belt.Set.Int.has collapsed span.id) with
+                       | [||], _ -> Leaf
+                       | _, true -> Closed
+                       | _, false -> Opened)
+                 emphasis=(match hover with
+                           | Hovering id when id = span.id -> Hovered
+                           | Hovering _ | Nobody -> (match Belt.Set.Int.has path span.id with true -> On_path | false -> Normal))
+                 matching=(match Belt.Set.Int.has matches span.id with true -> Matches | false -> Misses)
+                 detail=(match selection with Picked id when id = span.id -> Shown | Picked _ | Unpicked -> Hidden)
+                 labelWidth
+                 onToggle
+                 onHover
+                 onSelect />)
+        |> React.array)
+      </div>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () =
+    let collapsed, collapse =
+      React.useReducer
+        (fun collapsed action ->
+          match action with
+          | Toggle id ->
+              (match Belt.Set.Int.has collapsed id with
+               | true -> Belt.Set.Int.remove collapsed id
+               | false -> Belt.Set.Int.add collapsed id)
+          | Collapse_all ->
+              spans
+              |> Js.Array.filter ~f:(fun span -> Array.length children.(span.id) > 0)
+              |> Array.map (fun span -> span.id)
+              |> Belt.Set.Int.fromArray
+          | Expand_all -> Belt.Set.Int.empty)
+        Belt.Set.Int.empty
+    in
+    let hover, setHover = React.useState (fun () -> Nobody) in
+    let selection, setSelection = React.useState (fun () -> Unpicked) in
+    let query, setQuery = React.useState (fun () -> "") in
+    let rows =
+      React.useMemo1
+        (fun () ->
+          let rec walk id shown =
+            let shown = spans.(id) :: shown in
+            match Belt.Set.Int.has collapsed id with
+            | true -> shown
+            | false -> Array.fold_left (fun shown child -> walk child shown) shown children.(id)
+          in
+          walk 0 [] |> List.rev |> Array.of_list)
+        [| collapsed |]
+    in
+    let path =
+      React.useMemo1
+        (fun () ->
+          match hover with
+          | Nobody -> Belt.Set.Int.empty
+          | Hovering id ->
+              let rec up id found =
+                let found = Belt.Set.Int.add found id in
+                match spans.(id).parent with Root -> found | Child_of above -> up above found
+              in
+              let rec down id found =
+                match children.(id) with
+                | [||] -> found
+                | below ->
+                    let last =
+                      Array.fold_left
+                        (fun best child ->
+                          match spans.(child).start + spans.(child).duration > spans.(best).start + spans.(best).duration with
+                          | true -> child
+                          | false -> best)
+                        below.(0) below
+                    in
+                    down last (Belt.Set.Int.add found last)
+              in
+              down id (up id Belt.Set.Int.empty))
+        [| hover |]
+    in
+    let matches =
+      React.useMemo1
+        (fun () ->
+          match String.lowercase_ascii (String.trim query) with
+          | "" -> Belt.Set.Int.empty
+          | needle ->
+              spans
+              |> Js.Array.filter ~f:(fun span ->
+                     Js.String.includes ~search:needle span.service
+                     || Js.String.includes ~search:needle (String.lowercase_ascii span.operation))
+              |> Array.map (fun span -> span.id)
+              |> Belt.Set.Int.fromArray)
+        [| query |]
+    in
+    let onToggle = React.useCallback0 (fun id -> collapse (Toggle id)) in
+    let onHover = React.useCallback0 (fun next -> setHover (fun _ -> next)) in
+    let onSelect =
+      React.useCallback0 (fun id ->
+          setSelection (fun selection ->
+              match selection with Picked current when current = id -> Unpicked | Picked _ | Unpicked -> Picked id))
+    in
+    <div className="trace-app">
+      <Trace_summary />
+      <Toolbar
+        query
+        onQuery=(fun text -> setQuery (fun _ -> text))
+        matches=(Belt.Set.Int.size matches)
+        onCollapseAll=(fun () -> collapse Collapse_all)
+        onExpandAll=(fun () -> collapse Expand_all) />
+      <Minimap matches />
+      <Trace_view rows collapsed hover path matches selection onToggle onHover onSelect />
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)

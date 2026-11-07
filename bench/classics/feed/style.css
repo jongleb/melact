@@ -1,0 +1,31 @@
+.feed-app { background: #f0f2f5; height: 880px; display: flex; flex-direction: column; }
+.top-bar { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: height .1s; }
+.top-bar.tall { height: 64px; }
+.top-bar.compact { height: 44px; }
+.top-bar .logo { color: #1877f2; font-weight: bold; font-size: 22px; }
+.top-bar .tabs { display: flex; gap: 12px; margin-left: auto; }
+.feed-layout { display: flex; gap: 16px; flex: 1; min-height: 0; padding: 0 16px; }
+.feed-scroll { flex: 1; overflow-y: auto; max-width: 680px; }
+.stories { display: flex; gap: 8px; overflow: hidden; padding: 12px 0; }
+.story { display: flex; flex-direction: column; align-items: center; width: 80px; font-size: 11px; }
+.avatar { display: inline-flex; border-radius: 50%; align-items: center; justify-content: center; color: #fff; flex: none; }
+.composer, .post { background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.2); margin-bottom: 16px; padding: 12px 16px; }
+.composer { display: flex; gap: 8px; }
+.composer-input { flex: 1; border-radius: 20px; border: 0; background: #f0f2f5; padding: 8px 12px; }
+.post-header { display: flex; gap: 8px; align-items: center; }
+.byline { display: flex; flex-direction: column; flex: 1; }
+.byline .when { color: #65676b; font-size: 12px; }
+.post-menu-button { border: 0; background: none; font-size: 20px; }
+.photo { margin: 8px -16px; position: relative; background: #e4e6eb; }
+.picture { position: absolute; inset: 0; }
+.post-actions .counts { display: flex; justify-content: space-between; color: #65676b; padding: 6px 0; border-bottom: 1px solid #ced0d4; }
+.post-actions .buttons { display: flex; }
+.post-actions .buttons button { flex: 1; border: 0; background: none; padding: 6px; color: #65676b; }
+.like-button.liked { color: #1877f2; font-weight: bold; }
+.hidden-post { display: flex; justify-content: space-between; color: #65676b; }
+.sentinel { padding: 24px; text-align: center; color: #65676b; }
+.contacts { width: 260px; overflow-y: auto; }
+.contact { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+.menu { position: fixed; width: 180px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.25); border-radius: 6px; display: flex; flex-direction: column; z-index: 10; }
+.menu button { border: 0; background: none; text-align: left; padding: 8px 12px; }
+#back-to-top { position: fixed; top: 72px; left: 300px; border-radius: 16px; border: 0; background: #1877f2; color: #fff; padding: 6px 14px; }

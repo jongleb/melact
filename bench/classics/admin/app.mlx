@@ -1,0 +1,451 @@
+external add_document_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit = "addEventListener"
+[@@mel.send]
+
+external remove_document_listener : Dom.document -> string -> (Dom.keyboardEvent -> unit) -> unit
+  = "removeEventListener"
+[@@mel.send]
+
+external event_key : Dom.keyboardEvent -> string = "key" [@@mel.get]
+
+type role = Admin | Editor | Viewer | Guest
+
+(** Whether a user may sign in. *)
+type standing = Enabled | Disabled
+
+type user = { id : int; name : string; email : string; role : role; standing : standing; last_seen : string }
+
+(** Which modal is open. *)
+type dialog = No_dialog | Creating | Editing of user | Confirming of user
+
+(** How many rows the table shows. *)
+type paging = Paged | Everything
+
+(** Which roles the table lists. *)
+type role_filter = Any_role | Only of role
+
+type change = Create of user | Update of user | Delete of int
+
+(** A field of the form that cannot be saved as it is. *)
+type problem = Name_missing | Name_short | Email_invalid | Email_taken
+
+(** The form field a problem is about. *)
+type field = Name_field | Email_field
+
+(** Whether the form has been submitted once, after which its problems show. *)
+type attempt = Untried | Tried
+
+(** What the user form edits. *)
+module Draft = struct
+  type t = { name : string; email : string; role : role; standing : standing }
+end
+
+type toast = { serial : int; message : string }
+
+let roles = [| Admin; Editor; Viewer; Guest |]
+let per_page = 50
+
+let role_name role = match role with Admin -> "admin" | Editor -> "editor" | Viewer -> "viewer" | Guest -> "guest"
+
+let role_of_name name =
+  match name with "admin" -> Some Admin | "editor" -> Some Editor | "viewer" -> Some Viewer | "guest" -> Some Guest | _ -> None
+
+let portal_target () = Classic.element_by_id Classic.document "portal"
+
+let initial_users =
+  let seed = Classic.Seed.make 99 in
+  let given =
+    [| "Amelia"; "Bruno"; "Carmen"; "Diego"; "Esther"; "Felix"; "Greta"; "Hamid"; "Irene"; "Jakob"; "Karin"; "Leon";
+       "Marta"; "Noah"; "Oskar"; "Petra"; "Rafael"; "Selma"; "Theo"; "Ulla"; "Viktor"; "Wanda" |]
+  in
+  let family =
+    [| "Adams"; "Berg"; "Castro"; "Dahl"; "Engel"; "Falk"; "Gomez"; "Hansen"; "Ito"; "Jung"; "Klein"; "Lund"; "Moreau";
+       "Novak"; "Ortiz"; "Park"; "Quist"; "Richter"; "Sato"; "Torres" |]
+  in
+  Array.init 2000 (fun index ->
+      let first = Classic.Seed.pick seed given and last = Classic.Seed.pick seed family in
+      {
+        id = index + 1;
+        name = first ^ " " ^ last;
+        email = String.lowercase_ascii first ^ "." ^ String.lowercase_ascii last ^ string_of_int (index + 1) ^ "@company.test";
+        role = [| Viewer; Viewer; Viewer; Editor; Editor; Admin; Guest |].(Classic.Seed.next seed 7);
+        standing = (match Classic.Seed.next seed 9 with 0 -> Disabled | _ -> Enabled);
+        last_seen = string_of_int (Classic.Seed.next seed 59 + 1) ^ " days ago";
+      })
+
+let toast_context = React.createContext (fun (_ : string) -> ())
+
+module Toast_context_provider = struct
+  let make = React.Context.provider toast_context
+
+  external makeProps :
+    value:(string -> unit) -> children:React.element -> unit -> < value : string -> unit ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Toast_item = struct
+  let[@react.component] make ~toast ~onDismiss =
+    <div className="toast" role="status">
+      <span className="toast-message">(React.string toast.message)</span>
+      <button className="dismiss" ariaLabel="Dismiss" onClick=(fun _ -> onDismiss toast.serial)>(React.string "\xc3\x97")</button>
+    </div>
+end
+
+module Toast_provider = struct
+  let[@react.component] make ~children =
+    let toasts, setToasts = React.useState (fun () -> []) in
+    let serial = React.useRef 0 in
+    let notify =
+      React.useCallback0 (fun message ->
+          serial.current <- serial.current + 1;
+          let toast = { serial = serial.current; message } in
+          setToasts (fun toasts -> List.filteri (fun index _ -> index < 5) (toast :: toasts)))
+    in
+    let dismiss = React.useCallback0 (fun gone -> setToasts (fun toasts -> List.filter (fun toast -> toast.serial <> gone) toasts)) in
+    <Toast_context_provider value=notify>
+      children
+      (Option.fold ~none:React.null
+         ~some:(fun target ->
+           ReactDOM.createPortal
+             <div className="toast-stack">
+               (toasts |> Array.of_list
+               |> Array.map (fun toast -> <Toast_item key=(string_of_int toast.serial) toast onDismiss=dismiss />)
+               |> React.array)
+             </div>
+             target)
+         (portal_target ()))
+    </Toast_context_provider>
+end
+
+module Modal = struct
+  let[@react.component] make ~title ~onClose ~children =
+    React.useEffect1
+      (fun () ->
+        let listener event = match event_key event with "Escape" -> onClose () | _ -> () in
+        add_document_listener Classic.document "keydown" listener;
+        Some (fun () -> remove_document_listener Classic.document "keydown" listener))
+      [| onClose |];
+    Option.fold ~none:React.null
+      ~some:(fun target ->
+        ReactDOM.createPortal
+          <div className="overlay" onClick=(fun _ -> onClose ())>
+            <div
+              className="modal"
+              role="dialog"
+              ariaModal=true
+              onClick=(fun event -> React.Event.Mouse.stopPropagation event)>
+              <header className="modal-header">
+                <h2>(React.string title)</h2>
+                <button className="close" onClick=(fun _ -> onClose ())>(React.string "\xc3\x97")</button>
+              </header>
+              children
+            </div>
+          </div>
+          target)
+      (portal_target ())
+end
+
+module Text_field = struct
+  let[@react.component] make ~id ~label ~value ~onChange ~problem ~inputRef =
+    <div className=(match problem with Some _ -> "field invalid" | None -> "field")>
+      <label htmlFor=id>(React.string label)</label>
+      <input id ref=inputRef value onChange=(fun event -> onChange (React.Event.Form.target event)##value) />
+      (Option.fold ~none:React.null
+         ~some:(fun problem ->
+           <p className="field-error">
+             (React.string
+                (match problem with
+                 | Name_missing -> "Name is required"
+                 | Name_short -> "Name must have at least 3 characters"
+                 | Email_invalid -> "Enter a valid email address"
+                 | Email_taken -> "This email is already in use"))
+           </p>)
+         problem)
+    </div>
+end
+
+module User_form = struct
+  let[@react.component] make ~initial ~taken ~submitLabel ~onSubmit ~onCancel =
+    let draft, setDraft = React.useState (fun () -> (initial : Draft.t)) in
+    let attempt, setAttempt = React.useState (fun () -> Untried) in
+    let name_input = React.useRef Js.Nullable.null in
+    let email_input = React.useRef Js.Nullable.null in
+    React.useEffect0 (fun () ->
+        Js.Nullable.toOption name_input.current |> Option.iter Classic.focus;
+        None);
+    let field_of problem =
+      match problem with Name_missing | Name_short -> Name_field | Email_invalid | Email_taken -> Email_field
+    in
+    let parsed =
+      let name = String.trim draft.Draft.name and email = String.trim draft.Draft.email in
+      let problems =
+        List.concat
+          [
+            (match String.length name with 0 -> [ Name_missing ] | 1 | 2 -> [ Name_short ] | _ -> []);
+            (match (String.index_opt email '@', String.rindex_opt email '.') with
+             | Some at, Some dot when at > 0 && dot > at + 1 && dot < String.length email - 1 -> (
+                 match Belt.Set.String.has taken (String.lowercase_ascii email) with true -> [ Email_taken ] | false -> [])
+             | _ -> [ Email_invalid ]);
+          ]
+      in
+      match problems with [] -> Ok { draft with Draft.name; email } | _ :: _ -> Error problems
+    in
+    let shown_problem field =
+      match (attempt, parsed) with
+      | Tried, Error problems -> List.find_opt (fun problem -> field_of problem = field) problems
+      | Untried, _ | Tried, Ok _ -> None
+    in
+    <form
+      className="user-form"
+      onSubmit=(fun event ->
+        React.Event.Form.preventDefault event;
+        match parsed with
+        | Ok valid -> onSubmit valid
+        | Error problems ->
+            setAttempt (fun _ -> Tried);
+            List.nth_opt problems 0
+            |> Option.map (fun problem ->
+                   match field_of problem with Name_field -> name_input | Email_field -> email_input)
+            |> Option.iter (fun (input : Dom.element Js.Nullable.t React.ref) ->
+                   Js.Nullable.toOption input.current |> Option.iter Classic.focus))>
+      <Text_field
+        id="user-name"
+        label="Name"
+        value=draft.Draft.name
+        inputRef=(ReactDOM.Ref.domRef name_input)
+        onChange=(fun name -> setDraft (fun draft -> { draft with Draft.name }))
+        problem=(shown_problem Name_field) />
+      <Text_field
+        id="user-email"
+        label="Email"
+        value=draft.Draft.email
+        inputRef=(ReactDOM.Ref.domRef email_input)
+        onChange=(fun email -> setDraft (fun draft -> { draft with Draft.email }))
+        problem=(shown_problem Email_field) />
+      <div className="field">
+        <label htmlFor="user-role">(React.string "Role")</label>
+        <select
+          id="user-role"
+          value=(role_name draft.Draft.role)
+          onChange=(fun event ->
+            let value = (React.Event.Form.target event)##value in
+            Option.iter (fun role -> setDraft (fun draft -> { draft with Draft.role })) (role_of_name value))>
+          (React.array
+             (Array.map (fun role -> <option key=(role_name role) value=(role_name role)>(React.string (role_name role))</option>) roles))
+        </select>
+      </div>
+      <label className="check">
+        <input
+          id="user-enabled"
+          type_="checkbox"
+          checked=(match draft.Draft.standing with Enabled -> true | Disabled -> false)
+          onChange=(fun _ ->
+            setDraft (fun draft ->
+                { draft with Draft.standing = (match draft.Draft.standing with Enabled -> Disabled | Disabled -> Enabled) })) />
+        (React.string " Can sign in")
+      </label>
+      <footer className="modal-actions">
+        <button type_="button" className="cancel" onClick=(fun _ -> onCancel ())>(React.string "Cancel")</button>
+        <button type_="submit" className="submit">(React.string submitLabel)</button>
+      </footer>
+    </form>
+end
+
+module Confirm_delete = struct
+  let[@react.component] make ~user ~onConfirm ~onCancel =
+    <div className="confirm">
+      <p>
+        (React.string "Delete ")
+        <strong>(React.string user.name)</strong>
+        (React.string ("? " ^ user.email ^ " will lose access immediately."))
+      </p>
+      <footer className="modal-actions">
+        <button className="cancel" onClick=(fun _ -> onCancel ())>(React.string "Cancel")</button>
+        <button className="confirm-delete danger" onClick=(fun _ -> onConfirm user)>(React.string "Delete")</button>
+      </footer>
+    </div>
+end
+
+module Role_badge = struct
+  let[@react.component] make ~role = <span className=("role role-" ^ role_name role)>(React.string (role_name role))</span>
+end
+
+module User_row = struct
+  let[@react.component] make =
+    React.memo (fun ~user ~onEdit ~onDelete ->
+        <tr className=(match user.standing with Enabled -> "user-row" | Disabled -> "user-row disabled")>
+          <td className="num">(React.int user.id)</td>
+          <td>
+            <div className="user-name">(React.string user.name)</div>
+            <div className="user-email">(React.string user.email)</div>
+          </td>
+          <td><Role_badge role=user.role /></td>
+          <td>(React.string (match user.standing with Enabled -> "Active" | Disabled -> "Disabled"))</td>
+          <td>(React.string user.last_seen)</td>
+          <td className="actions">
+            <button className="edit" onClick=(fun _ -> onEdit user)>(React.string "Edit")</button>
+            <button className="delete" onClick=(fun _ -> onDelete user)>(React.string "Delete")</button>
+          </td>
+        </tr>)
+end
+
+module Pager = struct
+  let[@react.component] make ~page ~pages ~onPage =
+    <nav className="pager">
+      <button id="prev-page" disabled=(page = 0) onClick=(fun _ -> onPage (page - 1))>(React.string "\xe2\x80\xb9 Prev")</button>
+      <span id="page-info">(React.string ("Page " ^ string_of_int (page + 1) ^ " of " ^ string_of_int pages))</span>
+      <button id="next-page" disabled=(page >= pages - 1) onClick=(fun _ -> onPage (page + 1))>(React.string "Next \xe2\x80\xba")</button>
+    </nav>
+end
+
+module Toolbar = struct
+  let[@react.component] make ~query ~onQuery ~filter ~onFilter ~paging ~onPaging ~onCreate =
+    <div className="admin-toolbar">
+      <input id="search" type_="search" placeholder="Search users" value=query onChange=(fun event -> onQuery (React.Event.Form.target event)##value) />
+      <select
+        id="role-filter"
+        value=(match filter with Any_role -> "all" | Only role -> role_name role)
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          onFilter (Option.fold ~none:Any_role ~some:(fun role -> Only role) (role_of_name value)))>
+        <option value="all">(React.string "All roles")</option>
+        (React.array
+           (Array.map (fun role -> <option key=(role_name role) value=(role_name role)>(React.string (role_name role))</option>) roles))
+      </select>
+      <label className="check">
+        <input
+          id="show-all"
+          type_="checkbox"
+          checked=(match paging with Everything -> true | Paged -> false)
+          onChange=(fun _ -> onPaging (match paging with Everything -> Paged | Paged -> Everything)) />
+        (React.string " Show all")
+      </label>
+      <button id="new-user" className="primary" onClick=(fun _ -> onCreate ())>(React.string "New user")</button>
+    </div>
+end
+
+module Users_page = struct
+  let[@react.component] make () =
+    let notify = React.useContext toast_context in
+    let users, apply =
+      React.useReducer
+        (fun users change ->
+          match change with
+          | Create user -> Array.append [| user |] users
+          | Update user -> Array.map (fun other -> match other.id = user.id with true -> user | false -> other) users
+          | Delete id -> Js.Array.filter ~f:(fun user -> user.id <> id) users)
+        initial_users
+    in
+    let query, setQuery = React.useState (fun () -> "") in
+    let filter, setFilter = React.useState (fun () -> Any_role) in
+    let paging, setPaging = React.useState (fun () -> Paged) in
+    let page, setPage = React.useState (fun () -> 0) in
+    let dialog, setDialog = React.useState (fun () -> No_dialog) in
+    React.useEffect2
+      (fun () ->
+        setPage (fun _ -> 0);
+        None)
+      (query, filter);
+    let emails =
+      React.useMemo1
+        (fun () -> Belt.Set.String.fromArray (Array.map (fun user -> String.lowercase_ascii user.email) users))
+        [| users |]
+    in
+    let found =
+      React.useMemo3
+        (fun () ->
+          let needle = String.lowercase_ascii (String.trim query) in
+          Js.Array.filter
+            ~f:(fun user ->
+              (match filter with Any_role -> true | Only role -> user.role = role)
+              && (needle = ""
+                 || Js.String.includes ~search:needle (String.lowercase_ascii user.name)
+                 || Js.String.includes ~search:needle user.email))
+            users)
+        (users, query, filter)
+    in
+    let pages = max 1 ((Array.length found + per_page - 1) / per_page) in
+    let shown =
+      match paging with
+      | Everything -> found
+      | Paged -> Js.Array.slice ~start:(page * per_page) ~end_:((page + 1) * per_page) found
+    in
+    let close = React.useCallback0 (fun () -> setDialog (fun _ -> No_dialog)) in
+    let onEdit = React.useCallback0 (fun user -> setDialog (fun _ -> Editing user)) in
+    let onDelete = React.useCallback0 (fun user -> setDialog (fun _ -> Confirming user)) in
+    <div className="users-page">
+      <h1>(React.string "Users")</h1>
+      <Toolbar
+        query
+        onQuery=(fun text -> setQuery (fun _ -> text))
+        filter
+        onFilter=(fun next -> setFilter (fun _ -> next))
+        paging
+        onPaging=(fun next -> setPaging (fun _ -> next))
+        onCreate=(fun () -> setDialog (fun _ -> Creating)) />
+      <p id="result-count">(React.string (string_of_int (Array.length found) ^ " users"))</p>
+      <table className="users">
+        <thead>
+          <tr>
+            <th>(React.string "ID")</th>
+            <th>(React.string "User")</th>
+            <th>(React.string "Role")</th>
+            <th>(React.string "Status")</th>
+            <th>(React.string "Last seen")</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          (React.array (Array.map (fun user -> <User_row key=(string_of_int user.id) user onEdit onDelete />) shown))
+        </tbody>
+      </table>
+      (match paging with
+       | Paged -> <Pager page pages onPage=(fun next -> setPage (fun _ -> next)) />
+       | Everything -> React.null)
+      (match dialog with
+       | No_dialog -> React.null
+       | Creating ->
+           <Modal title="New user" onClose=close>
+             <User_form
+               initial={ Draft.name = ""; email = ""; role = Viewer; standing = Enabled }
+               taken=emails
+               submitLabel="Create"
+               onCancel=close
+               onSubmit=(fun (valid : Draft.t) ->
+                 let id = Array.fold_left (fun top user -> max top user.id) 0 users + 1 in
+                 apply
+                   (Create
+                      { id; name = valid.Draft.name; email = valid.Draft.email; role = valid.Draft.role; standing = valid.Draft.standing; last_seen = "never" });
+                 notify ("Created " ^ valid.Draft.name);
+                 close ()) />
+           </Modal>
+       | Editing user ->
+           <Modal title=("Edit " ^ user.name) onClose=close>
+             <User_form
+               initial={ Draft.name = user.name; email = user.email; role = user.role; standing = user.standing }
+               taken=(Belt.Set.String.remove emails (String.lowercase_ascii user.email))
+               submitLabel="Save"
+               onCancel=close
+               onSubmit=(fun (valid : Draft.t) ->
+                 apply (Update { user with name = valid.Draft.name; email = valid.Draft.email; role = valid.Draft.role; standing = valid.Draft.standing });
+                 notify ("Saved " ^ valid.Draft.name);
+                 close ()) />
+           </Modal>
+       | Confirming user ->
+           <Modal title="Delete user" onClose=close>
+             <Confirm_delete
+               user
+               onCancel=close
+               onConfirm=(fun user ->
+                 apply (Delete user.id);
+                 notify ("Deleted " ^ user.name);
+                 close ()) />
+           </Modal>)
+    </div>
+end
+
+module App = struct
+  let[@react.component] make () = <Toast_provider><Users_page /></Toast_provider>
+end
+
+let () = Classic.start (fun () -> <App />)
