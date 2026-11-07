@@ -50,12 +50,12 @@ type memoized = { mutable given : Raw.t; mutable given_ref : Raw.t; mutable rend
 let hook : unit Hook.key = Hook.key ()
 
 (** A portal's children, mounted into its container. *)
-type portaled = { container : Dom.element; mutable content : View.live }
+type portaled = { container : Dom.element; anchor : Dom.text; mutable content : View.live }
 
 let portals =
   View.hosting
-    ~visit:(fun [@u] _ _ -> ())
-    ~first:(fun [@u] _ after -> after)
+    ~visit:(fun [@u] placed see -> see (Dom_api.to_node placed.anchor) [@u])
+    ~first:(fun [@u] placed _ -> Js.Null.return (Dom_api.to_node placed.anchor))
     ~let_go:(fun [@u] placed ->
       View.visit placed.content (fun [@u] node -> Dom_api.remove_child (Dom_api.to_node placed.container) node);
       View.release placed.content)
@@ -283,16 +283,22 @@ and updated me instance kind props reference =
 
 and portal content container =
   let inside = { Template.parent = Dom_api.to_node container; before = Js.null } in
-  let bridged live parent = View.visit live (fun [@u] node -> Synthetic.bridge node ~parent) in
+  let bridged live anchor =
+    View.visit live (fun [@u] node ->
+        Dom_api.set_property (Dom_api.unsafe_element node) "$$melhole:anchor" anchor;
+        Synthetic.bridge node ~parent:(Dom_api.to_node anchor))
+  in
   View.host
-    ~build:(fun [@u] (position : Template.position) ->
+    ~build:(fun [@u] position ->
+      let anchor = Dom_api.create_text_node Dom_api.document "" in
+      View.insert position (Dom_api.to_node anchor);
       let live = View.build (child content) inside in
-      bridged live position.parent;
-      View.live portals { container; content = live })
-    ~patch:(fun [@u] (position : Template.position) live ->
+      bridged live anchor;
+      View.live portals { container; anchor; content = live })
+    ~patch:(fun [@u] _ live ->
       match View.hosted portals live with
       | Some placed when Dom_api.same placed.container container ->
           placed.content <- View.update inside placed.content (child content);
-          bridged placed.content position.parent;
+          bridged placed.content placed.anchor;
           Some live
       | Some _ | None -> None)

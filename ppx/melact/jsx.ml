@@ -2,6 +2,9 @@ open Ppxlib
 open Melhole_compiler
 open Ast_builder.Default
 
+(** Whether a JSX path and name are a component of a JavaScript library bound in this file; set once the file's bindings are known. *)
+let foreign : (longident -> string -> bool) ref = ref (fun _ _ -> false)
+
 let keyed_hooks =
   [
     "useState"; "useReducer"; "useReducerWithMapState"; "useRef"; "useId"; "useEffect";
@@ -345,6 +348,10 @@ let component ~loc ~name ~props_constructor expression =
                       kept
                   in
                   { expression with pexp_desc = Pexp_let (Nonrecursive, List.map bound bindings, walker#expression rest) }
+              | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, _)
+                when Option.is_some (Element.without_jsx expression.pexp_attributes)
+                     && !foreign path (match name with "createElement" -> "make" | other -> other) ->
+                  expression
               | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot _; _ }; _ } as callee), arguments)
                 when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
                   {
@@ -516,7 +523,7 @@ let foreign_of items =
   in
   gather [] items
 
-let foreign path name =
+let bound_foreign path name =
   match Longident.flatten_exn path with
   | written ->
       List.exists
@@ -528,6 +535,7 @@ let foreign path name =
         !foreign_components
   | exception Invalid_argument _ -> false
 
+let () = foreign := bound_foreign
 let foreign_name name = name ^ "__foreign"
 
 let bound_component ~loc (description : value_description) attributes =
@@ -766,11 +774,7 @@ let mapper =
           super#structure_item item
       | Pstr_primitive description
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
-          let loc = item.pstr_loc in
-          pstr_include ~loc
-            (include_infos ~loc
-               (pmod_structure ~loc
-                  (bound_component ~loc description (Option.value ~default:[] (without_component description.pval_attributes)))))
+          Location.raise_errorf ~loc:item.pstr_loc "melact: a [@react.component] external is bound before the JSX rewrite"
       | Pstr_value (flag, bindings) -> (
           let expanded = List.map self#component bindings in
           match List.concat_map (fun (types, _, _) -> types) expanded with
@@ -968,7 +972,7 @@ let mapper =
           in
           [%expr Melact_compat.Bridge.host [%e estring ~loc tag] [%e pexp_array ~loc props] [%e pexp_array ~loc children]]
       | Some _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, arguments)
-        when foreign path (match name with "createElement" -> "make" | other -> other) ->
+        when !foreign path (match name with "createElement" -> "make" | other -> other) ->
           let name = match name with "createElement" -> "make" | other -> other in
           [%expr
             Melact_compat.Bridge.element
@@ -992,7 +996,7 @@ let mapper =
         arguments
 
     method private uppercase ~loc path name arguments =
-      match foreign path name with
+      match !foreign path name with
       | true ->
           let key =
             List.find_map (fun (label, value) -> match label with Labelled "key" -> Some (self#expression value) | _ -> None) arguments
@@ -1429,7 +1433,6 @@ let structure items =
         | _ -> super#expression expression
     end
   in
-  foreign_components := foreign_of items;
   [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
   :: mapper#structure (inliner#structure (annotated items))
 let signature items = mapper#signature items
@@ -1448,7 +1451,26 @@ let () =
     (Arg.Unit (fun () -> Element.output := Element.Server))
     ~doc:" compile components to code that writes their HTML, for melact.server, natively or under Melange"
 
+let bound items =
+  foreign_components := foreign_of items;
+  let binder =
+    object
+      inherit Ast_traverse.map as super
+
+      method! structure_item item =
+        match item.pstr_desc with
+        | Pstr_primitive description ->
+            Option.fold ~none:item
+              ~some:(fun attributes ->
+                let loc = item.pstr_loc in
+                pstr_include ~loc (include_infos ~loc (pmod_structure ~loc (bound_component ~loc description attributes))))
+              (without_component description.pval_attributes)
+        | _ -> super#structure_item item
+    end
+  in
+  binder#structure items
+
 let () =
   Driver.register_transformation "melact"
-    ~instrument:(Driver.Instrument.make Npm_react.structure ~position:Before)
+    ~instrument:(Driver.Instrument.make (fun items -> Npm_react.structure (bound items)) ~position:Before)
     ~impl:structure ~intf:signature

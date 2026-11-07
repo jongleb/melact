@@ -495,6 +495,7 @@ let rec settle () =
         let queued = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
         put_off := None_put_off;
         let waiting = ref [] in
+        let carried = ref [] in
         let rec rendering round =
           let pending =
             match round with
@@ -502,7 +503,11 @@ let rec settle () =
             | `Later ->
                 let forced, stated =
                   List.partition
-                    (fun instance -> match instance.status with Dirty Forced -> true | Dirty (Stated _) | Clean | Unmounted -> false)
+                    (fun instance ->
+                      match instance.status with
+                      | Dirty Forced -> true
+                      | Dirty (Stated _) -> List.memq instance !carried
+                      | Clean | Unmounted -> false)
                     (!dirty @ !waiting)
                 in
                 waiting := stated;
@@ -531,6 +536,7 @@ let rec settle () =
                     match (instance.status, topmost instance) with Dirty _, `Topmost -> true | (Dirty _ | Clean | Unmounted), _ -> false)
                   pending
               in
+              (match later with [] -> () | _ :: _ -> put_off := Some_put_off);
               let roots = ordered roots in
               let rendered =
                 List.filter_map
@@ -553,6 +559,7 @@ let rec settle () =
                       | Unmounted -> ()
                       | Clean | Dirty _ -> wrote (position_of instance) instance result)
                     rendered);
+              carried := later;
               dirty :=
                 List.filter (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false) later
                 @ !dirty;
@@ -568,7 +575,17 @@ let rec settle () =
               let last = ref None in
               visit_nodes (host job) (fun [@u] node -> last := Some node);
               let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
-              Option.map deepest !last
+              let rec levels node inner =
+                let rec up at =
+                  match Js.Undefined.toOption (Dom_api.property (Dom_api.unsafe_element at) "$$melhole:anchor" : Dom.node Js.undefined) with
+                  | Some anchor -> Some anchor
+                  | None -> Option.bind (Dom_api.parent_node at) up
+                in
+                Option.fold ~none:(node :: inner) ~some:(fun anchor -> levels anchor (node :: inner)) (up node)
+              in
+              Option.fold ~none:(None, []) ~some:(fun node -> match levels (deepest node) [] with
+                | outer :: _ as all -> (Some outer, all)
+                | [] -> (None, [])) !last
             in
             let rec fresh old list oldest_first =
               match list == old with
@@ -578,7 +595,7 @@ let rec settle () =
             let old_layout_cleanups, old_layout_runs, old_passive_cleanups, old_passive_runs = queued in
             let batches =
               List.map
-                (fun (queue, old) -> (queue, old, List.map (fun job -> (job, ending job, (host job).depth)) (fresh old !queue [])))
+                (fun (queue, old) -> (queue, old, List.map (fun job -> let outer, inner = ending job in (job, outer, ((host job).depth, inner))) (fresh old !queue [])))
                 [
                   (layout_cleanups, old_layout_cleanups);
                   (layout_runs, old_layout_runs);
@@ -658,10 +675,33 @@ let rec settle () =
                 | _ :: _ :: _ ->
                     let ordered =
                       List.stable_sort
-                        (fun (_, first, first_depth) (_, second, second_depth) ->
-                          match earlier first second with
-                          | 0 -> Int.compare second_depth first_depth
-                          | order -> order)
+                        (fun (first_job, first, (first_depth, first_levels)) (second_job, second, (second_depth, second_levels)) ->
+                          let rec by_levels first second =
+                            match (first, second) with
+                            | one :: rest, other :: others when Dom_api.same one other -> by_levels rest others
+                            | one :: _, other :: _ -> (
+                                match Dom_api.compare_document_position one other land 4 <> 0 with true -> -1 | false -> 1)
+                            | [], _ | _, [] -> 0
+                          in
+                          let kinship older younger =
+                            let rec up at =
+                              match at.parent with
+                              | None -> `Apart
+                              | Some parent when parent == older -> `Ancestor
+                              | Some parent -> up parent
+                            in
+                            up younger
+                          in
+                          match (kinship (host first_job) (host second_job), kinship (host second_job) (host first_job)) with
+                          | `Ancestor, _ -> 1
+                          | _, `Ancestor -> -1
+                          | `Apart, `Apart -> (
+                              match earlier first second with
+                              | 0 -> (
+                                  match by_levels first_levels second_levels with
+                                  | 0 -> Int.compare second_depth first_depth
+                                  | order -> order)
+                              | order -> order))
                         jobs
                     in
                     queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)

@@ -116,35 +116,36 @@ let dispatcher native_type shown =
   match List.assoc_opt native_type !dispatchers with
   | Some found -> found
   | None ->
-      let key = Events.key_of native_type in
       let deliver (native : Dom.event) =
         let node = Dom_api.to_node (Dom_api.current_target native) in
         Option.iter
           (fun handler ->
             let event, _ = kept native Bubble shown in
             call handler event node)
-          (Raw.find (Raw.of_any node) (slot_of Bubble shown));
-        match (Raw.find (Raw.of_any node) portal_parent, !bridging, Dom_api.cancel_bubble native) with
-        | Some parent, Idle, false ->
-            bridging := Walking;
-            let rec up (at : Dom.node) =
-              Option.iter
-                (fun handle ->
-                  Dom_api.point_current_target native [%mel.obj { configurable = true; value = at }];
-                  handle native)
-                (Dom_api.handler at key);
-              match Dom_api.cancel_bubble native with true -> () | false -> Option.iter up (logical_parent at)
-            in
-            (match up (Raw.to_any parent) with
-            | () -> bridging := Idle
-            | exception error ->
-                bridging := Idle;
-                raise error);
-            Dom_api.point_current_target native [%mel.obj { configurable = true; value = node }]
-        | Some _, Walking, _ | Some _, _, true | None, _, _ -> ()
+          (Raw.find (Raw.of_any node) (slot_of Bubble shown))
       in
       dispatchers := (native_type, deliver) :: !dispatchers;
       deliver
+
+let onwards key (native : Dom.event) (node : Dom.node) =
+  match (Raw.find (Raw.of_any node) portal_parent, !bridging, Dom_api.cancel_bubble native) with
+  | Some parent, Idle, false ->
+      bridging := Walking;
+      let rec up (at : Dom.node) =
+        Option.iter
+          (fun handle ->
+            Dom_api.point_current_target native [%mel.obj { configurable = true; value = at }];
+            handle native)
+          (Dom_api.handler at key);
+        match Dom_api.cancel_bubble native with true -> () | false -> Option.iter up (logical_parent at)
+      in
+      (match up (Raw.to_any parent) with
+      | () -> bridging := Idle
+      | exception error ->
+          bridging := Idle;
+          raise error);
+      Dom_api.point_current_target native [%mel.obj { configurable = true; value = node }]
+  | Some _, Walking, _ | Some _, _, true | None, _, _ -> ()
 
 let capturing = ref []
 let capture_names = ref []
@@ -271,15 +272,25 @@ let bridged =
     ("contextmenu", "contextmenu"); ("submit", "submit"); ("wheel", "wheel");
   ]
 
+external define : Dom.node -> string -> < get : unit -> 'handler ; set : 'handler -> unit ; configurable : bool > Js.t -> unit
+  = "defineProperty"
+[@@mel.scope "Object"]
+
 let bridge node ~parent =
-  Raw.set (Raw.of_any node) portal_parent parent;
-  match Dom_api.node_type node with
-  | 1 ->
-      let element = Dom_api.unsafe_element node in
+  let raw = Raw.of_any node in
+  match (Raw.find raw portal_parent, Dom_api.node_type node) with
+  | Some _, _ -> Raw.set raw portal_parent parent
+  | None, 1 ->
+      Raw.set raw portal_parent parent;
       List.iter
-        (fun (native, shown) ->
-          match Dom_api.handler node (Events.key_of native) with
-          | Some _ -> ()
-          | None -> Events.set element (Events.key_of native) (dispatcher native shown))
+        (fun (native, _) ->
+          let key = Events.key_of native in
+          let own = ref (Raw.find raw key) in
+          let combined (event : Dom.event) =
+            Option.iter (fun handle -> ignore (Raw.call1 handle (Raw.of_any event))) !own;
+            onwards key event node
+          in
+          define node key
+            [%mel.obj { get = (fun () -> combined); set = (fun (handler : Dom.event -> unit) -> own := Raw.present (Raw.of_any handler)); configurable = true }])
         bridged
-  | _ -> ()
+  | None, _ -> Raw.set raw portal_parent parent

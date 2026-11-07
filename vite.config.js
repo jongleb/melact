@@ -27,8 +27,23 @@ const reactNineteen = {
   },
 };
 
+// The mixed compat laws bind JavaScript components from mlx; each build takes them on its own React.
+const compatEnv = resolve("test/compat/env/libraries.mjs");
+const compatLibraries = {
+  name: "compat-libraries",
+  enforce: "pre",
+  async resolveId(source, importer) {
+    const melact = importer?.includes("/test/compat/melact/output/");
+    const react = importer?.includes("/test/compat/react/output/");
+    if (!melact && !react) return null;
+    if (source === "compat-layers") return resolve(melact ? "test/compat/env/layers.mjs" : "test/compat/layers-react.mjs");
+    if (melact && /^(react-select|react-window|@radix-ui\/)/.test(source)) return this.resolve(source, compatEnv, { skipSelf: true });
+    return null;
+  },
+};
+
 export default defineConfig({
-  plugins: [reactNineteen, melangeOutput],
+  plugins: [reactNineteen, compatLibraries, melangeOutput],
   // The emitted libraries live under node_modules; pre-bundling would cache
   // them across dune rebuilds.
   optimizeDeps: { noDiscovery: true, include: [] },
