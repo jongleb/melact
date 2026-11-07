@@ -156,3 +156,11 @@ $ DYLD_LIBRARY_PATH=/opt/homebrew/Cellar/simdjson/4.6.4/lib node bench/resume/ru
 
 Options: `--runs=N`, `--sizes=1000,5000`, `--rates=1,4` (CPU throttling), `--press=ms`,
 `--variants=hydrate,resume`, `--no-build`, `--breakdown` (main-thread time per trace event).
+
+## Melact against an earlier Melact
+
+`node bench/classics/versus.mjs --base=<commit>` builds every app of the corpus at `<commit>` (in a
+temporary worktree) and at the working tree, runs them app by app in turn and flags each step where
+Melact does more layouts or style recalculations than before, or where its time against React (the
+control, built from the same app) grew by more than 15%. It exits with 1 when a step is flagged.
+`--apps=eventtable,trace`, `--runs`, `--cpu` and `--threshold` narrow it.
