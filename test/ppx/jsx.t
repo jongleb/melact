@@ -1221,6 +1221,8 @@ that ignores it is not:
   > let reason items = ((ul ~children:[ ((items |. Belt.Array.map) (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]))) |. React.array ] ()) [@JSX])
   > let reason_numbered items = ((ul ~children:[ ((items |. Belt.Array.mapWithIndex) (fun i x -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX]))) |. React.array ] ()) [@JSX])
   > let reason_desugared items = ((ul ~children:[ React.array ((Belt.Array.map items) (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]))) ] ()) [@JSX])
+  > let branched wide items = ((ul ~children:[ (match wide with true -> React.null | false -> React.array (Array.map (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) items)) ] ()) [@JSX])
+  > let chosen wide items = ((ul ~children:[ (if wide then React.null else React.array (Array.mapi (fun i x -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX])) items)) ] ()) [@JSX])
   > EOF
   $ ./pp.exe -impl forms.ml | grep -o "Melhole.View.Items\\|Melhole.View.Numbered"
   Melhole.View.Items
@@ -1233,6 +1235,8 @@ that ignores it is not:
   Melhole.View.Items
   Melhole.View.Numbered
   Melhole.View.Items
+  Melhole.View.Items
+  Melhole.View.Numbered
 
 A row function bound by a let in a component is cached and still compiles to a loop:
 
