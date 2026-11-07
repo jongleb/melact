@@ -651,6 +651,14 @@ does the same at run time. A dual law sends random typing, lone changes, blurs, 
 select changes to a page with all four and compares the calls and what the page shows with React's;
 listening to `input` alone, or not checking the recorded value, each break it.
 
+After the handlers of an `input` or `change` event on a controlled field Melact renders at once,
+before it puts the field's value back, as React does with `flushSync` there: a key handler in the
+same task, Enter after typing, sees the typed value. A dual law types a random word and presses
+Enter in one task; rendering at the next microtask breaks it. And when a layout effect sets state,
+the passive effects of that commit run before the render it causes, as React 18 flushes them before
+sync work, so a `useEffect` sees the page of its own commit: a popover hidden until its layout
+effect measured it is seen hidden; running them after the whole flush breaks a dual law.
+
 ## Events and makeProps
 
 A handler prop compiles to `fun event -> handler (React.Event.ofNative event)`: `ofNative` is the

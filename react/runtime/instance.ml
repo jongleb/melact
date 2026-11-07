@@ -640,9 +640,9 @@ let rec settle () =
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
         run_phases layout_cleanups layout_runs;
-        (match (!recovery.outstanding () [@u], !suspension.outstanding () [@u]) with
-        | Quiet, Quiet -> ()
-        | Busy, _ | _, Busy -> run_phases passive_cleanups passive_runs);
+        (match (!recovery.outstanding () [@u], !suspension.outstanding () [@u], !dirty) with
+        | Quiet, Quiet, [] -> ()
+        | Quiet, Quiet, _ :: _ | Busy, _, _ | _, Busy, _ -> run_phases passive_cleanups passive_runs);
         drain ()
   in
   drain ();
@@ -663,6 +663,8 @@ let flush () =
   render_schedule := Unqueued;
   settle ();
   run_passive ()
+
+let () = Events.after_controlled := flush
 
 let position = ref Melhole_server.Tree.root
 let around = ref []

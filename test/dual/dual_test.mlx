@@ -1221,6 +1221,59 @@ module Changing = struct
     </div>
 end
 
+external keyboard : string -> < bubbles : bool ; key : string > Js.t -> Dom.event = "KeyboardEvent" [@@mel.new]
+
+module Drafting = struct
+  let[@react.component] make () =
+    let draft, setDraft = React.useState (fun () -> "") in
+    let saved, setSaved = React.useState (fun () -> "") in
+    <div>
+      <input
+        value=draft
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          setDraft (fun _ -> value))
+        onKeyDown=(fun event -> match React.Event.Keyboard.key event with "Enter" -> setSaved (fun _ -> draft) | _ -> ()) />
+      <p>(React.string saved)</p>
+    </div>
+end
+
+external visibility : Dom.element -> string = "visibility" [@@mel.get] [@@mel.scope "style"]
+
+(** Whether a popover measures itself in a layout effect when it opens. *)
+type opening = Measured | Unmeasured
+
+(** Where a popover sits, once measured. *)
+type placing = Unplaced | Placed
+
+let popover_send = ref (fun (_ : opening option -> opening option) -> ())
+
+module Popover = struct
+  let[@react.component] make ~opening =
+    let placing, setPlacing = React.useState (fun () -> Unplaced) in
+    let box = React.useRef Js.Nullable.null in
+    React.useLayoutEffect0 (fun () ->
+        (match opening with Measured -> setPlacing (fun _ -> Placed) | Unmeasured -> ());
+        None);
+    React.useEffect0 (fun () ->
+        Option.iter (fun element -> log (visibility element)) (Js.Nullable.toOption box.current);
+        None);
+    <div
+      ref=(ReactDOM.Ref.domRef box)
+      style=(match (opening, placing) with
+        | Measured, Unplaced -> ReactDOM.Style.make ~visibility:"hidden" ()
+        | Measured, Placed | Unmeasured, (Unplaced | Placed) -> ReactDOM.Style.make ())>
+      (React.string (match placing with Unplaced -> "unplaced" | Placed -> "placed"))
+    </div>
+end
+
+module Popovers = struct
+  let[@react.component] make () =
+    let shown, setShown = React.useState (fun () -> None) in
+    popover_send := setShown;
+    match shown with Some opening -> <Popover opening /> | None -> React.null
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -3053,6 +3106,56 @@ let () =
              ignore (take ());
              step 8 ("", "", false, "red") []))
         [%mel.obj { numRuns = 120 }]));
+  describe "a controlled field typed into and read in the same task" (fun () ->
+    test_async "shows the typed value to the next handler, as React renders at once after input on a controlled field" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:10) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Drafting /> in
+             let words = [| "a"; "bc"; "def"; "" |] in
+             let rec step remaining seen expected =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect seen |. to_equal expected;
+                   finish ()
+               | _ ->
+                   let word = words.(draw tape 4) in
+                   let field = select root "input" in
+                   let* () =
+                     act (fun () ->
+                         put_value field word;
+                         dispatch field (bubbling "input" [%mel.obj { bubbles = true }]);
+                         dispatch field (keyboard "keydown" [%mel.obj { bubbles = true; key = "Enter" }]))
+                   in
+                   step (remaining - 1) (text_content (select root "p") :: seen) (word :: expected)
+             in
+             step 5 [] []))
+        [%mel.obj { numRuns = 60 }]));
+  describe "effects of a commit whose layout effect set state" (fun () ->
+    test_async "run before the render that state causes, as React 18 runs them, and see that commit's page" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:10) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Popovers /> in
+             let rec step remaining seen expected =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (List.rev seen) |. to_equal (List.rev expected);
+                   finish ()
+               | _ ->
+                   let opening = match draw tape 2 with 0 -> Measured | _ -> Unmeasured in
+                   let* () = act (fun () -> !popover_send (fun _ -> None)) in
+                   ignore (take ());
+                   let* () = act (fun () -> !popover_send (fun _ -> Some opening)) in
+                   let saw = take () in
+                   step (remaining - 1)
+                     ((saw, text_content root) :: seen)
+                     ((match opening with Measured -> ([ "hidden" ], "placed") | Unmeasured -> ([ "" ], "unplaced")) :: expected)
+             in
+             step 5 [] []))
+        [%mel.obj { numRuns = 40 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->
       let* root, client = mount <Unicode /> in
