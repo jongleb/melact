@@ -845,11 +845,14 @@ Accepted only with these holding, by property-based tests:
 - **Volatility:** a hole that reads mutable state is evaluated on every render.
 - **Ratchet:** a change may keep or lower the work done, never raise it. `test/ratchet` patches
   jsdom's prototypes to count DOM writes by kind, created nodes and layouts (a layout read after a
-  write is a forced one), and the programs count renders, effects, hole evaluations, keys and row
+  write is a forced one), steps of DOM walks (TreeWalker, `compareDocumentPosition`, `contains`),
+  and the programs count renders, effects, hole evaluations, keys and row
   refreshes, all per step. Law A runs random component trees and the bench's event table under
   React 18 and under Melact: in no step may Melact do more of a compared kind; a kind where it does
   more today is a known gap with its reason, and its total excess may only shrink. Law B keeps the
   totals of fixed Melact, Meltea and melhole runs in `test/ratchet/baseline.json`, which
   `node test/ratchet/lower.mjs` rewrites only downwards. Splicing hookless components into child
   slots again, sending `View.rows` always through the general keyed path, dropping a loop's no-op
-  for the same list, or unguarding the first hole of every template each break a law.
+  for the same list, unguarding the first hole of every template, or ordering effects by walking
+  the whole document each break a law. A counter new to the suite is recorded once with
+  `--admit=<counter>`.

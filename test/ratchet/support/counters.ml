@@ -19,11 +19,12 @@ type kind =
   | Keyed
   | Projected
   | Refreshed
+  | Walked
 
 let kinds =
   [
     Moved; Inserted; Removed; Attribute; Class; Text; Style; Property; Created; Forced_layout; Frame_layout; Layout_read; Rendered;
-    Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed;
+    Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked;
   ]
 
 let name kind =
@@ -48,6 +49,7 @@ let name kind =
   | Keyed -> "keys"
   | Projected -> "projections"
   | Refreshed -> "row refreshes"
+  | Walked -> "nodes walked"
 
 type t = int Js.Dict.t
 
@@ -192,6 +194,14 @@ let () =
   });
   before(Element.prototype, "getBoundingClientRect", read);
   before(Element.prototype, "getClientRects", read);
+  ["nextNode", "previousNode", "firstChild", "lastChild", "nextSibling", "previousSibling", "parentNode"].forEach(function (name) {
+    before(TreeWalker.prototype, name, function () { bump("nodes walked", 1); });
+  });
+  ["nextNode", "previousNode"].forEach(function (name) {
+    before(NodeIterator.prototype, name, function () { bump("nodes walked", 1); });
+  });
+  before(Node.prototype, "compareDocumentPosition", function () { bump("nodes walked", 1); });
+  before(Node.prototype, "contains", function () { bump("nodes walked", 1); });
   var computed = window.getComputedStyle;
   window.getComputedStyle = function () { read(); return computed.apply(this, arguments); };
 }|}]
