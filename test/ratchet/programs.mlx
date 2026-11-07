@@ -1,0 +1,641 @@
+[@@@alert "-deprecated"]
+open Testing
+
+external offset_top : Dom.element -> int = "offsetTop" [@@mel.get]
+external bounding : Dom.element -> < top : float > Js.t = "getBoundingClientRect" [@@mel.send]
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+
+type item = { key : string; label : string }
+
+(** Which of the items the lists show. *)
+type sieve = Every | Every_other
+
+(** Whether the popover is open. *)
+type opening = Closed | Open
+
+(** Whether a row is the selected one. *)
+type marking = Picked | Unpicked
+
+type app = {
+  tick : int;
+  theme : string;
+  items : item array;
+  shown : item array;  (** The items the sieve keeps: the same array while it keeps them all. *)
+  sieve : sieve;
+  selected : string option;
+  query : string;
+  opening : opening;
+  next : int;  (** The number of the next item made. *)
+}
+
+type message =
+  | Tick
+  | Flip
+  | Insert of int * int  (** Where, and how many. *)
+  | Remove of int * int  (** Where, and how many. *)
+  | Swap of int * int
+  | Reverse
+  | Sift
+  | Rename of int
+  | Select of int option
+  | Query of string
+  | Pop
+
+(** How the rows of a keyed list are drawn. *)
+type rows =
+  | Spliced  (** A component without hooks, spliced into the map row. *)
+  | Stateful  (** Rows with state of their own and a component without hooks in a child slot. *)
+  | Measured  (** Rows that read their own [offsetTop] while rendering. *)
+  | Memoized  (** [React.memo] rows given a fresh callback on every render. *)
+  | Selecting  (** [React.memo] rows that read the selection from a context and their [offsetTop]. *)
+
+(** A part of a generated page. *)
+type piece =
+  | Panel of piece list  (** State of its own, components without hooks in child slots, then its pieces. *)
+  | Kept of piece list  (** A [React.memo] boundary whose pieces read the app from a context. *)
+  | Themed of piece list  (** A theme provider at this depth. *)
+  | Reader  (** Reads the nearest theme. *)
+  | Measure  (** Reads its own [offsetTop] while rendering. *)
+  | Debounced  (** Shows the query once a timeout set by an effect fires. *)
+  | Listing of rows
+  | Field  (** A controlled input of the query that rejects long text. *)
+  | Popover  (** Placed by a layout effect while open. *)
+  | Handed  (** Gives a [React.memo] child a fresh callback on every render. *)
+
+(** What a step of a program does from outside. *)
+type step =
+  | Send of message
+  | Type of int * string  (** Into the field with this number. *)
+  | Press_panel of int
+  | Press_row of int
+  | Wait  (** Fires the pending timeouts. *)
+
+type program = { pieces : piece list; size : int; steps : step list }
+
+let made from count = Array.init count (fun index -> { key = "k" ^ string_of_int (from + index); label = "item " ^ string_of_int (from + index) })
+
+let started size =
+  let items = made 0 size in
+  { tick = 0; theme = "light"; items; shown = items; sieve = Every; selected = None; query = ""; opening = Closed; next = size }
+
+let app_context = React.createContext (started 0)
+let theme_context = React.createContext "none"
+let selection_context = React.createContext None
+
+module App_provider = struct
+  let make = React.Context.provider app_context
+
+  external makeProps : value:app -> children:React.element -> unit -> < value : app ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Theme_provider = struct
+  let make = React.Context.provider theme_context
+
+  external makeProps :
+    value:string -> children:React.element -> unit -> < value : string ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Selection_provider = struct
+  let make = React.Context.provider selection_context
+
+  external makeProps :
+    value:string option -> children:React.element -> unit -> < value : string option ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+let sender = ref (fun (_ : message) -> ())
+let placing : (app -> piece list -> React.element) ref = ref (fun _ _ -> React.null)
+
+(** Timeouts the program sets, fired by the run when it waits. *)
+module Clock = struct
+  let pending = ref []
+  let last = ref 0
+
+  let set run =
+    incr last;
+    pending := (!last, run) :: !pending;
+    !last
+
+  let clear id = pending := List.filter (fun (other, _) -> other <> id) !pending
+
+  let fire () =
+    let due = List.rev !pending in
+    pending := [];
+    List.iter (fun (_, run) -> run ()) due
+end
+
+module Label = struct
+  let[@react.component] make ~text = <b className="label">(React.string (Counters.seen Evaluated text))</b>
+end
+
+module Line = struct
+  let[@react.component] make ~label ~marking =
+    <li className=(match marking with Picked -> "line picked" | Unpicked -> "line")>
+      (React.string (Counters.seen Evaluated label))
+    </li>
+end
+
+module Measure = struct
+  let[@react.component] make ~tick ~theme =
+    let self = React.useRef Js.Nullable.null in
+    Counters.bump Rendered;
+    let top = Option.fold ~none:0 ~some:offset_top (Js.Nullable.toOption self.current) in
+    <i title=theme ref=(ReactDOM.Ref.domRef self) className=(match top > 9999 with true -> "far " ^ theme | false -> theme)>
+      (React.string (Counters.seen Evaluated (string_of_int tick)))
+    </i>
+end
+
+module Panel = struct
+  let[@react.component] make ~app ~pieces =
+    let opening, setOpening = React.useState (fun () -> Closed) in
+    Counters.bump Rendered;
+    let placed = !placing in
+    <section className=(match opening with Open -> "panel open" | Closed -> "panel")>
+      <button className="panel" onClick=(fun _ -> setOpening (fun opening -> match opening with Open -> Closed | Closed -> Open))>
+        (React.string (Counters.seen Evaluated (match opening with Open -> "close" | Closed -> "open")))
+      </button>
+      <Label text=(string_of_int app.tick) />
+      <Label text=app.theme />
+      (placed app pieces)
+    </section>
+end
+
+module Relay = struct
+  let[@react.component] make ~pieces =
+    let app = React.useContext app_context in
+    Counters.bump Rendered;
+    let placed = !placing in
+    <div className="relay">(placed app pieces)</div>
+end
+
+module Kept = struct
+  let[@react.component] make =
+    React.memo (fun ~pieces ->
+        Counters.bump Rendered;
+        <div className="kept"><Label text="kept" /><Relay pieces /></div>)
+end
+
+module Themed = struct
+  let[@react.component] make ~app ~depth ~pieces =
+    Counters.bump Rendered;
+    let placed = !placing in
+    <Theme_provider value=(app.theme ^ string_of_int depth)>(placed app pieces)</Theme_provider>
+end
+
+module Reader = struct
+  let[@react.component] make () =
+    let theme = React.useContext theme_context in
+    Counters.bump Rendered;
+    <p title=theme className=("reader " ^ theme)><Label text=theme /></p>
+end
+
+module Debounced = struct
+  let[@react.component] make ~query =
+    let settled, setSettled = React.useState (fun () -> query) in
+    React.useEffect1
+      (fun () ->
+        Counters.bump Effect_ran;
+        let id = Clock.set (fun () -> setSettled (fun _ -> query)) in
+        Some (fun () -> Clock.clear id))
+      [| query |];
+    Counters.bump Rendered;
+    <output>(React.string (Counters.seen Evaluated settled))</output>
+end
+
+module Field = struct
+  let[@react.component] make ~query =
+    Counters.bump Rendered;
+    <input
+      className="field"
+      value=query
+      onChange=(fun event ->
+        let value = (React.Event.Form.target event)##value in
+        !sender (Query value)) />
+end
+
+module Popup = struct
+  let[@react.component] make ~label =
+    let box = React.useRef Js.Nullable.null in
+    let placed, setPlaced = React.useState (fun () -> None) in
+    React.useLayoutEffect0 (fun () ->
+        Counters.bump Effect_ran;
+        Option.iter
+          (fun element ->
+            let top = (bounding element)##top in
+            setPlaced (fun _ -> Some top))
+          (Js.Nullable.toOption box.current);
+        None);
+    Counters.bump Rendered;
+    <div
+      ref=(ReactDOM.Ref.domRef box)
+      className="popover"
+      style=(match placed with
+        | None -> ReactDOM.Style.make ~visibility:"hidden" ()
+        | Some top -> ReactDOM.Style.make ~top:(Js.Float.toString (top +. 8.) ^ "px") ())>
+      (React.string (Counters.seen Evaluated label))
+    </div>
+end
+
+module Popover = struct
+  let[@react.component] make ~app =
+    Counters.bump Rendered;
+    <div className="anchor">
+      <Label text="anchor" />
+      (match app.opening with Open -> <Popup label=app.query /> | Closed -> React.null)
+    </div>
+end
+
+module Pressable = struct
+  let[@react.component] make =
+    React.memo (fun ~label ~onPress ->
+        Counters.bump Rendered;
+        <button className="pressable" onClick=(fun _ -> onPress ())>(React.string (Counters.seen Evaluated label))</button>)
+end
+
+module Handed = struct
+  let[@react.component] make ~app =
+    let presses, setPresses = React.useState (fun () -> 0) in
+    Counters.bump Rendered;
+    let send = !sender in
+    <Pressable
+      label=(app.theme ^ string_of_int presses)
+      onPress=(fun () ->
+        setPresses (fun presses -> presses + 1);
+        send Tick) />
+end
+
+module Counter_row = struct
+  let[@react.component] make ~item ~marking =
+    let count, setCount = React.useState (fun () -> 0) in
+    Counters.bump Rendered;
+    <li className=(match marking with Picked -> "counter picked" | Unpicked -> "counter")>
+      <button className="row" onClick=(fun _ -> setCount (fun count -> count + 1))>
+        (React.string (Counters.seen Evaluated (string_of_int count)))
+      </button>
+      <Label text=item.label />
+    </li>
+end
+
+module Measured_row = struct
+  let[@react.component] make ~item ~marking =
+    let self = React.useRef Js.Nullable.null in
+    Counters.bump Rendered;
+    let top = Option.fold ~none:0 ~some:offset_top (Js.Nullable.toOption self.current) in
+    <li
+      ref=(ReactDOM.Ref.domRef self)
+      className=(match (marking, top > 9999) with Picked, _ -> "measured picked" | Unpicked, true -> "measured far" | Unpicked, false -> "measured")>
+      <Label text=item.label />
+    </li>
+end
+
+module Memo_row = struct
+  let[@react.component] make =
+    React.memo (fun ~item ~onPick ->
+        Counters.bump Rendered;
+        <li className="memo">
+          <button className="pick" onClick=(fun _ -> onPick ())>(React.string (Counters.seen Evaluated item.label))</button>
+        </li>)
+end
+
+module Selecting_row = struct
+  let[@react.component] make =
+    React.memo (fun ~item ->
+        let selected = React.useContext selection_context in
+        let self = React.useRef Js.Nullable.null in
+        Counters.bump Rendered;
+        let top = Option.fold ~none:0 ~some:offset_top (Js.Nullable.toOption self.current) in
+        <li
+          ref=(ReactDOM.Ref.domRef self)
+          className=(match (selected, top > 9999) with
+            | Some key, _ when key = item.key -> "selecting picked"
+            | _, true -> "selecting far"
+            | _, false -> "selecting")>
+          (React.string (Counters.seen Evaluated item.label))
+        </li>)
+end
+
+module Listing = struct
+  let[@react.component] make ~app ~rows =
+    Counters.bump Rendered;
+    let send = !sender in
+    match rows with
+    | Spliced ->
+        <ul className="spliced">
+          (React.array
+             (Array.map
+                (fun item ->
+                  <Line
+                    key=(Counters.seen Keyed item.key)
+                    label=(Counters.seen Refreshed item.label)
+                    marking=(match app.selected with Some key when key = item.key -> Picked | _ -> Unpicked) />)
+                app.shown))
+        </ul>
+    | Stateful ->
+        <ul className="stateful">
+          (React.array
+             (Array.map
+                (fun item ->
+                  <Counter_row key=item.key item marking=(match app.selected with Some key when key = item.key -> Picked | _ -> Unpicked) />)
+                app.shown))
+        </ul>
+    | Measured ->
+        <ul className="measured">
+          (React.array
+             (Array.map
+                (fun item ->
+                  <Measured_row key=item.key item marking=(match app.selected with Some key when key = item.key -> Picked | _ -> Unpicked) />)
+                app.shown))
+        </ul>
+    | Memoized ->
+        <ul className="memoized">
+          (React.array
+             (Array.map
+                (fun item ->
+                  <Memo_row key=item.key item onPick=(fun () -> send (Select (Some 0))) />)
+                app.shown))
+        </ul>
+    | Selecting -> <ul className="selecting">(React.array (Array.map (fun item -> <Selecting_row key=item.key item />) app.shown))</ul>
+end
+
+let () =
+  placing :=
+    fun app pieces ->
+      React.array
+        (Array.of_list
+           (List.mapi
+              (fun index piece ->
+                let key = string_of_int index in
+                match piece with
+                | Panel inner -> <Panel key app pieces=inner />
+                | Kept inner -> <Kept key pieces=inner />
+                | Themed inner -> <Themed key app depth=index pieces=inner />
+                | Reader -> <Reader key />
+                | Measure -> <Measure key tick=app.tick theme=app.theme />
+                | Debounced -> <Debounced key query=app.query />
+                | Listing rows -> <Listing key app rows />
+                | Field -> <Field key query=app.query />
+                | Popover -> <Popover key app />
+                | Handed -> <Handed key app />)
+              pieces))
+
+module App = struct
+  let[@react.component] make ~pieces ~size =
+    let reduce app message =
+      let sifted sieve items =
+        match sieve with Every -> items | Every_other -> Array.of_list (List.filteri (fun index _ -> index mod 2 = 0) (Array.to_list items)) in
+      let size = Array.length app.items in
+      let listed items = { app with items; shown = sifted app.sieve items } in
+      match (message, size) with
+      | Tick, _ -> { app with tick = app.tick + 1 }
+      | Flip, _ -> { app with theme = (match app.theme with "light" -> "dark" | _ -> "light") }
+      | Insert (at, count), _ ->
+          let at = at mod (size + 1) in
+          { (listed (Array.concat [ Array.sub app.items 0 at; made app.next count; Array.sub app.items at (size - at) ])) with next = app.next + count }
+      | Remove (at, count), _ when size > 0 ->
+          let at = at mod size in
+          let count = min count (size - at) in
+          listed (Array.append (Array.sub app.items 0 at) (Array.sub app.items (at + count) (size - at - count)))
+      | Swap (first, second), _ when size > 1 ->
+          let first = first mod size and second = second mod size in
+          let items = Array.copy app.items in
+          items.(first) <- app.items.(second);
+          items.(second) <- app.items.(first);
+          listed items
+      | Reverse, _ -> listed (Array.of_list (List.rev (Array.to_list app.items)))
+      | Sift, _ ->
+          let sieve = match app.sieve with Every -> Every_other | Every_other -> Every in
+          { app with sieve; shown = sifted sieve app.items }
+      | Rename at, _ when size > 0 ->
+          let at = at mod size in
+          listed (Array.mapi (fun index item -> match index = at with true -> { item with label = item.label ^ "'" } | false -> item) app.items)
+      | Select at, _ ->
+          { app with selected = Option.bind at (fun at -> match size with 0 -> None | _ -> Some app.items.(at mod size).key) }
+      | Query query, _ -> { app with query = (match String.length query > 6 with true -> app.query | false -> query) }
+      | Pop, _ -> { app with opening = (match app.opening with Open -> Closed | Closed -> Open) }
+      | (Remove _ | Swap _ | Rename _), _ -> app
+    in
+    let app, send = React.useReducer reduce (started size) in
+    sender := send;
+    Counters.bump Rendered;
+    let placed = !placing in
+    <App_provider value=app>
+      <Selection_provider value=app.selected>
+        <Theme_provider value=app.theme>
+          <main>
+            <Label text=(string_of_int app.tick) />
+            <p className="status">(React.string (Counters.seen Evaluated (Option.value ~default:"none" app.selected)))</p>
+            (placed app pieces)
+            <Measure tick=app.tick theme="app" />
+          </main>
+        </Theme_provider>
+      </Selection_provider>
+    </App_provider>
+end
+
+let run program =
+  let ( let* ) promise next = Js.Promise.then_ next promise in
+  let act run = adopt (React.act run) in
+  let put : Dom.element -> string -> unit =
+    [%mel.raw
+      {|function (element, text) { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, text); }|}]
+  in
+  let inputted : Dom.element -> unit =
+    [%mel.raw {|function (element) { element.dispatchEvent(new Event("input", { bubbles: true })); }|}]
+  in
+  let root = Counters.unobserved attached in
+  Clock.pending := [];
+  ignore (Counters.take ());
+  let client = ReactDOM.Client.createRoot root in
+  let nth selector at =
+    let found = nodes (select_all root selector) in
+    match Array.length found with 0 -> None | count -> Some (element_of found.(at mod count))
+  in
+  let acted step =
+    match step with
+    | Send message -> !sender message
+    | Type (at, text) ->
+        Option.iter
+          (fun field ->
+            Counters.unobserved (fun () -> put field text);
+            inputted field)
+          (nth "input.field" at)
+    | Press_panel at -> Option.iter click (nth "button.panel" at)
+    | Press_row at -> Option.iter click (nth "button.row, button.pick, button.pressable" at)
+    | Wait -> Clock.fire ()
+  in
+  let counted run taken =
+    let* () = act run in
+    Js.Promise.resolve (Counters.take () :: taken)
+  in
+  let rec stepped steps taken =
+    match steps with
+    | [] -> Js.Promise.resolve taken
+    | step :: rest ->
+        let* taken = counted (fun () -> acted step) taken in
+        stepped rest taken
+  in
+  let* mounted = counted (fun () -> ReactDOM.Client.render client <App pieces=program.pieces size=program.size />) [] in
+  let* taken = stepped program.steps mounted in
+  let rec markup shown =
+    match shown with
+    | Text_shape text -> text
+    | Element_shape (tag, attributes, children) ->
+        "<" ^ String.lowercase_ascii tag
+        ^ String.concat "" (List.map (fun (name, value) -> " " ^ name ^ "=\"" ^ value ^ "\"") attributes)
+        ^ ">" ^ String.concat "" (List.map markup children) ^ "</" ^ String.lowercase_ascii tag ^ ">"
+  in
+  let page = String.concat "" (List.map markup (without_empty_style (shapes (as_node root)))) in
+  let* taken = counted (fun () -> ReactDOM.Client.unmount client ()) taken in
+  Counters.unobserved (fun () -> remove_root root);
+  Js.Promise.resolve (Array.of_list (List.rev taken), page)
+
+let generated values =
+  let tape = tape values in
+  let rows () = [| Spliced; Stateful; Measured; Memoized; Selecting |].(draw tape 5) in
+  let rec pieces depth = List.init (draw tape (match depth with 0 -> 5 | _ -> 3)) (fun _ -> piece depth)
+  and piece depth =
+    match draw tape (match depth with 3 -> 7 | _ -> 10) with
+    | 0 -> Reader
+    | 1 -> Measure
+    | 2 -> Debounced
+    | 3 -> Listing (rows ())
+    | 4 -> Field
+    | 5 -> Popover
+    | 6 -> Handed
+    | 7 -> Panel (pieces (depth + 1))
+    | 8 -> Kept (pieces (depth + 1))
+    | _ -> Themed (pieces (depth + 1))
+  in
+  let words = [| ""; "a"; "ab"; "abc"; "far too long" |] in
+  let step () =
+    match draw tape 16 with
+    | 0 -> Send Tick
+    | 1 -> Send Flip
+    | 2 -> Send (Insert (draw tape 10, 1 + draw tape 3))
+    | 3 -> Send (Remove (draw tape 10, 1 + draw tape 3))
+    | 4 -> Send (Swap (draw tape 10, draw tape 10))
+    | 5 -> Send Reverse
+    | 6 -> Send Sift
+    | 7 -> Send (Rename (draw tape 10))
+    | 8 -> Send (Select (match draw tape 3 with 0 -> None | _ -> Some (draw tape 10)))
+    | 9 -> Type (draw tape 3, words.(draw tape 5))
+    | 10 -> Send Pop
+    | 11 -> Press_panel (draw tape 4)
+    | 12 -> Press_row (draw tape 8)
+    | 13 -> Wait
+    | 14 -> Send (Query words.(draw tape 5))
+    | _ -> Send (Insert (draw tape 10, 1))
+  in
+  let pieces = pieces 0 in
+  let size = draw tape 8 in
+  { pieces; size; steps = List.init (4 + draw tape 16) (fun _ -> step ()) }
+
+let random values = run (generated values)
+
+let keyed_steps =
+  [
+    Send (Insert (100, 10)); Send (Remove (40, 5)); Send (Swap (3, 4)); Send (Swap (10, 80)); Send (Remove (20, 1));
+    Send (Insert (50, 1)); Send Reverse; Send Sift; Send Sift; Send (Rename 7); Send (Select (Some 5));
+    Send (Select (Some 9)); Send (Select None); Send Tick; Send (Remove (0, 200)); Send (Insert (0, 30));
+  ]
+
+let scenarios =
+  [|
+    ("spliced rows, keyed edits", { pieces = [ Listing Spliced ]; size = 100; steps = keyed_steps });
+    ("stateful rows, keyed edits", { pieces = [ Listing Stateful ]; size = 100; steps = keyed_steps });
+    ( "rows reading offsetTop, sorted and selected",
+      {
+        pieces = [ Panel [ Listing Measured; Measure ] ];
+        size = 40;
+        steps = [ Send Reverse; Send Reverse; Send (Select (Some 3)); Send Flip; Send Tick; Send (Swap (0, 1)) ];
+      } );
+    ( "memo rows reading the selection from a context and offsetTop",
+      {
+        pieces = [ Listing Selecting ];
+        size = 40;
+        steps = [ Send (Select (Some 1)); Send (Select (Some 2)); Send (Select (Some 3)); Send Tick; Send Reverse ];
+      } );
+    ( "components without hooks in child slots before a layout read",
+      {
+        pieces = [ Panel [ Panel [ Measure ]; Measure ]; Reader; Measure ];
+        size = 0;
+        steps = [ Send Tick; Send Flip; Send Tick; Press_panel 0; Press_panel 1; Send Flip ];
+      } );
+    ( "controlled field, debounce and popover",
+      {
+        pieces = [ Field; Debounced; Popover; Field; Debounced ];
+        size = 0;
+        steps =
+          [
+            Type (0, "a"); Type (0, "ab"); Type (1, "abc"); Type (0, "far too long"); Wait; Send Pop; Type (0, "x"); Wait;
+            Send Pop; Send Pop;
+          ];
+      } );
+    ( "memo boundaries, contexts at several depths and fresh callbacks",
+      {
+        pieces = [ Kept [ Reader; Themed [ Reader; Measure ] ]; Handed; Themed [ Kept [ Reader ]; Handed ] ];
+        size = 0;
+        steps = [ Send Flip; Send Tick; Press_row 0; Send Flip; Press_row 1; Send Tick ];
+      } );
+    ( "memo rows given fresh callbacks",
+      { pieces = [ Listing Memoized ]; size = 50; steps = [ Send Tick; Send (Swap (1, 2)); Press_row 3; Send Reverse ] } );
+  |]
+
+let names = Array.map fst scenarios
+let named index = run (snd scenarios.(index))
+
+let described values =
+  let program = generated values in
+  let rows kind =
+    match kind with
+    | Spliced -> "spliced"
+    | Stateful -> "stateful"
+    | Measured -> "measured"
+    | Memoized -> "memoized"
+    | Selecting -> "selecting"
+  in
+  let rec pieces inner = "[" ^ String.concat ", " (List.map piece inner) ^ "]"
+  and piece shown =
+    match shown with
+    | Panel inner -> "Panel " ^ pieces inner
+    | Kept inner -> "Kept " ^ pieces inner
+    | Themed inner -> "Themed " ^ pieces inner
+    | Reader -> "Reader"
+    | Measure -> "Measure"
+    | Debounced -> "Debounced"
+    | Listing kind -> "Listing " ^ rows kind
+    | Field -> "Field"
+    | Popover -> "Popover"
+    | Handed -> "Handed"
+  in
+  let number = string_of_int in
+  let message sent =
+    match sent with
+    | Tick -> "Tick"
+    | Flip -> "Flip"
+    | Insert (at, count) -> "Insert " ^ number count ^ " at " ^ number at
+    | Remove (at, count) -> "Remove " ^ number count ^ " at " ^ number at
+    | Swap (first, second) -> "Swap " ^ number first ^ " " ^ number second
+    | Reverse -> "Reverse"
+    | Sift -> "Sift"
+    | Rename at -> "Rename " ^ number at
+    | Select at -> "Select " ^ Option.fold ~none:"none" ~some:number at
+    | Query text -> "Query " ^ text
+    | Pop -> "Pop"
+  in
+  let step done_ =
+    match done_ with
+    | Send sent -> message sent
+    | Type (at, text) -> "Type " ^ text ^ " into " ^ number at
+    | Press_panel at -> "Press panel " ^ number at
+    | Press_row at -> "Press row " ^ number at
+    | Wait -> "Wait"
+  in
+  pieces program.pieces ^ ", " ^ number program.size ^ " items: " ^ String.concat "; " (List.map step program.steps)
