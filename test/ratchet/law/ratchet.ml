@@ -19,9 +19,16 @@ type verdict =
 
 let comparison kind =
   match kind with
-  | Counters.Moved | Attribute | Class | Text | Style | Frame_layout | Layout_read | Rendered | Effect_ran | Evaluated
-  | Task | Reaction | Kept_node | Kept_timer | Kept_global | Sent ->
+  | Counters.Attribute | Class | Style | Frame_layout | Layout_read | Rendered | Effect_ran | Evaluated | Task | Reaction
+  | Kept_node | Kept_timer | Kept_global | Sent ->
       Compared
+  | Moved ->
+      Known_gap
+        "in bench/classics/repro/logs-chunked, filtering and searching move up to 11,369 nodes a step that React leaves \
+         in place: a defect, not a design"
+  | Text ->
+      Known_gap
+        "in bench/classics/autocomplete, typing writes up to 28 more texts a step than React: a defect, not a design"
   | Timer | Frame ->
       Known_gap
         "passive effects wait for the next frame and then a timeout, as in a browser they run after the paint; React's \

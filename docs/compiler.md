@@ -1075,7 +1075,9 @@ Accepted only with these holding, by property-based tests:
   bundle needs `--admit=<bundle>`.
 
   Each of these laws has caught a mutant: ordering effects by walking from the document root to its
-  end (the big page, Law B on nodes walked), a timeout per render (Law B on timers), skipping effect
-  cleanups at unmount (listeners and timers kept), a cache of every cloned template (nodes kept), 2 kB
-  more in the runtime (the size ratchet), a server separator one byte longer (bytes served), and the
-  counters forgetting `setAttribute` (the mutation record check).
+  end (the big page, and Law B on nodes walked), a timeout per render (Law B on timers), skipping
+  effect cleanups at unmount (listeners and nodes kept), a list of every cloned template (nodes
+  kept), 2.5 kB more in the runtime (the size ratchet), a second space before each attribute the
+  server writes (bytes served), and the counters forgetting `setAttribute` (the mutation record
+  check). Time is virtual in every ratchet test, the ones driven by `act` too, so a timer never fires
+  because the machine was slow.
