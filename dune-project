@@ -65,7 +65,8 @@
   (reason-react :with-test)
   (reason-react-ppx :with-test)
   (reason :with-test)
-  (mlx :with-test)))
+  (mlx :with-test))
+ (depopts meltea))
 
 (package
  (name melact-ppx)

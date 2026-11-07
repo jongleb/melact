@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `melact.meltea`, a migration path from hooks to Meltea: `<MelteaProgram program input onReport />`
+  runs a Meltea program inside a Melact app (props become messages, messages are reported to
+  callbacks, the view is drawn in Melact's flush), and `MelactHtml.element` puts a Melact widget into
+  a Meltea view. Both run on the one melhole of the build. `docs/migration.md` is the guide;
+  `examples/halfway` and `meltea/examples/migrated` are the same app halfway and at the end.
+  `melact-ppx -meltea-hints` names, with an alert, every component whose only hooks are `useState`
+  and `useReducer`.
 - Melact renders on a server without a DOM: `melact-ppx -server` with `melact.server` (Melange, in
   Node) or `melact.server.native` (native OCaml) writes byte for byte what React 18's
   `renderToString` and `renderToStaticMarkup` write, `useId` and Suspense included, and Melact's

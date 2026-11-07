@@ -456,6 +456,31 @@ let view model =
 .fade-enter-active, .fade-leave-active, .fade-move { transition: all 200ms; }
 ```
 
+### From Melact to Meltea, one screen at a time
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/bridges-dark.svg">
+  <img src="assets/bridges.svg" alt="Moving one screen at a time: a Melact shell with hooks renders MelteaProgram with a program, an input and onReport; the Meltea screen in the middle has init of the input, a pure update of message and model, and a view; a new input becomes the message receive input, drawn in the same render, and each message the program sends itself is offered to report message model and then to the latest onReport. Inside its view, MelactHtml.element shows a Melact leaf widget that still has hooks, with props from the model; the widget's callbacks send messages, and its effects run after the program's draw. Both sides share one melhole: one listener per event type on document, and the screen draws in Melact's own flush; unmounting either side stops subscriptions, drops late commands and runs the widget's cleanups" width="100%">
+</picture>
+
+Hooks are not needed once every hole is guarded, so a Melact app can drop them a screen at a time.
+`melact.meltea` has two bridges on the same runtime: `<MelteaProgram program input onReport />` runs
+a Meltea program inside a Melact app, its props arriving as messages and its messages reported to
+callbacks, and `MelactHtml.element` puts a Melact widget, hooks and all, into a Meltea view.
+
+```ocaml
+let todos =
+  MelteaProgram.sandbox ~init:Todos.init ~update:Todos.update ~view:Todos.view
+    ~receive:(fun filter -> Some (Todos.Show filter))
+    "Todos"
+
+let[@react.component] make ~filter = <MelteaProgram program=todos input=filter />
+```
+
+[`docs/migration.md`](docs/migration.md) walks through the steps, from the two `dune` lines to an
+app without Melact, and maps every hook to its Meltea counterpart;
+[`examples/halfway`](examples/halfway/app.mlx) is an app halfway there.
+
 ## Status
 
 [`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
@@ -573,11 +598,12 @@ melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
 react/             melact           React (with React.Event), ReactDOM, ReasonReactRouter
+react/meltea       melact.meltea    bridges: a Meltea program in Melact, a Melact widget in Meltea
 meltea/            meltea           the Elm architecture: Program, Cmd, Sub, Html
 meltea/server      meltea.server    the same modules on a server: views write HTML
-meltea/examples                     counter, todomvc, served (Meltea)
+meltea/examples                     counter, todomvc, served, migrated (Meltea)
 test/                               laws: QCheck, fast-check in jsdom, React vs Melact
-examples/                           counter, todomvc (Melact)
+examples/                           counter, todomvc (Melact), halfway (Melact and Meltea)
 compat/                             real reason-react apps built against Melact
 assets/                             the figures above: python3 assets/make.py
 ```

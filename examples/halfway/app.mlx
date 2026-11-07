@@ -1,0 +1,23 @@
+let todos =
+  MelteaProgram.sandbox ~init:Todos.init ~update:Todos.update ~view:Todos.view
+    ~receive:(fun filter -> Some (Todos.Show filter))
+    ~report:(fun message (model : Todos.model) ->
+      match message with Todos.Add -> Some (List.length model.items) | _ -> None)
+    "Todos"
+
+let[@react.component] make () =
+  let filter, setFilter = React.useState (fun () -> Todos.All) in
+  let total, setTotal = React.useState (fun () -> 0) in
+  let tab label value =
+    <button className=(if filter = value then "tab on" else "tab") onClick=(fun _ -> setFilter (fun _ -> value))>
+      (React.string label)
+    </button>
+  in
+  <main>
+    <header>
+      <h1>(React.string "Halfway")</h1>
+      <nav>(tab "All" Todos.All) (tab "Active" Todos.Active) (tab "Done" Todos.Done)</nav>
+      <p className="total">(React.string (string_of_int total ^ " items"))</p>
+    </header>
+    <MelteaProgram program=todos input=filter onReport=(fun count -> setTotal (fun _ -> count)) />
+  </main>

@@ -951,6 +951,39 @@ counted on `globalThis`), so a click reaches the handlers of the copy that rende
 once. A law mounts the same Meltea widget from two builds beside each other and nested, presses
 and types at random, and checks every count; sharing one name doubles the first press.
 
+## Bridges between Melact and Meltea
+
+`melact.meltea` lets one build hold both front ends on one melhole, so that an app can move from
+hooks to Meltea a screen at a time ([migration.md](migration.md)). It adds no code to melhole,
+Meltea or Melact's runtime, and an app that does not link it carries none of it.
+
+`MelteaProgram.sandbox` and `element` describe a program once: its parts, a `Component.t` of its
+own and a typed hook key of its own. `<MelteaProgram program input onReport />` is an
+`Instance.component` with that identity and the inputs `input` and `onReport`; its one hook slot
+holds the running program: the model, the input it last took in, the model last drawn, the
+subscriptions, and the `onReport` of the last render. A render applies `receive input` when the
+input is a new value, and returns `Html.render (view model) send`, a child of the component like
+any other, or `Instance.unchanged` when the model is the one last drawn, so a parent that renders
+again with the same input costs no view call. A message updates the model at once, offers
+`report message model` to the latest `onReport` inside the same event, runs the commands, and
+invalidates the instance only when the model is a new value; Melact's scheduler draws it with
+everything else in the flush. The subscriptions are applied and the commands of `init` and of
+`receive` run after the commit, as layout effects. Unmounting stops the subscriptions and makes the
+program drop every later message, so a command that settles afterwards sends nothing.
+
+`MelactHtml.element (fun send -> <Widget … />)` is a hosted child that builds or patches the Melact
+element in the program's draw and queues one `Instance.settle` for the end of it, so the widget's
+layout effects run after the whole page is written, and its passive ones after the paint, as after
+a Melact render. The widget re-renders on its own state through Melact's scheduler; when the program
+draws it again, it is patched in place, keeping its state. Unmounting it runs its cleanups at once.
+
+A law in `test/bridge` runs a Meltea program inside a Melact parent and the same screen written
+with hooks under random clicks, typing, URL changes and unmounts, and compares the page and the
+parent's callback trail after every step; another counts the program's view calls against the
+inputs that change its model, and its URL listeners against whether it is mounted; a third runs a
+Meltea app with a Melact widget against the same app with the widget in Meltea and counts the
+widget's window listeners. Ten mutants of the bridges each break one.
+
 ## Events and makeProps
 
 A handler prop compiles to `fun event -> handler (React.Event.ofNative event)`: `ofNative` is the

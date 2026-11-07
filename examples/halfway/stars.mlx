@@ -1,0 +1,15 @@
+let[@react.component] make ~stars ~onRate =
+  let hover, setHover = React.useState (fun () -> None) in
+  let shown = Option.value hover ~default:stars in
+  <span className="stars" onMouseLeave=(fun _ -> setHover (fun _ -> None))>
+    (React.list
+       (List.init 5 (fun index ->
+            let value = index + 1 in
+            <button
+              key=(string_of_int value)
+              className=(if value <= shown then "star on" else "star")
+              onMouseEnter=(fun _ -> setHover (fun _ -> Some value))
+              onClick=(fun _ -> onRate value)>
+              (React.string "★")
+            </button>)))
+  </span>

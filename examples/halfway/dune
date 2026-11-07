@@ -1,0 +1,9 @@
+(melange.emit
+ (target output)
+ (libraries melact melact.meltea meltea melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (per_module
+   ((pps melange.ppx meltea-ppx) todos)
+   ((pps melange.ppx melact-ppx) main app stars stars_html))))

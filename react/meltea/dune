@@ -1,0 +1,9 @@
+(library
+ (name melact_meltea)
+ (public_name melact.meltea)
+ (wrapped false)
+ (optional)
+ (modes melange)
+ (libraries melact melact_runtime meltea melhole melange.dom)
+ (preprocess
+  (pps melange.ppx)))

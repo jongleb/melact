@@ -1,0 +1,15 @@
+external add_listener : string -> (Dom.event -> unit) -> unit = "addEventListener" [@@mel.scope "window"]
+external remove_listener : string -> (Dom.event -> unit) -> unit = "removeEventListener" [@@mel.scope "window"]
+
+let[@react.component] make ~label ~onPick =
+  let bumps, setBumps = React.useState (fun () -> 0) in
+  React.useEffect0 (fun () ->
+      let listener _ = () in
+      add_listener "resize" listener;
+      Some (fun () -> remove_listener "resize" listener));
+  <div className="picker">
+    <span>(React.string label)</span>
+    <output>(React.int bumps)</output>
+    <button className="bump" onClick=(fun _ -> setBumps (fun count -> count + 1))>(React.string "bump")</button>
+    <button className="pick" onClick=(fun _ -> onPick (label ^ "/" ^ string_of_int bumps))>(React.string "pick")</button>
+  </div>

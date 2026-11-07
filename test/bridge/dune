@@ -1,0 +1,10 @@
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact melact.meltea meltea testing melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (per_module
+   ((pps melange.ppx meltea-ppx) tally board)
+   ((pps melange.ppx melact-ppx) bridge_test picker picker_html))))

@@ -845,6 +845,63 @@ def family(p):
     return svg(p, 880, 450, "Two front ends, one compiler, one runtime: Meltea views in mlx with messages go through meltea-ppx, Melact components in reason-react style go through melact-ppx; both reach the shared compiler that turns static markup into templates, walks to every hole and compiles lists into keyed loops with selectors, and the shared runtime melhole, which knows no components: it clones templates, writes changed holes, moves keyed rows, delegates events and hydrates server HTML; meltea-ppx also finds the fields each update changes, melact-ppx gives hooks keys and alerts and writes makeProps; Melact adds its own runtime library with components, hooks and the scheduler", body)
 
 
+def bridges(p):
+    def card(x, w, title, subtitle, color, lines):
+        out = box(x, 0, w, 178, p["card"], p[color], rx=14, width=1.6, lift=True)
+        out += text(x + 16, 30, title, size=14.5, weight=800, cls=color)
+        out += text(x + 16, 50, subtitle, size=11.5, cls="muted")
+        for i, parts in enumerate(lines):
+            line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+            out += text(x + 16, 80 + i * 19, line, size=11.2, cls="mono", raw=True)
+        return out
+
+    def label(x, y, content, color, anchor="middle"):
+        return text(x, y, content, size=11, cls=f"mono {color}", weight=700, anchor=anchor)
+
+    body = card(0, 250, "Melact shell", "hooks, as before", "blue", [
+        [("let filter, setFilter =", "")],
+        [("  ", ""), ("React.useState", "blue"), (" … in", "")],
+        [("<", ""), ("MelteaProgram", "accent"), (" program=todos", "")],
+        [("  input=filter", "")],
+        [("  onReport=(fun n -> …) />", "")],
+    ])
+    body += card(315, 250, "Meltea screen", "model, messages, pure update", "accent", [
+        [("init input", "")],
+        [("update ", ""), ("message", "accent"), (" model", "")],
+        [("view model =", "")],
+        [("  <li>(", ""), ("MelactHtml.element", "blue"), ("", "")],
+        [("    (fun send -> <Stars …/>))", "")],
+    ])
+    body += card(630, 250, "Melact leaf", "not moved yet: still hooks", "blue", [
+        [("let hover, setHover =", "")],
+        [("  ", ""), ("React.useState", "blue"), (" … in", "")],
+        [("<span>", "")],
+        [("  <button onClick=(fun _ ->", "")],
+        [("    onRate value)> …", "")],
+    ])
+    for left, right, top, bottom, top_color, bottom_color in [(254, 311, "input", "report", "blue", "accent"),
+                                                              (569, 626, "props", "send", "accent", "blue")]:
+        middle = (left + right) // 2
+        body += arrow(p, left, 62, right, 62, top_color, flow=True, width=1.8)
+        body += label(middle, 50, top, top_color)
+        body += arrow(p, right, 134, left, 134, bottom_color, flow=True, width=1.8)
+        body += label(middle, 154, bottom, bottom_color)
+    notes = [
+        (125, "a new input: receive input,", "drawn in the same render"),
+        (440, "reports: report message model,", "then the latest onReport"),
+        (755, "callbacks send messages; effects", "run after the program's draw"),
+    ]
+    for x, first, second in notes:
+        body += text(x, 202, first, size=11, cls="muted", anchor="middle")
+        body += text(x, 218, second, size=11, cls="muted", anchor="middle")
+    body += box(0, 236, 880, 58, p["green_soft"], p["green"], rx=14, width=1.4)
+    body += text(440, 260, "one melhole for both: one listener per event type on document; the screen draws in Melact's own flush",
+                 size=12.5, cls="green", weight=700, anchor="middle")
+    body += text(440, 280, "unmounting either side stops subscriptions, drops late commands and runs the widget's cleanups",
+                 size=11.5, cls="muted", anchor="middle")
+    return svg(p, 880, 296, "Moving one screen at a time: a Melact shell with hooks renders MelteaProgram with a program, an input and onReport; the Meltea screen in the middle has init of the input, a pure update of message and model, and a view; a new input becomes the message receive input, drawn in the same render, and each message the program sends itself is offered to report message model and then to the latest onReport. Inside its view, MelactHtml.element shows a Melact leaf widget that still has hooks, with props from the model; the widget's callbacks send messages, and its effects run after the program's draw. Both sides share one melhole: one listener per event type on document, and the screen draws in Melact's own flush; unmounting either side stops subscriptions, drops late commands and runs the widget's cleanups", body)
+
+
 def compiled(p):
     char = 7.83
     cx = 655
@@ -1385,7 +1442,7 @@ def speed(p):
 
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed)
+               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed, bridges=bridges)
 
 HEADERS = dict(
     overview=("Melact in one picture", "Your reason-react code, compiled: no React underneath",
@@ -1436,6 +1493,8 @@ HEADERS = dict(
          "New code takes over the running model when the module's types are the same."),
     transition=("Transitions", "Enter, leave and move: CSS classes or View Transitions",
                 "As Vue's Transition and TransitionGroup, plus the browser's own View Transitions on request."),
+    bridges=("Moving to Meltea", "One screen at a time, hooks out, nothing rewritten at once",
+             "A Meltea program runs inside a Melact app, and a Melact widget inside a Meltea view, on one runtime."),
     roadmap=("Roadmap", "From templates to a release",
              "Every step is checked by property-based laws in CI."),
 )
