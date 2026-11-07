@@ -12,16 +12,16 @@ type step =
   | Filter of string  (** Picks a level in the filter, with an input and a change event. *)
   | Arrow_down
 
-let steps =
-  [ Click ("#expand-all", 0); Click ("#collapse-all", 0) ]
-  @ List.init 30 (fun count -> Click (".event-row .toggle", count * 11))
-  @ List.init 10 (fun _ -> Click ("#force-rerender", 0))
-  @ List.map (fun at -> Click (".header-cell", at)) [ 4; 4; 2 ]
-  @ [ Filter "warn" ]
-  @ List.init 30 (fun _ -> Arrow_down)
-  @ [ Click ("#expand-all", 0); Click ("#collapse-all", 0) ]
-
 let run () =
+  let steps =
+    [ Click ("#expand-all", 0); Click ("#collapse-all", 0) ]
+    @ List.init 30 (fun count -> Click (".event-row .toggle", count * 11))
+    @ List.init 10 (fun _ -> Click ("#force-rerender", 0))
+    @ List.map (fun at -> Click (".header-cell", at)) [ 4; 4; 2 ]
+    @ [ Filter "warn" ]
+    @ List.init 30 (fun _ -> Arrow_down)
+    @ [ Click ("#expand-all", 0); Click ("#collapse-all", 0) ]
+  in
   let ( let* ) promise next = Js.Promise.then_ next promise in
   let act run = adopt (React.act run) in
   let stubbed : unit -> unit =

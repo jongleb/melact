@@ -14,36 +14,6 @@ let projection outer =
   Array.unsafe_set out at (View.Input (marked outer item));
   Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix))
 
-let each =
-  let site = View.loop_site () in
-  let row_template = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "class"); Text ([], 0) |] in
-  fun items outer ->
-  View.each site View.Items items listed
-    (fun [@u] item _ ->
-      Counters.bump Refreshed;
-      View.with_key (Counters.seen Keyed item.key)
-        (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ outer.suffix) |]))
-    (projection outer) 2 [| View.Input outer |] View.Unselecting
-
-let rows =
-  let line_template =
-    View.template (Template.html "<li></li>")
-      (fun [@u] node ->
-        ( Template.element node,
-          View.attr_hole (Template.element node) "class",
-          View.text_hole { parent = node; before = Template.first_or_end node } ))
-      { placed = None; released = None; forgotten = None }
-  in
-  fun items outer ->
-  View.rows items listed line_template
-    (fun [@u] (root, _, _) -> root)
-    (fun [@u] (_, marking, text) item ->
-      Counters.bump Refreshed;
-      View.set_attr marking (Some (marked outer item));
-      View.set_text text (item.label ^ outer.suffix))
-    (fun [@u] item -> Counters.seen Keyed item.key)
-    (projection outer) 2 [| View.Input outer |] View.Unselecting
-
 external remove_root : Dom.element -> unit = "remove" [@@mel.send]
 
 let edited loop =
@@ -68,21 +38,21 @@ let edited loop =
   let reversed = Array.of_list (List.rev (Array.to_list renamed)) in
   let chosen = { plain with chosen = "k12" } in
   let first, rest =
-  ( (items, plain),
-  [
-    (items, plain);
-    (Array.copy items, plain);
-    (shorter, plain);
-    (longer, plain);
-    (adjacent, plain);
-    (far, plain);
-    (single, plain);
-    (single, chosen);
-    (single, { chosen = "k13"; suffix = "" });
-    (renamed, chosen);
-    (reversed, chosen);
-    (reversed, chosen);
-  ] )
+    ( (items, plain),
+      [
+        (items, plain);
+        (Array.copy items, plain);
+        (shorter, plain);
+        (longer, plain);
+        (adjacent, plain);
+        (far, plain);
+        (single, plain);
+        (single, chosen);
+        (single, { chosen = "k13"; suffix = "" });
+        (renamed, chosen);
+        (reversed, chosen);
+        (reversed, chosen);
+      ] )
   in
   let root = Counters.unobserved Testing.attached in
   ignore (Counters.take ());
@@ -93,4 +63,35 @@ let edited loop =
   Counters.unobserved (fun () -> remove_root root);
   counts
 
-let scenarios = [| ("View.rows, keyed edits", fun () -> edited rows); ("View.each, keyed edits", fun () -> edited each) |]
+let scenarios =
+  let each =
+    let site = View.loop_site () in
+    let row_template = Template.make ~html:"<li></li>" ~holes:[| Attr ([], "class"); Text ([], 0) |] in
+    fun items outer ->
+      View.each site View.Items items listed
+        (fun [@u] item _ ->
+          Counters.bump Refreshed;
+          View.with_key (Counters.seen Keyed item.key)
+            (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ outer.suffix) |]))
+        (projection outer) 2 [| View.Input outer |] View.Unselecting
+  in
+  let rows =
+    let line_template =
+      View.template (Template.html "<li></li>")
+        (fun [@u] node ->
+          ( Template.element node,
+            View.attr_hole (Template.element node) "class",
+            View.text_hole { parent = node; before = Template.first_or_end node } ))
+        { placed = None; released = None; forgotten = None }
+    in
+    fun items outer ->
+      View.rows items listed line_template
+        (fun [@u] (root, _, _) -> root)
+        (fun [@u] (_, marking, text) item ->
+          Counters.bump Refreshed;
+          View.set_attr marking (Some (marked outer item));
+          View.set_text text (item.label ^ outer.suffix))
+        (fun [@u] item -> Counters.seen Keyed item.key)
+        (projection outer) 2 [| View.Input outer |] View.Unselecting
+  in
+  [| ("View.rows, keyed edits", fun () -> edited rows); ("View.each, keyed edits", fun () -> edited each) |]

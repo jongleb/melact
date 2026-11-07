@@ -1,6 +1,6 @@
-// Runs the ratchet suite and rewrites test/ratchet/baseline.json to what it measured, but only
-// downwards: if any counter went up, or a run in the baseline is no longer run, it changes nothing.
-// New runs are added. Usage: node test/ratchet/lower.mjs [--no-build]
+// Runs the ratchet suite and rewrites test/ratchet/baseline.json to what it measured, only downwards:
+// if a counter went up or a recorded run is gone, it changes nothing. New runs are added; each test
+// file writes the runs it owns into RATCHET_OUT. Usage: node test/ratchet/lower.mjs [--no-build]
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,10 +17,7 @@ try {
     stdio: "inherit",
     env: { ...process.env, RATCHET_OUT: measuredDirectory },
   });
-} catch {
-  // The laws fail while the baseline is behind; the numbers they measured are compared below.
-}
-// Each test file of the suite writes the runs it owns into a file of its own.
+} catch {}
 const parts = ["programs.json", "table.json", "meltea.json"];
 const missing = parts.filter((part) => !existsSync(join(measuredDirectory, part)));
 if (missing.length > 0) {

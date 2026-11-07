@@ -36,11 +36,10 @@ type step = Send of message | Type of string | Pick of int
 
 type program = { size : int; steps : step list }
 
-let sifted sieve items = match sieve with Every -> items | Every_other -> List.filteri (fun index _ -> index mod 2 = 0) items
-
 let made from count = List.init count (fun index -> { key = "k" ^ string_of_int (from + index); label = "item " ^ string_of_int (from + index) })
 
 let update message model =
+  let sifted sieve items = match sieve with Every -> items | Every_other -> List.filteri (fun index _ -> index mod 2 = 0) items in
   let size = List.length model.items in
   let listed items = { model with items; shown = sifted model.sieve items } in
   match (message, size) with
@@ -79,7 +78,8 @@ let summary items =
 
 let view model =
   let () = Counters.bump Viewed in
-  <main>
+  let query = model.query in
+  <main title=query>
     <p className="tick">(Html.text (Counters.seen Evaluated (string_of_int model.tick)))</p>
     <input className="field" value=model.query onInput=(fun text -> Query text) />
     <ul>
@@ -134,16 +134,13 @@ let run program =
   Counters.unobserved (fun () -> remove_root root);
   counts
 
-let keyed_steps =
-  [
-    Send (Insert (100, 10)); Send (Remove (40, 5)); Send (Swap (3, 4)); Send (Swap (10, 80)); Send (Remove (20, 1));
-    Send (Insert (50, 1)); Send Reverse; Send Sift; Send Sift; Send (Rename 7); Pick 5; Pick 9; Send (Select None);
-    Send Tick; Send Same; Type "ab"; Type "far too long"; Send (Remove (0, 200)); Send (Insert (0, 30));
-  ]
-
 let scenarios =
   [|
-    ("keyed edits", { size = 100; steps = keyed_steps });
+    ("keyed edits", { size = 100; steps = [
+          Send (Insert (100, 10)); Send (Remove (40, 5)); Send (Swap (3, 4)); Send (Swap (10, 80)); Send (Remove (20, 1));
+          Send (Insert (50, 1)); Send Reverse; Send Sift; Send Sift; Send (Rename 7); Pick 5; Pick 9; Send (Select None);
+          Send Tick; Send Same; Type "ab"; Type "far too long"; Send (Remove (0, 200)); Send (Insert (0, 30));
+        ] });
     ("selection only", { size = 200; steps = [ Pick 1; Pick 2; Pick 150; Send (Select None); Send Tick; Send Same ] });
   |]
 

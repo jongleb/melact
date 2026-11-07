@@ -52,7 +52,6 @@ let comparison kind =
 let loaded : string -> 'build Js.Promise.t =
   [%mel.raw {|function (path) { return import(/* @vite-ignore */ process.cwd() + "/" + path); }|}]
 
-let ( let* ) promise next = Js.Promise.then_ next promise
 let path_of build file = "_build/default/test/ratchet/" ^ build ^ "/output/test/ratchet/" ^ build ^ "/" ^ file
 
 let seeded seed =
@@ -62,6 +61,7 @@ let seeded seed =
       (!state lsr 16) mod 1000)
 
 let sequenced runs =
+  let ( let* ) promise next = Js.Promise.then_ next promise in
   Js.Promise.then_
     (fun done_ -> Js.Promise.resolve (List.rev done_))
     (List.fold_left
@@ -200,11 +200,11 @@ let never_more_than_last_time ~part ~owned rows =
   in
   let shown verdict =
     match verdict with
-    | Raised { run; kind; was; now } -> "↑ " ^ run ^ " · " ^ kind ^ ": " ^ string_of_int was ^ " → " ^ string_of_int now
-    | Lowered { run; kind; was; now } -> "↓ " ^ run ^ " · " ^ kind ^ ": " ^ string_of_int was ^ " → " ^ string_of_int now
+    | Raised { run; kind; was; now } -> {js|↑ |js} ^ run ^ {js| · |js} ^ kind ^ ": " ^ string_of_int was ^ {js| → |js} ^ string_of_int now
+    | Lowered { run; kind; was; now } -> {js|↓ |js} ^ run ^ {js| · |js} ^ kind ^ ": " ^ string_of_int was ^ {js| → |js} ^ string_of_int now
     | Unrecorded run -> "+ " ^ run ^ ": not in the baseline yet"
     | Dropped run -> "- " ^ run ^ ": in the baseline, no longer run"
-    | Unknown { run; kind } -> "? " ^ run ^ " · " ^ kind ^ ": no such counter"
+    | Unknown { run; kind } -> "? " ^ run ^ {js| · |js} ^ kind ^ ": no such counter"
   in
   print
     (String.concat "\n"

@@ -75,46 +75,11 @@ type step =
 
 type program = { pieces : piece list; size : int; steps : step list }
 
-let sifted sieve items =
-  match sieve with Every -> items | Every_other -> Array.of_list (List.filteri (fun index _ -> index mod 2 = 0) (Array.to_list items))
-
 let made from count = Array.init count (fun index -> { key = "k" ^ string_of_int (from + index); label = "item " ^ string_of_int (from + index) })
 
 let started size =
   let items = made 0 size in
   { tick = 0; theme = "light"; items; shown = items; sieve = Every; selected = None; query = ""; opening = Closed; next = size }
-
-let reduce app message =
-  let size = Array.length app.items in
-  let listed items = { app with items; shown = sifted app.sieve items } in
-  match (message, size) with
-  | Tick, _ -> { app with tick = app.tick + 1 }
-  | Flip, _ -> { app with theme = (match app.theme with "light" -> "dark" | _ -> "light") }
-  | Insert (at, count), _ ->
-      let at = at mod (size + 1) in
-      { (listed (Array.concat [ Array.sub app.items 0 at; made app.next count; Array.sub app.items at (size - at) ])) with next = app.next + count }
-  | Remove (at, count), _ when size > 0 ->
-      let at = at mod size in
-      let count = min count (size - at) in
-      listed (Array.append (Array.sub app.items 0 at) (Array.sub app.items (at + count) (size - at - count)))
-  | Swap (first, second), _ when size > 1 ->
-      let first = first mod size and second = second mod size in
-      let items = Array.copy app.items in
-      items.(first) <- app.items.(second);
-      items.(second) <- app.items.(first);
-      listed items
-  | Reverse, _ -> listed (Array.of_list (List.rev (Array.to_list app.items)))
-  | Sift, _ ->
-      let sieve = match app.sieve with Every -> Every_other | Every_other -> Every in
-      { app with sieve; shown = sifted sieve app.items }
-  | Rename at, _ when size > 0 ->
-      let at = at mod size in
-      listed (Array.mapi (fun index item -> match index = at with true -> { item with label = item.label ^ "'" } | false -> item) app.items)
-  | Select at, _ ->
-      { app with selected = Option.bind at (fun at -> match size with 0 -> None | _ -> Some app.items.(at mod size).key) }
-  | Query query, _ -> { app with query = (match String.length query > 6 with true -> app.query | false -> query) }
-  | Pop, _ -> { app with opening = (match app.opening with Open -> Closed | Closed -> Open) }
-  | (Remove _ | Swap _ | Rename _), _ -> app
 
 let app_context = React.createContext (started 0)
 let theme_context = React.createContext "none"
@@ -182,7 +147,7 @@ module Measure = struct
     let self = React.useRef Js.Nullable.null in
     Counters.bump Rendered;
     let top = Option.fold ~none:0 ~some:offset_top (Js.Nullable.toOption self.current) in
-    <i ref=(ReactDOM.Ref.domRef self) className=(match top > 9999 with true -> "far " ^ theme | false -> theme)>
+    <i title=theme ref=(ReactDOM.Ref.domRef self) className=(match top > 9999 with true -> "far " ^ theme | false -> theme)>
       (React.string (Counters.seen Evaluated (string_of_int tick)))
     </i>
 end
@@ -228,7 +193,7 @@ module Reader = struct
   let[@react.component] make () =
     let theme = React.useContext theme_context in
     Counters.bump Rendered;
-    <p className=("reader " ^ theme)><Label text=theme /></p>
+    <p title=theme className=("reader " ^ theme)><Label text=theme /></p>
 end
 
 module Debounced = struct
@@ -422,6 +387,40 @@ let () =
 
 module App = struct
   let[@react.component] make ~pieces ~size =
+    let reduce app message =
+      let sifted sieve items =
+        match sieve with Every -> items | Every_other -> Array.of_list (List.filteri (fun index _ -> index mod 2 = 0) (Array.to_list items)) in
+      let size = Array.length app.items in
+      let listed items = { app with items; shown = sifted app.sieve items } in
+      match (message, size) with
+      | Tick, _ -> { app with tick = app.tick + 1 }
+      | Flip, _ -> { app with theme = (match app.theme with "light" -> "dark" | _ -> "light") }
+      | Insert (at, count), _ ->
+          let at = at mod (size + 1) in
+          { (listed (Array.concat [ Array.sub app.items 0 at; made app.next count; Array.sub app.items at (size - at) ])) with next = app.next + count }
+      | Remove (at, count), _ when size > 0 ->
+          let at = at mod size in
+          let count = min count (size - at) in
+          listed (Array.append (Array.sub app.items 0 at) (Array.sub app.items (at + count) (size - at - count)))
+      | Swap (first, second), _ when size > 1 ->
+          let first = first mod size and second = second mod size in
+          let items = Array.copy app.items in
+          items.(first) <- app.items.(second);
+          items.(second) <- app.items.(first);
+          listed items
+      | Reverse, _ -> listed (Array.of_list (List.rev (Array.to_list app.items)))
+      | Sift, _ ->
+          let sieve = match app.sieve with Every -> Every_other | Every_other -> Every in
+          { app with sieve; shown = sifted sieve app.items }
+      | Rename at, _ when size > 0 ->
+          let at = at mod size in
+          listed (Array.mapi (fun index item -> match index = at with true -> { item with label = item.label ^ "'" } | false -> item) app.items)
+      | Select at, _ ->
+          { app with selected = Option.bind at (fun at -> match size with 0 -> None | _ -> Some app.items.(at mod size).key) }
+      | Query query, _ -> { app with query = (match String.length query > 6 with true -> app.query | false -> query) }
+      | Pop, _ -> { app with opening = (match app.opening with Open -> Closed | Closed -> Open) }
+      | (Remove _ | Swap _ | Rename _), _ -> app
+    in
     let app, send = React.useReducer reduce (started size) in
     sender := send;
     Counters.bump Rendered;
