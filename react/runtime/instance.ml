@@ -261,6 +261,7 @@ let front_node instance after =
 let patching = ref At_once
 
 let put_off = ref None_put_off
+let committed = audience ()
 
 let instances =
   View.hosting
@@ -357,6 +358,17 @@ let render instance =
       | Failed error -> catching.recover error)
 
 let commit (position : Template.position) instance =
+  (match (!patching, instance.pending) with
+  | At_once, _ -> ()
+  | Next_round, [] -> join committed instance
+  | Next_round, _ :: _ ->
+      let rec below ancestor =
+        match ancestor with
+        | None -> ()
+        | Some above -> ( match member committed above with true -> put_off := Some_put_off | false -> below above.parent)
+      in
+      below instance.parent;
+      join committed instance);
   (match (Js.Null.toOption (View.front instance.output Js.null), instance.region) with
   | Some _, Nodes | None, Marker _ -> ()
   | Some _, Marker node ->
@@ -494,6 +506,7 @@ let rec settle () =
                List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced) in
         let queued = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
         put_off := None_put_off;
+        disband committed;
         let waiting = ref [] in
         let rec rendering round =
           let pending =
@@ -511,8 +524,39 @@ let rec settle () =
           in
           match pending with
           | [] -> ()
-          | pending ->
+          | pending -> (
               dirty := [];
+              let unchanged checks =
+                List.for_all
+                  (fun (Checking (cell, check)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
+                  checks
+              in
+              match
+                List.fold_left
+                  (fun found instance ->
+                    match (found, instance.kind) with
+                    | Component.Pure, Renders { component = { rendering = Component.Pure; _ }; _ } -> Component.Pure
+                    | (Component.Pure | Component.Impure), (Renders _ | Provides _ | Catches _ | Suspends _) -> Component.Impure)
+                  Component.Pure pending
+              with
+              | Component.Pure ->
+                  within patching Next_round (fun () ->
+                      List.iter
+                        (fun (_, instance) ->
+                          match instance.status with
+                          | Dirty (Stated checks) when unchanged checks -> instance.status <- Clean
+                          | Dirty (Forced | Stated _) -> (
+                              let result = match render instance with child -> Ok child | exception error -> Error error in
+                              match instance.status with
+                              | Unmounted -> ()
+                              | Clean | Dirty _ -> wrote (position_of instance) instance result)
+                          | Clean | Unmounted -> ())
+                        (ordered
+                           (List.filter
+                              (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false)
+                              pending)));
+                  rendering `Later
+              | Component.Impure ->
               let round = audience () in
               List.iter
                 (fun instance -> match instance.status with Dirty _ -> join round instance | Clean | Unmounted -> ())
@@ -536,10 +580,7 @@ let rec settle () =
                 List.filter_map
                   (fun (_, instance) ->
                     match instance.status with
-                    | Dirty (Stated checks)
-                      when List.for_all
-                             (fun (Checking (cell, check)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
-                             checks ->
+                    | Dirty (Stated checks) when unchanged checks ->
                         instance.status <- Clean;
                         None
                     | Dirty (Forced | Stated _) -> Some (instance, match render instance with child -> Ok child | exception error -> Error error)
@@ -556,7 +597,7 @@ let rec settle () =
               dirty :=
                 List.filter (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false) later
                 @ !dirty;
-              rendering `Later
+              rendering `Later)
         in
         rendering `First;
         dirty := !waiting @ !dirty;
@@ -636,6 +677,7 @@ let rec settle () =
                 in
                 queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)
               batches);
+        disband committed;
         View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
@@ -769,11 +811,11 @@ let component definition inputs render =
                 | (Clean | Dirty _ | Unmounted), _ -> (
                     rendered.inputs <- inputs;
                     rendered.render <- render;
-                    match (!patching, instance.status) with
-                    | Next_round, (Clean | Dirty _) ->
+                    match (!patching, instance.status, definition.rendering, !View.patch_order) with
+                    | Next_round, (Clean | Dirty _), Component.Impure, _ | Next_round, (Clean | Dirty _), _, View.Out_of_order ->
                         put_off := Some_put_off;
                         mark_dirty instance
-                    | (At_once | Next_round), _ -> refresh position instance));
+                    | (At_once | Next_round), _, (Component.Pure | Component.Impure), _ -> refresh position instance));
                 Some live
             | Renders _ | Provides _ | Catches _ | Suspends _ -> None)
         | None -> None)

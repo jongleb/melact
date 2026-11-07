@@ -154,7 +154,11 @@ let component ~loc ~name ~props_constructor expression =
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
   let definition =
-    lazy (Hoist.hoist ~loc "component" [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]])
+    lazy
+      (Hoist.hoist ~loc "component"
+         (match Graph.rendering expression with
+         | Graph.Pure -> [%expr Melact_runtime.Component.pure ~name:[%e estring ~loc name]]
+         | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
   in
   let read_fields =
     List.concat_map

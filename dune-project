@@ -80,7 +80,8 @@
   (ppxlib
    (>= 0.39.0))
   (melhole
-   (= :version))))
+   (= :version))
+  (qcheck-core :with-test)))
 
 (package
  (name meltea)

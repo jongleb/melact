@@ -454,7 +454,7 @@ A component with optional, defaulted and children props, and its signature:
   $ ./pp.exe -impl card.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_component_1 = Melact_runtime.Component.make ~name:"Card.make"
+  let __melhole_component_1 = Melact_runtime.Component.pure ~name:"Card.make"
   include
     struct
       type make_props =
@@ -573,7 +573,7 @@ A component with optional, defaulted and children props, and its signature:
       external make : make_props -> React.element = "%identity"
     end
   let __melhole_component_4 =
-    Melact_runtime.Component.make ~name:"Card.nothing"
+    Melact_runtime.Component.pure ~name:"Card.nothing"
   include
     struct
       type nothing_props =
@@ -614,7 +614,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   $ ./pp.exe -impl fancy.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_component_1 = Melact_runtime.Component.make ~name:"Fancy.make"
+  let __melhole_component_1 = Melact_runtime.Component.pure ~name:"Fancy.make"
   include
     struct
       type make_props =
@@ -858,7 +858,7 @@ Reason input:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 =
-    Melact_runtime.Component.make ~name:"Greeting.make"
+    Melact_runtime.Component.pure ~name:"Greeting.make"
   include
     struct
       type make_props =
@@ -963,7 +963,7 @@ mlx input:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_component_1 =
-    Melact_runtime.Component.make ~name:"Greeting.make"
+    Melact_runtime.Component.pure ~name:"Greeting.make"
   include
     struct
       type make_props =
