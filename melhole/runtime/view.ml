@@ -1525,8 +1525,21 @@ let set_style (hole : Hole.style) value =
       | true, _ -> Dom_api.set_style_property style name value ""
       | false, _ -> Dom_api.set_style style name value
     in
-    List.iter (fun (name, _) -> written name "") hole.value;
-    List.iter (fun (name, value) -> written name value) value;
+    List.iter
+      (fun (name, _) ->
+        match List.exists (fun (next, _) -> String.equal next name) value with
+        | true -> ()
+        | false -> written name "")
+      hole.value;
+    let shown name properties =
+      List.fold_left (fun found (named, value) -> match String.equal named name with true -> Some value | false -> found) None properties
+    in
+    List.iter
+      (fun (name, next) ->
+        match (shown name hole.value, shown name value) with
+        | Some last, Some wanted when String.equal last next && String.equal wanted next -> ()
+        | (Some _ | None), _ -> written name next)
+      value;
     hole.value <- value)
 
 let classes_hole element : Hole.classes = { element; value = [] }
