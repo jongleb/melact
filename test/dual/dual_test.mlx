@@ -1116,6 +1116,31 @@ module Lit = struct
     <Opened_provider value=opened><Lit_grid count /></Opened_provider>
 end
 
+let sized_send = ref (fun (_ : string -> string) -> ())
+
+module Sized = struct
+  let[@react.component] make ~start =
+    let size, setSize = React.useState (fun () -> start) in
+    sized_send := setSize;
+    let pick event =
+      let value = (React.Event.Form.target event)##value in
+      setSize (fun _ -> value)
+    in
+    <div>
+      <select id="literal" value=size onChange=pick>
+        <option value="s">(React.string "Small")</option>
+        <option value="m">(React.string "Medium")</option>
+        <option value="l">(React.string "Large")</option>
+      </select>
+      <select id="mapped" value=size onChange=pick>
+        (React.array
+           (Array.map
+              (fun (value, label) -> <option key=value value>(React.string label)</option>)
+              [| ("s", "Small"); ("m", "Medium"); ("l", "Large") |]))
+      </select>
+    </div>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -2850,6 +2875,29 @@ let () =
                    step (remaining - 1) next
              in
              step 4 false))
+        [%mel.obj { numRuns = 40 }]));
+  describe "controlled selects" (fun () ->
+    test_async "show their value from mount on, with options written or mapped" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:8) (fun values ->
+             let tape = tape values in
+             let sizes = [| "s"; "m"; "l" |] in
+             let start = sizes.(draw tape 3) in
+             let* root, client = mount <Sized start /> in
+             let shown () = (value_of (select root "#literal"), value_of (select root "#mapped")) in
+             let first = shown () in
+             let rec step remaining seen =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (first, List.map snd seen) |. to_equal ((start, start), List.map (fun (size, _) -> (size, size)) seen);
+                   finish ()
+               | _ ->
+                   let size = sizes.(draw tape 3) in
+                   let* () = act (fun () -> !sized_send (fun _ -> size)) in
+                   step (remaining - 1) ((size, shown ()) :: seen)
+             in
+             step 4 []))
         [%mel.obj { numRuns = 40 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->
