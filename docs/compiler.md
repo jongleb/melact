@@ -1057,7 +1057,8 @@ The laws found two bugs in Melact's ordering of effects. The fixes apply to ever
   the tree. This needs no DOM reads.
 - Effects across a portal were sorted by document position instead of by the tree. The sort now
   runs a descendant's effects before its ancestor's. Inside a portal it orders by the portal's
-  place, an empty text node, and then by position within the portal.
+  place, an empty text node, and then by position within the portal. This order is installed by
+  melact.compat, through `Instance.tree_order`, so apps without its portals do not carry it.
 
 Laws ([`test/compat`](../test/compat)). They are fast-check runs in jsdom: the same app on npm's
 React 18 and on the shim, or `mixed.mlx` built with reason-react and with Melact, must show the same
@@ -1095,9 +1096,10 @@ written among the library component's children. Melact does not render again a c
 are unchanged, so effects without dependencies, and functions passed as components, behave as with
 React Compiler rather than as with React.
 
-On this spike's measurements (esbuild, minified, gzip -9), a counter on the shim is 21.7 kB, against
-45.6 kB on React 18 and react-dom. react-select is 53.0 kB against 75.8 kB, Radix Popover 48.3
-against 69.9, react-window 28.9 against 52.1.
+On this spike's measurements (esbuild, minified, gzip -9), a counter on the shim is 23.4 kB, against
+45.6 kB on React 18 and react-dom. react-select is 54.6 kB against 75.8 kB, Radix Popover 50.0
+against 69.9, react-window 30.6 against 52.1. The two ordering fixes add 0.9 kB (0.34 kB gzip) to
+every Melact app; Meltea is unchanged.
 
 ## Laws
 
