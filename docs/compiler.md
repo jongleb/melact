@@ -781,6 +781,16 @@ drops it where it costs work:
   keeps the instances committed in the pass and looks up the ancestors of the next one) and sorts
   only then; before, any put-off child forced the sort, a walk over the whole document.
 
+An impure component that reads a context renders, when the context changes during a flush's
+writes, right where its provider is patched: before the provider's subtree is written, so it reads
+the page as the update found it, as React's render phase does; the scheduler keeps the result and
+writes it in its round, unless new props or new state arrive first. The event table of the corpus,
+whose rows read `offsetTop` and the selection from a context, forced 30 layouts over its scenario
+and now forces none (React 18: 4, in its layout effects), and the ratchet's generated programs go
+from 103 forced layouts more than React to 96. Components given new props by a parent's write
+still render after that write; doing better needs a refresh that hands children their props before
+it writes, which is not built yet.
+
 A root rendered inside a discrete event now runs its passive effects at the next microtask, as React
 18 runs those of a commit in its sync lane, instead of after the next paint. Found while measuring:
 the app benchmark's first click on a row, after mounting with a click, raced the mount's effects.

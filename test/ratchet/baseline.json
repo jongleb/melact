@@ -224,7 +224,7 @@
     "attributes": 5,
     "texts": 5,
     "created nodes": 46,
-    "forced layouts": 4,
+    "forced layouts": 1,
     "frame layouts": 7,
     "layout reads": 121,
     "renders": 173,
@@ -447,7 +447,7 @@
     "row refreshes": 215
   },
   "Law A: Melact's excess over React 18 on the generated programs": {
-    "forced layouts": 103,
+    "forced layouts": 96,
     "keys": 63,
     "row refreshes": 305
   },
@@ -459,12 +459,10 @@
     "texts": 1466,
     "properties": 1,
     "created nodes": 17062,
-    "forced layouts": 30,
     "frame layouts": 70,
     "layout reads": 11498
   },
   "Law A: Melact's excess over React 18 on the event table": {
-    "insertions": 1,
-    "forced layouts": 30
+    "insertions": 1
   }
 }

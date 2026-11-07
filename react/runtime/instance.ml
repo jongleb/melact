@@ -56,7 +56,11 @@ type instance = {
   mutable teardown : ending list;  (** Run on unmount, newest first. *)
   mutable renders : int;  (** How many times it started rendering. *)
   mutable providers : instance list;  (** The providers above it that it has read, found once: they stay while it does. *)
+  mutable prepared : prepared;
 }
+
+(** A render made ahead of its round, while the page was still as the update found it. *)
+and prepared = Unprepared | Prepared of (View.child, exn) result
 
 and kind =
   | Renders of {
@@ -360,6 +364,7 @@ let reading instance =
 
 let mark_dirty instance =
   reading instance;
+  instance.prepared <- Unprepared;
   match instance.status with
   | Clean ->
       instance.status <- Dirty Forced;
@@ -376,6 +381,7 @@ let sourced instance bits =
 
 let mark_sourced instance bits =
   reading instance;
+  instance.prepared <- Unprepared;
   match instance.status with
   | Clean ->
       sourced instance bits;
@@ -409,6 +415,7 @@ let run_phases cleanups runs =
   run_jobs Run pending_runs
 
 let render instance =
+  instance.prepared <- Unprepared;
   let sources =
     match instance.status with
     | Dirty Forced | Clean | Unmounted -> Every
@@ -712,7 +719,15 @@ let rec settle () =
                     | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks ->
                         instance.status <- Clean;
                         None
-                    | Dirty (Forced | Sourced _) -> Some (instance, match render instance with child -> Ok child | exception error -> Error error)
+                    | Dirty (Forced | Sourced _) ->
+                        Some
+                          ( instance,
+                            match instance.prepared with
+                            | Prepared result ->
+                                instance.prepared <- Unprepared;
+                                instance.status <- Clean;
+                                result
+                            | Unprepared -> ( match render instance with child -> Ok child | exception error -> Error error) )
                     | Clean | Unmounted -> None)
                   roots
               in
@@ -931,6 +946,7 @@ let born kind =
       teardown = [];
       renders = 0;
       providers = [];
+      prepared = Unprepared;
     }
   in
   instance
@@ -1012,8 +1028,23 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
                 | Some Equal ->
                     if not (Dom_api.same provision.value value) then (
                       provision.value <- value;
-                      each_reader provision.consumers (fun bits reader -> mark_sourced reader bits);
-                      clear_readers provision.consumers);
+                      let marked = ref [] in
+                      each_reader provision.consumers (fun bits reader ->
+                          mark_sourced reader bits;
+                          marked := reader :: !marked);
+                      clear_readers provision.consumers;
+                      match !patching with
+                      | At_once -> ()
+                      | Next_round ->
+                          List.iter
+                            (fun reader ->
+                              match (reader.kind, reader.status) with
+                              | Renders { component = { rendering = Component.Impure; _ }; _ }, Dirty _ ->
+                                  let result = match render reader with child -> Ok child | exception error -> Error error in
+                                  reader.status <- Dirty Forced;
+                                  reader.prepared <- Prepared result
+                              | (Renders _ | Provides _ | Catches _ | Suspends _), (Clean | Dirty _ | Unmounted) -> ())
+                            (List.rev !marked));
                     provision.children <- children;
                     refresh position instance;
                     Some live
@@ -1081,6 +1112,7 @@ let invalidate_state instance cell check bit =
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
   | None ->
       reading instance;
+      instance.prepared <- Unprepared;
       (match instance.status with
       | Clean ->
           instance.status <- Dirty (Sourced { mask = Bits 0; checks = [ Checking (cell, check, bit) ] });
