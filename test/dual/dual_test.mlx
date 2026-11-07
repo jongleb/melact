@@ -1141,6 +1141,36 @@ module Sized = struct
     </div>
 end
 
+(** Which way a count moved at its last change. *)
+type trend = Steady | Rising | Falling
+
+let trend_name trend = match trend with Steady -> "steady" | Rising -> "rising" | Falling -> "falling"
+let trend_send = ref (fun (_ : int -> int) -> ())
+
+module Trend = struct
+  let[@react.component] make ~count =
+    let previous, setPrevious = React.useState (fun () -> count) in
+    let trend, setTrend = React.useState (fun () -> Steady) in
+    (match previous = count with
+    | true -> ()
+    | false ->
+        setPrevious (fun _ -> count);
+        setTrend (fun _ -> match count > previous with true -> Rising | false -> Falling));
+    React.useEffect1
+      (fun () ->
+        log (trend_name trend);
+        None)
+      [| count |];
+    <p>(React.string (string_of_int count ^ " " ^ trend_name trend))</p>
+end
+
+module Trending = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    trend_send := setCount;
+    <Trend count />
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -2898,6 +2928,29 @@ let () =
                    step (remaining - 1) ((size, shown ()) :: seen)
              in
              step 4 []))
+        [%mel.obj { numRuns = 40 }]));
+  describe "state set while rendering, to follow a prop" (fun () ->
+    test_async "renders again at once with that state, and its effects see the last render" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:10) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Trending /> in
+             let rec step remaining count seen expected =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (List.rev seen) |. to_equal (List.rev expected);
+                   finish ()
+               | _ ->
+                   let next = match draw tape 2 with 0 -> count + 1 | _ -> count - 1 in
+                   let* () = act (fun () -> !trend_send (fun _ -> next)) in
+                   let trend = match next > count with true -> "rising" | false -> "falling" in
+                   step (remaining - 1) next
+                     ((text_content root, take ()) :: seen)
+                     ((string_of_int next ^ " " ^ trend, [ trend ]) :: expected)
+             in
+             ignore (take ());
+             step 6 0 [] []))
         [%mel.obj { numRuns = 40 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->

@@ -59,6 +59,10 @@ val start_effect : instance -> timing -> 'deps -> (unit -> (unit -> unit) option
 val deps : 'deps effect_hook -> 'deps
 val rerun : 'deps effect_hook -> 'deps -> (unit -> (unit -> unit) option) -> unit
 
+(** Whether an effect was queued by the render under way, which a render that set its own state
+    runs again: then it takes that attempt's effect whatever its dependencies. *)
+val queued : 'deps effect_hook -> [ `This_render | `Earlier ]
+
 (** The value of the instance's next hook when an earlier render made it, else [None]: then [put] makes it. *)
 val found : instance -> 'a Hook.key -> 'a option
 

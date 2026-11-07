@@ -328,7 +328,7 @@ An element is a writer. A component writes itself when its parent writes it: it 
 fresh hook slots (`useState` and `useReducer` give their initial state, `useMemo`, `useCallback` and
 `useRef` their first value, `useContext` the value of the provider being written around it), and
 effects of every kind never run. A state set while the component renders makes it render again with
-the update, as React's server does (Melact's client refuses such a set), and a dispatch afterwards
+the update, as React's server and Melact's client do, and a dispatch afterwards
 is dropped. Handlers and refs are typed and dropped. A Suspense boundary is written as
 `<!--$-->…<!--/$-->`; if a child throws, what it wrote is taken back and the boundary is left to the
 client, `<!--$!--><template></template>`, the fallback, `<!--/$-->`, as React writes it in
@@ -579,6 +579,17 @@ its argument (`List`, `Belt.Array.keep`, `Js.Array.map`, …); `let total = ref 
 `total := …` is computed on every render. A kept `let` carries `[@melhole.cached value]` until the
 scope traversal records `value`, so a loop whose row function is such a `let` still compiles. Two
 Melact laws count the computations, and mutants that ignore `Frozen` or keep no `let` break them.
+
+### State set while rendering
+
+React's way to adjust state when a prop changes is to set it while rendering: the component renders
+again at once with the update, before any child, at most 25 times. Melact does the same: a setter
+called by the component that is rendering marks it to render again, any other setter called while
+rendering still throws. An effect queued by the attempt that set the state takes the next attempt's
+closure, whatever its dependencies, so it sees the last render, as React's does. A dual law follows
+a prop through random changes: the text and what the effect saw match React; a mutant that keeps
+the first attempt's effect breaks it. A component that sets its own state on every render throws
+"too many re-renders", as React does.
 
 ### Reading layout while rendering
 

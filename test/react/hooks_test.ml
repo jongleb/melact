@@ -333,5 +333,5 @@ let () =
           let _ = fresh (order ()) in
           !flip (fun _ -> true);
           expect (fun () -> Instance.flush ()) |. to_throw "different order");
-      test "reject a setter called while rendering" (fun () ->
-          expect (fun () -> fresh (eager ())) |. to_throw "while a component was rendering"))
+      test "reject a component that sets its own state on every render, as React does" (fun () ->
+          expect (fun () -> fresh (eager ())) |. to_throw "too many re-renders"))

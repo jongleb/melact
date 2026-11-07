@@ -33,6 +33,7 @@ type instance = {
   mutable region : region;
   mutable pending : job list;  (** Effects of the last render, newest first. *)
   mutable teardown : ending list;  (** Run on unmount, newest first. *)
+  mutable renders : int;  (** How many times it started rendering. *)
 }
 
 and kind =
@@ -109,6 +110,7 @@ and 'deps effect_hook = {
   mutable deps : 'deps;
   mutable cleanup : (unit -> unit) option;
   mutable run : unit -> (unit -> unit) option;  (** The effect of the render that last changed [deps]. *)
+  mutable queued_in : int;  (** The render of its host that last queued it. *)
 }
 
 (** What an instance lets go of when it unmounts. *)
@@ -202,6 +204,11 @@ let thrown error =
   | other -> raise other
 
 let rendering = ref None
+
+(** Whether the component rendering now set its own state while rendering, so it renders again. *)
+type rerendering = Once | Again
+
+let rerendering = ref Once
 let recovery =
   ref
     {
@@ -328,10 +335,20 @@ let run_phases cleanups runs =
 
 let render instance =
   instance.status <- Clean;
+  instance.renders <- instance.renders + 1;
   match instance.kind with
   | Renders definition ->
-      Hook.rewind instance.slots;
-      within rendering (Some instance) definition.render
+      let rec attempt count =
+        Hook.rewind instance.slots;
+        rerendering := Once;
+        let child = within rendering (Some instance) definition.render in
+        match (!rerendering, count < 25) with
+        | Once, _ -> child
+        | Again, true -> attempt (count + 1)
+        | Again, false ->
+            Js.Exn.raiseError "melact: too many re-renders: a component sets its own state on every render"
+      in
+      attempt 1
   | Provides provision -> provision.children
   | Suspends suspending -> suspending.wanted
   | Catches catching -> (
@@ -686,6 +703,7 @@ let born kind =
       region = Nodes;
       pending = [];
       teardown = [];
+      renders = 0;
     }
   in
   instance
@@ -801,6 +819,7 @@ let queue_render () =
 
 let invalidate instance =
   match !rendering with
+  | Some current when current == instance -> rerendering := Again
   | Some _ ->
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
   | None ->
@@ -809,6 +828,7 @@ let invalidate instance =
 
 let invalidate_state instance cell check =
   match !rendering with
+  | Some current when current == instance -> rerendering := Again
   | Some _ ->
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
   | None ->
@@ -824,7 +844,7 @@ let after_commit instance timing phase work =
   instance.pending <- Work { owner = instance; timing; phase; work } :: instance.pending
 
 let start_effect instance timing deps run =
-  let made = { host = instance; when_run = timing; deps; cleanup = None; run } in
+  let made = { host = instance; when_run = timing; deps; cleanup = None; run; queued_in = instance.renders } in
   instance.teardown <- Finishes made :: instance.teardown;
   instance.pending <- Effect made :: instance.pending;
   made
@@ -834,7 +854,13 @@ let deps hook = hook.deps
 let rerun hook deps run =
   hook.deps <- deps;
   hook.run <- run;
-  hook.host.pending <- Effect hook :: hook.host.pending
+  match hook.queued_in = hook.host.renders with
+  | true -> ()
+  | false ->
+      hook.queued_in <- hook.host.renders;
+      hook.host.pending <- Effect hook :: hook.host.pending
+
+let queued hook = match hook.queued_in = hook.host.renders with true -> `This_render | false -> `Earlier
 let found instance key = Hook.found instance.slots key
 let put instance key value = Hook.put instance.slots key value
 

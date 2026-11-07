@@ -153,7 +153,10 @@ let useReducerWithMapState key reduce initial map =
 let use_effect timing unchanged key run deps =
   let instance = Instance.current () in
   match Instance.found instance key with
-  | Some hook -> if not (unchanged (Instance.deps hook) deps) then Instance.rerun hook deps run
+  | Some hook -> (
+      match Instance.queued hook with
+      | `This_render -> Instance.rerun hook deps run
+      | `Earlier -> if not (unchanged (Instance.deps hook) deps) then Instance.rerun hook deps run)
   | None -> Instance.put instance key (Instance.start_effect instance timing deps run)
 
 let memoize unchanged key compute deps =
