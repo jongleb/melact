@@ -877,8 +877,202 @@ let mapper =
 
 let structure items =
   let loc = Location.none in
+  let hooked expression =
+    let finder =
+      object
+        inherit [[ `Hooked | `Pure ]] Ast_traverse.fold as super
+
+        method! expression expression found =
+          match (found, expression.pexp_desc) with
+          | `Hooked, _ -> `Hooked
+          | `Pure, Pexp_ident { txt; _ } -> (
+              let name = Longident.last_exn txt in
+              match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
+              | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> `Hooked
+              | true | false -> `Pure)
+          | `Pure, _ -> super#expression expression found
+      end
+    in
+    finder#expression expression `Pure
+  in
+  let jsx expression = Option.is_some (Element.without_jsx expression.pexp_attributes) in
+  let inlinable item =
+    match item.pstr_desc with
+    | Pstr_value (Nonrecursive, [ binding ])
+      when Option.is_some (without_component binding.pvb_attributes)
+           && (match binding.pvb_pat.ppat_desc with Ppat_var { txt = "make"; _ } -> true | _ -> false) -> (
+        let rec unmemo expression =
+          match expression.pexp_desc with
+          | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "memo"); _ }; _ }, [ (Nolabel, inner) ]) ->
+              unmemo inner
+          | _ -> expression
+        in
+        match (unmemo binding.pvb_expr).pexp_desc with
+        | Pexp_function (params, None, Pfunction_body body) -> (
+            let props =
+              List.filter_map
+                (fun param ->
+                  match param.pparam_desc with
+                  | Pparam_val (Labelled label, None, { ppat_desc = Ppat_var { txt; _ }; _ })
+                    when not (List.mem label [ "key"; "children"; "ref" ]) ->
+                      Some (`Prop (label, txt))
+                  | Pparam_val (Nolabel, None, { ppat_desc = Ppat_construct ({ txt = Lident "()"; _ }, None); _ }) -> Some `Unit
+                  | Pparam_val _ | Pparam_newtype _ -> Some `Other)
+                params
+            in
+            let named = List.filter_map (fun prop -> match prop with `Prop pair -> Some pair | `Unit | `Other -> None) props in
+            match
+              ( List.exists (fun prop -> match prop with `Other -> true | `Prop _ | `Unit -> false) props,
+                hooked body,
+                body.pexp_desc,
+                jsx body,
+                Free.of_expression body )
+            with
+            | false, `Pure, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident _; _ }; _ }, _), true, Reads reads ->
+                Some (named, body, List.filter (fun name -> not (List.mem_assoc name (List.map (fun (l, v) -> (v, l)) named))) reads)
+            | _ -> None)
+        | _ -> None)
+    | _ -> None
+  in
+  let inliner =
+    object (self)
+      inherit Scope.mapper as super
+      val mutable known : (string * ((string * string) list * expression * string list)) list = []
+      val mutable shadowed : (string * string list) list = []
+
+      method! structure_item item =
+        let mapped = super#structure_item item in
+        (match mapped.pstr_desc with
+        | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure [ single ]; _ }; _ } ->
+            known <- List.remove_assoc name known;
+            shadowed <- List.remove_assoc name shadowed;
+            Option.iter
+              (fun component ->
+                known <- (name, component) :: known;
+                shadowed <- (name, []) :: shadowed)
+              (inlinable single)
+        | Pstr_module { pmb_name = { txt = Some name; _ }; _ } ->
+            known <- List.remove_assoc name known;
+            shadowed <- List.remove_assoc name shadowed
+        | Pstr_value (_, bindings) ->
+            let names = List.concat_map (fun binding -> Free.bound binding.pvb_pat) bindings in
+            shadowed <- List.map (fun (name, list) -> (name, names @ list)) shadowed
+        | _ -> ());
+        mapped
+
+      method private expanded expression =
+        match expression.pexp_desc with
+        | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident name, "createElement"); _ }; _ }, arguments)
+          when jsx expression -> (
+            match List.assoc_opt name known with
+            | None -> None
+            | Some (named, body, reads) -> (
+                let given =
+                  List.filter_map
+                    (fun (label, value) -> match label with Labelled label | Optional label -> Some (label, value) | Nolabel -> None)
+                    arguments
+                in
+                let children_empty =
+                  match List.assoc_opt "children" given with
+                  | None | Some { pexp_desc = Pexp_construct ({ txt = Lident "[]"; _ }, None); _ } -> `Empty
+                  | Some _ -> `Given
+                in
+                let props = List.filter (fun (label, _) -> not (List.mem label [ "key"; "children" ])) given in
+                let exact =
+                  List.length props = List.length named
+                  && List.for_all (fun (label, _) -> List.mem_assoc label props) named
+                  && List.for_all (fun (label, _) -> List.mem_assoc label named) props
+                  && List.for_all (fun (label, _) -> match label with Labelled _ | Nolabel -> true | Optional _ -> false) arguments
+                in
+                let clear =
+                  List.for_all
+                    (fun read ->
+                      not (List.mem read self#locals || List.mem read (Option.value ~default:[] (List.assoc_opt name shadowed))))
+                    reads
+                in
+                match (children_empty, exact, clear) with
+                | `Empty, true, true ->
+                    let keyed =
+                      Option.fold ~none:body
+                        ~some:(fun key ->
+                          match body.pexp_desc with
+                          | Pexp_apply (tag, tag_arguments) ->
+                              { body with pexp_desc = Pexp_apply (tag, (Labelled "key", key) :: tag_arguments) }
+                          | _ -> body)
+                        (List.assoc_opt "key" given)
+                    in
+                    let loc = expression.pexp_loc in
+                    Some
+                      (match named with
+                      | [] -> keyed
+                      | _ :: _ ->
+                          pexp_let ~loc Nonrecursive
+                            (List.map
+                               (fun (label, variable) -> value_binding ~loc ~pat:(pvar ~loc variable) ~expr:(List.assoc label props))
+                               named)
+                            keyed)
+                | (`Empty | `Given), _, _ -> None))
+        | _ -> None
+
+      method! expression expression =
+        let in_place item = Option.value ~default:item (self#expanded item) in
+        let mapping callee =
+          match callee.pexp_desc with
+          | Pexp_ident { txt; _ }
+          | Pexp_apply
+              ( { pexp_desc = Pexp_ident { txt = Lident ("|." | "|>"); _ }; _ },
+                [ _; (Nolabel, { pexp_desc = Pexp_ident { txt; _ }; _ }) ] )
+          | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, _) -> (
+              match Longident.flatten_exn txt with
+              | ["Array"; ("map" | "mapi")] | ["Stdlib"; "Array"; ("map" | "mapi")] | ["List"; ("map" | "mapi")]
+              | ["Stdlib"; "List"; ("map" | "mapi")] | ["Belt"; "Array"; ("map" | "mapWithIndex")]
+              | ["Js"; "Array"; ("map" | "mapi")] ->
+                  `Mapping
+              | _ -> `Other
+              | exception Invalid_argument _ -> `Other)
+          | _ -> `Other
+        in
+        match expression.pexp_desc with
+        | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident _; _ }; _ } as tag, arguments) when jsx expression ->
+            super#expression
+              {
+                expression with
+                pexp_desc =
+                  Pexp_apply
+                    ( tag,
+                      List.map
+                        (fun (label, value) ->
+                          match (label, Element.list_items value) with
+                          | Labelled "children", Some items ->
+                              ( label,
+                                List.fold_right
+                                  (fun item rest ->
+                                    { value with pexp_desc = Pexp_construct ({ txt = Lident "::"; loc = value.pexp_loc }, Some (pexp_tuple ~loc:value.pexp_loc [ in_place item; rest ])) })
+                                  items
+                                  { value with pexp_desc = Pexp_construct ({ txt = Lident "[]"; loc = value.pexp_loc }, None) } )
+                          | _ -> (label, value))
+                        arguments );
+              }
+        | Pexp_apply (callee, arguments) when mapping callee = `Mapping ->
+            super#expression
+              {
+                expression with
+                pexp_desc =
+                  Pexp_apply
+                    ( callee,
+                      List.map
+                        (fun (label, value) ->
+                          match value.pexp_desc with
+                          | Pexp_function (params, constraint_, Pfunction_body body) ->
+                              (label, { value with pexp_desc = Pexp_function (params, constraint_, Pfunction_body (in_place body)) })
+                          | _ -> (label, value))
+                        arguments );
+              }
+        | _ -> super#expression expression
+    end
+  in
   [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
-  :: mapper#structure items
+  :: mapper#structure (inliner#structure items)
 let signature items = mapper#signature items
 let () =
   Driver.add_arg "-hook-modules"

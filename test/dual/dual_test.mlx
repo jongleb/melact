@@ -1293,6 +1293,31 @@ module Deferring = struct
     <p>(React.string (text ^ "/" ^ deferred))</p>
 end
 
+let shade = "module"
+
+module Shaded_label = struct
+  let[@react.component] make ~label = <em>(React.string (label ^ "-" ^ shade))</em>
+end
+
+module Counter_holder = struct
+  let[@react.component] make ~label = <span>(React.string "[")<Counter label />(React.string "]")</span>
+end
+
+let holders_send = ref (fun (_ : string array * int -> string array * int) -> ())
+
+module Holders = struct
+  let[@react.component] make () =
+    let state, setState = React.useState (fun () -> ([| "a"; "b"; "c" |], 0)) in
+    holders_send := setState;
+    let labels, tick = state in
+    let shade = "local" in
+    <div>
+      <Shaded_label label=(shade ^ string_of_int tick) />
+      <Counter_holder label="fixed" />
+      (React.array (Array.map (fun label -> <Counter_holder key=label label />) labels))
+    </div>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -3198,6 +3223,46 @@ let () =
              in
              step 6 "" [] []))
         [%mel.obj { numRuns = 60 }]));
+  describe "components without hooks of the same file" (fun () ->
+    test_async "read the values of their own module and keep their children's state, by key and in place" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Holders /> in
+             let counts = Hashtbl.create 8 in
+             let count label = Option.value ~default:0 (Hashtbl.find_opt counts label) in
+             let rec step remaining labels tick =
+               match remaining with
+               | 0 ->
+                   let shown = text_content root in
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect shown
+                   |. to_equal
+                        ("local" ^ string_of_int tick ^ "-module" ^ "[fixed" ^ string_of_int (count "fixed") ^ "]"
+                        ^ String.concat "" (List.map (fun label -> "[" ^ label ^ string_of_int (count label) ^ "]") (Array.to_list labels)));
+                   finish ()
+               | _ -> (
+                   match draw tape 3 with
+                   | 0 ->
+                       let ranked = Array.map (fun label -> (draw tape 100, label)) [| "a"; "b"; "c"; "d" |] in
+                       Array.stable_sort compare ranked;
+                       let next = Array.sub (Array.map snd ranked) 0 (1 + draw tape 4) in
+                       Array.iter (fun label -> if not (Array.mem label next) then Hashtbl.remove counts label) labels;
+                       let* () = act (fun () -> !holders_send (fun _ -> (next, tick))) in
+                       step (remaining - 1) next tick
+                   | 1 ->
+                       let* () = act (fun () -> !holders_send (fun (labels, tick) -> (labels, tick + 1))) in
+                       step (remaining - 1) labels (tick + 1)
+                   | _ ->
+                       let buttons = Array.map element_of (nodes (select_all root "button")) in
+                       let index = draw tape (Array.length buttons) in
+                       let label = match index with 0 -> "fixed" | _ -> labels.(index - 1) in
+                       Hashtbl.replace counts label (count label + 1);
+                       let* () = act (fun () -> click buttons.(index)) in
+                       step (remaining - 1) labels tick)
+             in
+             step 10 [| "a"; "b"; "c" |] 0))
+        [%mel.obj { numRuns = 80 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->
       let* root, client = mount <Unicode /> in

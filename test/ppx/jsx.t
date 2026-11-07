@@ -1266,3 +1266,18 @@ index:
   Melhole.View.each __melhole_site_7 Melhole.View.Items
   Melhole.View.selector Melhole.View.Structural
   Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let x = __melhole_item in x) [@ocaml.warning "-26-27"])) 
+
+A component without hooks of the same file is spliced into the row of a list and into a child slot,
+so the list compiles to rows of one template; an element that flows as a value keeps the component:
+
+  $ cat > inlined.ml <<'EOF'
+  > module Row = struct
+  >   let make = React.memo (fun ~item -> ((li ~children:[ React.string item ] ()) [@JSX])) [@@react.component]
+  > end
+  > let rows items = ((ul ~children:[ React.array (Array.map (fun item -> ((Row.createElement ~key:item ~item ~children:[] ()) [@JSX])) items) ] ()) [@JSX])
+  > let slot = ((ul ~children:[ ((Row.createElement ~item:"a" ~children:[] ()) [@JSX]) ] ()) [@JSX])
+  > let value = ((Row.createElement ~item:"b" ~children:[] ()) [@JSX])
+  > EOF
+  $ ./pp.exe -impl inlined.ml | grep -o "Melhole.View.rows\|Melhole.View.each\|Row.makeProps"
+  Melhole.View.rows
+  Row.makeProps
