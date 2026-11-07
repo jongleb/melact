@@ -38,7 +38,7 @@ let renders = ref 0
 let marked outer item = match String.equal item.key outer.chosen with true -> "on" | false -> ""
 
 let loop numbering items outer =
-  View.each each_site numbering items
+  View.each each_site numbering items Fun.id
     (fun [@u] item index ->
       incr renders;
       let place = match numbering with View.Items -> "" | View.Numbered -> string_of_int index ^ ":" in
@@ -60,7 +60,7 @@ let line_template =
     { placed = None; released = None; forgotten = None }
 
 let lines items outer =
-  View.rows items line_template
+  View.rows items Fun.id line_template
     (fun [@u] (root, _, _) -> root)
     (fun [@u] (_, marking, text) item ->
       incr renders;
@@ -77,7 +77,7 @@ let lines items outer =
 let shouted_site = View.loop_site ()
 
 let shouted items outer =
-  View.each shouted_site View.Items items
+  View.each shouted_site View.Items items Fun.id
     (fun [@u] item _ ->
       View.with_key item.key
         (View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText (item.label ^ "!") |]))
@@ -398,7 +398,7 @@ let hashed_template =
     { placed = None; released = None; forgotten = None }
 
 let hashed items =
-  View.rows items hashed_template
+  View.rows items Fun.id hashed_template
     (fun [@u] (root, _) -> root)
     (fun [@u] (_, text) item -> View.set_text text ("#" ^ item.label))
     (fun [@u] item -> item.key)
@@ -454,7 +454,7 @@ let referring_template =
     }
 
 let referring items =
-  View.rows items referring_template
+  View.rows items Fun.id referring_template
     (fun [@u] (root, _, _) -> root)
     (fun [@u] (_, text, reference) item ->
       let callback = List.assoc item.key (Array.to_list attach) in
@@ -535,7 +535,7 @@ let selected kind keying items picked =
   match kind with
   | Each | Numbered_each ->
       let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows -> View.Items in
-      View.each each_site numbering items
+      View.each each_site numbering items Fun.id
         (fun [@u] item index ->
           incr renders;
           let place = match numbering with View.Items -> "" | View.Numbered -> string_of_int index ^ ":" in
@@ -545,7 +545,7 @@ let selected kind keying items picked =
         (selected_project keying picked) 2 inputs
         (View.Selecting (each_selection, [| selector keying picked |]))
   | Rows ->
-      View.rows items line_template
+      View.rows items Fun.id line_template
         (fun [@u] (root, _, _) -> root)
         (fun [@u] (_, marking, text) item ->
           incr renders;

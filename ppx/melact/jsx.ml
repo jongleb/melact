@@ -506,6 +506,7 @@ let mapper =
       {
         Element.name = "melact";
         locals = self#locals;
+        definitions = self#definitions;
         map = self#expression;
         wrap = (fun loc child -> [%expr React.of_child [%e child]]);
         unwrap = (fun loc element -> unwrap ~loc element);

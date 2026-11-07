@@ -43,6 +43,11 @@ stores the new one. On mount nothing is remembered yet, so every hole is evaluat
 variables are all physically unchanged is neither evaluated nor compared, and a nested JSX tree
 inside it is not built at all: `lazy` everywhere, without writing it.
 
+A local function is a fresh closure on every render, so a guard on it would always fire. A hole that
+calls one, such as `(button "run" "Create 1,000 rows" Run)` with `button` defined in the view, is
+guarded instead by what the function captures, looking through further local definitions. A
+helper that captures nothing outer is evaluated on mount only.
+
 ### What is never guarded
 
 - event handlers: a fresh closure each render, swapped on the element without touching the DOM;
@@ -127,6 +132,10 @@ its projection changed: selecting a row of 1,000 re-renders two. Leaves that bui
 (closures, records) never compare equal, so such rows simply re-render; that is slower, never wrong.
 A law runs random messages against a view whose rows read two outer values and compares the page
 with a fresh mount.
+
+The loop remembers the list it was drawn from. When the next render passes the same list (`===`)
+and no outer value changed, the loop does nothing at all: no array is made from the list and no row
+is looked at. When only an outer value changed, the rows are reselected over the array already made.
 
 Re-projecting is still a pass over every row, so the compiler also recognises the leaves that pick
 rows by key, `match o with p when x = i -> a | q -> b` (or `if e = i then a else b`) where `p` binds

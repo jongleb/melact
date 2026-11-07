@@ -62,7 +62,7 @@ let rec description tape depth =
   | 6 -> View.lazy1 lazy_text (draw tape 3)
   | 8 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
-      View.each each_site View.Items items
+      View.each each_site View.Items items Fun.id
         (fun [@u] item _ -> View.with_key item (View.text item))
         (fun [@u] _ _ _ _ -> ())
         0
@@ -70,7 +70,7 @@ let rec description tape depth =
         View.Unselecting
   | 7 ->
       let items = Array.init (draw tape 5) (fun _ -> words.(draw tape 5)) in
-      View.rows items word_line
+      View.rows items Fun.id word_line
         (fun [@u] word -> word.root)
         (fun [@u] word item ->
           View.put_text word.written word.text item;

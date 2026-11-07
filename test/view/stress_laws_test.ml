@@ -17,7 +17,7 @@ let described structure words =
   | Listed -> View.list (List.map line words)
   | Keyed -> View.keyed (List.map (fun word -> (word, line word)) words)
   | Each ->
-      View.each site View.Items (Array.of_list words)
+      View.each site View.Items (Array.of_list words) Fun.id
         (fun [@u] word _ -> View.with_key word (line word))
         (fun [@u] _ _ _ _ -> ())
         0 [||] View.Unselecting
