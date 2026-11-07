@@ -1,0 +1,172 @@
+open Testing
+
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+
+type item = { key : string; label : string }
+
+(** Which of the items the list shows. *)
+type sieve = Every | Every_other
+
+type model = {
+  tick : int;
+  items : item list;
+  shown : item list;  (** The items the sieve keeps: the same list while it keeps them all. *)
+  sieve : sieve;
+  selected : string option;
+  query : string;
+  next : int;  (** The number of the next item made. *)
+}
+
+type message =
+  | Tick
+  | Insert of int * int  (** Where, and how many. *)
+  | Remove of int * int  (** Where, and how many. *)
+  | Swap of int * int
+  | Reverse
+  | Sift
+  | Rename of int
+  | Select of string option
+  | Query of string
+  | Same
+
+(** What a step of a program does from outside. *)
+type step = Send of message | Type of string | Pick of int
+
+type program = { size : int; steps : step list }
+
+let sifted sieve items = match sieve with Every -> items | Every_other -> List.filteri (fun index _ -> index mod 2 = 0) items
+
+let made from count = List.init count (fun index -> { key = "k" ^ string_of_int (from + index); label = "item " ^ string_of_int (from + index) })
+
+let update message model =
+  let size = List.length model.items in
+  let listed items = { model with items; shown = sifted model.sieve items } in
+  match (message, size) with
+  | Tick, _ -> { model with tick = model.tick + 1 }
+  | Insert (at, count), _ ->
+      let at = at mod (size + 1) in
+      {
+        (listed (List.filteri (fun index _ -> index < at) model.items @ made model.next count @ List.filteri (fun index _ -> index >= at) model.items))
+        with
+        next = model.next + count;
+      }
+  | Remove (at, count), _ when size > 0 ->
+      let at = at mod size in
+      listed (List.filteri (fun index _ -> index < at || index >= at + count) model.items)
+  | Swap (first, second), _ when size > 1 ->
+      let first = first mod size and second = second mod size in
+      let items = Array.of_list model.items in
+      listed
+        (List.mapi
+           (fun index item -> match (index = first, index = second) with true, _ -> items.(second) | _, true -> items.(first) | false, false -> item)
+           model.items)
+  | Reverse, _ -> listed (List.rev model.items)
+  | Sift, _ ->
+      let sieve = match model.sieve with Every -> Every_other | Every_other -> Every in
+      { model with sieve; shown = sifted sieve model.items }
+  | Rename at, _ when size > 0 ->
+      let at = at mod size in
+      listed (List.mapi (fun index item -> match index = at with true -> { item with label = item.label ^ "'" } | false -> item) model.items)
+  | Select selected, _ -> { model with selected }
+  | Query query, _ -> { model with query = (match String.length query > 6 with true -> model.query | false -> query) }
+  | (Same | Remove _ | Swap _ | Rename _), _ -> model
+
+let summary items =
+  let () = Counters.bump Viewed in
+  <p className="summary">(Html.int (Counters.seen Evaluated (List.length items)))</p>
+
+let view model =
+  let () = Counters.bump Viewed in
+  <main>
+    <p className="tick">(Html.text (Counters.seen Evaluated (string_of_int model.tick)))</p>
+    <input className="field" value=model.query onInput=(fun text -> Query text) />
+    <ul>
+      (Html.list
+         (List.map
+            (fun item ->
+              <li
+                key=(Counters.seen Keyed item.key)
+                className=(match model.selected with Some key when key = item.key -> "picked" | _ -> "")>
+                <span>(Html.text (Counters.seen Refreshed item.label))</span>
+                <button className="pick" onClick=(Select (Some item.key))>(Html.text "pick")</button>
+              </li>)
+            model.shown))
+    </ul>
+    (Html.memo summary model.items)
+  </main>
+
+let run program =
+  let put : Dom.element -> string -> unit =
+    [%mel.raw
+      {|function (element, text) { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, text); }|}]
+  in
+  let inputted : Dom.element -> unit =
+    [%mel.raw {|function (element) { element.dispatchEvent(new Event("input", { bubbles: true })); }|}]
+  in
+  let root = Counters.unobserved attached in
+  ignore (Counters.take ());
+  let items = made 0 program.size in
+  let running =
+    Program.sandbox ~init:{ tick = 0; items; shown = items; sieve = Every; selected = None; query = ""; next = program.size } ~update ~view root
+  in
+  Program.flush running;
+  let nth selector at =
+    let found = nodes (select_all root selector) in
+    match Array.length found with 0 -> None | count -> Some (element_of found.(at mod count))
+  in
+  List.iter
+    (fun step ->
+      (match step with
+      | Send message -> Program.dispatch running message
+      | Type text ->
+          Option.iter
+            (fun field ->
+              Counters.unobserved (fun () -> put field text);
+              inputted field)
+            (nth "input.field" 0)
+      | Pick at -> Option.iter click (nth "button.pick" at));
+      Program.flush running)
+    program.steps;
+  Program.stop running;
+  let counts = Counters.take () in
+  Counters.unobserved (fun () -> remove_root root);
+  counts
+
+let keyed_steps =
+  [
+    Send (Insert (100, 10)); Send (Remove (40, 5)); Send (Swap (3, 4)); Send (Swap (10, 80)); Send (Remove (20, 1));
+    Send (Insert (50, 1)); Send Reverse; Send Sift; Send Sift; Send (Rename 7); Pick 5; Pick 9; Send (Select None);
+    Send Tick; Send Same; Type "ab"; Type "far too long"; Send (Remove (0, 200)); Send (Insert (0, 30));
+  ]
+
+let scenarios =
+  [|
+    ("keyed edits", { size = 100; steps = keyed_steps });
+    ("selection only", { size = 200; steps = [ Pick 1; Pick 2; Pick 150; Send (Select None); Send Tick; Send Same ] });
+  |]
+
+let names = Array.map fst scenarios
+let named index = run (snd scenarios.(index))
+
+let random values =
+  let tape = tape values in
+  let words = [| ""; "a"; "ab"; "far too long" |] in
+  let step () =
+    match draw tape 12 with
+    | 0 -> Send Tick
+    | 1 -> Send (Insert (draw tape 10, 1 + draw tape 3))
+    | 2 -> Send (Remove (draw tape 10, 1 + draw tape 3))
+    | 3 -> Send (Swap (draw tape 10, draw tape 10))
+    | 4 -> Send Reverse
+    | 5 -> Send Sift
+    | 6 -> Send (Rename (draw tape 10))
+    | 7 -> Pick (draw tape 10)
+    | 8 -> Send (Select None)
+    | 9 -> Type words.(draw tape 4)
+    | 10 -> Send Same
+    | _ -> Send (Insert (draw tape 10, 1))
+  in
+  let size = draw tape 12 in
+  run { size; steps = List.init (4 + draw tape 16) (fun _ -> step ()) }

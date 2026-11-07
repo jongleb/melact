@@ -1,0 +1,79 @@
+[@@@alert "-deprecated"]
+open Testing
+
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+
+(** What a step of the event table's scenario does, as bench/classics/eventtable/scenario.mjs does it. *)
+type step =
+  | Click of string * int  (** The element with this number among those the selector finds. *)
+  | Filter of string  (** Picks a level in the filter, with an input and a change event. *)
+  | Arrow_down
+
+let steps =
+  [ Click ("#expand-all", 0); Click ("#collapse-all", 0) ]
+  @ List.init 30 (fun count -> Click (".event-row .toggle", count * 11))
+  @ List.init 10 (fun _ -> Click ("#force-rerender", 0))
+  @ List.map (fun at -> Click (".header-cell", at)) [ 4; 4; 2 ]
+  @ [ Filter "warn" ]
+  @ List.init 30 (fun _ -> Arrow_down)
+  @ [ Click ("#expand-all", 0); Click ("#collapse-all", 0) ]
+
+let run () =
+  let ( let* ) promise next = Js.Promise.then_ next promise in
+  let act run = adopt (React.act run) in
+  let stubbed : unit -> unit =
+    [%mel.raw
+      {|function () {
+          if (!globalThis.ResizeObserver) globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+          if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = function () {};
+        }|}]
+  in
+  let filtered : Dom.element -> string -> unit =
+    [%mel.raw
+      {|function (select, value) {
+          globalThis.__ratchet.quiet++;
+          try { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value); }
+          finally { globalThis.__ratchet.quiet--; }
+          select.dispatchEvent(new Event("input", { bubbles: true }));
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        }|}]
+  in
+  let pressed : Dom.element -> unit =
+    [%mel.raw {|function (element) { element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })); }|}]
+  in
+  stubbed ();
+  let root = Counters.unobserved attached in
+  ignore (Counters.take ());
+  let client = ReactDOM.Client.createRoot root in
+  let nth selector at =
+    let found = nodes (select_all root selector) in
+    match Array.length found with 0 -> None | count -> Some (element_of found.(at mod count))
+  in
+  let counted run taken =
+    let* () = act run in
+    Js.Promise.resolve (Counters.take () :: taken)
+  in
+  let rec stepped remaining taken =
+    match remaining with
+    | [] -> Js.Promise.resolve taken
+    | step :: rest ->
+        let* taken =
+          counted
+            (fun () ->
+              match step with
+              | Click (selector, at) -> Option.iter click (nth selector at)
+              | Filter level -> Option.iter (fun select -> filtered select level) (nth ".level-filter" 0)
+              | Arrow_down -> Option.iter pressed (nth ".event-body" 0))
+            taken
+        in
+        stepped rest taken
+  in
+  let* mounted = counted (fun () -> ReactDOM.Client.render client <App.App />) [] in
+  let* taken = stepped steps mounted in
+  let page = text_content root in
+  let* taken = counted (fun () -> ReactDOM.Client.unmount client ()) taken in
+  Counters.unobserved (fun () -> remove_root root);
+  Js.Promise.resolve (Array.of_list (List.rev taken), page)
