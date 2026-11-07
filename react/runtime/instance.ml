@@ -855,23 +855,23 @@ let current () =
 
 let slot instance key init = Hook.take instance.slots key init
 
+let lane () =
+  Option.fold ~none:`Default
+    ~some:(fun event ->
+      match Dom_api.event_type event with
+      | "auxclick" | "beforeinput" | "blur" | "cancel" | "change" | "click" | "close" | "compositionend"
+      | "compositionstart" | "compositionupdate" | "contextmenu" | "copy" | "cut" | "dblclick" | "dragend"
+      | "dragstart" | "drop" | "focus" | "focusin" | "focusout" | "fullscreenchange" | "hashchange" | "input"
+      | "invalid" | "keydown" | "keypress" | "keyup" | "mousedown" | "mouseup" | "paste" | "pause" | "play"
+      | "pointercancel" | "pointerdown" | "pointerup" | "popstate" | "ratechange" | "reset" | "resize" | "seeked"
+      | "select" | "selectionchange" | "selectstart" | "submit" | "textInput" | "touchcancel" | "touchend"
+      | "touchstart" | "volumechange" ->
+          `Discrete
+      | _ -> `Default)
+    (Js.Undefined.toOption Dom_api.current_event)
+
 let queue_render () =
-  let lane =
-    Option.fold ~none:`Default
-      ~some:(fun event ->
-        match Dom_api.event_type event with
-        | "auxclick" | "beforeinput" | "blur" | "cancel" | "change" | "click" | "close" | "compositionend"
-        | "compositionstart" | "compositionupdate" | "contextmenu" | "copy" | "cut" | "dblclick" | "dragend"
-        | "dragstart" | "drop" | "focus" | "focusin" | "focusout" | "fullscreenchange" | "hashchange" | "input"
-        | "invalid" | "keydown" | "keypress" | "keyup" | "mousedown" | "mouseup" | "paste" | "pause" | "play"
-        | "pointercancel" | "pointerdown" | "pointerup" | "popstate" | "ratechange" | "reset" | "resize" | "seeked"
-        | "select" | "selectionchange" | "selectstart" | "submit" | "textInput" | "touchcancel" | "touchend"
-        | "touchstart" | "volumechange" ->
-            `Discrete
-        | _ -> `Default)
-      (Js.Undefined.toOption Dom_api.current_event)
-  in
-  match (!render_schedule, lane) with
+  match (!render_schedule, lane ()) with
   | Next_microtask, _ | Next_task, `Default -> ()
   | (Unqueued | Next_task), `Discrete ->
       render_schedule := Next_microtask;
@@ -883,6 +883,10 @@ let queue_render () =
           render_schedule := Unqueued;
           settle ())
         0
+
+let settle_in_event () =
+  settle ();
+  match lane () with `Discrete -> Dom_api.queue_microtask run_passive | `Default -> ()
 
 let invalidate instance =
   match !rendering with

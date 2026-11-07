@@ -72,6 +72,10 @@ val consume : instance -> 'value Context.t -> 'value
 val settle : unit -> unit
 val flush : unit -> unit
 
+(** Settles what a root's render made; inside a discrete event its passive effects run at the next
+    microtask, as React 18 runs those of a commit in its sync lane, before any later event. *)
+val settle_in_event : unit -> unit
+
 (** Runs [job] in a later task, outside any render: a deferred value catching up. *)
 val defer : (unit -> unit) -> unit
 

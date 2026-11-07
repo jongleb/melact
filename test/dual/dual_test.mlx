@@ -1189,6 +1189,18 @@ module Forest = struct
     <Tick_provider value=forest.tick><Forest_node name="r" n=forest.n tree=forest.tree /></Tick_provider>
 end
 
+module Mounted_by_click = struct
+  let[@react.component] make ~label =
+    let shown, setShown = React.useState (fun () -> "") in
+    React.useEffect0 (fun () ->
+        log ("passive " ^ label);
+        setShown (fun _ -> label);
+        None);
+    <i>(React.string shown)</i>
+end
+
+external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> unit = "addEventListener" [@@mel.send]
+
 let unicode_send = ref (fun (_ : int -> int) -> ())
 
 module Unicode = struct
@@ -2222,6 +2234,22 @@ let () =
              step 3 start))
         [%mel.obj { numRuns = 3 }])
       120_000);
+  describe "a root rendered inside a click" (fun () ->
+    test_async "runs its passive effects at the next microtask, before any later event, as React 18 runs those of a commit in its sync lane" (fun () ->
+      let root = attached () in
+      let button = create_element document "button" in
+      append_child (body document) button;
+      let client = ReactDOM.Client.createRoot root in
+      add_event_listener button "click" (fun _ -> ReactDOM.Client.render client <Mounted_by_click label="a" />);
+      let loud = quiet_errors () in
+      ignore (take ());
+      click button;
+      let* () = Js.Promise.resolve () in
+      let seen = (take (), text_content root) in
+      loud ();
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      expect seen |. to_equal ([ "passive a" ], "");
+      finish ()));
   describe "callback refs" (fun () ->
     test_async "run once the whole tree is in the page, as React attaches them after its writes" (fun () ->
       check_async
