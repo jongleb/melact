@@ -213,6 +213,13 @@ and every row that stays keeps its node in whatever group it lands; a Melact law
 within and across groups and they keep their counts. Making moved rows again, or rebuilding the
 groups, breaks them. Groups are written on the client only; a server page shows the rows ungrouped.
 
+### One block removed or added
+
+When the outer values are kept and the list only lost or gained one block of rows, the loop finds
+the longest run of physically equal items at both ends and touches only the middle: it removes the
+rows that went, or mounts the new ones before the first row that follows them. Removing a row or
+appending 1,000 compares each kept item once and builds no plan.
+
 ### A few rows that change places
 
 When a compiled loop keeps its length and its outer values, and at most 64 rows changed places
