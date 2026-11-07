@@ -1189,6 +1189,78 @@ module Forest = struct
     <Tick_provider value=forest.tick><Forest_node name="r" n=forest.n tree=forest.tree /></Tick_provider>
 end
 
+let shade_context = React.createContext 0
+
+module Shade_provider = struct
+  let make = React.Context.provider shade_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+(** What the parent of the probe holds: the context it provides and the probe's two props. *)
+type outer = { shade : int; p : int; q : int }
+
+let probe_a = ref (fun (_ : int -> int) -> ())
+let probe_b = ref (fun (_ : int) -> ())
+let outer_send = ref (fun (_ : outer -> outer) -> ())
+
+module Sourced_child = struct
+  let[@react.component] make =
+    React.memo (fun ~onBump ~label ->
+        React.useEffect1
+          (fun () ->
+            log "child callback";
+            None)
+          [| onBump |];
+        <i onClick=(fun _ -> onBump ())>(React.string label)</i>)
+end
+
+module Sourced = struct
+  let[@react.component] make =
+    React.memo (fun ~p ~q ->
+        let a, setA = React.useState (fun () -> 0) in
+        let b, addB = React.useReducer (fun b by -> b + by) 0 in
+        let shade = React.useContext shade_context in
+        React.useEffect0 (fun () ->
+            probe_a := setA;
+            probe_b := addB;
+            None);
+        let sum = a + p in
+        let label = string_of_int b ^ "/" ^ string_of_int shade in
+        let scaled =
+          React.useMemo2
+            (fun () ->
+              log ("memo " ^ string_of_int b ^ " " ^ string_of_int q);
+              (b * 10) + q)
+            (b, q)
+        in
+        let onBump = React.useCallback1 (fun () -> setA (fun a -> a + p)) [| p |] in
+        React.useEffect1
+          (fun () ->
+            log ("effect a " ^ string_of_int a);
+            Some (fun () -> log ("cleanup a " ^ string_of_int a)))
+          [| a |];
+        React.useLayoutEffect2
+          (fun () ->
+            log ("layout " ^ string_of_int shade ^ " " ^ string_of_int p);
+            None)
+          (shade, p);
+        React.useEffect (fun () ->
+            log "every";
+            None);
+        <p>(React.string (string_of_int sum ^ ";" ^ label ^ ";" ^ string_of_int scaled ^ ";")) <Sourced_child onBump label /></p>)
+end
+
+module Sourced_parent = struct
+  let[@react.component] make () =
+    let outer, setOuter = React.useState (fun () -> { shade = 0; p = 1; q = 0 }) in
+    React.useEffect0 (fun () ->
+        outer_send := setOuter;
+        None);
+    <Shade_provider value=outer.shade><Sourced p=outer.p q=outer.q /></Shade_provider>
+end
+
 module Mounted_by_click = struct
   let[@react.component] make ~label =
     let shown, setShown = React.useState (fun () -> "") in
@@ -2234,6 +2306,63 @@ let () =
              step 3 start))
         [%mel.obj { numRuns = 3 }])
       120_000);
+  describe "a component with state, a reducer, a context, props, memos, a callback and effects" (fun () ->
+    test_async "shows, computes and runs what React does after any batch of changes to any of its sources" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Sourced_parent /> in
+             let rec step remaining (a, b, (outer : outer)) =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   ignore (take ());
+                   finish ()
+               | _ ->
+                   let actions =
+                     List.init (1 + draw tape 3) (fun _ ->
+                         match draw tape 6 with
+                         | 0 ->
+                             let by = draw tape 3 in
+                             (`A by, fun () -> !probe_a (fun a -> a + by))
+                         | 1 ->
+                             let by = draw tape 3 in
+                             (`B by, fun () -> !probe_b by)
+                         | 2 -> (`Shade, fun () -> !outer_send (fun outer -> { outer with shade = outer.shade + 1 }))
+                         | 3 -> (`P, fun () -> !outer_send (fun outer -> { outer with p = outer.p + 1 }))
+                         | 4 -> (`Q, fun () -> !outer_send (fun outer -> { outer with q = outer.q + 1 }))
+                         | _ -> (`Click, fun () -> click (select root "i")))
+                   in
+                   let a', b', outer' =
+                     List.fold_left
+                       (fun (a, b, next) (action, _) ->
+                         match action with
+                         | `A by -> (a + by, b, next)
+                         | `B by -> (a, b + by, next)
+                         | `Shade -> (a, b, { next with shade = next.shade + 1 })
+                         | `P -> (a, b, { next with p = next.p + 1 })
+                         | `Q -> (a, b, { next with q = next.q + 1 })
+                         | `Click -> (a + outer.p, b, next))
+                       (a, b, outer) actions
+                   in
+                   let* () = act (fun () -> List.iter (fun (_, run) -> run ()) actions) in
+                   let label = string_of_int b' ^ "/" ^ string_of_int outer'.shade in
+                   let rendered = (a, b, outer) <> (a', b', outer') in
+                   let when_ changed entries = match changed with true -> entries | false -> [] in
+                   expect (text_content root, take ())
+                   |. to_equal
+                        ( string_of_int (a' + outer'.p) ^ ";" ^ label ^ ";" ^ string_of_int ((b' * 10) + outer'.q) ^ ";" ^ label,
+                          when_ (b <> b' || outer.q <> outer'.q) [ "memo " ^ string_of_int b' ^ " " ^ string_of_int outer'.q ]
+                          @ when_ (outer.shade <> outer'.shade || outer.p <> outer'.p)
+                              [ "layout " ^ string_of_int outer'.shade ^ " " ^ string_of_int outer'.p ]
+                          @ when_ (a <> a') [ "cleanup a " ^ string_of_int a ]
+                          @ when_ (outer.p <> outer'.p) [ "child callback" ]
+                          @ when_ (a <> a') [ "effect a " ^ string_of_int a' ]
+                          @ when_ rendered [ "every" ] );
+                   step (remaining - 1) (a', b', outer')
+             in
+             step 8 (0, 0, { shade = 0; p = 1; q = 0 })))
+        [%mel.obj { numRuns = 150 }]));
   describe "a root rendered inside a click" (fun () ->
     test_async "runs its passive effects at the next microtask, before any later event, as React 18 runs those of a commit in its sync lane" (fun () ->
       let root = attached () in

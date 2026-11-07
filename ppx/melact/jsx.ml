@@ -153,10 +153,11 @@ let component ~loc ~name ~props_constructor expression =
     | `Missing ->
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
+  let rendering = Graph.rendering expression in
   let definition =
     lazy
       (Hoist.hoist ~loc "component"
-         (match Graph.rendering expression with
+         (match rendering with
          | Graph.Pure -> [%expr Melact_runtime.Component.pure ~name:[%e estring ~loc name]]
          | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
   in
@@ -194,6 +195,23 @@ let component ~loc ~name ~props_constructor expression =
       (List.filteri (fun index _ -> index < List.length names) labelled)
   in
   let inputs = pexp_array ~loc (List.concat field_inputs) in
+  let props =
+    let rec bits offset patterns counts =
+      match (patterns, counts) with
+      | pattern :: patterns, count :: counts ->
+          let mask = match offset + count <= 30 with true -> ((1 lsl count) - 1) lsl offset | false -> Graph.full - 1 in
+          List.map (fun name -> (name, mask)) (Free.bound pattern) @ bits (offset + count) patterns counts
+      | [], _ | _, [] -> []
+    in
+    bits 0
+      (List.filter_map
+         (fun param ->
+           match param.pparam_desc with
+           | Pparam_val ((Labelled _ | Optional _), _, pattern) -> Some pattern
+           | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
+         params)
+      (List.map List.length field_inputs)
+  in
   let stateful expression =
     let finder =
       object
@@ -368,17 +386,78 @@ let component ~loc ~name ~props_constructor expression =
               | _ -> super#expression expression
           end
         in
-        let walked = walker#expression body in
-        match !sites with
-        | 0 -> body
-        | count ->
-            [%expr
-              let __melact_memo =
-                Melact_runtime.Memo.cells
-                  [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
-                  [%e eint ~loc count]
+        let remembered walked count =
+          [%expr
+            let __melact_memo =
+              Melact_runtime.Memo.cells
+                [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
+                [%e eint ~loc count]
+            in
+            [%e walked]]
+        in
+        match
+          match rendering with
+          | Graph.Pure -> Graph.plan ~inputs:(List.length (List.concat field_inputs)) ~props body
+          | Graph.Impure -> None
+        with
+        | Some plan ->
+            let held pattern mask ~source value kept rest =
+              let at = !sites in
+              sites := at + 1;
+              let found =
+                [%expr
+                  let __melact_found =
+                    Melact_runtime.Memo.graph __melact_memo [%e eint ~loc at] __melact_changed [%e eint ~loc mask]
+                  in
+                  match Melact_runtime.Memo.kept __melact_found with
+                  | Some __melact_kept -> [%e kept]
+                  | None -> Melact_runtime.Memo.store __melact_memo [%e eint ~loc at] __melact_found [%e value]]
               in
-              [%e walked]])
+              [%expr
+                let [%p pattern] =
+                  [%e
+                    {
+                      found with
+                      pexp_attributes =
+                        attribute ~loc ~name:{ txt = "melhole.cached"; loc } ~payload:(PStr [ pstr_eval ~loc source [] ])
+                        :: found.pexp_attributes;
+                    }]
+                in
+                [%e rest]]
+            in
+            let graphed =
+              List.fold_right
+                (fun step rest ->
+                  match step with
+                  | Graph.Statement value -> [%expr [%e walker#expression value]; [%e rest]]
+                  | Graph.Called (pattern, value) -> [%expr let [%p pattern] = [%e value] in [%e rest]]
+                  | Graph.Context { pattern; context; bit } ->
+                      held pattern (bit lor Graph.full) ~source:[%expr React.useContext [%e context]]
+                        [%expr
+                          Melact_runtime.Instance.consume_source (Melact_runtime.Instance.current ()) [%e eint ~loc bit]
+                            (match [%e context] with React.Context.Context __melact_context -> __melact_context)]
+                        [%expr __melact_kept] rest
+                  | Graph.Memo { pattern; hook; mask } ->
+                      held pattern mask ~source:hook [%expr ([%e hook] [@alert "-hook"])]
+                        [%expr Melact_runtime.Instance.skip_hook (); __melact_kept] rest
+                  | Graph.Effect { hook; mask } ->
+                      [%expr
+                        (match __melact_changed land [%e eint ~loc mask] with
+                        | 0 -> Melact_runtime.Instance.skip_hook ()
+                        | _ -> (([%e hook] [@alert "-hook"]) : unit));
+                        [%e rest]]
+                  | Graph.Derived { pattern; value; mask } ->
+                      held pattern mask ~source:value (walker#expression value) [%expr __melact_kept] rest)
+                plan.steps
+                [%expr
+                  match __melact_changed land [%e eint ~loc plan.reads] with
+                  | 0 -> React.of_child Melact_runtime.Instance.unchanged
+                  | _ -> [%e walker#expression plan.result]]
+            in
+            remembered [%expr let __melact_changed = Melact_runtime.Instance.changed () in [%e graphed]] (max 1 !sites)
+        | None -> (
+            let walked = walker#expression body in
+            match !sites with 0 -> body | count -> remembered walked count))
   in
   let checked =
     let watched expression =

@@ -1080,11 +1080,14 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  58:                       ((fun () -> 0)[@alert "+hook"]) in
-  61:                     then ((1)[@alert "+hook"])
-  62:                     else ((0)[@alert "+hook"]) in
-  102:                                                   [@alert "+hook"]))
-  103:                                               [@alert "+hook"])
+  63:                       ((fun () -> 0)[@alert "+hook"]) in
+  70:                         [@alert "+hook"])
+  75:                              then ((1)[@alert "+hook"])
+  76:                              else ((0)[@alert "+hook"])))
+  77:                         [@alert "+hook"]) in
+  80:                       [@alert "+hook"])
+  122:                                                       [@alert "+hook"]))
+  123:                                                   [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare
@@ -1262,7 +1265,8 @@ that ignores it is not:
   Melhole.View.Items
   Melhole.View.Numbered
 
-A row function bound by a let in a component is cached and still compiles to a loop:
+A row function bound by a let in a component is kept while the sources it reads stay (the update
+graph's memory, below) and still compiles to a loop:
 
   $ cat > letrow.ml <<'EOF'
   > let make ~items =
@@ -1271,8 +1275,8 @@ A row function bound by a let in a component is cached and still compiles to a l
   >   ((ul ~children:[ React.array (Array.map row items) ] ()) [@JSX])
   > [@@react.component]
   > EOF
-  $ ./pp.exe -impl letrow.ml | grep -o "Memo.lookup2\|Melhole.View.rows\|melhole.cached"
-  Memo.lookup2
+  $ ./pp.exe -impl letrow.ml | grep -o "Memo.graph\|Memo.lookup2\|Melhole.View.rows\|melhole.cached"
+  Memo.graph
   Melhole.View.rows
 
 A row whose prop picks it by key gets a selector, in a numbered loop too, where the key can be the

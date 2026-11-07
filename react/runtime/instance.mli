@@ -46,9 +46,27 @@ val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
 val invalidate : instance -> unit
 
 (** Marks an instance to render again because a state cell changed; [check] tells, when the render
-    is due, whether the cell's value still differs from the one it last rendered with. If no check
-    does and nothing else asked, the render is skipped, as React bails out. *)
-val invalidate_state : instance -> 'cell -> ('cell -> Melhole.View.change) -> unit
+    is due, whether the cell's value still differs from the one it last rendered with, and [bit] is
+    the cell's source. If no check does and nothing else asked, the render is skipped, as React bails out. *)
+val invalidate_state : instance -> 'cell -> ('cell -> Melhole.View.change) -> int -> unit
+
+(** The source bit of a state cell made by the instance's next hook: its inputs, then its hooks in
+    order, as melact-ppx numbers them; [-1] past the thirtieth. *)
+val cell_source : instance -> int
+
+(** The source bits that changed since the render of the component under way, [-1] when they are
+    not known: a component compiled with its update graph skips what reads none of them. *)
+val changed : unit -> int
+
+(** Passes over the next hook of the component rendering, whose value its render does not need. *)
+val skip_hook : unit -> unit
+
+(** What a render returns when nothing its output reads changed: its holes stay as they are. *)
+val unchanged : Melhole.View.child
+
+(** [consume_source instance bits context]: the value of the nearest provider, which renders the
+    instance again with [bits] among its changed sources when the value changes. *)
+val consume_source : instance -> int -> 'value Context.t -> 'value
 val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
 
 (** An effect hook: made once, its cleanup and run queued after each commit that changes its

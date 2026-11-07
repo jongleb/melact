@@ -9,3 +9,26 @@ type rendering =
     counts as run during the render unless the function is a JSX prop or the callback of an effect, a
     reducer or [useCallback]. *)
 val rendering : Ppxlib.expression -> rendering
+
+(** One step of a body read as an update graph. A mask is the set of sources (bits of props, state
+    cells and contexts) whose change makes the step run again; [full] is in every mask, so a render
+    that knows nothing of what changed runs every step. *)
+type step =
+  | Statement of Ppxlib.expression  (** Run on every render. *)
+  | Called of Ppxlib.pattern * Ppxlib.expression  (** A hook called on every render: a state cell, a ref, an id. *)
+  | Context of { pattern : Ppxlib.pattern; context : Ppxlib.expression; bit : int }
+  | Memo of { pattern : Ppxlib.pattern; hook : Ppxlib.expression; mask : int }  (** [useMemo], [useCallback]. *)
+  | Effect of { hook : Ppxlib.expression; mask : int }  (** An effect, skipped while its dependencies' sources stay. *)
+  | Derived of { pattern : Ppxlib.pattern; value : Ppxlib.expression; mask : int }
+
+(** A body as steps, then the expression it returns and the mask of what that reads. *)
+type plan = { steps : step list; result : Ppxlib.expression; reads : int }
+
+(** The bit set in every mask and in the sources of a render that knows nothing of what changed. *)
+val full : int
+
+(** [plan ~inputs ~props body]: the update graph of a pure body, given the number of inputs the
+    component compares and the input bits of each prop variable; [None] when a hook, a construct or
+    the number of sources is beyond it, and the component renders whole. The first hook slot is the
+    component's memory. *)
+val plan : inputs:int -> props:(string * int) list -> Ppxlib.expression -> plan option

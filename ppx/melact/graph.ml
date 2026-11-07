@@ -101,3 +101,181 @@ let rendering body =
         raise Reads_the_world
   in
   match now body with () -> Pure | exception Reads_the_world -> Impure
+
+type step =
+  | Statement of expression
+  | Called of pattern * expression
+  | Context of { pattern : pattern; context : expression; bit : int }
+  | Memo of { pattern : pattern; hook : expression; mask : int }
+  | Effect of { hook : expression; mask : int }
+  | Derived of { pattern : pattern; value : expression; mask : int }
+
+type plan = { steps : step list; result : expression; reads : int }
+
+let full = 1 lsl 30
+
+(** What makes a memo or an effect run again. *)
+type dependencies =
+  | Every_render  (** No dependencies given. *)
+  | Once  (** The numbered hook with none, [useEffect0]. *)
+  | Reading of expression  (** The dependencies given. *)
+
+(** What a binding or a statement of a body is to its update graph, before bits are given. *)
+type shape =
+  | Run of expression
+  | Cell of pattern * expression  (** [useState], [useReducer]: the first of the pair is the cell's value. *)
+  | Stable of pattern * expression  (** [useRef], [useId]: the same value on every render. *)
+  | Read of pattern * expression  (** [useContext] of a context. *)
+  | Remembered of pattern * expression * dependencies  (** [useMemo], [useCallback]. *)
+  | Effected of expression * dependencies
+  | Computed of pattern * expression
+  | Changing of pattern * expression  (** A value the rest of the body may change in place: made on every render. *)
+
+exception Beyond
+
+let plan ~inputs ~props body =
+  let hook expression =
+    match expression.pexp_desc with
+    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); _ }; _ }, arguments)
+      when String.length name >= 3 && String.equal (String.sub name 0 3) "use" ->
+        let rec trimmed length =
+          match length > 0 && name.[length - 1] >= '0' && name.[length - 1] <= '9' with
+          | true -> trimmed (length - 1)
+          | false -> length
+        in
+        let base = String.sub name 0 (trimmed (String.length name)) in
+        let values = List.map snd arguments in
+        let dependencies =
+          match (String.sub name (String.length base) (String.length name - String.length base), List.rev values) with
+          | "", _ -> Every_render
+          | "0", _ -> Once
+          | _, last :: _ -> Reading last
+          | _, [] -> raise Beyond
+        in
+        Some (base, dependencies, values)
+    | _ -> None
+  in
+  let checked expression =
+    let finder =
+      object
+        inherit Ast_traverse.iter as super
+
+        method! expression expression =
+          match expression.pexp_desc with
+          | Pexp_ident { txt; _ } -> (
+              let name = Longident.last_exn txt in
+              match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
+              | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> raise Beyond
+              | true | false -> ())
+          | _ -> super#expression expression
+      end
+    in
+    finder#expression expression;
+    expression
+  in
+  let shaped pattern value rest =
+    match (hook value, pattern) with
+    | None, None -> Run (checked value)
+    | None, Some pattern -> (
+        match
+          List.fold_left
+            (fun found name ->
+              match (found, Frozen.uses name rest) with
+              | Frozen.Read_only, Frozen.Read_only -> Frozen.Read_only
+              | (Frozen.Read_only | Frozen.Possibly_changed), _ -> Frozen.Possibly_changed)
+            Frozen.Read_only (Free.bound pattern)
+        with
+        | Frozen.Possibly_changed -> Changing (pattern, checked value)
+        | Frozen.Read_only -> Computed (pattern, checked value))
+    | Some (base, dependencies, arguments), _ -> (
+        List.iter (fun argument -> ignore (checked argument)) arguments;
+        match (base, pattern) with
+        | ("useState" | "useReducer" | "useReducerWithMapState"), Some pattern -> Cell (pattern, value)
+        | ("useRef" | "useId"), Some pattern -> Stable (pattern, value)
+        | "useContext", Some pattern -> (
+            match arguments with [ context ] -> Read (pattern, context) | _ -> raise Beyond)
+        | ("useMemo" | "useCallback"), Some pattern -> Remembered (pattern, value, dependencies)
+        | ("useEffect" | "useLayoutEffect" | "useInsertionEffect" | "useImperativeHandle"), None ->
+            Effected (value, dependencies)
+        | "useDebugValue", None -> Run value
+        | _ -> raise Beyond)
+  in
+  let rec read expression shapes =
+    match expression.pexp_desc with
+    | Pexp_sequence (first, rest) -> read rest (shaped None first rest :: shapes)
+    | Pexp_let (Nonrecursive, [ binding ], rest) -> (
+        match binding.pvb_pat.ppat_desc with
+        | Ppat_construct ({ txt = Lident "()"; _ }, None) -> read rest (shaped None binding.pvb_expr rest :: shapes)
+        | _ -> read rest (shaped (Some binding.pvb_pat) binding.pvb_expr rest :: shapes))
+    | _ -> (List.rev shapes, checked expression)
+  in
+  match read body [] with
+  | exception Beyond -> None
+  | shapes, result -> (
+      let slots =
+        1
+        + List.length
+            (List.filter
+               (fun shape ->
+                 match shape with
+                 | Cell _ | Stable _ | Remembered _ | Effected _ -> true
+                 | Run _ | Read _ | Computed _ | Changing _ -> false)
+               shapes)
+      in
+      let contexts = List.length (List.filter (fun shape -> match shape with Read _ -> true | _ -> false) shapes) in
+      match inputs + slots + contexts <= 30 with
+      | false -> None
+      | true -> (
+          let mask env expression =
+            match Free.of_expression expression with
+            | Free.Volatile -> raise Beyond
+            | Free.Reads names ->
+                List.fold_left
+                  (fun found name -> found lor Option.value ~default:0 (List.assoc_opt name env))
+                  0 names
+          in
+          let bind env pattern bits = List.map (fun name -> (name, bits)) (Free.bound pattern) @ env in
+          let sources env dependencies =
+            match dependencies with
+            | Every_render -> full - 1
+            | Once -> 0
+            | Reading value -> mask env value
+          in
+          let rec given env slot context shapes steps =
+            match shapes with
+            | [] -> (env, List.rev steps)
+            | shape :: rest -> (
+                match shape with
+                | Run value -> given env slot context rest (Statement value :: steps)
+                | Cell (pattern, value) ->
+                    let bit = 1 lsl (inputs + slot) in
+                    let env =
+                      match pattern.ppat_desc with
+                      | Ppat_tuple [ shown; setter ] -> bind (bind env setter 0) shown bit
+                      | _ -> bind env pattern bit
+                    in
+                    given env (slot + 1) context rest (Called (pattern, value) :: steps)
+                | Stable (pattern, value) -> given (bind env pattern 0) (slot + 1) context rest (Called (pattern, value) :: steps)
+                | Read (pattern, value) ->
+                    let bit = 1 lsl (inputs + slots + context) in
+                    given (bind env pattern bit) slot (context + 1) rest
+                      (Context { pattern; context = value; bit } :: steps)
+                | Remembered (pattern, hook, dependencies) ->
+                    let bits = sources env dependencies in
+                    given (bind env pattern bits) (slot + 1) context rest (Memo { pattern; hook; mask = bits lor full } :: steps)
+                | Effected (hook, dependencies) ->
+                    let bits = sources env dependencies in
+                    given env (slot + 1) context rest (Effect { hook; mask = bits lor full } :: steps)
+                | Computed (pattern, value) ->
+                    let bits = mask env value in
+                    given (bind env pattern bits) slot context rest (Derived { pattern; value; mask = bits lor full } :: steps)
+                | Changing (pattern, value) ->
+                    given (bind env pattern (full - 1)) slot context rest
+                      (Derived { pattern; value; mask = -1 } :: steps))
+          in
+          match given props 1 0 shapes [] with
+          | exception Beyond -> None
+          | env, steps -> (
+              match mask env result with
+              | exception Beyond -> None
+              | reads -> Some { steps; result; reads = reads lor full })))

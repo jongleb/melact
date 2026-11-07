@@ -115,6 +115,7 @@ let stated cell reduce =
   (cell.value, cell.dispatch)
 
 let state_cell instance key reduce initial =
+  let bit = Instance.cell_source instance in
   let rec cell =
     {
       value = initial;
@@ -124,8 +125,10 @@ let state_cell instance key reduce initial =
         (fun action ->
           let next = cell.reduce cell.value action in
           if not (next == cell.value) then (
-            Instance.invalidate_state instance cell (fun cell ->
-                match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed);
+            Instance.invalidate_state instance cell
+              (fun cell ->
+                match cell.value == cell.rendered with true -> Melhole.View.Unchanged | false -> Melhole.View.Changed)
+              bit;
             cell.value <- next));
     }
   in
