@@ -10,7 +10,7 @@ let reads_the_world =
   [ "row.current"; "!counter"; "Js.Date.now ()"; "measure ()"; "(counter := 1; 0)"; "useThing x"; "(object_ # size)"; "(let cell = counter in cell := 1; 0)" ]
 
 let pure_atoms =
-  [ "x"; "count"; "item.title"; "String.length name"; "(count + 1)"; "\"text\""; "Some x"; "(let cell = ref 0 in cell := 1; incr cell; !cell)" ]
+  [ "x"; "count"; "item.title"; "String.length name"; "(count + 1)"; "\"text\""; "Some x"; "(let cell = ref 0 in cell := 1; incr cell; !cell)"; "(fst (useTracked x))" ]
 
 let both first second =
   match (first.rendering, second.rendering) with
@@ -62,6 +62,10 @@ let law =
     ~count:2000
     ~print:(fun { source; _ } -> source)
     (Gen.sized_size (Gen.int_bound 5) (fun depth -> body depth Rendering))
-    (fun { source; rendering } -> Melact_ppx.Graph.rendering (Ppxlib.Parse.expression (Lexing.from_string source)) = rendering)
+    (fun { source; rendering } ->
+      let hooks callee =
+        match callee.Ppxlib.pexp_desc with Pexp_ident { txt = Lident "useTracked"; _ } -> Some 1 | _ -> None
+      in
+      Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) = rendering)
 
 let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law ])

@@ -817,10 +817,11 @@ Hooks get one key per call site, also inside custom hooks:
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let useToggle () =
-    (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
-      (fun () -> false)
-  let __melhole_component_2 = Melact_runtime.Component.make ~name:"Hooks.make"
+  let ((useToggle)[@melhole.hook (1, 1)]) =
+    fun () ->
+      (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
+        (fun () -> false)
+  let __melhole_component_2 = Melact_runtime.Component.pure ~name:"Hooks.make"
   include
     struct
       type make_props =
@@ -1143,13 +1144,15 @@ stays as a definition other files can call, with no limit on the number of depen
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useEffect3 _melact_argument_0 _melact_argument_1 =
-    React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
-      _melact_argument_0 _melact_argument_1[@@warning "-32"]
+  let ((useEffect3)[@melhole.hook (1, 1)]) =
+    fun _melact_argument_0 _melact_argument_1 ->
+      React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
+        _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let melact_key_useEffect8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useEffect8 _melact_argument_0 _melact_argument_1 =
-    React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
-      _melact_argument_0 _melact_argument_1[@@warning "-32"]
+  let ((useEffect8)[@melhole.hook (1, 1)]) =
+    fun _melact_argument_0 _melact_argument_1 ->
+      React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
+        _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let __melhole_hook_2 =
@@ -1171,9 +1174,10 @@ call the binding's definition:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let useMemo8 _melact_argument_0 _melact_argument_1 =
-    React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
-      _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
+  let ((useMemo8)[@melhole.hook (1, 1)]) =
+    fun _melact_argument_0 _melact_argument_1 ->
+      React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
+        _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
     [@@warning "-32"]
   let use a = useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
 
@@ -1311,3 +1315,22 @@ their round, after the layout reads of the components rendered before it:
   Melhole.View.rows
   Row.makeProps
   Row.makeProps
+
+A custom hook whose body is pure and calls its hooks at its top level carries how many hook slots it
+takes, so that a component calling it, in this file or in another module under staged_pps, keeps its
+update graph; the component numbers the hook's state cells after its own slots:
+
+  $ cat > tally.ml <<'EOF'
+  > let useTally start =
+  >   let count, setCount = React.useState (fun () -> start) in
+  >   let bump = React.useCallback0 (fun by -> setCount (fun count -> count + by)) in
+  >   (count, bump)
+  > let make () =
+  >   let left, bump = useTally 0 in
+  >   ((button ~onClick:(fun _ -> bump 1) ~children:[ React.int left ] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl tally.ml | grep -o "melhole.hook ([0-9], [0-9])\|Component.pure\|Instance.changed\|Memo.graph __melact_memo [0-9]* __melact_changed [0-9]*"
+  melhole.hook (1, 2)
+  Component.pure
+  Instance.changed

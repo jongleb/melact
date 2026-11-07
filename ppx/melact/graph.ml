@@ -5,7 +5,7 @@ type rendering = Pure | Impure
 
 exception Reads_the_world
 
-let rendering body =
+let rendering ~hooks body =
   let hook callee =
     match callee.pexp_desc with
     | Pexp_ident { txt; _ } -> (
@@ -62,7 +62,8 @@ let rendering body =
                 each rest
             | [] -> ())
         | Some ("useState" | "useMemo" | "useContext" | "useRef" | "useId" | "useDebugValue"), _ -> each values
-        | Some _, _ -> raise Reads_the_world
+        | Some _, _ -> (
+            match hooks callee with Some _ -> each values | None -> raise Reads_the_world)
         | None, [ (Nolabel, { pexp_desc = Pexp_construct ({ txt = Lident "()"; _ }, None); _ }) ] -> raise Reads_the_world
         | None, _ ->
             now cells callee;
@@ -152,10 +153,11 @@ type shape =
   | Effected of expression * dependencies
   | Computed of pattern * expression
   | Changing of pattern * expression  (** A value the rest of the body may change in place: made on every render. *)
+  | Custom of pattern option * expression * int  (** A custom hook whose fact gives its hook slots. *)
 
 exception Beyond
 
-let plan ~inputs ~props body =
+let plan ~hooks ~inputs ~props body =
   let hook expression =
     match expression.pexp_desc with
     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); _ }; _ }, arguments)
@@ -196,9 +198,20 @@ let plan ~inputs ~props body =
     expression
   in
   let shaped pattern value rest =
-    match (hook value, pattern) with
-    | None, None -> Run (checked value)
-    | None, Some pattern -> (
+    let custom =
+      match value.pexp_desc with
+      | Pexp_apply (callee, arguments) ->
+          Option.map
+            (fun count ->
+              List.iter (fun (_, argument) -> ignore (checked argument)) arguments;
+              Custom (pattern, value, count))
+            (hooks callee)
+      | _ -> None
+    in
+    match (custom, hook value, pattern) with
+    | Some shape, _, _ -> shape
+    | None, None, None -> Run (checked value)
+    | None, None, Some pattern -> (
         match
           List.fold_left
             (fun found name ->
@@ -209,7 +222,7 @@ let plan ~inputs ~props body =
         with
         | Frozen.Possibly_changed -> Changing (pattern, checked value)
         | Frozen.Read_only -> Computed (pattern, checked value))
-    | Some (base, dependencies, arguments), _ -> (
+    | None, Some (base, dependencies, arguments), _ -> (
         List.iter (fun argument -> ignore (checked argument)) arguments;
         match (base, pattern) with
         | ("useState" | "useReducer" | "useReducerWithMapState"), Some pattern -> Cell (pattern, value)
@@ -236,12 +249,13 @@ let plan ~inputs ~props body =
   | shapes, result -> (
       let slots =
         1
+        + List.fold_left (fun found shape -> match shape with Custom (_, _, count) -> found + count | _ -> found) 0 shapes
         + List.length
             (List.filter
                (fun shape ->
                  match shape with
                  | Cell _ | Stable _ | Remembered _ | Effected _ -> true
-                 | Run _ | Read _ | Computed _ | Changing _ -> false)
+                 | Run _ | Read _ | Computed _ | Changing _ | Custom _ -> false)
                shapes)
       in
       let contexts = List.length (List.filter (fun shape -> match shape with Read _ -> true | _ -> false) shapes) in
@@ -269,6 +283,12 @@ let plan ~inputs ~props body =
             | shape :: rest -> (
                 match shape with
                 | Run value -> given env slot context rest (Statement value :: steps)
+                | Custom (pattern, value, count) ->
+                    let bits = ((1 lsl count) - 1) lsl (inputs + slot) lor mask env value in
+                    given
+                      (Option.fold ~none:env ~some:(fun pattern -> bind env pattern bits) pattern)
+                      (slot + count) context rest
+                      (Option.fold ~none:(Statement value) ~some:(fun pattern -> Called (pattern, value)) pattern :: steps)
                 | Cell (pattern, value) ->
                     let bit = 1 lsl (inputs + slot) in
                     let env =
@@ -301,3 +321,63 @@ let plan ~inputs ~props body =
               match mask env result with
               | exception Beyond -> None
               | reads -> Some { steps; result; reads = reads lor full })))
+
+let slots ~hooks body =
+  let free_of_hooks expression =
+    (object
+       inherit Ast_traverse.iter as super
+
+       method! expression expression =
+         match expression.pexp_desc with
+         | Pexp_ident { txt; _ } -> (
+             let name = Longident.last_exn txt in
+             match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
+             | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> raise Beyond
+             | true | false -> ())
+         | _ -> super#expression expression
+    end)
+      #expression expression
+  in
+  let taken value =
+    match value.pexp_desc with
+    | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
+        let count =
+          match (hooks callee, txt) with
+          | Some count, _ -> Some count
+          | None, Ldot (Lident "React", name) -> (
+              let rec trimmed length =
+                match length > 0 && name.[length - 1] >= '0' && name.[length - 1] <= '9' with
+                | true -> trimmed (length - 1)
+                | false -> length
+              in
+              match String.sub name 0 (trimmed (String.length name)) with
+              | "useState" | "useReducer" | "useReducerWithMapState" | "useRef" | "useId" | "useMemo" | "useCallback"
+              | "useEffect" | "useLayoutEffect" | "useInsertionEffect" | "useImperativeHandle" ->
+                  Some 1
+              | "useContext" | "useDebugValue" -> Some 0
+              | _ -> None)
+          | None, _ -> None
+        in
+        match count with
+        | Some count ->
+            List.iter (fun (_, argument) -> free_of_hooks argument) arguments;
+            count
+        | None ->
+            free_of_hooks value;
+            0)
+    | _ ->
+        free_of_hooks value;
+        0
+  in
+  let rec counted expression =
+    match expression.pexp_desc with
+    | Pexp_sequence (first, rest) -> taken first + counted rest
+    | Pexp_let (Nonrecursive, [ binding ], rest) -> taken binding.pvb_expr + counted rest
+    | _ -> taken expression
+  in
+  let rec inner expression =
+    match expression.pexp_desc with Pexp_function (_, _, Pfunction_body body) -> inner body | _ -> expression
+  in
+  match rendering ~hooks body with
+  | Impure -> None
+  | Pure -> ( match counted (inner body) with count -> Some count | exception Beyond -> None)

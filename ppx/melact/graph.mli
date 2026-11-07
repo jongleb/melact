@@ -7,8 +7,8 @@ type rendering =
 
 (** [rendering body]: how the body of a [@react.component] reads while it renders. A function's body
     counts as run during the render unless the function is a JSX prop or the callback of an effect, a
-    reducer or [useCallback]. *)
-val rendering : Ppxlib.expression -> rendering
+    reducer or [useCallback]. [hooks] gives the hook slots of a custom hook known to be pure, from its fact. *)
+val rendering : hooks:(Ppxlib.expression -> int option) -> Ppxlib.expression -> rendering
 
 (** One step of a body read as an update graph. A mask is the set of sources (bits of props, state
     cells and contexts) whose change makes the step run again; [full] is in every mask, so a render
@@ -31,4 +31,9 @@ val full : int
     component compares and the input bits of each prop variable; [None] when a hook, a construct or
     the number of sources is beyond it, and the component renders whole. The first hook slot is the
     component's memory. *)
-val plan : inputs:int -> props:(string * int) list -> Ppxlib.expression -> plan option
+val plan :
+  hooks:(Ppxlib.expression -> int option) -> inputs:int -> props:(string * int) list -> Ppxlib.expression -> plan option
+
+(** [slots ~hooks definition]: the hook slots a custom hook takes on every call, when its body is pure,
+    calls its hooks at its top level and calls only React's hooks and custom hooks known by [hooks]. *)
+val slots : hooks:(Ppxlib.expression -> int option) -> Ppxlib.expression -> int option
