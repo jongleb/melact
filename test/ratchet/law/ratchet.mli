@@ -14,6 +14,8 @@ type outcome = Counters.t array * string
 type paired = { name : string; react : outcome; melact : outcome }
 
 val comparison : Counters.kind -> comparison
+(** Imports a module by its path from the root of the repository, once the ratchet's virtual time
+    (test/ratchet/classics/clock.mjs) stands in for the timers. *)
 val loaded : string -> 'build Js.Promise.t
 val path_of : string -> string -> string
 val seeded : int -> int array
@@ -21,6 +23,7 @@ val sequenced : (unit -> 'result Js.Promise.t) list -> 'result list Js.Promise.t
 val total : outcome -> Counters.kind -> int
 val excess : outcome -> outcome -> Counters.kind -> int
 val exceeding : outcome -> outcome -> string array
+val unaccounted : outcome -> string array
 val gaps : paired list -> (Counters.kind * int) list
 val never_more_than_react : gaps:string -> paired list -> unit
 val never_more_than_last_time : part:string -> owned:string list -> (string * (Counters.kind * int) list) list -> unit

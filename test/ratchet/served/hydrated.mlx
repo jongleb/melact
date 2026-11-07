@@ -1,0 +1,20 @@
+external document : Dom.document = "document"
+
+external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
+[@@mel.send] [@@mel.return nullable]
+
+external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> unit = "addEventListener" [@@mel.send]
+external set_inner_html : Dom.element -> string -> unit = "innerHTML" [@@mel.set]
+
+let start html count =
+  match (element_by_id document "root", element_by_id document "mount", element_by_id document "unmount") with
+  | Some container, Some mount, Some unmount ->
+      set_inner_html container html;
+      let hydrated = ref None in
+      add_event_listener mount "click" (fun _ ->
+          hydrated :=
+            Some (ReactDOM.Client.hydrateRoot container <Page.App rows=(Rows.made count) />));
+      add_event_listener unmount "click" (fun _ ->
+          Option.iter (fun root -> ReactDOM.Client.unmount root ()) !hydrated;
+          hydrated := None)
+  | _ -> ()

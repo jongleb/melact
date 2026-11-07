@@ -1166,3 +1166,53 @@ Accepted only with these holding, by property-based tests:
   for the same list, unguarding the first hole of every template, or ordering effects by walking
   the whole document each break a law. A counter new to the suite is recorded once with
   `--admit=<counter>`.
+
+  What else is counted. Timers (`setTimeout`, `setInterval`, `requestIdleCallback`), animation
+  frames, tasks (`setImmediate`, `MessagePort.postMessage`), microtasks (`queueMicrotask`) and
+  promise reactions (`then`). Event listeners added and removed, on any target. The mutation records
+  a `MutationObserver` sees on the document: another law checks that every record comes from a write
+  the counters saw, so a write path the counters miss shows up. After the unmount, and a full garbage
+  collection, what the run left behind: nodes it made that are out of the document and still
+  reachable, listeners it added on targets still alive, timers and frame requests still pending, and
+  properties it added to `window` or `document`. Selector matching (`querySelector`, `matches`,
+  `closest`) is the browser's work and does not count as walking.
+
+  The whole corpus runs. `test/ratchet/classics/driver.mjs` mounts each app of `bench/classics` and
+  each repro in jsdom, in its React 18 (production) and its Melact build, and drives it through its
+  own `scenario.mjs`, as `bench/classics/run.mjs` does in Chromium. Time is virtual: every timeout,
+  interval, frame and `setImmediate` waits in one queue that the driver runs in order, so a run counts
+  the same each time; a frame boundary is a paint. jsdom gets cheap stand-ins: `ResizeObserver` and
+  `IntersectionObserver` report once (never intersecting), `scrollIntoView` and `scrollTo` do
+  nothing, layout values are fixed (an element is 1000 by 20, a scroll box 600 high) and scroll
+  positions are kept. A step that needs real geometry is skipped, with its reason, in the part file
+  that lists the app (feed's steps on posts its infinite scroll loads, virtuallist's pick of visible
+  rows). The apps are split into parts that run in parallel; the slowest parts run only with
+  `RATCHET_SLOW` set, as CI and `lower.mjs` set it.
+
+  A small change on a big page costs the same as on a small one. `test/ratchet/bigpage` is a page
+  of rows of twelve elements each, more than 20,000 elements at 2,000 rows, with a debounced search
+  field, rows that read `offsetTop`, forty rows marked from a context and a popover. Every step after
+  the mount must count exactly the same at 2,000 rows as at 200, under React and under Melact; the
+  constant allowed is zero. A walk of the whole page fails it. `Big_page.keystroke build rows` gives
+  the counters of one keystroke on a page of that many rows.
+
+  Server output. `test/ratchet/served` renders `bench/ssr`'s page with Melact's server at 10, 100 and
+  1,000 rows: its HTML may have no more bytes than React's `renderToString` (Law A) or than last time
+  (Law B, as `bytes served`). The page is then hydrated by Melact and, from React's own HTML, by
+  React; after the hydration Law A holds per step, and the hydration's own excess over React's is
+  recorded and may only shrink.
+
+  Bundle size. `node test/ratchet/sizes.mjs` bundles every production build of Melact and Meltea
+  code (bench/melact, bench/meltea, the hydrating clients of bench/ssr, each app of bench/classics,
+  the examples) with esbuild and compares their gzip -9 sizes with `test/ratchet/sizes.json`; the
+  law test fails when one grows. `--lower` records what shrank. Growth is recorded only with
+  `--allow-growth=<reason>`, which the user approves and which keeps the reason in the file; a new
+  bundle needs `--admit=<bundle>`.
+
+  Each of these laws has caught a mutant: ordering effects by walking from the document root to its
+  end (the big page, and Law B on nodes walked), a timeout per render (Law B on timers), skipping
+  effect cleanups at unmount (listeners and nodes kept), a list of every cloned template (nodes
+  kept), 2.5 kB more in the runtime (the size ratchet), a second space before each attribute the
+  server writes (bytes served), and the counters forgetting `setAttribute` (the mutation record
+  check). Time is virtual in every ratchet test, the ones driven by `act` too, so a timer never fires
+  because the machine was slow.

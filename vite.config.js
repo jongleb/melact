@@ -55,6 +55,10 @@ export default defineConfig({
     // byte for byte against each other by dune; test/typed/probed runs it.
     exclude: ["**/node_modules/**", "_build/default/test/typed/dual/**", "_build/default/test/typed/staged/**"],
     setupFiles: ["./test/setup.js"],
+    // The ratchet's leak check collects garbage before it looks for nodes still reachable after an unmount.
+    poolOptions: { forks: { execArgv: ["--expose-gc"] } },
+    // The size ratchet bundles with esbuild, which needs Node's own typed arrays.
+    environmentMatchGlobs: [["**/test/ratchet/sizes/sizes_test.mjs", "node"]],
     // The compat laws load the npm libraries twice: from the root on npm's React, and from
     // test/compat/env on melact.compat, through Vite so that they share Melact's runtime with the app.
     server: { deps: { inline: [/test\/compat\/env\/node_modules\/(?!hoist-non-react-statics|react-is|prop-types)/] } },

@@ -6,3 +6,15 @@
   (es6 mjs))
  (preprocess
   (pps melange.ppx)))
+
+(rule
+ (alias runtest-js)
+ (deps
+  (alias_rec %{project_root}/bench/classics/all)
+  (alias_rec %{project_root}/bench/melact/all)
+  (alias_rec %{project_root}/bench/meltea/all)
+  (alias_rec %{project_root}/bench/ssr/melact/client/all)
+  (alias_rec %{project_root}/bench/ssr/meltea/client/all)
+  (alias_rec %{project_root}/examples/all))
+ (action
+  (progn)))

@@ -1,0 +1,72 @@
+name: Versus
+
+# Melact against an earlier Melact in headless Chromium: bench/classics/versus.mjs builds every app of
+# the corpus at a base commit and at this one and flags the steps that got slower against React or lay
+# out more. It is slow and needs a browser, so it runs nightly and by hand, never on a push. The base is
+# the input, else the last tag, else the commit before this one.
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Commit or tag to compare with (default the last tag, else the previous commit)
+        required: false
+        type: string
+      apps:
+        description: Apps of bench/classics, comma separated (default all)
+        required: false
+        type: string
+      runs:
+        description: Runs per app and side
+        required: false
+        default: "5"
+        type: string
+
+concurrency:
+  group: versus
+  cancel-in-progress: false
+
+jobs:
+  versus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.5"
+      - run: opam install . --deps-only --with-test --yes
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Playwright and its Chromium, outside the project's dependencies
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.48.2
+          npx --prefix "$RUNNER_TEMP/playwright" playwright install --with-deps chromium
+          echo "PLAYWRIGHT=$RUNNER_TEMP/playwright/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+      - name: The base to compare with
+        id: base
+        run: |
+          base="${{ inputs.base }}"
+          if [ -z "$base" ]; then base=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-parse HEAD^); fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+      - name: bench/classics/versus.mjs
+        env:
+          TMPDIR: ${{ runner.temp }}/versus
+        run: |
+          mkdir -p "$TMPDIR"
+          apps="${{ inputs.apps }}"
+          opam exec -- node bench/classics/versus.mjs --base=${{ steps.base.outputs.base }} --runs=${{ inputs.runs || '5' }} ${apps:+--apps=$apps} | tee "$TMPDIR/versus.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: versus
+          path: |
+            ${{ runner.temp }}/versus/versus.txt
+            ${{ runner.temp }}/versus/melact-versus-*/*.json
+          if-no-files-found: warn

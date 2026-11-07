@@ -2,6 +2,7 @@
 // if a counter went up or a recorded run is gone, it changes nothing. New runs are added; each test
 // file writes the runs it owns into RATCHET_OUT. Usage: node test/ratchet/lower.mjs [--no-build]
 // [--admit=<counter>]: a counter that is new to the suite is recorded as measured, once, the first time.
+// It runs the slow parts of bench/classics too (RATCHET_SLOW), so that every recorded run is measured.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,10 +18,18 @@ if (!process.argv.includes("--no-build")) {
 try {
   execFileSync("npx", ["vitest", "run", "_build/default/test/ratchet/"], {
     stdio: "inherit",
-    env: { ...process.env, RATCHET_OUT: measuredDirectory },
+    env: { ...process.env, RATCHET_OUT: measuredDirectory, RATCHET_SLOW: "1" },
   });
 } catch {}
-const parts = ["programs.json", "table.json", "meltea.json"];
+const parts = [
+  "programs.json",
+  "table.json",
+  "meltea.json",
+  "bigpage.json",
+  "served.json",
+  ...[1, 2, 3, 4].map((part) => `classics quick ${part}.json`),
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((part) => `classics slow ${part}.json`),
+];
 const missing = parts.filter((part) => !existsSync(join(measuredDirectory, part)));
 if (missing.length > 0) {
   console.error(`The ratchet suite did not report ${missing.join(", ")}; is it built?`);
