@@ -1,6 +1,6 @@
 {
   "meltea: keyed edits": {
-    "moves": 108,
+    "moves": 107,
     "insertions": 94,
     "removals": 164,
     "attributes": 5,
@@ -10,7 +10,7 @@
     "frame layouts": 1,
     "hole evaluations": 30,
     "view calls": 31,
-    "keys": 369,
+    "keys": 366,
     "row refreshes": 194
   },
   "meltea: selection only": {
@@ -26,7 +26,7 @@
     "row refreshes": 200
   },
   "meltea: random program, seed 1": {
-    "moves": 2,
+    "moves": 1,
     "insertions": 11,
     "removals": 12,
     "texts": 4,
@@ -34,7 +34,7 @@
     "frame layouts": 1,
     "hole evaluations": 16,
     "view calls": 16,
-    "keys": 25,
+    "keys": 23,
     "row refreshes": 20
   },
   "meltea: random program, seed 2": {
@@ -46,11 +46,11 @@
     "frame layouts": 1,
     "hole evaluations": 10,
     "view calls": 10,
-    "keys": 19,
+    "keys": 18,
     "row refreshes": 10
   },
   "meltea: random program, seed 3": {
-    "moves": 4,
+    "moves": 2,
     "insertions": 11,
     "removals": 11,
     "texts": 4,
@@ -58,7 +58,7 @@
     "frame layouts": 1,
     "hole evaluations": 23,
     "view calls": 24,
-    "keys": 29,
+    "keys": 24,
     "row refreshes": 13
   },
   "meltea: random program, seed 4": {
@@ -84,11 +84,11 @@
     "frame layouts": 1,
     "hole evaluations": 19,
     "view calls": 20,
-    "keys": 20,
+    "keys": 19,
     "row refreshes": 13
   },
   "meltea: random program, seed 6": {
-    "moves": 2,
+    "moves": 1,
     "insertions": 1,
     "removals": 4,
     "attributes": 2,
@@ -98,7 +98,7 @@
     "frame layouts": 1,
     "hole evaluations": 10,
     "view calls": 11,
-    "keys": 10,
+    "keys": 9,
     "row refreshes": 7
   },
   "meltea: random program, seed 7": {
@@ -121,11 +121,11 @@
     "frame layouts": 1,
     "hole evaluations": 8,
     "view calls": 9,
-    "keys": 17,
+    "keys": 16,
     "row refreshes": 14
   },
   "meltea: random program, seed 9": {
-    "moves": 2,
+    "moves": 1,
     "insertions": 6,
     "removals": 7,
     "attributes": 2,
@@ -135,11 +135,11 @@
     "frame layouts": 1,
     "hole evaluations": 23,
     "view calls": 25,
-    "keys": 16,
+    "keys": 14,
     "row refreshes": 10
   },
   "meltea: random program, seed 10": {
-    "moves": 6,
+    "moves": 3,
     "insertions": 3,
     "removals": 3,
     "attributes": 1,
@@ -149,7 +149,7 @@
     "frame layouts": 1,
     "hole evaluations": 19,
     "view calls": 19,
-    "keys": 17,
+    "keys": 13,
     "row refreshes": 6
   },
   "meltea: random program, seed 11": {
@@ -173,11 +173,11 @@
     "frame layouts": 1,
     "hole evaluations": 13,
     "view calls": 13,
-    "keys": 24,
+    "keys": 22,
     "row refreshes": 17
   },
   "melact: spliced rows, keyed edits": {
-    "moves": 108,
+    "moves": 107,
     "insertions": 94,
     "removals": 164,
     "attributes": 4,
@@ -188,8 +188,8 @@
     "layout reads": 1,
     "renders": 35,
     "hole evaluations": 215,
-    "keys": 369,
-    "row refreshes": 671
+    "keys": 366,
+    "row refreshes": 668
   },
   "melact: stateful rows, keyed edits": {
     "moves": 107,
@@ -421,7 +421,7 @@
     "hole evaluations": 19
   },
   "melhole: View.rows, keyed edits": {
-    "moves": 102,
+    "moves": 101,
     "insertions": 105,
     "removals": 105,
     "attributes": 5,
@@ -429,7 +429,7 @@
     "created nodes": 211,
     "frame layouts": 1,
     "listings": 9,
-    "keys": 275,
+    "keys": 272,
     "projections": 504,
     "row refreshes": 209
   },
@@ -447,11 +447,10 @@
     "row refreshes": 215
   },
   "Law A: Melact's excess over React 18 on the generated programs": {
-    "moves": 1,
     "properties": 15,
     "forced layouts": 103,
-    "keys": 64,
-    "row refreshes": 306
+    "keys": 63,
+    "row refreshes": 305
   },
   "event table: Melact, through its scenario": {
     "moves": 1325,
