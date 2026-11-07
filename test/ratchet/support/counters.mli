@@ -23,6 +23,7 @@ type kind =
   | Projected  (** A row's projection computed. *)
   | Refreshed  (** A row drawn again by its refresh or row function. *)
   | Walked  (** A step of a DOM walk: a TreeWalker or NodeIterator move, compareDocumentPosition, contains. *)
+  | Jobs_moved  (** A cell of an effect queue copied to put effects back in the order of the tree. *)
 
 val kinds : kind list
 val name : kind -> string

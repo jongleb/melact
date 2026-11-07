@@ -51,6 +51,7 @@ type rows =
   | Measured  (** Rows that read their own [offsetTop] while rendering. *)
   | Memoized  (** [React.memo] rows given a fresh callback on every render. *)
   | Selecting  (** [React.memo] rows that read the selection from a context and their [offsetTop]. *)
+  | Effected  (** Rows with a layout effect and an effect when they mount. *)
 
 (** A part of a generated page. *)
 type piece =
@@ -321,6 +322,18 @@ module Selecting_row = struct
         </li>)
 end
 
+module Effected_row = struct
+  let[@react.component] make ~item =
+    React.useLayoutEffect0 (fun () ->
+        Counters.bump Effect_ran;
+        None);
+    React.useEffect0 (fun () ->
+        Counters.bump Effect_ran;
+        None);
+    Counters.bump Rendered;
+    <li className="effected">(React.string (Counters.seen Evaluated item.label))</li>
+end
+
 module Listing = struct
   let[@react.component] make ~app ~rows =
     Counters.bump Rendered;
@@ -361,6 +374,7 @@ module Listing = struct
                   <Memo_row key=item.key item onPick=(fun () -> send (Select (Some 0))) />)
                 app.shown))
         </ul>
+    | Effected -> <ul className="effected">(React.array (Array.map (fun item -> <Effected_row key=item.key item />) app.shown))</ul>
     | Selecting -> <ul className="selecting">(React.array (Array.map (fun item -> <Selecting_row key=item.key item />) app.shown))</ul>
 end
 
@@ -584,6 +598,8 @@ let scenarios =
         size = 0;
         steps = [ Send Flip; Send Tick; Press_row 0; Send Flip; Press_row 1; Send Tick ];
       } );
+    ( "rows with effects, 200 mounted by one patch between kept ones",
+      { pieces = [ Listing Effected ]; size = 400; steps = [ Send Sift; Send Sift; Send Sift; Send Sift ] } );
     ( "memo rows given fresh callbacks",
       { pieces = [ Listing Memoized ]; size = 50; steps = [ Send Tick; Send (Swap (1, 2)); Press_row 3; Send Reverse ] } );
   |]
@@ -600,6 +616,7 @@ let described values =
     | Measured -> "measured"
     | Memoized -> "memoized"
     | Selecting -> "selecting"
+    | Effected -> "effected"
   in
   let rec pieces inner = "[" ^ String.concat ", " (List.map piece inner) ^ "]"
   and piece shown =

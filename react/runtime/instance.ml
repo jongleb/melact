@@ -306,7 +306,11 @@ let enqueued = ref 0
 let mounting = ref 0
 
 let tree_order = ref None
-let parent instance = instance.parent
+let rec below older younger =
+  match younger.parent with
+  | None -> `Apart
+  | Some parent when parent == older -> `Below
+  | Some parent -> below older parent
 
 let last_node instance =
   let last = ref None in
@@ -403,7 +407,52 @@ let changed_sources = ref Every
 
 let unchanged = View.host ~build:(fun [@u] _ -> View.nothing) ~patch:(fun [@u] _ _ -> None)
 
+(** Siblings that one patch builds from the last one: where the last of them went, the effect queues
+    below the first of them and above the last, and what each of them queued, the last first. *)
+type 'job siblings = {
+  holder : Dom.node;
+  mutable front : Dom.node Js.null;
+  base : 'job list * 'job list * 'job list * 'job list;
+  mutable above : 'job list * 'job list * 'job list * 'job list;
+  mutable segments : ('job list * 'job list * 'job list * 'job list) list;
+}
+
+let siblings : job siblings option ref = ref None
+
+let moved : int -> unit =
+  [%mel.raw
+    {|function (count) {
+  if (typeof process !== "undefined" && process.env.NODE_ENV !== "production" && globalThis.__ratchet)
+    globalThis.__ratchet.bump("queued jobs moved", count);
+}|}]
+
+let rec taken stop list =
+  match list == stop with
+  | true -> []
+  | false -> ( match list with job :: rest -> job :: taken stop rest | [] -> [])
+
+let finish_siblings () =
+  Option.iter
+    (fun run ->
+      siblings := None;
+      match run.segments with
+      | [] | [ _ ] -> ()
+      | segments ->
+          let a1, a2, a3, a4 = run.above and b1, b2, b3, b4 = run.base in
+          let rebuild queue above base pick =
+            let later = taken above !queue in
+            let ordered = List.fold_left (fun lower segment -> pick segment @ lower) base segments in
+            moved (List.length later + List.fold_left (fun total segment -> total + List.length (pick segment)) 0 segments);
+            queue := later @ ordered
+          in
+          rebuild layout_cleanups a1 b1 (fun (jobs, _, _, _) -> jobs);
+          rebuild layout_runs a2 b2 (fun (_, jobs, _, _) -> jobs);
+          rebuild passive_cleanups a3 b3 (fun (_, _, jobs, _) -> jobs);
+          rebuild passive_runs a4 b4 (fun (_, _, _, jobs) -> jobs))
+    !siblings
+
 let run_phases cleanups runs =
+  finish_siblings ();
   let run_jobs phase jobs =
     List.iter
       (fun job ->
@@ -756,6 +805,7 @@ let rec settle () =
         in
         rendering `First;
         dirty := !waiting @ !dirty;
+        finish_siblings ();
         (match !put_off with
         | None_put_off -> ()
         | Some_put_off ->
@@ -965,22 +1015,29 @@ let born kind =
   in
   instance
 
-(** Siblings that one patch builds from the last one: where the last of them went, and the effect
-    queues below the first of them and above the last. *)
-type 'job siblings = {
-  parent : Dom.node;
-  mutable front : Dom.node Js.null;
-  base : 'job list * 'job list * 'job list * 'job list;
-  mutable above : 'job list * 'job list * 'job list * 'job list;
-}
-
-let siblings : job siblings option ref = ref None
-
-let mount_instance position kind =
+let mount_instance (position : Template.position) kind =
   let instance = born kind in
   let since = !enqueued in
   let queued () = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
   let before = match (!View.patch_order, !mounting) with View.Out_of_order, 0 -> Some (queued ()) | _ -> None in
+  let continued =
+    Option.bind before (fun (e1, e2, e3, e4) ->
+        match !siblings with
+        | Some ({ above = a1, a2, a3, a4; _ } as run)
+          when Dom_api.same run.holder position.parent && a1 == e1 && a2 == e2 && a3 == e3 && a4 == e4
+               &&
+               let rec reaches node =
+                 match Js.Null.toOption node with
+                 | None -> `Elsewhere
+                 | Some node when Dom_api.same (Js.Null.return node) run.front -> `Before_it
+                 | Some node -> reaches (Dom_api.following_sibling node)
+               in
+               reaches position.before = `Before_it ->
+            Some run
+        | Some _ | None ->
+            finish_siblings ();
+            None)
+  in
   incr mounting;
   (match
      let child = render instance in
@@ -1003,32 +1060,21 @@ let mount_instance position kind =
       decr mounting;
       !suspension.rescue While_rendering instance error [@u]);
   let live = View.live instances instance in
-  (match (before, !enqueued > since) with
-  | Some before, true -> (
+  (match (before, continued, !enqueued > since) with
+  | Some (e1, e2, e3, e4), _, true ->
+      let segment = (taken e1 !layout_cleanups, taken e2 !layout_runs, taken e3 !passive_cleanups, taken e4 !passive_runs) in
       let front = View.front live Js.null in
-      let rec above stop list = match list == stop with true -> [] | false -> ( match list with job :: rest -> job :: above stop rest | [] -> []) in
-      match !siblings with
-      | Some ({ above = a1, a2, a3, a4; _ } as run)
-        when Dom_api.same run.parent position.parent
-             && (let e1, e2, e3, e4 = before in a1 == e1 && a2 == e2 && a3 == e3 && a4 == e4)
-             &&
-             let rec reaches node =
-               match Js.Null.toOption node with
-               | None -> `Elsewhere
-               | Some node when Dom_api.same (Js.Null.return node) run.front -> `Before_it
-               | Some node -> reaches (Dom_api.following_sibling node)
-             in
-             reaches position.before = `Before_it ->
-          let b1, b2, b3, b4 = run.base and e1, e2, e3, e4 = before in
-          let splice queue base earlier = queue := above base earlier @ above earlier !queue @ base in
-          splice layout_cleanups b1 e1;
-          splice layout_runs b2 e2;
-          splice passive_cleanups b3 e3;
-          splice passive_runs b4 e4;
+      Option.fold
+        ~none:(fun () ->
+          siblings := Some { holder = position.parent; front; base = (e1, e2, e3, e4); above = queued (); segments = [ segment ] })
+        ~some:(fun run () ->
+          run.segments <- segment :: run.segments;
           run.front <- front;
-          run.above <- queued ()
-      | Some _ | None -> siblings := Some { parent = position.parent; front; base = before; above = queued () })
-  | (Some _ | None), _ -> ());
+          run.above <- queued ())
+        continued ()
+  | Some _, Some run, false ->
+      run.front <- View.front live Js.null
+  | (Some _ | None), _, _ -> ());
   live
 
 let component definition inputs render =

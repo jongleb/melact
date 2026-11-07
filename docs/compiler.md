@@ -1086,8 +1086,13 @@ The laws found two bugs in Melact's ordering of effects. The fixes apply to ever
 
 - Siblings mounted by one patch, such as the rows of a list whose keys all changed, ran their
   effects in reverse tree order, because a patch builds new siblings from the last one. Each such
-  mount now puts its effects below those of the siblings the same patch built just before it,
-  which follow it in the tree. This needs no DOM reads. A dual law edits a keyed list of components
+  mount now keeps what it queued as a segment of the run of siblings it belongs to. When the run
+  ends, the queues are rebuilt once with the segments in reverse order: when a mount does not
+  continue it, or before the effects are sorted or run. N rows cost O(N), with no DOM reads. A first
+  version spliced the queues at every mount, which was quadratic and doubled TodoMVC's filter steps
+  in the browser. The ratchet now counts the queue cells this ordering copies ("queued jobs
+  moved"), and a fixed program mounts 200 rows with effects between kept ones. That program records
+  1,600 cells in the baseline; the old splice moves 160,792 and fails Law B. A dual law edits a keyed list of components
   with layout and passive effects at random, and after every edit the effects of the new rows must
   run as under React 18: layout effects first, each kind in list order. Before the fix it failed
   on its eighth run.

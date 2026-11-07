@@ -41,12 +41,6 @@ let () =
   Instance.tree_order :=
     Some
       (fun first second ->
-        let rec below older younger =
-          match Instance.parent younger with
-          | None -> `Apart
-          | Some parent when parent == older -> `Below
-          | Some parent -> below older parent
-        in
         let rec levels node inner =
           let rec up at =
             match Raw.find (Raw.of_any at) anchor_key with
@@ -61,7 +55,7 @@ let () =
           | a :: _, b :: _ -> (match Dom_api.compare_document_position a b land 4 with 0 -> 1 | _ -> -1)
           | [], _ | _, [] -> 0
         in
-        match (below first second, below second first) with
+        match (Instance.below first second, Instance.below second first) with
         | `Below, _ -> 1
         | _, `Below -> -1
         | `Apart, `Apart -> (

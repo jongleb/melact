@@ -42,6 +42,7 @@ let comparison kind =
       Known_gap
         "effects of children put off to a later round are put back in document order: by comparing positions when few, \
          by walking the subtree that holds them when many; React keeps that order in its fibers"
+  | Jobs_moved -> Excluded "React keeps effects in the order of its fibers and moves no queue"
   | Created -> Excluded "templates keep a comment anchor for every child slot, where React keeps positions in fibers"
   | Viewed | Listed | Projected -> Excluded "only the Meltea and melhole runs count it"
 

@@ -55,7 +55,8 @@ val current : unit -> instance
     tree, [0] to leave it to document order. melact.compat sets it to order through its portals. *)
 val tree_order : (instance -> instance -> int) option ref
 
-val parent : instance -> instance option
+(** [`Below] when the second instance is inside the first one. *)
+val below : instance -> instance -> [ `Below | `Apart ]
 
 (** The deepest last node of what the instance shows, if it shows anything. *)
 val last_node : instance -> Dom.node option
