@@ -599,11 +599,14 @@ replacing one hookless component by another with the same output resets the stat
 
 ### Spliced into the caller
 
-Where a hookless component is used at a place that never holds anything else, a child slot of a DOM
-element or the row of a `map`, `melact-ppx` splices its body in: the props become `let`s and the
-body joins the caller's template, so a list of such rows compiles to `View.rows` with one template
-and no child per row. An element that flows as a value (passed to `render`, returned from a branch)
-keeps the component, since two places of one component must keep its state when they swap. The
+Where a hookless component is the row of a `map`, `melact-ppx` splices its body in: the props
+become `let`s and the body joins the caller's template, so a list of such rows compiles to
+`View.rows` with one template and no child per row. In a child slot of a DOM element it stays a
+component. Spliced there, its DOM writes would happen in its parent's pass instead of the next
+round, before the render of a later component that reads layout (`offsetTop` of a ref): each such
+read then forces a layout. In an event table, sorting went from 2 layouts to 4 and from 73 to 106 ms.
+An element that flows as a value (passed to `render`, returned from a branch) keeps the component
+too, since two places of one component must keep its state when they swap. The
 body is spliced only when no name it reads is shadowed where it lands, it takes required labelled
 props and no `children`, and `React.memo` carries no comparison of its own. On the keyed benchmark
 creating 1,000 rows went from 20.7 to 16.6 ms and 10,000 rows from 193.9 to 179.0 ms.

@@ -1274,26 +1274,6 @@ let structure items =
           | _ -> `Other
         in
         match expression.pexp_desc with
-        | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident _; _ }; _ } as tag, arguments) when jsx expression ->
-            super#expression
-              {
-                expression with
-                pexp_desc =
-                  Pexp_apply
-                    ( tag,
-                      List.map
-                        (fun (label, value) ->
-                          match (label, Element.list_items value) with
-                          | Labelled "children", Some items ->
-                              ( label,
-                                List.fold_right
-                                  (fun item rest ->
-                                    { value with pexp_desc = Pexp_construct ({ txt = Lident "::"; loc = value.pexp_loc }, Some (pexp_tuple ~loc:value.pexp_loc [ in_place item; rest ])) })
-                                  items
-                                  { value with pexp_desc = Pexp_construct ({ txt = Lident "[]"; loc = value.pexp_loc }, None) } )
-                          | _ -> (label, value))
-                        arguments );
-              }
         | Pexp_apply (callee, arguments) when mapping callee = `Mapping ->
             super#expression
               {

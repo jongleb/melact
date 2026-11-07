@@ -35,11 +35,11 @@ let calls file name =
 
 let () =
   describe "components of other modules" (fun () ->
-      test "are spliced in under staged_pps, and called under pps, unless a name they read is shadowed where they are used" (fun () ->
+      test "are spliced into map rows under staged_pps, and called under pps, in child slots, or where a name they read is shadowed" (fun () ->
           expect
             ( (calls "melact" "Tag", calls "melact" "Holder", calls "melact" "Badge" > 0, calls "melact" "Stale" > 0),
               (calls "plain" "Tag" > 0, calls "plain" "Holder" > 0) )
-          |. to_equal ((0, 0, true, true), (true, true)));
+          |. to_equal ((1, 1, true, true), (true, true)));
       test_async "show what React shows, keep their children's state by key and in place, and read their own module's values" (fun () ->
           check_async
             (async_property (tapes ~shortest:2 ~longest:30) (fun values ->

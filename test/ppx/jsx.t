@@ -1291,8 +1291,9 @@ index:
   Melhole.View.selector Melhole.View.Structural
   Js.Fn.I2 = (fun __melhole_item __melhole_index -> ((let x = __melhole_item in x) [@ocaml.warning "-26-27"])) 
 
-A component without hooks of the same file is spliced into the row of a list and into a child slot,
-so the list compiles to rows of one template; an element that flows as a value keeps the component:
+A component without hooks of the same file is spliced into the row of a list, so the list compiles
+to rows of one template; in a child slot or as a value it stays a component, so its DOM writes keep
+their round, after the layout reads of the components rendered before it:
 
   $ cat > inlined.ml <<'EOF'
   > module Row = struct
@@ -1304,4 +1305,5 @@ so the list compiles to rows of one template; an element that flows as a value k
   > EOF
   $ ./pp.exe -impl inlined.ml | grep -o "Melhole.View.rows\|Melhole.View.each\|Row.makeProps"
   Melhole.View.rows
+  Row.makeProps
   Row.makeProps
