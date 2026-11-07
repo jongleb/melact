@@ -640,6 +640,17 @@ DOM differs. The guard stays; the check after input costs one property read. One
 reason-react with React 18 and against Melact, types and clicks into a controlled field and
 checkbox whose handlers keep or reject the input, and compares what the page shows.
 
+`onChange` follows the element, as React's change plugin does. On a `select` it listens to
+`change` and fires on every one. On an `input` or a `textarea` it listens to both `input` and
+`change` and fires only when what the element shows, its value or checked state, differs from what
+was recorded, as React's value tracker does: the handler and every controlled write record it. So
+typing fires once per character, the `change` a blur sends after it fires nothing, a checkbox click
+(click, input, change) fires once, and a lone `change`, as Testing Library's `fireEvent.change`
+sends, reaches the handler. The compiler picks the event from the tag; `ReactDOM.createElement`
+does the same at run time. A dual law sends random typing, lone changes, blurs, checkbox clicks and
+select changes to a page with all four and compares the calls and what the page shows with React's;
+listening to `input` alone, or not checking the recorded value, each break it.
+
 ## Events and makeProps
 
 A handler prop compiles to `fun event -> handler (React.Event.ofNative event)`: `ofNative` is the

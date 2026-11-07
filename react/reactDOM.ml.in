@@ -472,9 +472,15 @@ type built = {
   mutable styled : View.Hole.style option;
 }
 
+let applying_on built name =
+  match (name, built.tag) with
+  | "onChange", "select" -> Event "change"
+  | "onChange", ("input" | "textarea") -> Event "onchange"
+  | _, _ -> applying name
+
 let apply built props name =
   let element = built.element in
-  match applying name with
+  match applying_on built name with
   | Text_attribute attribute -> Dom_api.set_attribute element attribute (read props name : string)
   | Flag_attribute attribute -> (
       match (read props name : bool) with
@@ -531,7 +537,7 @@ let apply built props name =
 
 let clear built name =
   let element = built.element in
-  match applying name with
+  match applying_on built name with
   | Text_attribute attribute
   | Flag_attribute attribute
   | Booleanish_attribute attribute

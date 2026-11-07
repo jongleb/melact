@@ -1171,6 +1171,56 @@ module Trending = struct
     <Trend count />
 end
 
+let put_value : Dom.element -> string -> unit =
+  [%mel.raw
+    {|function (element, value) {
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value").set.call(element, value);
+      }|}]
+
+module Changing = struct
+  let[@react.component] make () =
+    let text, setText = React.useState (fun () -> "") in
+    let area, setArea = React.useState (fun () -> "") in
+    let checked, setChecked = React.useState (fun () -> false) in
+    let colour, setColour = React.useState (fun () -> "red") in
+    <div>
+      <input
+        id="text"
+        value=text
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          log ("text " ^ value);
+          setText (fun _ -> value)) />
+      <textarea
+        id="area"
+        value=area
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          log ("area " ^ value);
+          setArea (fun _ -> value)) />
+      <input
+        id="check"
+        type_="checkbox"
+        checked
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##checked in
+          log ("check " ^ string_of_bool value);
+          setChecked (fun _ -> value)) />
+      <select
+        id="colour"
+        value=colour
+        onChange=(fun event ->
+          let value = (React.Event.Form.target event)##value in
+          log ("colour " ^ value);
+          setColour (fun _ -> value))>
+        <option value="red">(React.string "red")</option>
+        <option value="green">(React.string "green")</option>
+        <option value="blue">(React.string "blue")</option>
+      </select>
+      <p>(React.string (text ^ "|" ^ area ^ "|" ^ string_of_bool checked ^ "|" ^ colour))</p>
+    </div>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -2952,6 +3002,57 @@ let () =
              ignore (take ());
              step 6 0 [] []))
         [%mel.obj { numRuns = 40 }]));
+  describe "onChange, from input, change and click events" (fun () ->
+    test_async "fires as React's does: on a changed value of an input or textarea, on a click of a checkbox, on every change of a select" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Changing /> in
+             let words = [| "a"; "b"; "ab" |] and colours = [| "red"; "green"; "blue" |] in
+             let fire element name = dispatch element (bubbling name [%mel.obj { bubbles = true }]) in
+             let rec step remaining (text, area, checked, colour) expected =
+               match remaining with
+               | 0 ->
+                   let shown = text_content (select root "p") in
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (shown, take ())
+                   |. to_equal
+                        ( text ^ "|" ^ area ^ "|" ^ string_of_bool checked ^ "|" ^ colour,
+                          List.rev expected );
+                   finish ()
+               | _ ->
+                   let field, last, label = match draw tape 2 with 0 -> ("#text", text, "text") | _ -> ("#area", area, "area") in
+                   let next model = match label with "text" -> (fun (_, a, c, o) v -> (v, a, c, o)) model | _ -> (fun (t, _, c, o) v -> (t, v, c, o)) model in
+                   let model = (text, area, checked, colour) in
+                   let run, model, expected =
+                     match draw tape 5 with
+                     | 0 ->
+                         let word = words.(draw tape 3) in
+                         ( (fun () -> put_value (select root field) word; fire (select root field) "input"),
+                           next model word,
+                           match String.equal word last with true -> expected | false -> (label ^ " " ^ word) :: expected )
+                     | 1 ->
+                         let word = words.(draw tape 3) in
+                         ( (fun () -> put_value (select root field) word; fire (select root field) "change"),
+                           next model word,
+                           match String.equal word last with true -> expected | false -> (label ^ " " ^ word) :: expected )
+                     | 2 -> ((fun () -> fire (select root field) "change"), model, expected)
+                     | 3 ->
+                         ( (fun () -> click (select root "#check")),
+                           (text, area, not checked, colour),
+                           ("check " ^ string_of_bool (not checked)) :: expected )
+                     | _ ->
+                         let chosen = colours.(draw tape 3) in
+                         ( (fun () -> put_value (select root "#colour") chosen; fire (select root "#colour") "change"),
+                           (text, area, checked, chosen),
+                           ("colour " ^ chosen) :: expected )
+                   in
+                   let* () = act run in
+                   step (remaining - 1) model expected
+             in
+             ignore (take ());
+             step 8 ("", "", false, "red") []))
+        [%mel.obj { numRuns = 120 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->
       let* root, client = mount <Unicode /> in
