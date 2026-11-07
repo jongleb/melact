@@ -1224,7 +1224,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                         | false -> Js.Null.return (root_of (Array.unsafe_get frames (index + 1)))
                       in
                       move position.parent (root_of (Array.unsafe_get frames index)) before
-                    done;;
+                    done;
                     Some (shown items keys projections frames Unindexed))
             | `In_place ->
                 let frames = old.frames and projections = old.projections and indexes = ref old.indexes in
