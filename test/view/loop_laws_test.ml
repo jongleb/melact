@@ -736,3 +736,40 @@ let () =
                      expect (List.map fst seen) |. to_equal (List.map snd seen)))
                 [%mel.obj { numRuns = 400 }])))
     loops
+
+let sparse_site = View.loop_site ()
+
+let sparse items outer =
+  View.each sparse_site View.Items items View.arrayed
+    (fun [@u] item _ ->
+      View.with_key item.key
+        (match String.equal item.group "a" with
+        | true -> View.empty
+        | false -> View.tpl_instance row_template [| HAttr (Some (marked outer item)); HText item.label |]))
+    (fun [@u] item _ out at -> Array.unsafe_set out at (View.Input (marked outer item)))
+    1
+    [| View.Input outer |]
+    View.Unselecting
+
+let () =
+  describe "Keyed loop laws: rows that show nothing" (fun () ->
+      test "after any edits, patching shows what mounting from scratch shows, beside any neighbours" (fun () ->
+          check
+            (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 let framed child = View.list [ View.text "<"; child; View.text ">" ] in
+                 let root = create_element document "ul" in
+                 let items, outer = start in
+                 let mounted = View.mount (framed (sparse items outer)) ~parent:root ~before:None in
+                 let rec run state remaining =
+                   match remaining with
+                   | 0 -> []
+                   | _ ->
+                       let ((items, outer) as next), _ = step (fun _ outer -> outer) tape state in
+                       View.patch mounted (framed (sparse items outer));
+                       (shapes (as_node root), shown (framed (sparse items outer))) :: run next (remaining - 1)
+                 in
+                 let seen = run start (2 + draw tape 12) in
+                 View.unmount mounted;
+                 expect (List.map fst seen) |. to_equal (List.map snd seen)))
+            [%mel.obj { numRuns = 400 }]))

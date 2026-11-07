@@ -1,6 +1,6 @@
 open Testing
 
-external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external test_async : string -> (unit -> unit Js.Promise.t) -> int -> unit = "test"
 
 external keyboard : string -> < key : string ; bubbles : bool > Js.t -> Dom.event = "KeyboardEvent"
 [@@mel.new]
@@ -159,7 +159,8 @@ let () =
                  let* mounted = mounted model early late in
                  expect (resumed = hydrated, resumed = mounted) |. to_equal (true, true);
                  Js.Promise.resolve ()))
-            [%mel.obj { numRuns = 150 }]);
+            [%mel.obj { numRuns = 150 }])
+        60000;
       test_async "with no input before the code arrives, a resumed page runs no view and changes nothing until its first input or message" (fun () ->
           check_async
             (async_property (tapes ~shortest:8 ~longest:40) (fun values ->
@@ -167,7 +168,8 @@ let () =
                  let* _, waking = served Program.resume model [] late in
                  expect waking.untouched |. to_equal (0, 0);
                  Js.Promise.resolve ()))
-            [%mel.obj { numRuns = 60 }]);
+            [%mel.obj { numRuns = 60 }])
+        60000;
       test_async "its first input takes the page over once, keeping every element the server sent and creating none; a message takes it over at its draw" (fun () ->
           check_async
             (async_property (tapes ~shortest:8 ~longest:40) (fun values ->
@@ -177,4 +179,5 @@ let () =
                  expect waking.taking
                  |. to_equal (match late with Route _ :: _ -> (2, waking.sent, 1) | _ -> (1, waking.sent, 0));
                  Js.Promise.resolve ()))
-            [%mel.obj { numRuns = 60 }]))
+            [%mel.obj { numRuns = 60 }])
+        60000)

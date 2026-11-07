@@ -217,7 +217,9 @@ groups, breaks them. Groups are written on the client only; a server page shows 
 
 When the outer values are kept and the list only lost or gained one block of rows, the loop finds
 the longest run of physically equal items at both ends and touches only the middle: it removes the
-rows that went, or mounts the new ones before the first row that follows them. Removing a row or
+rows that went, or mounts the new ones before the first row that follows them. Loops of components
+(`View.each`) do the same when rows ignore their index; a row that shows nothing is skipped when
+looking for the node to insert before. Removing a row or
 appending 1,000 compares each kept item once and builds no plan.
 
 ### A few rows that change places
