@@ -23,6 +23,18 @@ type kind =
   | Projected  (** A row's projection computed. *)
   | Refreshed  (** A row drawn again by its refresh or row function. *)
   | Walked  (** A step of a DOM walk: a TreeWalker or NodeIterator move, compareDocumentPosition, contains. *)
+  | Timer  (** A [setTimeout], [setInterval] or [requestIdleCallback] call. *)
+  | Frame  (** A [requestAnimationFrame] call. *)
+  | Task  (** A task queued with [setImmediate] or [MessagePort.postMessage], as schedulers queue them. *)
+  | Microtask  (** A [queueMicrotask] call. *)
+  | Reaction  (** A [then] call on a promise, also from [catch], [finally] and resolving with a promise. *)
+  | Listened  (** An event listener added that its target did not have. *)
+  | Unlistened  (** An event listener removed that its target had. *)
+  | Recorded  (** A mutation record of the document from a [MutationObserver], a cross-check of the writes. *)
+  | Kept_node  (** After unmount and a full collection, a node the run made, out of the document and still reachable. *)
+  | Kept_listener  (** After unmount and a full collection, a listener the run added, on a target still reachable. *)
+  | Kept_timer  (** After unmount, a timeout, interval or frame request the run made, still pending. *)
+  | Kept_global  (** After unmount, a property the run added to [window] or [document]. *)
 
 val kinds : kind list
 val name : kind -> string

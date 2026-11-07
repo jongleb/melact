@@ -22,6 +22,8 @@ let comparison kind =
   | Counters.Removed | Moved | Property | Attribute | Class | Text | Style | Frame_layout | Layout_read | Rendered
   | Effect_ran | Evaluated ->
       Compared
+  | Timer | Frame | Task | Microtask | Reaction | Listened | Unlistened | Recorded | Kept_node
+  | Kept_listener | Kept_timer | Kept_global -> Excluded "measuring"
   | Forced_layout ->
       Known_gap
         "a flush renders and writes in rounds, so a layout read in a later round follows the writes of an earlier one; \

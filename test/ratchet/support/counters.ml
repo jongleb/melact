@@ -20,11 +20,24 @@ type kind =
   | Projected
   | Refreshed
   | Walked
+  | Timer
+  | Frame
+  | Task
+  | Microtask
+  | Reaction
+  | Listened
+  | Unlistened
+  | Recorded
+  | Kept_node
+  | Kept_listener
+  | Kept_timer
+  | Kept_global
 
 let kinds =
   [
     Moved; Inserted; Removed; Attribute; Class; Text; Style; Property; Created; Forced_layout; Frame_layout; Layout_read; Rendered;
-    Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked;
+    Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked; Timer; Frame; Task; Microtask; Reaction; Listened;
+    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global;
   ]
 
 let name kind =
@@ -50,6 +63,18 @@ let name kind =
   | Projected -> "projections"
   | Refreshed -> "row refreshes"
   | Walked -> "nodes walked"
+  | Timer -> "timers"
+  | Frame -> "animation frames"
+  | Task -> "tasks"
+  | Microtask -> "microtasks"
+  | Reaction -> "promise reactions"
+  | Listened -> "listeners added"
+  | Unlistened -> "listeners removed"
+  | Recorded -> "mutation records"
+  | Kept_node -> "nodes kept"
+  | Kept_listener -> "listeners kept"
+  | Kept_timer -> "timers kept"
+  | Kept_global -> "globals kept"
 
 type t = int Js.Dict.t
 
@@ -57,8 +82,19 @@ let () =
   ([%mel.raw
     {|function () {
   if (globalThis.__ratchet) return;
-  var state = { counts: Object.create(null), dirty: false, quiet: 0 };
+  var state = { counts: Object.create(null), dirty: false, layout: null, made: null };
   globalThis.__ratchet = state;
+  var hushed = 0;
+  var observer = null;
+  var recorded = function (records) { bump("mutation records", records.length); };
+  Object.defineProperty(state, "quiet", {
+    get: function () { return hushed; },
+    set: function (level) {
+      if (observer && hushed === 0 && level > 0) recorded(observer.takeRecords());
+      if (observer && hushed > 0 && level === 0) observer.takeRecords();
+      hushed = level;
+    },
+  });
   var traced = typeof process !== "undefined" && process.env && process.env.RATCHET_TRACE;
   var bump = function (kind, by) {
     if (state.quiet > 0 || by === 0) return;
@@ -204,21 +240,103 @@ let () =
   before(Node.prototype, "contains", function () { bump("nodes walked", 1); });
   var computed = window.getComputedStyle;
   window.getComputedStyle = function () { read(); return computed.apply(this, arguments); };
+  var remembered = function (node) { if (state.made && state.quiet === 0) state.made.push(new WeakRef(node)); };
+  ["createElement", "createElementNS", "createTextNode", "createComment"].forEach(function (name) {
+    after(Document.prototype, name, remembered);
+  });
+  after(Node.prototype, "cloneNode", remembered);
+  after(Document.prototype, "importNode", remembered);
+  var idle = function (callback) {
+    return state.clock.setTimeout(function () { callback({ didTimeout: false, timeRemaining: function () { return 0; } }); }, 1);
+  };
+  state.clock = {
+    setTimeout: window.setTimeout, clearTimeout: window.clearTimeout,
+    setInterval: window.setInterval, clearInterval: window.clearInterval,
+    setImmediate: globalThis.setImmediate, clearImmediate: globalThis.clearImmediate,
+    requestAnimationFrame: window.requestAnimationFrame || function (callback) { return state.clock.setTimeout(function () { callback(performance.now()); }, 16); },
+    cancelAnimationFrame: window.cancelAnimationFrame || function (handle) { state.clock.clearTimeout(handle); },
+    requestIdleCallback: window.requestIdleCallback || idle,
+    cancelIdleCallback: window.cancelIdleCallback || function (handle) { state.clock.clearTimeout(handle); },
+    queueMicrotask: window.queueMicrotask,
+  };
+  var scheduled = {
+    setTimeout: "timers", setInterval: "timers", requestIdleCallback: "timers", requestAnimationFrame: "animation frames",
+    setImmediate: "tasks", queueMicrotask: "microtasks",
+    clearTimeout: null, clearInterval: null, clearImmediate: null, cancelAnimationFrame: null, cancelIdleCallback: null,
+  };
+  Object.keys(scheduled).forEach(function (name) {
+    var kind = scheduled[name];
+    window[name] = function () { if (kind) bump(kind, 1); return state.clock[name].apply(window, arguments); };
+  });
+  if (typeof MessagePort !== "undefined") before(MessagePort.prototype, "postMessage", function () { bump("tasks", 1); });
+  before(Promise.prototype, "then", function () { bump("promise reactions", 1); });
+  var registered = new WeakMap();
+  state.listened = [];
+  var listening = function (target, type, options) {
+    var capture = typeof options === "boolean" ? options : !!(options && options.capture);
+    var listeners = registered.get(target);
+    if (!listeners) {
+      listeners = new Map();
+      registered.set(target, listeners);
+      state.listened.push(new WeakRef(target));
+    }
+    var key = type + (capture ? " capture" : "");
+    if (!listeners.has(key)) listeners.set(key, new Set());
+    return listeners.get(key);
+  };
+  var added = EventTarget.prototype.addEventListener;
+  var removed = EventTarget.prototype.removeEventListener;
+  EventTarget.prototype.addEventListener = function (type, listener, options) {
+    if (listener && state.quiet === 0) {
+      var listeners = listening(this, type, options);
+      if (!listeners.has(listener)) { listeners.add(listener); bump("listeners added", 1); }
+    }
+    return added.apply(this, arguments);
+  };
+  EventTarget.prototype.removeEventListener = function (type, listener, options) {
+    if (listener && state.quiet === 0) {
+      var listeners = listening(this, type, options);
+      if (listeners.has(listener)) { listeners.delete(listener); bump("listeners removed", 1); }
+    }
+    return removed.apply(this, arguments);
+  };
+  state.listening = function () {
+    var count = 0;
+    state.listened.forEach(function (held) {
+      var target = held.deref();
+      if (target) registered.get(target).forEach(function (listeners) { count += listeners.size; });
+    });
+    return count;
+  };
+  [["offsetTop", "offsetLeft", "offsetWidth", "offsetHeight"], ["clientTop", "clientLeft", "clientWidth", "clientHeight", "scrollWidth", "scrollHeight", "scrollTop", "scrollLeft"]].forEach(function (names, at) {
+    var proto = at === 0 ? HTMLElement.prototype : Element.prototype;
+    names.forEach(function (name) {
+      var described = Object.getOwnPropertyDescriptor(proto, name);
+      if (!described || !described.get) return;
+      Object.defineProperty(proto, name, Object.assign({}, described, {
+        get: function () { return state.layout ? (read(), state.layout.get(this, name)) : described.get.call(this); },
+        set: described.set && function (value) { if (state.layout) state.layout.set(this, name, value); else described.set.call(this, value); },
+      }));
+    });
+  });
+  var bounded = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function () { return state.layout ? (read(), state.layout.rect(this)) : bounded.call(this); };
+  observer = new MutationObserver(recorded);
+  observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  state.take = function () {
+    if (traced) console.log("ratchet: the step ends");
+    if (hushed === 0) recorded(observer.takeRecords()); else observer.takeRecords();
+    if (state.dirty) state.counts["frame layouts"] = (state.counts["frame layouts"] || 0) + 1;
+    var taken = state.counts;
+    state.counts = Object.create(null);
+    state.dirty = false;
+    return taken;
+  };
 }|}]
     : unit -> unit)
     ()
 
-let take : unit -> t =
-  [%mel.raw
-    {|function () {
-  var state = globalThis.__ratchet;
-  if (typeof process !== "undefined" && process.env && process.env.RATCHET_TRACE) console.log("ratchet: the step ends");
-  if (state.dirty) state.counts["frame layouts"] = (state.counts["frame layouts"] || 0) + 1;
-  var taken = state.counts;
-  state.counts = Object.create(null);
-  state.dirty = false;
-  return taken;
-}|}]
+let take : unit -> t = [%mel.raw {|function () { return globalThis.__ratchet.take(); }|}]
 
 let count totals kind = Option.value ~default:0 (Js.Dict.get totals (name kind))
 
