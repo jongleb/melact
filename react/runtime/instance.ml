@@ -765,6 +765,7 @@ let born kind =
 
 let mount_instance position kind =
   let instance = born kind in
+  (match !patching with Next_round -> put_off := Some_put_off | At_once -> ());
   (match
      let child = render instance in
      within owner (Some instance) (fun () ->
