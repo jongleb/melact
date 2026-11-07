@@ -20,7 +20,7 @@ val lookup : t -> int -> Melhole.View.input array -> 'value found
 
 (** [graph cells at changed mask]: the value kept at [at] while none of the sources in [mask] is
     among those that [changed] since the last render. *)
-val graph : t -> int -> int -> int -> 'value found
+val graph : t -> int -> Instance.sources -> int -> 'value found
 
 external kept : 'value found -> 'value option = "%identity"
 

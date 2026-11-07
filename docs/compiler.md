@@ -764,11 +764,14 @@ Rounds exist for renders that read the page (see "Reading layout while rendering
 render before any of them writes. For a pure render that ordering cannot be seen, so the scheduler
 drops it where it costs work:
 
-- A pure child given new props by its parent renders at once, inside the parent's write, when the
-  parent patches its children in document order: a template's holes, or a list patched in place,
-  which now goes from the first row. A list that patches from its last row, reconciles moves, or
-  picks the rows a selection changed sets `View.patch_order` to `Out_of_order`, and a child reached
-  there is put off to the next round as before.
+- A pure child given new props renders at once, inside the parent's write, when the parent patches
+  its children in document order (a template's holes, or a list patched in place, which now goes
+  from the first row) and no component that may read the page is due to render later in the same
+  flush. A list that patches from its last row, reconciles moves, shuffles or picks the rows a
+  selection changed sets `View.patch_order` to `Out_of_order`; a child reached there, or while an
+  impure component waits for a later round, is put off to the next round as before, so that its
+  writes stay behind those reads. (Rendering it at once there cost eventtable's selection one forced
+  style recalculation more per key: its inspector wrote its portal before the rows read `offsetTop`.)
 - A round whose dirty instances are all pure is one pass in document order. An instance whose
   ancestor rendered earlier in the pass comes after it: skipped if the ancestor's write reached it,
   rendered with its current props if not. A tree of readers of one context renders in one round
@@ -802,22 +805,24 @@ let label = item.title ^ theme_class theme in               (* item's bits and t
 The runtime knows which sources changed: a state cell's bit when its value differs from the one the
 last render read, a context's bit when its provider's value changed (a provider keeps its readers in
 a `Map`, each with the bits its value is to it), the bits of the inputs that differ when a parent
-patches a child. Before the render, `Instance.changed ()` holds them. The body then runs only the
-steps whose mask meets them:
+patches a child. Before the render, `Instance.changed ()` holds them: `Bits` of the sources that
+changed, or `Every` when that is not known (a mount, a boundary, a deferred value catching up, a
+component that set its own state while rendering). The body then runs only the steps whose mask
+meets them, every step for `Every`:
 
 ```ocaml
 let theme =
-  let found = Melact_runtime.Memo.graph memory 1 changed 1073742336 in   (* the context's bit, or a full render *)
+  let found = Melact_runtime.Memo.graph memory 1 changed 512 in   (* the context's bit *)
   match Melact_runtime.Memo.kept found with
   | Some kept -> kept
-  | None -> Melact_runtime.Memo.store memory 1 found (Melact_runtime.Instance.consume_source ... 512 ...)
+  | None -> Melact_runtime.Memo.store memory 1 found (Melact_runtime.Instance.consume_source ... (Bits 512) ...)
 in
 ...
-(match changed land 1073741848 with 0 -> Melact_runtime.Instance.skip_hook () | _ -> React.useEffect1 ...);
+(match Melact_runtime.Instance.reaches changed 24 with Unreached -> Melact_runtime.Instance.skip_hook () | Reached -> React.useEffect1 ...);
 ...
-match changed land 1073742503 with
-| 0 -> React.of_child Melact_runtime.Instance.unchanged       (* nothing the view reads changed *)
-| _ -> <the template>
+match Melact_runtime.Instance.reaches changed 679 with
+| Unreached -> React.of_child Melact_runtime.Instance.unchanged       (* nothing the view reads changed *)
+| Reached -> <the template>
 ```
 
 A let or a context read keeps its value in the instance's memory, a memo or an effect whose
@@ -826,10 +831,8 @@ slot cursor on), and when the returned expression reads none of the changed sour
 returns `Instance.unchanged` and the instance's holes are not touched at all: a context or a prop
 that only an effect reads costs the effect's comparison and nothing else. Hooks called on every
 render and statements always run, so hook slots, render-phase logs and `useEffect` without
-dependencies behave as before. Bit 30 is in every mask, and a render that knows nothing of what
-changed (a mount, a boundary, a deferred value catching up, a component that set its own state while
-rendering) has every bit, so it runs every step. A value a later statement may change in place
-(`Frozen`) is made on every render.
+dependencies behave as before. A value a later statement may change in place (`Frozen`) is made on
+every render.
 
 A body the compiler cannot read as steps renders whole, as before: a hook it does not know
 (`useSyncExternalStore`, `useDeferredValue`, a custom hook without a fact), a hook inside an
@@ -864,7 +867,9 @@ to npm's React hooks are such custom hooks too.
   change and runs effects children first in the order of the page; a component with a state cell,
   a reducer, a context, two props, lets, a memo, a callback passed to a memo child and effects with
   and without dependencies shows, computes and runs what React does after any batch of changes to
-  any of its sources; a root rendered inside a click runs its passive effects at the next microtask.
+  any of its sources; a pure component given new props in the same update as components that read the
+  page writes only after they rendered, so they all see the page as it was; a root rendered inside a
+  click runs its passive effects at the next microtask.
   The existing laws of rounds (all render before any writes, effects children first) hold.
 - A Melact law counts renders and page walks: a context read by a tree of pure components three
   levels deep renders every reader once per change and walks the page once.
@@ -872,7 +877,8 @@ to npm's React hooks are such custom hooks too.
   compiled with its graph, under `pps` it renders whole, and both show what React shows.
 - Mutants, each caught: rendering pure children at once whatever the patch order, patching in place
   from the last row unmarked, dropping the ancestor check before effects, taking every render as
-  pure, a fused pass without document order, no fused pass, deferring a root's passive effects; a
+  pure, rendering a pure child at once while a component that reads the page waits, a fused pass
+  without document order, no fused pass, deferring a root's passive effects; a
   kept value that ignores its mask, a context read without its bit, effects that never run again,
   a view whose mask reads nothing, hook slots numbered from 0, input bits shifted by one, a
   provider that drops its readers' bits, a patch that drops the changed input bits, a let whose

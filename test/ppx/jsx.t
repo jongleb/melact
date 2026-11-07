@@ -1086,9 +1086,9 @@ callbacks of a component, so a hook called there is reported by the type checker
   75:                              then ((1)[@alert "+hook"])
   76:                              else ((0)[@alert "+hook"])))
   77:                         [@alert "+hook"]) in
-  80:                       [@alert "+hook"])
-  122:                                                       [@alert "+hook"]))
-  123:                                                   [@alert "+hook"])
+  83:                       [@alert "+hook"])
+  125:                                                       [@alert "+hook"]))
+  126:                                                   [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare

@@ -135,7 +135,7 @@ type step =
 
 type plan = { steps : step list; result : expression; reads : int }
 
-let full = 1 lsl 30
+let every_source = (1 lsl 30) - 1
 
 (** What makes a memo or an effect run again. *)
 type dependencies =
@@ -273,7 +273,7 @@ let plan ~hooks ~inputs ~props body =
           let bind env pattern bits = List.map (fun name -> (name, bits)) (Free.bound pattern) @ env in
           let sources env dependencies =
             match dependencies with
-            | Every_render -> full - 1
+            | Every_render -> every_source
             | Once -> 0
             | Reading value -> mask env value
           in
@@ -304,23 +304,23 @@ let plan ~hooks ~inputs ~props body =
                       (Context { pattern; context = value; bit } :: steps)
                 | Remembered (pattern, hook, dependencies) ->
                     let bits = sources env dependencies in
-                    given (bind env pattern bits) (slot + 1) context rest (Memo { pattern; hook; mask = bits lor full } :: steps)
+                    given (bind env pattern bits) (slot + 1) context rest (Memo { pattern; hook; mask = bits } :: steps)
                 | Effected (hook, dependencies) ->
                     let bits = sources env dependencies in
-                    given env (slot + 1) context rest (Effect { hook; mask = bits lor full } :: steps)
+                    given env (slot + 1) context rest (Effect { hook; mask = bits } :: steps)
                 | Computed (pattern, value) ->
                     let bits = mask env value in
-                    given (bind env pattern bits) slot context rest (Derived { pattern; value; mask = bits lor full } :: steps)
+                    given (bind env pattern bits) slot context rest (Derived { pattern; value; mask = bits } :: steps)
                 | Changing (pattern, value) ->
-                    given (bind env pattern (full - 1)) slot context rest
-                      (Derived { pattern; value; mask = -1 } :: steps))
+                    given (bind env pattern every_source) slot context rest
+                      (Derived { pattern; value; mask = every_source } :: steps))
           in
           match given props 1 0 shapes [] with
           | exception Beyond -> None
           | env, steps -> (
               match mask env result with
               | exception Beyond -> None
-              | reads -> Some { steps; result; reads = reads lor full })))
+              | reads -> Some { steps; result; reads })))
 
 let slots ~hooks body =
   let free_of_hooks expression =

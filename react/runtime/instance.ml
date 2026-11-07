@@ -1,5 +1,23 @@
 open Melhole
 
+(** What changed since an instance last rendered. *)
+type sources =
+  | Every  (** Not known: a mount, a boundary, a parent without inputs to compare; every step runs again. *)
+  | Bits of int  (** The bits of the inputs, hook slots and context reads that changed, as melact-ppx numbers them. *)
+
+(** Whether a step of an update graph reads a source that changed. *)
+type reach = Reached | Unreached
+
+let union first second =
+  match (first, second) with
+  | Every, _ | _, Every -> Every
+  | Bits first, Bits second -> Bits (first lor second)
+
+let reaches sources mask =
+  match sources with
+  | Every -> Reached
+  | Bits bits -> ( match bits land mask with 0 -> Unreached | _ -> Reached)
+
 (** When an effect runs after its instance is patched. *)
 type timing =
   | Layout  (** Synchronously, before the browser paints. *)
@@ -128,12 +146,12 @@ and status = Clean | Dirty of dirt | Unmounted
 (** Why an instance is to render again. *)
 and dirt =
   | Forced  (** Its parent, a context or a boundary asks for it, without saying what changed. *)
-  | Sourced of { mask : int; checks : checking list }
+  | Sourced of { mask : sources; checks : checking list }
       (** The props and contexts whose bits are in [mask] changed, and the state cells checked may have: each
           check tells whether a value differs from the one it last rendered with. *)
 
 (** A state cell, how to tell whether its value differs from the one it last rendered with, and its bit. *)
-and checking = Checking : 'cell * ('cell -> View.change) * int -> checking
+and checking = Checking : 'cell * ('cell -> View.change) * sources -> checking
 
 (** Where an instance sits in the DOM when its output has no nodes. *)
 and region =
@@ -180,14 +198,14 @@ external member : audience -> instance -> bool = "has" [@@mel.send]
 external leave : audience -> instance -> unit = "delete" [@@mel.send]
 external disband : audience -> unit = "clear" [@@mel.send]
 external readers : unit -> readers = "Map" [@@mel.new]
-external read_bits : readers -> instance -> int Js.undefined = "get" [@@mel.send]
-external set_bits : readers -> instance -> int -> unit = "set" [@@mel.send]
+external read_bits : readers -> instance -> sources Js.undefined = "get" [@@mel.send]
+external set_bits : readers -> instance -> sources -> unit = "set" [@@mel.send]
 external stop_reading : readers -> instance -> bool = "delete" [@@mel.send]
-external each_reader : readers -> ((int -> instance -> unit)[@mel.uncurry]) -> unit = "forEach" [@@mel.send]
+external each_reader : readers -> ((sources -> instance -> unit)[@mel.uncurry]) -> unit = "forEach" [@@mel.send]
 external clear_readers : readers -> unit = "clear" [@@mel.send]
 
 let read readers instance bits =
-  set_bits readers instance (Option.fold ~none:bits ~some:(fun known -> known lor bits) (Js.Undefined.toOption (read_bits readers instance)))
+  set_bits readers instance (Option.fold ~none:bits ~some:(union bits) (Js.Undefined.toOption (read_bits readers instance)))
 
 (** A JavaScript [Map] from a DOM node to the dirty instances that start at it. *)
 type starts
@@ -317,7 +335,19 @@ let instances =
           View.release suspending.backup;
           instance.status <- Unmounted)
 
+(** Whether an instance that may read the page renders later in this flush: a pure child given new
+    props then waits for the next round, so that its writes do not land between two reads. *)
+type reads = Reads_ahead | No_reads_ahead
+
+let reads = ref No_reads_ahead
+
+let reading instance =
+  match instance.kind with
+  | Renders { component = { rendering = Component.Impure; _ }; _ } -> reads := Reads_ahead
+  | Renders _ | Provides _ | Catches _ | Suspends _ -> ()
+
 let mark_dirty instance =
+  reading instance;
   match instance.status with
   | Clean ->
       instance.status <- Dirty Forced;
@@ -327,19 +357,20 @@ let mark_dirty instance =
 
 let sourced instance bits =
   match (bits, instance.status) with
-  | -1, (Clean | Dirty (Sourced _)) -> instance.status <- Dirty Forced
-  | _, Clean -> instance.status <- Dirty (Sourced { mask = bits; checks = [] })
-  | _, Dirty (Sourced { mask; checks }) -> instance.status <- Dirty (Sourced { mask = mask lor bits; checks })
-  | _, (Dirty Forced | Unmounted) -> ()
+  | Every, (Clean | Dirty (Sourced _)) -> instance.status <- Dirty Forced
+  | Bits _, Clean -> instance.status <- Dirty (Sourced { mask = bits; checks = [] })
+  | Bits _, Dirty (Sourced { mask; checks }) -> instance.status <- Dirty (Sourced { mask = union mask bits; checks })
+  | (Every | Bits _), (Dirty Forced | Unmounted) -> ()
 
 let mark_sourced instance bits =
+  reading instance;
   match instance.status with
   | Clean ->
       sourced instance bits;
       dirty := instance :: !dirty
   | Dirty _ | Unmounted -> sourced instance bits
 
-let changed_sources = ref (-1)
+let changed_sources = ref Every
 
 let unchanged = View.host ~build:(fun [@u] _ -> View.nothing) ~patch:(fun [@u] _ _ -> None)
 
@@ -368,10 +399,10 @@ let run_phases cleanups runs =
 let render instance =
   let sources =
     match instance.status with
-    | Dirty Forced | Clean | Unmounted -> -1
+    | Dirty Forced | Clean | Unmounted -> Every
     | Dirty (Sourced { mask; checks }) ->
         List.fold_left
-          (fun found (Checking (cell, check, bit)) -> match check cell with View.Changed -> found lor bit | View.Unchanged -> found)
+          (fun found (Checking (cell, check, bit)) -> match check cell with View.Changed -> union found bit | View.Unchanged -> found)
           mask checks
   in
   instance.status <- Clean;
@@ -381,9 +412,9 @@ let render instance =
       let rec attempt count =
         Hook.rewind instance.slots;
         rerendering := Once;
-        changed_sources := (match count with 1 -> sources | _ -> -1);
+        changed_sources := (match count with 1 -> sources | _ -> Every);
         let child = within rendering (Some instance) definition.render in
-        changed_sources := -1;
+        changed_sources := Every;
         match (!rerendering, count < 25) with
         | Once, _ -> child
         | Again, true -> attempt (count + 1)
@@ -562,7 +593,8 @@ let rec settle () =
                     (fun instance ->
                       match instance.status with
                       | Dirty Forced -> true
-                      | Dirty (Sourced { mask; _ }) -> mask <> 0
+                      | Dirty (Sourced { mask = Bits 0; _ }) -> false
+                      | Dirty (Sourced _) -> true
                       | Clean | Unmounted -> false)
                     (!dirty @ !waiting)
                 in
@@ -574,6 +606,8 @@ let rec settle () =
           | [] -> ()
           | pending -> (
               dirty := [];
+              reads := No_reads_ahead;
+              List.iter reading !waiting;
               let unchanged checks =
                 List.for_all
                   (fun (Checking (cell, check, _)) -> match check cell with View.Unchanged -> true | View.Changed -> false)
@@ -592,7 +626,7 @@ let rec settle () =
                       List.iter
                         (fun (_, instance) ->
                           match instance.status with
-                          | Dirty (Sourced { mask = 0; checks }) when unchanged checks -> instance.status <- Clean
+                          | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks -> instance.status <- Clean
                           | Dirty (Forced | Sourced _) -> (
                               let result = match render instance with child -> Ok child | exception error -> Error error in
                               match instance.status with
@@ -623,12 +657,13 @@ let rec settle () =
                     match (instance.status, topmost instance) with Dirty _, `Topmost -> true | (Dirty _ | Clean | Unmounted), _ -> false)
                   pending
               in
+              List.iter reading later;
               let roots = ordered roots in
               let rendered =
                 List.filter_map
                   (fun (_, instance) ->
                     match instance.status with
-                    | Dirty (Sourced { mask = 0; checks }) when unchanged checks ->
+                    | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks ->
                         instance.status <- Clean;
                         None
                     | Dirty (Forced | Sourced _) -> Some (instance, match render instance with child -> Ok child | exception error -> Error error)
@@ -860,7 +895,7 @@ let component definition inputs render =
                 | (Clean | Dirty _ | Unmounted), _ -> (
                     let bits =
                       match Array.length inputs = Array.length rendered.inputs && Array.length inputs < 30 with
-                      | false -> -1
+                      | false -> Every
                       | true ->
                           let found = ref 0 in
                           Array.iteri
@@ -868,15 +903,17 @@ let component definition inputs render =
                               let (View.Input last) = Array.unsafe_get rendered.inputs index in
                               if not (Dom_api.same last next) then found := !found lor (1 lsl index))
                             inputs;
-                          !found
+                          Bits !found
                     in
                     rendered.inputs <- inputs;
                     rendered.render <- render;
-                    match (!patching, instance.status, definition.rendering, !View.patch_order) with
-                    | Next_round, (Clean | Dirty _), Component.Impure, _ | Next_round, (Clean | Dirty _), _, View.Out_of_order ->
+                    match (!patching, instance.status, definition.rendering, !View.patch_order, !reads) with
+                    | Next_round, (Clean | Dirty _), Component.Impure, _, _
+                    | Next_round, (Clean | Dirty _), _, View.Out_of_order, _
+                    | Next_round, (Clean | Dirty _), _, _, Reads_ahead ->
                         put_off := Some_put_off;
                         mark_sourced instance bits
-                    | (At_once | Next_round), _, (Component.Pure | Component.Impure), _ ->
+                    | (At_once | Next_round), _, (Component.Pure | Component.Impure), _, _ ->
                         sourced instance bits;
                         refresh position instance));
                 Some live
@@ -966,9 +1003,10 @@ let invalidate_state instance cell check bit =
   | Some _ ->
       Js.Exn.raiseError "melact: a state setter was called while a component was rendering"
   | None ->
+      reading instance;
       (match instance.status with
       | Clean ->
-          instance.status <- Dirty (Sourced { mask = 0; checks = [ Checking (cell, check, bit) ] });
+          instance.status <- Dirty (Sourced { mask = Bits 0; checks = [ Checking (cell, check, bit) ] });
           dirty := instance :: !dirty
       | Dirty (Sourced { mask; checks }) -> instance.status <- Dirty (Sourced { mask; checks = Checking (cell, check, bit) :: checks })
       | Dirty Forced | Unmounted -> ());
@@ -978,8 +1016,8 @@ let cell_source instance =
   match instance.kind with
   | Renders { inputs; _ } -> (
       let at = Array.length inputs + Hook.position instance.slots in
-      match at < 30 with true -> 1 lsl at | false -> -1)
-  | Provides _ | Catches _ | Suspends _ -> -1
+      match at < 30 with true -> Bits (1 lsl at) | false -> Every)
+  | Provides _ | Catches _ | Suspends _ -> Every
 
 let changed () = !changed_sources
 let skip_hook () = match !rendering with Some instance -> Hook.skip instance.slots | None -> ()
@@ -1010,7 +1048,7 @@ let put instance key value = Hook.put instance.slots key value
 
 let on_unmount instance cleanup = instance.teardown <- Calls cleanup :: instance.teardown
 
-let rec provided : type value. instance -> int -> value Context.t -> instance option -> value =
+let rec provided : type value. instance -> sources -> value Context.t -> instance option -> value =
  fun instance bits context ancestor ->
   match ancestor with
   | None -> context.default
@@ -1029,7 +1067,7 @@ let rec provided : type value. instance -> int -> value Context.t -> instance op
           | None -> provided instance bits context above.parent)
       | Renders _ | Catches _ | Suspends _ -> provided instance bits context above.parent)
 
-let consume_source : type value. instance -> int -> value Context.t -> value =
+let consume_source : type value. instance -> sources -> value Context.t -> value =
  fun instance bits context ->
   let rec known providers =
     match providers with
@@ -1044,7 +1082,7 @@ let consume_source : type value. instance -> int -> value Context.t -> value =
   in
   known instance.providers
 
-let consume instance context = consume_source instance (-1) context
+let consume instance context = consume_source instance Every context
 
 let catch =
   let caught_boundaries = ref [] and struck_boundaries = ref [] and fallen_boundaries = ref [] in

@@ -240,7 +240,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
     let rec bits offset patterns counts =
       match (patterns, counts) with
       | pattern :: patterns, count :: counts ->
-          let mask = match offset + count <= 30 with true -> ((1 lsl count) - 1) lsl offset | false -> Graph.full - 1 in
+          let mask = match offset + count <= 30 with true -> ((1 lsl count) - 1) lsl offset | false -> Graph.every_source in
           List.map (fun name -> (name, mask)) (Free.bound pattern) @ bits (offset + count) patterns counts
       | [], _ | _, [] -> []
     in
@@ -473,9 +473,10 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                   | Graph.Statement value -> [%expr [%e walker#expression value]; [%e rest]]
                   | Graph.Called (pattern, value) -> [%expr let [%p pattern] = [%e value] in [%e rest]]
                   | Graph.Context { pattern; context; bit } ->
-                      held pattern (bit lor Graph.full) ~source:[%expr React.useContext [%e context]]
+                      held pattern bit ~source:[%expr React.useContext [%e context]]
                         [%expr
-                          Melact_runtime.Instance.consume_source (Melact_runtime.Instance.current ()) [%e eint ~loc bit]
+                          Melact_runtime.Instance.consume_source (Melact_runtime.Instance.current ())
+                            (Melact_runtime.Instance.Bits [%e eint ~loc bit])
                             (match [%e context] with React.Context.Context __melact_context -> __melact_context)]
                         [%expr __melact_kept] rest
                   | Graph.Memo { pattern; hook; mask } ->
@@ -483,17 +484,17 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                         [%expr Melact_runtime.Instance.skip_hook (); __melact_kept] rest
                   | Graph.Effect { hook; mask } ->
                       [%expr
-                        (match __melact_changed land [%e eint ~loc mask] with
-                        | 0 -> Melact_runtime.Instance.skip_hook ()
-                        | _ -> (([%e hook] [@alert "-hook"]) : unit));
+                        (match Melact_runtime.Instance.reaches __melact_changed [%e eint ~loc mask] with
+                        | Melact_runtime.Instance.Unreached -> Melact_runtime.Instance.skip_hook ()
+                        | Melact_runtime.Instance.Reached -> (([%e hook] [@alert "-hook"]) : unit));
                         [%e rest]]
                   | Graph.Derived { pattern; value; mask } ->
                       held pattern mask ~source:value (walker#expression value) [%expr __melact_kept] rest)
                 plan.steps
                 [%expr
-                  match __melact_changed land [%e eint ~loc plan.reads] with
-                  | 0 -> React.of_child Melact_runtime.Instance.unchanged
-                  | _ -> [%e walker#expression plan.result]]
+                  match Melact_runtime.Instance.reaches __melact_changed [%e eint ~loc plan.reads] with
+                  | Melact_runtime.Instance.Unreached -> React.of_child Melact_runtime.Instance.unchanged
+                  | Melact_runtime.Instance.Reached -> [%e walker#expression plan.result]]
             in
             remembered [%expr let __melact_changed = Melact_runtime.Instance.changed () in [%e graphed]] (max 1 !sites)
         | None -> (

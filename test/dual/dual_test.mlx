@@ -957,6 +957,26 @@ module Measured_row = struct
     <li>(React.string (label ^ match opened with true -> "+" | false -> "-"))</li>
 end
 
+module Echoed = struct
+  let[@react.component] make ~value =
+    let suffix, _ = React.useState (fun () -> "!") in
+    <b>(React.string (string_of_int value ^ suffix))</b>
+end
+
+let echo_send = ref (fun (_ : bool -> bool) -> ())
+
+module Echoing = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    echo_send := setOpened;
+    <Opened_provider value=opened>
+      <div>
+        <Echoed value=(match opened with true -> 1 | false -> 0) />
+        <ul>(React.array (Array.init count (fun index -> <Measured_row key=(string_of_int index) label=(string_of_int index) />)))</ul>
+      </div>
+    </Opened_provider>
+end
+
 module Measured = struct
   let[@react.component] make ~count =
     let opened, setOpened = React.useState (fun () -> false) in
@@ -2417,6 +2437,29 @@ let () =
                    step (remaining - 1) next
              in
              step 3 false))
+        [%mel.obj { numRuns = 40 }]));
+  describe "a pure component given new props in the same update as components that read the page" (fun () ->
+    test_async "writes after they render, so they all see the page as it was before the update" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+             let tape = tape values in
+             let count = 2 + draw tape 30 in
+             ignore (dom_writes ());
+             let* root, client = mount <Echoing count /> in
+             let rec step remaining opened =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = not opened in
+                   let before = dom_writes () in
+                   let* () = act (fun () -> !echo_send (fun _ -> next)) in
+                   expect (List.sort_uniq compare (take ()), text_content (select root "b"))
+                   |. to_equal ([ string_of_int before ], (match next with true -> "1!" | false -> "0!"));
+                   step (remaining - 1) next
+             in
+             step 4 false))
         [%mel.obj { numRuns = 40 }]));
   describe "children given new props by their parent" (fun () ->
     test_async "all render before any of them writes the DOM, whether rows appear or go" (fun () ->
