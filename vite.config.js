@@ -35,9 +35,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    include: ["_build/default/test/**/output/test/**/*_test.mjs"],
+    include: ["_build/default/test/**/output/test/**/*_test.mjs", "test/compat/*.test.mjs"],
     // test/typed/dual is the dual suite built with -typed, checked byte for byte against test/dual by dune.
     exclude: ["**/node_modules/**", "_build/default/test/typed/dual/**"],
     setupFiles: ["./test/setup.js"],
+    // The compat laws load the npm libraries twice: from the root on npm's React, and from
+    // test/compat/env on melact.compat, through Vite so that they share Melact's runtime with the app.
+    server: { deps: { inline: [/test\/compat\/env\/node_modules\/(?!hoist-non-react-statics|react-is|prop-types)/] } },
   },
 });
