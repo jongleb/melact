@@ -175,9 +175,9 @@ let () =
                        let* () = act (fun () -> resuming := Some (ReactDOM.Client.resumeRoot resumed (Pages.shown values))) in
                        let untouched = (Pages.effects.contents, inner_html resumed) in
                        let quiet = (0, written) in
-                       let* () = act (fun () -> ignore (ReactDOM.Client.hydrateRoot hydrated (Pages.shown values))) in
                        Pages.effects := 0;
-                       let* () = act (fun () -> ignore (ReactDOM.Client.hydrateRoot hydrated (Pages.shown values))) in
+                       let hydrating = ref None in
+                       let* () = act (fun () -> hydrating := Some (ReactDOM.Client.hydrateRoot hydrated (Pages.shown values))) in
                        let hydration_effects = Pages.effects.contents in
                        let counters root = elements (select_all root "button.counter") in
                        let pick = draw tape (1 + Array.length (counters resumed)) in
@@ -197,7 +197,8 @@ let () =
                        let after_click = (observe resumed, observe hydrated) in
                        let* () =
                          act (fun () ->
-                             Option.iter (fun root -> ReactDOM.Client.unmount root ()) !resuming)
+                             Option.iter (fun root -> ReactDOM.Client.unmount root ()) !resuming;
+                             Option.iter (fun root -> ReactDOM.Client.unmount root ()) !hydrating)
                        in
                        remove resumed;
                        remove hydrated;
