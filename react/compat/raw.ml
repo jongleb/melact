@@ -71,7 +71,6 @@ type 'value table
 
 external table : unit -> 'value table = "WeakMap" [@@mel.new]
 external table_get : 'value table -> t -> 'value Js.undefined = "get" [@@mel.send]
-external table_set : 'value table -> t -> 'value -> unit = "set" [@@mel.send]
+external store : 'value table -> t -> 'value -> unit = "set" [@@mel.send]
 
 let lookup table key = Js.Undefined.toOption (table_get table key)
-let store table key value = table_set table key value

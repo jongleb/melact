@@ -1053,8 +1053,11 @@ The laws found two bugs in Melact's ordering of effects. The fixes apply to ever
 
 - Siblings mounted by one patch, such as the rows of a list whose keys all changed, ran their
   effects in reverse tree order, because a patch builds new siblings from the last one. Each such
-  mount now puts its effects below those of the siblings built just before it, which follow it in
-  the tree. This needs no DOM reads.
+  mount now puts its effects below those of the siblings the same patch built just before it,
+  which follow it in the tree. This needs no DOM reads. A dual law edits a keyed list of components
+  with layout and passive effects at random, and after every edit the effects of the new rows must
+  run as under React 18: layout effects first, each kind in list order. Before the fix it failed
+  on its eighth run.
 - Effects across a portal were sorted by document position instead of by the tree. The sort now
   runs a descendant's effects before its ancestor's. Inside a portal it orders by the portal's
   place, an empty text node, and then by position within the portal. This order is installed by
@@ -1097,9 +1100,9 @@ are unchanged, so effects without dependencies, and functions passed as componen
 React Compiler rather than as with React.
 
 On this spike's measurements (esbuild, minified, gzip -9), a counter on the shim is 23.4 kB, against
-45.6 kB on React 18 and react-dom. react-select is 54.6 kB against 75.8 kB, Radix Popover 50.0
-against 69.9, react-window 30.6 against 52.1. The two ordering fixes add 0.9 kB (0.34 kB gzip) to
-every Melact app; Meltea is unchanged.
+45.6 kB on React 18 and react-dom. react-select is 54.6 kB against 75.8 kB, Radix Popover 49.9
+against 69.9, react-window 30.7 against 52.1. The sibling ordering fix and the hook for the portal order add
+1.1 kB (0.4 kB gzip) to every Melact app; Meltea is unchanged.
 
 ## Laws
 

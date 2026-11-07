@@ -52,4 +52,4 @@ type 'value table
 
 val table : unit -> 'value table
 val lookup : 'value table -> t -> 'value option
-val store : 'value table -> t -> 'value -> unit
+external store : 'value table -> t -> 'value -> unit = "set" [@@mel.send]

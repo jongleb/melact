@@ -2,8 +2,23 @@ open Ppxlib
 open Melhole_compiler
 open Ast_builder.Default
 
-(** Whether a JSX path and name are a component of a JavaScript library bound in this file; set once the file's bindings are known. *)
-let foreign : (longident -> string -> bool) ref = ref (fun _ _ -> false)
+let foreign_components : (string list * string) list ref = ref []
+
+let foreign path name =
+  match Longident.flatten_exn path with
+  | written -> (
+      match
+        List.exists
+          (fun (modules, bound) ->
+            String.equal bound name
+            &&
+            let length = List.length written and full = List.length modules in
+            length <= full && List.equal String.equal written (List.filteri (fun index _ -> index >= full - length) modules))
+          !foreign_components
+      with
+      | true -> `Foreign
+      | false -> `Melact)
+  | exception Invalid_argument _ -> `Melact
 
 let keyed_hooks =
   [
@@ -413,7 +428,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                   { expression with pexp_desc = Pexp_let (Nonrecursive, List.map bound bindings, walker#expression rest) }
               | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, _)
                 when Option.is_some (Element.without_jsx expression.pexp_attributes)
-                     && !foreign path (match name with "createElement" -> "make" | other -> other) ->
+                     && foreign path (match name with "createElement" -> "make" | other -> other) = `Foreign ->
                   expression
               | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot _; _ }; _ } as callee), arguments)
                 when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
@@ -630,75 +645,7 @@ let rec with_unit typ =
       let loc = typ.ptyp_loc in
       [%type: unit -> [%t typ]]
 
-(** The components of JavaScript libraries bound in the file being rewritten: their module path and name. *)
-let foreign_components : (string list * string) list ref = ref []
-
-let foreign_of items =
-  let rec gather path items =
-    List.concat_map
-      (fun item ->
-        match item.pstr_desc with
-        | Pstr_primitive description
-          when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
-            [ (path, description.pval_name.txt) ]
-        | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ }; _ } ->
-            gather (path @ [ name ]) inner
-        | _ -> [])
-      items
-  in
-  gather [] items
-
-let bound_foreign path name =
-  match Longident.flatten_exn path with
-  | written ->
-      List.exists
-        (fun (modules, bound) ->
-          String.equal bound name
-          &&
-          let length = List.length written and full = List.length modules in
-          length <= full && List.equal String.equal written (List.filteri (fun index _ -> index >= full - length) modules))
-        !foreign_components
-  | exception Invalid_argument _ -> false
-
-let () = foreign := bound_foreign
 let foreign_name name = name ^ "__foreign"
-
-let bound_component ~loc (description : value_description) attributes =
-  let name = description.pval_name.txt in
-  let rec given typ =
-    match typ.ptyp_desc with
-    | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) -> ptyp_arrow ~loc label argument (given result)
-    | _ -> [%type: ?key:string -> unit -> Melact_compat.Bridge.props]
-  in
-  [
-    pstr_primitive ~loc
-      {
-        (value_description ~loc ~name:{ loc; txt = props_name name } ~type_:(given (with_unit description.pval_type)) ~prim:[ "" ]) with
-        pval_attributes = [ attribute ~loc ~name:{ loc; txt = "mel.obj" } ~payload:(PStr []) ];
-      };
-    pstr_primitive ~loc
-      {
-        description with
-        pval_name = { loc; txt = foreign_name name };
-        pval_type = [%type: Melact_compat.Bridge.foreign];
-        pval_attributes = attributes;
-      };
-    pstr_value ~loc Nonrecursive
-      [
-        value_binding ~loc ~pat:(pvar ~loc name)
-          ~expr:[%expr fun props -> Melact_compat.Bridge.mount [%e evar ~loc (foreign_name name)] props];
-      ];
-  ]
-
-let dom_name name =
-  let name =
-    match String.length name > 1 && name.[String.length name - 1] = '_' with
-    | true -> String.sub name 0 (String.length name - 1)
-    | false -> name
-  in
-  match String.length name > 4 && String.sub name 0 4 = "aria" && Char.uppercase_ascii name.[4] = name.[4] with
-  | true -> "aria-" ^ String.lowercase_ascii (String.sub name 4 (String.length name - 4))
-  | false -> name
 
 let mapper =
   object (self)
@@ -1111,6 +1058,16 @@ let mapper =
         ]
 
     method private foreign_child child =
+      let dom_name name =
+        let name =
+          match String.length name > 1 && name.[String.length name - 1] = '_' with
+          | true -> String.sub name 0 (String.length name - 1)
+          | false -> name
+        in
+        match String.length name > 4 && String.sub name 0 4 = "aria" && Char.uppercase_ascii name.[4] = name.[4] with
+        | true -> "aria-" ^ String.lowercase_ascii (String.sub name 4 (String.length name - 4))
+        | false -> name
+      in
       let loc = child.pexp_loc in
       match (Element.without_jsx child.pexp_attributes, child.pexp_desc) with
       | Some _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident tag; _ }; _ }, arguments) ->
@@ -1133,7 +1090,7 @@ let mapper =
           in
           [%expr Melact_compat.Bridge.host [%e estring ~loc tag] [%e pexp_array ~loc props] [%e pexp_array ~loc children]]
       | Some _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, arguments)
-        when !foreign path (match name with "createElement" -> "make" | other -> other) ->
+        when foreign path (match name with "createElement" -> "make" | other -> other) = `Foreign ->
           let name = match name with "createElement" -> "make" | other -> other in
           [%expr
             Melact_compat.Bridge.element
@@ -1157,8 +1114,8 @@ let mapper =
         arguments
 
     method private uppercase ~loc path name arguments =
-      match !foreign path name with
-      | true ->
+      match foreign path name with
+      | `Foreign ->
           let key =
             List.find_map (fun (label, value) -> match label with Labelled "key" -> Some (self#expression value) | _ -> None) arguments
           in
@@ -1175,7 +1132,7 @@ let mapper =
           Option.fold ~none:call
             ~some:(fun key -> [%expr React.of_child (Melhole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
             key
-      | false -> self#melact_uppercase ~loc path name arguments
+      | `Melact -> self#melact_uppercase ~loc path name arguments
 
     method private melact_uppercase ~loc path name arguments =
       let key =
@@ -1612,6 +1569,48 @@ let () =
     ~doc:" compile components to code that writes their HTML, for melact.server, natively or under Melange"
 
 let bound items =
+  let foreign_of items =
+    let rec gather path items =
+      List.concat_map
+        (fun item ->
+          match item.pstr_desc with
+          | Pstr_primitive description
+            when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
+              [ (path, description.pval_name.txt) ]
+          | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ }; _ } ->
+              gather (path @ [ name ]) inner
+          | _ -> [])
+        items
+    in
+    gather [] items
+  in
+  let bound_component ~loc (description : value_description) attributes =
+    let name = description.pval_name.txt in
+    let rec given typ =
+      match typ.ptyp_desc with
+      | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) -> ptyp_arrow ~loc label argument (given result)
+      | _ -> [%type: ?key:string -> unit -> Melact_compat.Bridge.props]
+    in
+    [
+      pstr_primitive ~loc
+        {
+          (value_description ~loc ~name:{ loc; txt = props_name name } ~type_:(given (with_unit description.pval_type)) ~prim:[ "" ]) with
+          pval_attributes = [ attribute ~loc ~name:{ loc; txt = "mel.obj" } ~payload:(PStr []) ];
+        };
+      pstr_primitive ~loc
+        {
+          description with
+          pval_name = { loc; txt = foreign_name name };
+          pval_type = [%type: Melact_compat.Bridge.foreign];
+          pval_attributes = attributes;
+        };
+      pstr_value ~loc Nonrecursive
+        [
+          value_binding ~loc ~pat:(pvar ~loc name)
+            ~expr:[%expr fun props -> Melact_compat.Bridge.mount [%e evar ~loc (foreign_name name)] props];
+        ];
+    ]
+  in
   foreign_components := foreign_of items;
   let binder =
     object

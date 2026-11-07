@@ -1,7 +1,5 @@
 open Melact_runtime
 
-let version = Api.version
-
 let createPortal children container key =
   Raw.record
     [
@@ -16,8 +14,6 @@ let flushSync run =
   let result = Option.fold ~none:Raw.undefined ~some:Raw.call0 (Raw.present run) in
   (match Instance.writing_component () with Some _ -> () | None -> Instance.flush ());
   result
-
-let batchedUpdates run argument = Raw.call1 run argument
 
 let createRoot container _ =
   let root = ReactDOMClient.createRoot container in

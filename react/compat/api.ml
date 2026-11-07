@@ -1,29 +1,21 @@
 let version = "18.3.1"
-let create kind config children = Element.create kind config children
-let jsx kind config key = Element.jsx kind config key
-let clone element config children = Element.clone element config children
 let isValidElement value = Option.is_some (Element.of_value value)
 let createRef () = Raw.record [ ("current", Raw.null) ]
-let createContext default = Render.context default
 let forwardRef render = Raw.record [ ("$$typeof", Element.Mark.forward_ref); ("render", render) ]
 
 let memo kind compare =
   Raw.record [ ("$$typeof", Element.Mark.memo); ("type", kind); ("compare", Option.value ~default:Raw.null (Raw.present compare)) ]
 
 let lazy_ load = Raw.record [ ("$$typeof", Element.Mark.lazy_); ("_payload", load) ]
-let fragment = Element.Mark.fragment
-let strictMode = Element.Mark.strict_mode
-let profiler = Element.Mark.profiler
-let suspense = Element.Mark.suspense
 
 external replace_all : string -> string -> string -> string = "replaceAll" [@@mel.send]
 let escape_slashes text = Js.String.replaceByRe ~regexp:[%re "/\\/+/g"] ~replacement:"$&/" text
 
 external in_radix : int -> int -> string = "toString" [@@mel.send]
 
-let escaped key = "$" ^ replace_all (replace_all key "=" "=0") ":" "=2"
-
 let key_at value index =
+  let escaped key = "$" ^ replace_all (replace_all key "=" "=0") ":" "=2"
+  in
   match Option.bind (Element.of_value value) Element.key with
   | Some key -> escaped key
   | None -> in_radix index 36

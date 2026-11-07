@@ -18,9 +18,8 @@ let useEffect create deps = effected React.useEffect React.useEffect1 create dep
 let useLayoutEffect create deps = effected React.useLayoutEffect React.useLayoutEffect1 create deps
 let useInsertionEffect create deps = effected React.useInsertionEffect React.useInsertionEffect1 create deps
 
-let reduced state action = match Raw.view action with Callable update -> Raw.call1 update state | _ -> action
-
 let useState initial =
+  let reduced state action = match Raw.view action with Callable update -> Raw.call1 update state | _ -> action in
   React.useReducerWithMapState (Hook.unchecked base) reduced initial (fun initial ->
       match Raw.view initial with Callable make -> Raw.call0 make | _ -> initial)
 
@@ -41,7 +40,6 @@ let useCallback callback deps =
   | _ -> React.useCallback (Hook.unchecked base) callback
 
 let useRef initial = React.useRef (Hook.unchecked base) initial
-let useContext context = Render.read context
 let useId () = React.useId (Hook.unchecked base) ()
 
 let useImperativeHandle reference create deps =

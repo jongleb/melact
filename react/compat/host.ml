@@ -17,7 +17,6 @@ let svg_namespace = "http://www.w3.org/2000/svg"
 external create_in : Dom.document -> string -> string -> Dom.element = "createElementNS" [@@mel.send]
 external namespace_of : Dom.node -> string Js.null = "namespaceURI" [@@mel.get]
 external focus : Dom.element -> unit = "focus" [@@mel.send]
-let options_of : Dom.element -> Dom.element array = [%mel.raw {|function (select) { return Array.from(select.options); }|}]
 
 let assign reference value =
   match Raw.view reference with
@@ -25,136 +24,135 @@ let assign reference value =
   | Record record -> Raw.set record "current" value
   | Missing | Flag _ | Number _ | Text _ | Listed _ | Other _ -> ()
 
-let attribute_name space name =
-  let hyphenated =
-    [
-      "accent-height"; "alignment-baseline"; "arabic-form"; "baseline-shift"; "cap-height"; "clip-path"; "clip-rule";
-      "color-interpolation"; "color-interpolation-filters"; "color-profile"; "color-rendering"; "dominant-baseline";
-      "enable-background"; "fill-opacity"; "fill-rule"; "flood-color"; "flood-opacity"; "font-family"; "font-size";
-      "font-size-adjust"; "font-stretch"; "font-style"; "font-variant"; "font-weight"; "glyph-name";
-      "glyph-orientation-horizontal"; "glyph-orientation-vertical"; "horiz-adv-x"; "horiz-origin-x"; "image-rendering";
-      "letter-spacing"; "lighting-color"; "marker-end"; "marker-mid"; "marker-start"; "overline-position";
-      "overline-thickness"; "paint-order"; "pointer-events"; "rendering-intent"; "shape-rendering"; "stop-color";
-      "stop-opacity"; "strikethrough-position"; "strikethrough-thickness"; "stroke-dasharray"; "stroke-dashoffset";
-      "stroke-linecap"; "stroke-linejoin"; "stroke-miterlimit"; "stroke-opacity"; "stroke-width"; "text-anchor";
-      "text-decoration"; "text-rendering"; "underline-position"; "underline-thickness"; "unicode-bidi"; "unicode-range";
-      "units-per-em"; "v-alphabetic"; "v-hanging"; "v-ideographic"; "v-mathematical"; "vector-effect"; "vert-adv-y";
-      "vert-origin-x"; "vert-origin-y"; "word-spacing"; "writing-mode"; "x-height";
-    ]
-  in
-  match name with
-  | "className" -> "class"
-  | "htmlFor" -> "for"
-  | "acceptCharset" -> "accept-charset"
-  | "httpEquiv" -> "http-equiv"
-  | _ -> (
-      match space with
-      | Html -> name
-      | Svg ->
-          let buffer = Buffer.create (String.length name + 4) in
-          String.iter
-            (fun letter ->
-              match Char.lowercase_ascii letter = letter with
-              | true -> Buffer.add_char buffer letter
-              | false ->
-                  Buffer.add_char buffer '-';
-                  Buffer.add_char buffer (Char.lowercase_ascii letter))
-            name;
-          let kebab = Buffer.contents buffer in
-          (match List.mem kebab hyphenated with true -> kebab | false -> name))
+external trimmed : string -> string = "trim" [@@mel.send]
 
 (** How react-dom writes an attribute's value. *)
 type flavour = Boolean | Overloaded | Booleanish | Plain
 
-let flavour name =
-  match name with
-  | "allowFullScreen" | "async" | "autoPlay" | "controls" | "default" | "defer" | "disabled"
-  | "disablePictureInPicture" | "disableRemotePlayback" | "formNoValidate" | "hidden" | "loop" | "noModule"
-  | "noValidate" | "open" | "playsInline" | "readOnly" | "required" | "reversed" | "scoped" | "seamless" | "itemScope" ->
-      Boolean
-  | "capture" | "download" -> Overloaded
-  | "contentEditable" | "draggable" | "spellCheck" | "autoReverse" | "externalResourcesRequired" | "focusable"
-  | "preserveAlpha" ->
-      Booleanish
-  | _ when String.length name > 5 && (String.sub name 0 5 = "data-" || String.sub name 0 5 = "aria-") -> Booleanish
-  | _ -> Plain
-
-let attribute element space name value =
-  let target =
-    match flavour name with Boolean -> String.lowercase_ascii name | Overloaded | Booleanish | Plain -> attribute_name space name
-  in
-  let write text = Dom_api.set_attribute element target text and erase () = Dom_api.remove_attribute element target in
-  match (Raw.view value, flavour name) with
-  | (Missing | Callable _ | Other _), _ -> erase ()
-  | Flag true, (Boolean | Overloaded) -> write ""
-  | Flag false, (Boolean | Overloaded) -> erase ()
-  | Flag shown, Booleanish -> write (string_of_bool shown)
-  | Flag _, Plain -> erase ()
-  | Text "", Boolean -> erase ()
-  | _, Boolean -> write ""
-  | (Number _ | Text _ | Record _ | Listed _), (Overloaded | Booleanish | Plain) -> write (Raw.text_of value)
-
-external trimmed : string -> string = "trim" [@@mel.send]
-
-let styles element previous next =
-  let unitless name =
-    let bare =
-      let prefixed prefix =
-        let length = String.length prefix in
-        String.length name > length && String.sub name 0 length = prefix && Char.uppercase_ascii name.[length] = name.[length]
-      in
-      match List.find_opt prefixed [ "Webkit"; "Moz"; "ms"; "O" ] with
-      | Some prefix ->
-          let rest = String.sub name (String.length prefix) (String.length name - String.length prefix) in
-          String.make 1 (Char.lowercase_ascii rest.[0]) ^ String.sub rest 1 (String.length rest - 1)
-      | None -> name
-    in
-    List.mem bare
-      [
-        "animationIterationCount"; "aspectRatio"; "borderImageOutset"; "borderImageSlice"; "borderImageWidth"; "boxFlex";
-        "boxFlexGroup"; "boxOrdinalGroup"; "columnCount"; "columns"; "flex"; "flexGrow"; "flexPositive"; "flexShrink";
-        "flexNegative"; "flexOrder"; "gridArea"; "gridRow"; "gridRowEnd"; "gridRowSpan"; "gridRowStart"; "gridColumn";
-        "gridColumnEnd"; "gridColumnSpan"; "gridColumnStart"; "fontWeight"; "lineClamp"; "lineHeight"; "opacity"; "order";
-        "orphans"; "tabSize"; "widows"; "zIndex"; "zoom"; "fillOpacity"; "floodOpacity"; "stopOpacity"; "strokeDasharray";
-        "strokeDashoffset"; "strokeMiterlimit"; "strokeOpacity"; "strokeWidth";
-      ]
-  in
-  let style = Dom_api.style element in
-  let put name value =
-    let custom = String.length name > 1 && String.sub name 0 2 = "--" in
-    let shown =
-      match Raw.view value with
-      | Missing | Flag _ -> ""
-      | Text "" -> ""
-      | Number number when number <> 0. && not (unitless name) -> Raw.text_of value ^ "px"
-      | Number _ | Text _ | Callable _ | Listed _ | Record _ | Other _ -> trimmed (Raw.text_of value)
-    in
-    match custom with
-    | true -> Dom_api.set_style_property style name shown ""
-    | false -> Dom_api.set_style style (match name with "float" -> "cssFloat" | other -> other) shown
-  in
-  let fields value = match Raw.view value with Record record -> Some record | _ -> None in
-  Option.iter
-    (fun old ->
-      Array.iter
-        (fun name ->
-          match Option.bind (fields next) (fun next -> Raw.present (Raw.get next name)) with
-          | Some _ -> ()
-          | None -> put name Raw.undefined)
-        (Raw.keys old))
-    (fields previous);
-  Option.iter
-    (fun next ->
-      Array.iter
-        (fun name ->
-          let value = Raw.get next name in
-          match Option.map (fun old -> Raw.same (Raw.get old name) value) (fields previous) with
-          | Some true -> ()
-          | Some false | None -> put name value)
-        (Raw.keys next))
-    (fields next)
-
 let write element space tag name previous value =
+  let attribute element space name value =
+    let attribute_name space name =
+      let hyphenated =
+        [
+          "accent-height"; "alignment-baseline"; "arabic-form"; "baseline-shift"; "cap-height"; "clip-path"; "clip-rule";
+          "color-interpolation"; "color-interpolation-filters"; "color-profile"; "color-rendering"; "dominant-baseline";
+          "enable-background"; "fill-opacity"; "fill-rule"; "flood-color"; "flood-opacity"; "font-family"; "font-size";
+          "font-size-adjust"; "font-stretch"; "font-style"; "font-variant"; "font-weight"; "glyph-name";
+          "glyph-orientation-horizontal"; "glyph-orientation-vertical"; "horiz-adv-x"; "horiz-origin-x"; "image-rendering";
+          "letter-spacing"; "lighting-color"; "marker-end"; "marker-mid"; "marker-start"; "overline-position";
+          "overline-thickness"; "paint-order"; "pointer-events"; "rendering-intent"; "shape-rendering"; "stop-color";
+          "stop-opacity"; "strikethrough-position"; "strikethrough-thickness"; "stroke-dasharray"; "stroke-dashoffset";
+          "stroke-linecap"; "stroke-linejoin"; "stroke-miterlimit"; "stroke-opacity"; "stroke-width"; "text-anchor";
+          "text-decoration"; "text-rendering"; "underline-position"; "underline-thickness"; "unicode-bidi"; "unicode-range";
+          "units-per-em"; "v-alphabetic"; "v-hanging"; "v-ideographic"; "v-mathematical"; "vector-effect"; "vert-adv-y";
+          "vert-origin-x"; "vert-origin-y"; "word-spacing"; "writing-mode"; "x-height";
+        ]
+      in
+      match name with
+      | "className" -> "class"
+      | "htmlFor" -> "for"
+      | "acceptCharset" -> "accept-charset"
+      | "httpEquiv" -> "http-equiv"
+      | _ -> (
+          match space with
+          | Html -> name
+          | Svg ->
+              let buffer = Buffer.create (String.length name + 4) in
+              String.iter
+                (fun letter ->
+                  match Char.lowercase_ascii letter = letter with
+                  | true -> Buffer.add_char buffer letter
+                  | false ->
+                      Buffer.add_char buffer '-';
+                      Buffer.add_char buffer (Char.lowercase_ascii letter))
+                name;
+              let kebab = Buffer.contents buffer in
+              (match List.mem kebab hyphenated with true -> kebab | false -> name))
+    in
+    let flavour name =
+      match name with
+      | "allowFullScreen" | "async" | "autoPlay" | "controls" | "default" | "defer" | "disabled"
+      | "disablePictureInPicture" | "disableRemotePlayback" | "formNoValidate" | "hidden" | "loop" | "noModule"
+      | "noValidate" | "open" | "playsInline" | "readOnly" | "required" | "reversed" | "scoped" | "seamless" | "itemScope" ->
+          Boolean
+      | "capture" | "download" -> Overloaded
+      | "contentEditable" | "draggable" | "spellCheck" | "autoReverse" | "externalResourcesRequired" | "focusable"
+      | "preserveAlpha" ->
+          Booleanish
+      | _ when String.length name > 5 && (String.sub name 0 5 = "data-" || String.sub name 0 5 = "aria-") -> Booleanish
+      | _ -> Plain
+    in
+    let target =
+      match flavour name with Boolean -> String.lowercase_ascii name | Overloaded | Booleanish | Plain -> attribute_name space name
+    in
+    let write text = Dom_api.set_attribute element target text and erase () = Dom_api.remove_attribute element target in
+    match (Raw.view value, flavour name) with
+    | (Missing | Callable _ | Other _), _ -> erase ()
+    | Flag true, (Boolean | Overloaded) -> write ""
+    | Flag false, (Boolean | Overloaded) -> erase ()
+    | Flag shown, Booleanish -> write (string_of_bool shown)
+    | Flag _, Plain -> erase ()
+    | Text "", Boolean -> erase ()
+    | _, Boolean -> write ""
+    | (Number _ | Text _ | Record _ | Listed _), (Overloaded | Booleanish | Plain) -> write (Raw.text_of value)
+  in
+  let styles element previous next =
+    let unitless name =
+      let bare =
+        let prefixed prefix =
+          let length = String.length prefix in
+          String.length name > length && String.sub name 0 length = prefix && Char.uppercase_ascii name.[length] = name.[length]
+        in
+        match List.find_opt prefixed [ "Webkit"; "Moz"; "ms"; "O" ] with
+        | Some prefix ->
+            let rest = String.sub name (String.length prefix) (String.length name - String.length prefix) in
+            String.make 1 (Char.lowercase_ascii rest.[0]) ^ String.sub rest 1 (String.length rest - 1)
+        | None -> name
+      in
+      List.mem bare
+        [
+          "animationIterationCount"; "aspectRatio"; "borderImageOutset"; "borderImageSlice"; "borderImageWidth"; "boxFlex";
+          "boxFlexGroup"; "boxOrdinalGroup"; "columnCount"; "columns"; "flex"; "flexGrow"; "flexPositive"; "flexShrink";
+          "flexNegative"; "flexOrder"; "gridArea"; "gridRow"; "gridRowEnd"; "gridRowSpan"; "gridRowStart"; "gridColumn";
+          "gridColumnEnd"; "gridColumnSpan"; "gridColumnStart"; "fontWeight"; "lineClamp"; "lineHeight"; "opacity"; "order";
+          "orphans"; "tabSize"; "widows"; "zIndex"; "zoom"; "fillOpacity"; "floodOpacity"; "stopOpacity"; "strokeDasharray";
+          "strokeDashoffset"; "strokeMiterlimit"; "strokeOpacity"; "strokeWidth";
+        ]
+    in
+    let style = Dom_api.style element in
+    let put name value =
+      let shown =
+        match Raw.view value with
+        | Missing | Flag _ -> ""
+        | Text "" -> ""
+        | Number number when number <> 0. && not (unitless name) -> Raw.text_of value ^ "px"
+        | Number _ | Text _ | Callable _ | Listed _ | Record _ | Other _ -> trimmed (Raw.text_of value)
+      in
+      match String.length name > 1 && String.sub name 0 2 = "--" with
+      | true -> Dom_api.set_style_property style name shown ""
+      | false -> Dom_api.set_style style (match name with "float" -> "cssFloat" | other -> other) shown
+    in
+    let fields value = match Raw.view value with Record record -> Some record | _ -> None in
+    Option.iter
+      (fun old ->
+        Array.iter
+          (fun name ->
+            match Option.bind (fields next) (fun next -> Raw.present (Raw.get next name)) with
+            | Some _ -> ()
+            | None -> put name Raw.undefined)
+          (Raw.keys old))
+      (fields previous);
+    Option.iter
+      (fun next ->
+        Array.iter
+          (fun name ->
+            let value = Raw.get next name in
+            match fields previous with
+            | Some old when Raw.same (Raw.get old name) value -> ()
+            | Some _ | None -> put name value)
+          (Raw.keys next))
+      (fields next)
+  in
   let valued tag = match tag with "input" | "select" | "textarea" -> `Valued | _ -> `Plain in
   match (name, valued tag) with
   | ( ( "children" | "key" | "ref" | "suppressContentEditableWarning" | "suppressHydrationWarning" | "defaultValue"
@@ -220,6 +218,9 @@ let values element tag ~mounting props =
       Option.iter
         (fun value ->
           let chosen = Raw.text_of value in
+          let options_of : Dom.element -> Dom.element array =
+            [%mel.raw {|function (select) { return Array.from(select.options); }|}]
+          in
           let options = options_of element in
           match Array.find_opt (fun option -> String.equal (Dom_api.property option "value") chosen) options with
           | Some option -> Dom_api.set_property option "selected" true

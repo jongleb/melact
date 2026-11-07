@@ -303,7 +303,6 @@ let put_off = ref None_put_off
 let committed = audience ()
 let enqueued = ref 0
 
-(** How deep the mounts under way are nested. *)
 let mounting = ref 0
 
 let tree_order = ref None
@@ -976,11 +975,11 @@ type 'job siblings = {
 }
 
 let siblings : job siblings option ref = ref None
-let queued () = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs)
 
 let mount_instance position kind =
   let instance = born kind in
   let since = !enqueued in
+  let queued () = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
   let before = match (!View.patch_order, !mounting) with View.Out_of_order, 0 -> Some (queued ()) | _ -> None in
   incr mounting;
   (match
@@ -996,12 +995,13 @@ let mount_instance position kind =
    with
   | output ->
       instance.output <- output;
-      commit ~since position instance
+      commit ~since position instance;
+      decr mounting
   | exception error ->
       instance.pending <- [];
       commit ~since position instance;
+      decr mounting;
       !suspension.rescue While_rendering instance error [@u]);
-  decr mounting;
   let live = View.live instances instance in
   (match (before, !enqueued > since) with
   | Some before, true -> (
@@ -1009,8 +1009,16 @@ let mount_instance position kind =
       let rec above stop list = match list == stop with true -> [] | false -> ( match list with job :: rest -> job :: above stop rest | [] -> []) in
       match !siblings with
       | Some ({ above = a1, a2, a3, a4; _ } as run)
-        when Dom_api.same run.parent position.parent && Dom_api.same run.front position.before
-             && (let e1, e2, e3, e4 = before in a1 == e1 && a2 == e2 && a3 == e3 && a4 == e4) ->
+        when Dom_api.same run.parent position.parent
+             && (let e1, e2, e3, e4 = before in a1 == e1 && a2 == e2 && a3 == e3 && a4 == e4)
+             &&
+             let rec reaches node =
+               match Js.Null.toOption node with
+               | None -> `Elsewhere
+               | Some node when Dom_api.same (Js.Null.return node) run.front -> `Before_it
+               | Some node -> reaches (Dom_api.following_sibling node)
+             in
+             reaches position.before = `Before_it ->
           let b1, b2, b3, b4 = run.base and e1, e2, e3, e4 = before in
           let splice queue base earlier = queue := above base earlier @ above earlier !queue @ base in
           splice layout_cleanups b1 e1;

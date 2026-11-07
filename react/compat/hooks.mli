@@ -10,7 +10,6 @@ val useReducer : Raw.t -> Raw.t -> Raw.t -> Raw.t * (Raw.t -> unit)
 val useMemo : Raw.t -> Raw.t -> Raw.t
 val useCallback : Raw.t -> Raw.t -> Raw.t
 val useRef : Raw.t -> Raw.t React.ref
-val useContext : Raw.t -> Raw.t
 val useId : unit -> string
 val useImperativeHandle : Raw.t -> Raw.t -> Raw.t -> unit
 val useSyncExternalStore : Raw.t -> Raw.t -> Raw.t -> Raw.t

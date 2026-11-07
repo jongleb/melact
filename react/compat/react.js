@@ -1,24 +1,26 @@
 // npm's "react", implemented on Melact's runtime. An app aliases "react" to this file.
 import * as Api from "./api.mjs";
+import * as Element from "./element.mjs";
 import * as Hooks from "./hooks.mjs";
+import * as Render from "./render.mjs";
 
 const rest = (args, from) => Array.prototype.slice.call(args, from);
 
 export const version = Api.version;
-export const Fragment = Api.fragment;
-export const StrictMode = Api.strictMode;
-export const Profiler = Api.profiler;
-export const Suspense = Api.suspense;
+export const Fragment = Element.Mark.fragment;
+export const StrictMode = Element.Mark.strict_mode;
+export const Profiler = Element.Mark.profiler;
+export const Suspense = Element.Mark.suspense;
 
 export function createElement(type, config) {
-  return Api.create(type, config, rest(arguments, 2));
+  return Element.create(type, config, rest(arguments, 2));
 }
 export function cloneElement(element, config) {
-  return Api.clone(element, config, rest(arguments, 2));
+  return Element.clone(element, config, rest(arguments, 2));
 }
 export const isValidElement = (value) => Api.isValidElement(value);
 export const createRef = () => Api.createRef();
-export const createContext = (value) => Api.createContext(value);
+export const createContext = (value) => Render.context(value);
 export const forwardRef = (render) => Api.forwardRef(render);
 export const memo = (type, compare) => Api.memo(type, compare);
 export const lazy = (load) => Api.lazy_(load);
@@ -62,7 +64,7 @@ export const useInsertionEffect = (create, deps) => Hooks.useInsertionEffect(cre
 export const useMemo = (compute, deps) => Hooks.useMemo(compute, deps);
 export const useCallback = (callback, deps) => Hooks.useCallback(callback, deps);
 export const useRef = (initial) => Hooks.useRef(initial);
-export const useContext = (context) => Hooks.useContext(context);
+export const useContext = (context) => Render.read(context);
 export const useId = () => Hooks.useId();
 export const useImperativeHandle = (ref, create, deps) => Hooks.useImperativeHandle(ref, create, deps);
 export const useSyncExternalStore = (subscribe, snapshot, server) => Hooks.useSyncExternalStore(subscribe, snapshot, server);

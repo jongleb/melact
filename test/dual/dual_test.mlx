@@ -3825,3 +3825,56 @@ let () =
            ( "<p>&lt;<b>on</b>&gt;<button>toggle</button></p>",
              "<p>&lt;&gt;<button>toggle</button></p>" );
       finish ()))
+
+module Mounted_row = struct
+  let[@react.component] make ~label =
+    React.useLayoutEffect0 (fun () ->
+        log ("layout " ^ label);
+        None);
+    React.useEffect0 (fun () ->
+        log ("passive " ^ label);
+        None);
+    <li>(React.string label)</li>
+end
+
+module Mounted_rows = struct
+  let[@react.component] make ~labels =
+    <ul>(React.array (Array.map (fun label -> <Mounted_row key=label label />) labels))</ul>
+end
+
+let () =
+  describe "effects of rows mounted by one patch" (fun () ->
+    test_async "run in tree order, layout effects first, after any edits of a keyed list" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:60) (fun values ->
+             let tape = tape values in
+             let pool = [| "a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "k"; "l" |] in
+             let pick () =
+               let rec chosen remaining picked =
+                 match remaining with
+                 | 0 -> Array.of_list (List.rev picked)
+                 | _ ->
+                     let free = List.filter (fun label -> not (List.mem label picked)) (Array.to_list pool) in
+                     chosen (remaining - 1) (List.nth free (draw tape (List.length free)) :: picked)
+               in
+               chosen (draw tape 7) []
+             in
+             let root = attached () in
+             let client = ReactDOM.Client.createRoot root in
+             let rec run remaining shown =
+               match remaining with
+               | 0 -> Js.Promise.resolve ()
+               | _ ->
+                   let labels = pick () in
+                   let* () = act (fun () -> ReactDOM.Client.render client <Mounted_rows labels />) in
+                   let fresh = List.filter (fun label -> not (Array.mem label shown)) (Array.to_list labels) in
+                   expect (take ())
+                   |. to_equal
+                        (List.map (fun label -> "layout " ^ label) fresh @ List.map (fun label -> "passive " ^ label) fresh);
+                   run (remaining - 1) labels
+             in
+             let* () = run (1 + draw tape 6) [||] in
+             let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+             ignore (take ());
+             finish ()))
+        [%mel.obj { numRuns = 100 }]))

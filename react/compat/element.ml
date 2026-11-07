@@ -40,17 +40,19 @@ let copied config =
     (Raw.present config);
   props
 
+let default_props kind =
+  Option.bind (Raw.present kind) (fun kind -> match Raw.view kind with Callable _ | Record _ -> Raw.find kind "defaultProps" | _ -> None)
+
 let defaults kind props =
   Option.iter
     (fun given ->
       Array.iter
         (fun name ->
-          match Raw.view (Raw.get props name) with
-          | Missing when Raw.same (Raw.get props name) Raw.undefined -> Raw.set props name (Raw.get given name)
-          | _ -> ())
+          match Raw.same (Raw.get props name) Raw.undefined with
+          | true -> Raw.set props name (Raw.get given name)
+          | false -> ())
         (Raw.keys given))
-    (Option.bind (Raw.present kind) (fun kind ->
-         match Raw.view kind with Callable _ | Record _ -> Raw.find kind "defaultProps" | _ -> None))
+    (default_props kind)
 
 let given_key config = Option.map Raw.text_of (Option.bind (Raw.present config) (fun config -> Raw.find config "key"))
 
@@ -72,11 +74,7 @@ let create kind config children =
 let jsx kind config key =
   let props = copied config in
   defaults kind props;
-  let key =
-    match given_key config with
-    | Some key -> Some key
-    | None -> Option.map Raw.text_of (Raw.present key)
-  in
+  let key = Option.fold ~none:(Option.map Raw.text_of (Raw.present key)) ~some:Option.some (given_key config) in
   built kind key (given_ref config) props
 
 let kind element = Raw.get element "type"
@@ -86,8 +84,7 @@ let key element = Option.map Raw.text_of (Raw.find element "key")
 
 let clone element config children =
   let props = Raw.merged (Raw.make_object ()) (props element) Raw.undefined in
-  let fallback = Option.bind (Raw.present (kind element)) (fun kind ->
-    match Raw.view kind with Callable _ | Record _ -> Raw.find kind "defaultProps" | _ -> None) in
+  let fallback = default_props (kind element) in
   Option.iter
     (fun config ->
       Array.iter
@@ -102,10 +99,9 @@ let clone element config children =
         (Raw.keys config))
     (Raw.present config);
   put_children props children;
-  let key = match given_key config with Some key -> Some key | None -> key element in
+  let key = Option.fold ~none:(key element) ~some:Option.some (given_key config) in
   let reference =
-    Option.fold ~none:(reference element) ~some:(fun config -> match Raw.find config "ref" with Some given -> given | None -> reference element)
-      (Raw.present config)
+    Option.value ~default:(reference element) (Option.bind (Raw.present config) (fun config -> Raw.find config "ref"))
   in
   built (kind element) key reference props
 
