@@ -127,102 +127,91 @@ def logo(p):
 
 
 def overview(p):
-    def chips(x, y, width, labels, tone):
-        out, cx, cy = "", x, y
-        for label in labels:
-            w = int(len(label) * 7.6) + 24
-            if cx + w > x + width:
-                cx, cy = x, cy + 38
-            fill = {"gone": p["card"], "stays": p["accent_soft"]}[tone]
-            stroke = {"gone": p["line"], "stays": p["accent"]}[tone]
-            out += box(cx, cy, w, 28, fill, stroke, rx=14, width=1.2)
-            out += text(cx + w / 2, cy + 19, label, size=12, cls="muted" if tone == "gone" else "accent",
-                        weight=600, anchor="middle")
-            if tone == "gone":
-                out += f'<line x1="{cx + 12}" y1="{cy + 15}" x2="{cx + w - 12}" y2="{cy + 15}" stroke="{p["orange"]}" stroke-width="1.6"/>'
-            cx += w + 10
+    width = 1100
+
+    def button(x, y, value, live):
+        out = box(x - 6, y - 6, 270, 76, "none", p["green"], rx=16, dash="3 4", width=1.3)
+        out += box(x, y, 258, 64, p["card"], p["text"], rx=12, width=1.4)
+        out += text(x + 24, y + 41, "Count:", size=21, cls="faint", weight=700)
+        out += (f'<rect x="{x + 108}" y="{y + 12}" width="56" height="40" rx="8" fill="{p["orange_soft"] if live else p["card"]}" '
+                f'stroke="{p["orange"]}" stroke-width="1.8" stroke-dasharray="5 4"{" class=\"pulse\"" if live else ""}/>')
+        out += text(x + 136, y + 40, value, size=21, cls="orange", weight=800, anchor="middle")
+        out += box(x + 186, y - 12, 76, 24, p["accent"], p["accent"], rx=12)
+        out += text(x + 224, y + 5, "onClick", size=11.5, cls="mono", weight=700, anchor="middle", fill=p["card"])
         return out
 
-    def heading(x, n, title, note):
-        return (f'<circle cx="{x + 12}" cy="14" r="12" fill="{p["accent"]}"/>'
-                + text(x + 12, 19, n, size=12.5, weight=800, anchor="middle", fill="#ffffff")
-                + text(x + 32, 19, title, size=15, weight=700)
-                + text(x + 32, 38, note, size=11.5, cls="muted"))
+    body = text(0, 14, "On the page", size=14, weight=700)
+    body += box(0, 26, width, 150, p["card"], p["line"], rx=14, width=1.2, lift=True)
+    body += button(48, 70, "0", False)
+    body += text(48, 160, "grey text: static, cloned from the template once", size=12, cls="muted")
+    body += arrow(p, 336, 102, 470, 102, "orange", flow=True, width=2)
+    body += text(403, 90, "click", size=12.5, cls="orange", weight=700, anchor="middle")
+    body += button(508, 70, "1", True)
+    body += text(508, 160, "one write: the text node now says 1", size=12, cls="orange", weight=700)
+    lx = 820
+    body += text(lx, 62, "three holes, and what each reads", size=13, weight=700)
+    body += text(lx, 88, span("■ ", "orange") + "text   reads " + f'<tspan class="orange" font-weight="800">count</tspan>', size=12.5, raw=True)
+    body += text(lx, 112, span("■ ", "green") + "class  reads " + f'<tspan class="green" font-weight="800">tone</tspan>' + span("  (a prop)", "muted"), size=12.5, raw=True)
+    body += text(lx, 136, span("■ ", "accent") + "onClick runs setCount", size=12.5, raw=True)
+    body += text(lx, 160, "the rest of the button never changes", size=12, cls="muted")
 
-    def mono(x, y, parts, size=11.5):
-        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+    def code(x, y, parts, size=12.5):
+        line = "".join(span(chunk, cls) if cls else escape(chunk) for chunk, cls in parts)
         return text(x, y, line, size=size, cls="mono", raw=True)
 
-    body = heading(0, "1", "You keep your code", "a reason-react component, unchanged")
-    body += heading(305, "2", "Melact compiles it, once", "at build time, per JSX tree")
-    body += heading(610, "3", "A click runs this", "in the browser, every render")
-
-    body += box(0, 54, 270, 166, p["card"], p["line"], lift=True)
-    code = [
-        [("let[@react.component] make () =", "")],
-        [("  let n, set =", "")],
-        [("    React.useState (fun () -> 0) in", "")],
-        [("  <button onClick=", ""), ("(fun _ ->", "accent")],
-        [("      set (fun n -> n + 1))", "accent"), (">", "")],
-        [("    ", ""), ("(React.int n)", "orange")],
-        [("  </button>", "")],
+    yb = 212
+    body += text(0, yb, "Your JSX, unchanged reason-react", size=14, weight=700)
+    body += box(0, yb + 12, 400, 190, p["card"], p["line"], rx=14, width=1.2, lift=True)
+    jsx = [
+        [("let[@react.component] make ~", None), ("tone", "green"), (" =", None)],
+        [("  let ", None), ("count", "orange"), (", setCount = React.useState ...", None)],
+        [("  <button className=", None), ("tone", "green")],
+        [("    ", None), ("onClick", "accent"), ("=(fun _ -> setCount ...)>", None)],
+        [("    (React.string \"Count: \")", None)],
+        [("    (React.int ", None), ("count", "orange"), (")", None)],
+        [("  </button>", None)],
     ]
-    for i, parts in enumerate(code):
-        body += mono(14, 82 + i * 19, parts, size=11.2)
-    body += box(0, 232, 270, 82, p["card"], p["line"], lift=True)
-    body += text(14, 252, "the whole migration: two dune lines", size=11.5, cls="muted", weight=600)
-    for i, (line, cls) in enumerate([("- (libraries reason-react)  + melact", "orange"), ("- (pps reason-react-ppx)  + melact-ppx", "green")]):
-        body += text(14, 276 + i * 20, line, size=11, cls=f"mono {cls}")
-
-    body += box(305, 54, 270, 260, p["card"], p["accent"], lift=True, width=1.4)
-    body += text(321, 78, "the template, made once", size=12.5, cls="accent", weight=700)
-    tpl = escape("<button") + span("●", "accent") + escape(">") + span("●", "orange") + escape("</button>")
-    body += box(321, 90, 238, 40, p["accent_soft"], p["accent"], rx=8, dash="4 4")
-    body += text(440, 116, tpl, size=14, cls="mono", raw=True, anchor="middle")
-    body += text(321, 150, "●", size=12, cls="accent")
-    body += text(335, 150, "the click handler", size=11.5, cls="muted")
-    body += text(441, 150, "●", size=12, cls="orange")
-    body += text(455, 150, "the text n", size=11.5, cls="muted")
-    body += text(321, 168, "holes: the only places that can change", size=11.5, cls="muted")
-    body += f'<line x1="321" y1="184" x2="559" y2="184" stroke="{p["line"]}"/>'
-    body += text(321, 206, "the render, generated", size=12.5, cls="blue", weight=700)
-    body += mono(321, 232, [("if ", "accent"), ("n", "orange"), (" !== last then", "")])
-    body += mono(321, 252, [("  text.data = ", ""), ("n", "orange")])
-    body += text(321, 280, "one compare per value, at most", size=11.5, cls="muted")
-    body += text(321, 298, "one write per change: nothing else", size=11.5, cls="muted")
-
-    body += box(610, 54, 270, 260, p["card"], p["line"], lift=True)
-    flow = [
-        ("click → set (fun n -> n + 1)", "your code, as before", "line"),
-        ("only this component runs", "no parent, no tree", "line"),
-        ("n: 0 → 1, so n !== last", "one ===", "accent"),
-        ("text.data = \"1\"", "the only DOM write", "green"),
+    for i, parts in enumerate(jsx):
+        body += code(20, yb + 46 + i * 22, parts)
+    body += arrow(p, 410, yb + 106, 462, yb + 106, "accent", width=2)
+    body += text(436, yb + 94, "build", size=12, cls="accent", weight=700, anchor="middle")
+    x2 = 474
+    body += text(x2, yb, "What melact-ppx makes of it", size=14, weight=700)
+    body += box(x2, yb + 12, width - x2, 190, p["card"], p["line"], rx=14, width=1.2, lift=True)
+    compiled_lines = [
+        ([('template = "<button>Count: </button>"', None)], "static HTML, parsed once", "muted"),
+        ([("text", "orange"), ("  = button.lastChild", None)], "hole, reads count", "orange"),
+        ([("class", "green"), (" = button.className", None)], "hole, reads tone", "green"),
+        ([("onClick", "accent"), (" button (fun _ -> setCount ...)", None)], "hole, set once at mount", "accent"),
+        ([("setCount", "orange"), (" marks the bit of ", None), ("count", "orange")], "known at build time", "muted"),
+        ([("count", "orange"), (" changed → ", None), ("text", "orange"), (".data <- count", None)], "the only write", "orange"),
     ]
-    for i, (label, note, tone) in enumerate(flow):
-        y = 68 + i * 60
-        fill = {"line": p["card"], "accent": p["accent_soft"], "green": p["green_soft"]}[tone]
-        stroke = {"line": p["line"], "accent": p["accent"], "green": p["green"]}[tone]
-        body += box(626, y, 238, 44, fill, stroke, rx=10, width=1.3)
-        body += text(640, y + 19, label, size=12, cls=("mono green" if tone == "green" else "mono accent" if tone == "accent" else "mono"), weight=700)
-        body += text(640, y + 36, note, size=11, cls="muted")
-        if i < len(flow) - 1:
-            body += arrow(p, 745, y + 45, 745, y + 58, "accent", width=1.4)
+    for i, (parts, note, cls) in enumerate(compiled_lines):
+        y = yb + 44 + i * 26
+        body += code(x2 + 18, y, parts)
+        body += text(width - 16, y, note, size=11.5, cls=cls, weight=700 if cls != "muted" else None, anchor="end")
 
-    body += arrow(p, 273, 184, 301, 184, "accent", flow=True)
-    body += arrow(p, 578, 184, 606, 184, "accent", flow=True)
-
-    body += box(0, 336, 430, 116, p["card"], p["line"], rx=14)
-    body += text(18, 362, "Gone", size=14.5, weight=700)
-    body += text(62, 362, "from the bundle and from every render", size=12.5, cls="muted")
-    body += chips(18, 376, 400, ["React", "react-dom", "virtual DOM", "a tree per render", "tree diff", "fiber"], "gone")
-    body += box(450, 336, 430, 116, p["accent_soft"], p["accent"], rx=14)
-    body += text(468, 362, "Stays", size=14.5, weight=700)
-    body += text(512, 362, "it compiles unchanged", size=12.5, cls="muted")
-    body += chips(468, 376, 400, ["your components", "hooks", "mlx · Reason · OCaml", "ReactDOM", "React.Event"], "stays")
-    body += box(0, 468, 880, 52, p["green_soft"], p["green"], rx=14, width=1.4)
-    body += text(20, 499, "Starting fresh?", size=14, weight=700, cls="green")
-    body += text(140, 499, "Write Meltea: messages and a pure update, compiled by the same compiler into the same templates.", size=12.5, cls="muted")
-    return svg(p, 880, 520, "Melact in one picture. 1: you keep a reason-react component unchanged; the whole migration is two dune lines. 2: Melact compiles it once, at build time, into a template with two holes, the click handler and the text n, the only places that can change, and a generated render: if n !== last then text.data = n, one compare per value and at most one write per change. 3: a click runs your set as before, only this component runs, n goes from 0 to 1 so one === fails, and text.data = 1 is the only DOM write. Gone: React, react-dom, the virtual DOM, a tree per render, the tree diff, fiber. Stays: your components, hooks, mlx, Reason and OCaml, ReactDOM, React.Event. Starting fresh? Write Meltea", body)
+    yc = yb + 238
+    body += text(0, yc, "What a click does", size=14, weight=700)
+    steps = [("click", "accent"), ("setCount 1", "accent"), ("bit count set", "orange"), ("holes that read count: text", "orange"),
+             ("text.data <- 1", "orange"), ("class hole: tone did not change", "green")]
+    x = 0
+    for i, (label, cls) in enumerate(steps):
+        w = 26 + len(label) * 7.1
+        body += box(x, yc + 14, w, 34, p[cls + "_soft"], p[cls], rx=17, width=1.2)
+        body += text(x + w / 2, yc + 36, label, size=12, cls=f"mono {cls}", weight=700, anchor="middle")
+        if i < len(steps) - 1:
+            body += arrow(p, x + w + 3, yc + 31, x + w + 21, yc + 31, "muted", width=1.4)
+        x += w + 25
+    body += text(0, yc + 74, "No tree is built and nothing is diffed: the markup is cloned once, and an update runs only the holes that read what changed.", size=12.5, cls="muted")
+    body += text(0, yc + 98, "Gone: React, react-dom, the virtual DOM, fiber.  Stays: your components, hooks, mlx, ReactDOM, React.Event.  Starting fresh? Write Meltea.", size=12.5, weight=600)
+    label = ("A Melact counter button on the page and in code. melact-ppx cuts the unchanged reason-react JSX into static HTML, "
+             "parsed once and cloned, and three holes: the text node, which reads count; the class, which reads the prop tone; "
+             "and the click handler, set once at mount. It records at build time which value each hole reads. A click runs "
+             "setCount, which marks count as changed; only the hole that reads count runs, and it writes 1 into its text node. "
+             "The class hole reads tone, which did not change, so it does nothing. No tree is built and nothing is diffed. "
+             "Gone: React, react-dom, the virtual DOM, fiber. Stays: your components, hooks, mlx, ReactDOM, React.Event.")
+    return svg(p, width, yc + 106, label, body)
 
 
 def pipeline(p):
@@ -1445,8 +1434,8 @@ FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, c
                reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed, bridges=bridges)
 
 HEADERS = dict(
-    overview=("Melact in one picture", "Your reason-react code, compiled: no React underneath",
-              "Two dune lines change. Components, hooks and JSX stay; the build turns each JSX tree into a template and a refresh."),
+    overview=("Melact in one picture", "A click writes one text node, chosen at build time",
+              "Two dune lines change. The compiler cuts your JSX into static HTML and holes, and writes down what each hole reads."),
     speed=("Benchmark", "Within ×1.2 of hand-written JavaScript",
            "js-framework-benchmark's keyed operations in headless Chrome, against vanilla JS, Svelte 5, Vue Vapor and React 18."),
     surface=("Compatibility", "The reason-react API, kept call for call",
