@@ -270,7 +270,8 @@
     "animation frames": 2,
     "microtasks": 6,
     "promise reactions": 7,
-    "mutation records": 27782
+    "mutation records": 27782,
+    "nodes kept": 5002
   },
   "classics: chess, Melact": {
     "moves": 315,
@@ -465,7 +466,8 @@
     "listeners added": 13,
     "listeners removed": 12,
     "mutation records": 4268,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "nodes kept": 247
   },
   "classics: repro/change-event, Melact": {
     "insertions": 1,
@@ -528,7 +530,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 292,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "nodes kept": 25
   },
   "classics: repro/layout-read-after-parent-write, Melact": {
     "insertions": 5,
@@ -650,7 +653,8 @@
     "listeners added": 12262,
     "listeners removed": 12260,
     "mutation records": 226297,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "nodes kept": 2023
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 3": {
     "insertions": 10,
@@ -663,7 +667,8 @@
     "listeners removed": 12270,
     "mutation records": 20,
     "listeners kept": 2,
-    "texts": 42
+    "texts": 42,
+    "nodes kept": 2020
   },
   "classics: chat, Melact": {
     "insertions": 21188,
@@ -699,14 +704,16 @@
     "promise reactions": 128,
     "listeners added": 2,
     "mutation records": 20218,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "nodes kept": 3362
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 4": {
     "nodes walked": 16,
     "timers": 40,
     "animation frames": 35,
     "microtasks": 1465,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "nodes kept": 3360
   },
   "classics: email, Melact": {
     "insertions": 9314,
@@ -725,7 +732,8 @@
     "listeners added": 96,
     "listeners removed": 94,
     "mutation records": 30956,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "nodes kept": 5657
   },
   "classics: gallery, Melact": {
     "insertions": 6568,
@@ -819,7 +827,8 @@
     "listeners added": 13656,
     "listeners removed": 13654,
     "mutation records": 37544,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "nodes kept": 7808
   },
   "classics: shop, Melact": {
     "moves": 1298,

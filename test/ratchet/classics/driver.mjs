@@ -2,7 +2,9 @@
 // scenario, the way bench/classics/run.mjs runs it in Chromium, and returns what each step counted.
 // Time is virtual: timeouts, intervals, animation frames, idle callbacks and setImmediate wait in one
 // queue that the driver runs in order, so a run counts the same every time. After the last step the
-// page is unmounted, collected, and checked for what it left behind.
+// page is unmounted, collected, and checked for what it left behind. RATCHET_KEPT=1 prints the
+// subtrees kept after the unmount; RATCHET_SNAPSHOT=<file> also writes a heap snapshot in which the
+// first of them holds a LeakMarker, to find what keeps it.
 import { readFileSync } from "node:fs";
 import { clock, failed, fired, later, real, yielded } from "./clock.mjs";
 

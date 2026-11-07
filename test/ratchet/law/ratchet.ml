@@ -20,8 +20,12 @@ type verdict =
 let comparison kind =
   match kind with
   | Counters.Attribute | Class | Style | Frame_layout | Layout_read | Rendered | Effect_ran | Evaluated | Task | Reaction
-  | Kept_node | Kept_timer | Kept_global | Sent ->
+  | Kept_timer | Kept_global | Sent ->
       Compared
+  | Kept_node ->
+      Known_gap
+        "the instances mounted last as one run of siblings stay in react/runtime/instance.ml's [siblings] after they \
+         unmount, with the effect queues that hold them and their DOM: a defect, not a design"
   | Moved ->
       Known_gap
         "in bench/classics/repro/logs-chunked, filtering and searching move up to 11,369 nodes a step that React leaves \

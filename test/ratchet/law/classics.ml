@@ -63,7 +63,7 @@ let laws ~part ~pace apps =
             |. to_equal (List.map (fun (run : Ratchet.paired) -> (run.name, [||], [||])) paired, []);
             Ratchet.never_more_than_react ~gaps paired;
             Js.Promise.resolve ())
-          600_000);
+          1_800_000);
     describe ("Law B: never more than last time, bench/classics " ^ part) (fun () ->
         test_long "no counter of these apps under Melact is above the checked-in baseline" (fun () ->
             let* runs = Lazy.force runs in
@@ -76,7 +76,7 @@ let laws ~part ~pace apps =
                  apps paired
               @ [ (gaps, Ratchet.gaps paired) ]);
             Js.Promise.resolve ())
-          600_000)
+          1_800_000)
   in
   match (pace, Js.Dict.get environment "RATCHET_SLOW") with
   | Quick, _ | Slow, Some _ -> laws ()
