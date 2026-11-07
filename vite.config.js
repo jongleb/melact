@@ -40,5 +40,9 @@ export default defineConfig({
     // byte for byte against each other by dune; test/typed/probed runs it.
     exclude: ["**/node_modules/**", "_build/default/test/typed/dual/**", "_build/default/test/typed/staged/**"],
     setupFiles: ["./test/setup.js"],
+    // The ratchet's leak check collects garbage before it looks for nodes still reachable after an unmount.
+    poolOptions: { forks: { execArgv: ["--expose-gc"] } },
+    // The size ratchet bundles with esbuild, which needs Node's own typed arrays.
+    environmentMatchGlobs: [["**/test/ratchet/sizes/sizes_test.mjs", "node"]],
   },
 });

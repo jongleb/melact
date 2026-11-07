@@ -22,7 +22,7 @@ type kind =
   | Keyed  (** A row's key computed. *)
   | Projected  (** A row's projection computed. *)
   | Refreshed  (** A row drawn again by its refresh or row function. *)
-  | Walked  (** A step of a DOM walk: a TreeWalker or NodeIterator move, compareDocumentPosition, contains. *)
+  | Walked  (** A step of a DOM walk: a TreeWalker or NodeIterator move, compareDocumentPosition, contains, outside selector matching. *)
   | Timer  (** A [setTimeout], [setInterval] or [requestIdleCallback] call. *)
   | Frame  (** A [requestAnimationFrame] call. *)
   | Task  (** A task queued with [setImmediate] or [MessagePort.postMessage], as schedulers queue them. *)
@@ -35,6 +35,7 @@ type kind =
   | Kept_listener  (** After unmount and a full collection, a listener the run added, on a target still reachable. *)
   | Kept_timer  (** After unmount, a timeout, interval or frame request the run made, still pending. *)
   | Kept_global  (** After unmount, a property the run added to [window] or [document]. *)
+  | Sent  (** A byte of the HTML a server renderer wrote. *)
 
 val kinds : kind list
 val name : kind -> string

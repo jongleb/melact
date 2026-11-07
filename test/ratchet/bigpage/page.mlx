@@ -1,0 +1,128 @@
+(* A page of [rows] rows of twelve elements each, a search field whose effect is debounced, rows that
+   read their offsetTop in a layout effect, the first forty of them marked from a context, and a
+   popover placed by a layout effect. Built for React 18 and for Melact. *)
+
+external set_timeout : (unit -> unit) -> int -> int = "setTimeout"
+external clear_timeout : int -> unit = "clearTimeout"
+external offset_top : Dom.element -> int = "offsetTop" [@@mel.get]
+external rect_top : Dom.element -> float = "top" [@@mel.get]
+external rect : Dom.element -> Dom.element = "getBoundingClientRect" [@@mel.send]
+external document : Dom.document = "document"
+
+external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
+[@@mel.send] [@@mel.return nullable]
+
+external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> unit = "addEventListener" [@@mel.send]
+
+(** Whether the first forty rows are marked. *)
+type marking = Marked | Plain
+
+(** The row a popover is open on. *)
+type popover = Closed | Open of int
+
+let marking = React.createContext Plain
+
+module Marking = struct
+  let make = React.Context.provider marking
+
+  external makeProps : value:marking -> children:React.element -> unit -> < value : marking ; children : React.element > Js.t
+    = ""
+  [@@mel.obj]
+end
+
+module Mark = struct
+  let[@react.component] make () =
+    let shown = React.useContext marking in
+    let cell = React.useRef Js.Nullable.null in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption cell.current |> Option.iter (fun element -> ignore (offset_top element));
+        None)
+      [| shown |];
+    <em ref=(ReactDOM.Ref.domRef cell) className="mark">(React.string (match shown with Marked -> "*" | Plain -> ""))</em>
+end
+
+module Row = struct
+  let[@react.component] make =
+    React.memo (fun ~index ~onOpen ->
+        let row = React.useRef Js.Nullable.null in
+        React.useLayoutEffect0 (fun () ->
+            Js.Nullable.toOption row.current |> Option.iter (fun element -> ignore (offset_top element));
+            None);
+        <tr ref=(ReactDOM.Ref.domRef row) className="row">
+          <td className="id">(React.int index)</td>
+          <td className="label">
+            <a href="#">(React.string ("row " ^ string_of_int index))</a>
+            (match index < 40 with true -> <Mark /> | false -> React.null)
+          </td>
+          <td className="pick"><input type_="checkbox" /></td>
+          <td className="open">
+            <button className="opener" onClick=(fun _ -> onOpen index)><span>(React.string "open")</span></button>
+          </td>
+          <td className="extra"><i /><i /></td>
+        </tr>)
+end
+
+module Popover = struct
+  let[@react.component] make ~index ~onClose =
+    let box = React.useRef Js.Nullable.null in
+    let top, setTop = React.useState (fun () -> 0.) in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption box.current |> Option.iter (fun element -> setTop (fun _ -> rect_top (rect element)));
+        None)
+      [| index |];
+    <div ref=(ReactDOM.Ref.domRef box) className="popover" style=(ReactDOM.Style.make ~top:(Js.Float.toString top ^ "px") ())>
+      (React.string ("row " ^ string_of_int index))
+      <button className="close" onClick=(fun _ -> onClose ())>(React.string "close")</button>
+    </div>
+end
+
+module App = struct
+  let[@react.component] make ~rows =
+    let query, setQuery = React.useState (fun () -> "") in
+    let settled, setSettled = React.useState (fun () -> "") in
+    let shown, setShown = React.useState (fun () -> Plain) in
+    let popover, setPopover = React.useState (fun () -> Closed) in
+    React.useEffect1
+      (fun () ->
+        let timer = set_timeout (fun () -> setSettled (fun _ -> query)) 300 in
+        Some (fun () -> clear_timeout timer))
+      [| query |];
+    let onOpen = React.useCallback0 (fun index -> setPopover (fun _ -> Open index)) in
+    <Marking value=shown>
+      <div className="page">
+        <input
+          className="search"
+          value=query
+          onChange=(fun event ->
+            let value = (React.Event.Form.target event)##value in
+            setQuery (fun _ -> value)) />
+        <output className="settled">(React.string settled)</output>
+        <button
+          className="marker"
+          onClick=(fun _ -> setShown (fun current -> match current with Marked -> Plain | Plain -> Marked))>
+          (React.string "mark")
+        </button>
+        (match popover with
+         | Closed -> React.null
+         | Open index -> <Popover index onClose=(fun () -> setPopover (fun _ -> Closed)) />)
+        <table>
+          <tbody>(React.array (Array.init rows (fun index -> <Row key=(string_of_int index) index onOpen />)))</tbody>
+        </table>
+      </div>
+    </Marking>
+end
+
+let start rows =
+  match (element_by_id document "root", element_by_id document "mount", element_by_id document "unmount") with
+  | Some container, Some mount, Some unmount ->
+      let mounted = ref None in
+      add_event_listener mount "click" (fun _ ->
+          let root = ReactDOM.Client.createRoot container in
+          ReactDOM.Client.render root <App rows />;
+          mounted := Some root);
+      add_event_listener unmount "click" (fun _ ->
+          Option.iter (fun root -> ReactDOM.Client.unmount root ()) !mounted;
+          mounted := None)
+  | _ -> ()

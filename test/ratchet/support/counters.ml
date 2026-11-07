@@ -32,12 +32,13 @@ type kind =
   | Kept_listener
   | Kept_timer
   | Kept_global
+  | Sent
 
 let kinds =
   [
     Moved; Inserted; Removed; Attribute; Class; Text; Style; Property; Created; Forced_layout; Frame_layout; Layout_read; Rendered;
     Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked; Timer; Frame; Task; Microtask; Reaction; Listened;
-    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global;
+    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global; Sent;
   ]
 
 let name kind =
@@ -75,6 +76,7 @@ let name kind =
   | Kept_listener -> "listeners kept"
   | Kept_timer -> "timers kept"
   | Kept_global -> "globals kept"
+  | Sent -> "bytes served"
 
 type t = int Js.Dict.t
 
@@ -82,11 +84,14 @@ let () =
   ([%mel.raw
     {|function () {
   if (globalThis.__ratchet) return;
-  var state = { counts: Object.create(null), dirty: false, layout: null, made: null };
+  var state = { counts: Object.create(null), dirty: false, layout: null, made: null, generation: 0 };
   globalThis.__ratchet = state;
   var hushed = 0;
   var observer = null;
-  var recorded = function (records) { bump("mutation records", records.length); };
+  var recorded = function (records) {
+    bump("mutation records", records.length);
+    if (traced === "records") records.forEach(function (record) { console.log("record " + record.type + " " + (record.attributeName || "") + " " + record.target.nodeName + " +" + record.addedNodes.length + " -" + Array.prototype.map.call(record.removedNodes, function (node) { return node.nodeName + (node.nodeType === 3 ? JSON.stringify(node.data) : ""); }).join(",")); });
+  };
   Object.defineProperty(state, "quiet", {
     get: function () { return hushed; },
     set: function (level) {
@@ -236,8 +241,19 @@ let () =
   ["nextNode", "previousNode"].forEach(function (name) {
     before(NodeIterator.prototype, name, function () { bump("nodes walked", 1); });
   });
-  before(Node.prototype, "compareDocumentPosition", function () { bump("nodes walked", 1); });
-  before(Node.prototype, "contains", function () { bump("nodes walked", 1); });
+  var selecting = 0;
+  before(Node.prototype, "compareDocumentPosition", function () { if (selecting === 0) bump("nodes walked", 1); });
+  before(Node.prototype, "contains", function () { if (selecting === 0) bump("nodes walked", 1); });
+  [Element.prototype, Document.prototype, DocumentFragment.prototype].forEach(function (proto) {
+    ["querySelector", "querySelectorAll", "matches", "closest"].forEach(function (name) {
+      var original = proto[name];
+      if (typeof original !== "function") return;
+      proto[name] = function () {
+        selecting++;
+        try { return original.apply(this, arguments); } finally { selecting--; }
+      };
+    });
+  });
   var computed = window.getComputedStyle;
   window.getComputedStyle = function () { read(); return computed.apply(this, arguments); };
   var remembered = function (node) { if (state.made && state.quiet === 0) state.made.push(new WeakRef(node)); };
@@ -281,7 +297,7 @@ let () =
       state.listened.push(new WeakRef(target));
     }
     var key = type + (capture ? " capture" : "");
-    if (!listeners.has(key)) listeners.set(key, new Set());
+    if (!listeners.has(key)) listeners.set(key, new Map());
     return listeners.get(key);
   };
   var added = EventTarget.prototype.addEventListener;
@@ -289,7 +305,7 @@ let () =
   EventTarget.prototype.addEventListener = function (type, listener, options) {
     if (listener && state.quiet === 0) {
       var listeners = listening(this, type, options);
-      if (!listeners.has(listener)) { listeners.add(listener); bump("listeners added", 1); }
+      if (!listeners.has(listener)) { listeners.set(listener, state.made !== null ? state.generation : 0); bump("listeners added", 1); }
     }
     return added.apply(this, arguments);
   };
@@ -304,7 +320,7 @@ let () =
     var count = 0;
     state.listened.forEach(function (held) {
       var target = held.deref();
-      if (target) registered.get(target).forEach(function (listeners) { count += listeners.size; });
+      if (target) registered.get(target).forEach(function (listeners) { listeners.forEach(function (during) { if (during > 0 && during === state.generation) count++; }); });
     });
     return count;
   };
