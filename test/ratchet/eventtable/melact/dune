@@ -1,0 +1,17 @@
+(copy_files
+ (files ../table.mlx))
+
+(copy_files
+ (files %{project_root}/bench/classics/eventtable/app.mlx))
+
+(copy_files
+ (files %{project_root}/bench/classics/common/classic.mlx))
+
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact testing counters melange.dom melange.belt)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (pps melange.ppx melact-ppx)))

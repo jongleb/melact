@@ -692,77 +692,107 @@ let rec settle () =
         | None_put_off -> ()
         | Some_put_off ->
             let host job = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
-            let ranks = nodes_ranked () in
-            let placed = ref None in
-            let keyed queue old =
-              let rec fresh list oldest_first =
-                match list == old with
-                | true -> oldest_first
-                | false -> ( match list with job :: rest -> fresh rest (job :: oldest_first) | [] -> oldest_first)
-              in
-              List.map
-                (fun job ->
-                  let owner = host job in
-                  let last = ref None in
-                  visit_nodes owner (fun [@u] node -> last := Some node);
-                  let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
-                  let ending = Option.map deepest !last in
-                  Option.iter
-                    (fun node ->
-                      rank_set ranks node (-1);
-                      placed := Some node)
-                    ending;
-                  (job, owner, ending))
-                (fresh !queue [])
+            let ending job =
+              let last = ref None in
+              visit_nodes (host job) (fun [@u] node -> last := Some node);
+              let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
+              Option.map deepest !last
+            in
+            let rec fresh old list oldest_first =
+              match list == old with
+              | true -> oldest_first
+              | false -> ( match list with job :: rest -> fresh old rest (job :: oldest_first) | [] -> oldest_first)
             in
             let old_layout_cleanups, old_layout_runs, old_passive_cleanups, old_passive_runs = queued in
             let batches =
-              [
-                (layout_cleanups, old_layout_cleanups, keyed layout_cleanups old_layout_cleanups);
-                (layout_runs, old_layout_runs, keyed layout_runs old_layout_runs);
-                (passive_cleanups, old_passive_cleanups, keyed passive_cleanups old_passive_cleanups);
-                (passive_runs, old_passive_runs, keyed passive_runs old_passive_runs);
-              ]
+              List.map
+                (fun (queue, old) -> (queue, old, List.map (fun job -> (job, ending job, (host job).depth)) (fresh old !queue [])))
+                [
+                  (layout_cleanups, old_layout_cleanups);
+                  (layout_runs, old_layout_runs);
+                  (passive_cleanups, old_passive_cleanups);
+                  (passive_runs, old_passive_runs);
+                ]
             in
-            Option.iter
-              (fun node ->
-                let rec top node = Option.fold ~none:node ~some:top (Dom_api.parent_node node) in
-                let root = top node in
-                let count = ref 0 in
-                let mark node =
-                  Option.iter (fun _ -> rank_set ranks node !count) (Js.Undefined.toOption (rank_get ranks node));
-                  incr count
-                in
-                mark root;
-                let walker = tree_walker Dom_api.document root (-1) in
-                let rec next () =
-                  match Js.Null.toOption (next_node walker) with
-                  | Some node ->
-                      mark node;
-                      next ()
-                  | None -> ()
-                in
-                next ())
-              !placed;
-            let rank last =
-              Option.fold ~none:max_int
-                ~some:(fun node ->
-                  Option.fold ~none:max_int
-                    ~some:(fun rank -> match rank < 0 with true -> max_int | false -> rank)
-                    (Js.Undefined.toOption (rank_get ranks node)))
-                last
+            let endings = List.concat_map (fun (_, _, jobs) -> List.filter_map (fun (_, last, _) -> last) jobs) batches in
+            let earlier =
+              match List.compare_length_with endings 32 <= 0 with
+              | true -> (
+                  fun first second ->
+                    match (first, second) with
+                    | Some first, Some second when not (Dom_api.same first second) ->
+                        if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
+                    | Some _, Some _ | None, None -> 0
+                    | Some _, None -> -1
+                    | None, Some _ -> 1)
+              | false ->
+                  let ranks = nodes_ranked () in
+                  let remaining = ref 0 in
+                  List.iter
+                    (fun node ->
+                      match Js.Undefined.toOption (rank_get ranks node) with
+                      | Some _ -> ()
+                      | None ->
+                          incr remaining;
+                          rank_set ranks node (-1))
+                    endings;
+                  let common =
+                    List.fold_left
+                      (fun candidate node ->
+                        let rec up candidate =
+                          match node_contains candidate node with
+                          | true -> Some candidate
+                          | false -> Option.bind (Dom_api.parent_node candidate) up
+                        in
+                        Option.bind candidate up)
+                      (Some (List.hd endings)) endings
+                  in
+                  let count = ref 0 in
+                  let mark node =
+                    (match Js.Undefined.toOption (rank_get ranks node) with
+                    | Some _ ->
+                        rank_set ranks node !count;
+                        decr remaining
+                    | None -> ());
+                    incr count
+                  in
+                  Option.iter
+                    (fun ancestor ->
+                      mark ancestor;
+                      let walker = tree_walker Dom_api.document ancestor (-1) in
+                      let rec next () =
+                        match (!remaining, Js.Null.toOption (next_node walker)) with
+                        | 0, _ | _, None -> ()
+                        | _, Some node ->
+                            mark node;
+                            next ()
+                      in
+                      next ())
+                    common;
+                  let rank last =
+                    Option.fold ~none:max_int
+                      ~some:(fun node ->
+                        Option.fold ~none:max_int
+                          ~some:(fun rank -> match rank < 0 with true -> max_int | false -> rank)
+                          (Js.Undefined.toOption (rank_get ranks node)))
+                      last
+                  in
+                  fun first second -> Int.compare (rank first) (rank second)
             in
             List.iter
               (fun (queue, old, jobs) ->
-                let ordered =
-                  List.stable_sort
-                    (fun (_, first_rank, first_depth) (_, second_rank, second_depth) ->
-                      match Int.compare first_rank second_rank with
-                      | 0 -> Int.compare second_depth first_depth
-                      | order -> order)
-                    (List.map (fun (job, owner, last) -> (job, rank last, owner.depth)) jobs)
-                in
-                queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)
+                match jobs with
+                | [] | [ _ ] -> ()
+                | _ :: _ :: _ ->
+                    let ordered =
+                      List.stable_sort
+                        (fun (_, first, first_depth) (_, second, second_depth) ->
+                          match earlier first second with
+                          | 0 -> Int.compare second_depth first_depth
+                          | order -> order)
+                        jobs
+                    in
+                    queue := List.rev_append (List.map (fun (job, _, _) -> job) ordered) old)
               batches);
         disband committed;
         View.attach_references ();
