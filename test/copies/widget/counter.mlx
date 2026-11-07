@@ -1,0 +1,17 @@
+type message = Press | Typed of string
+
+type model = { presses : int; typed : string }
+
+let update message model =
+  match message with
+  | Press -> { model with presses = model.presses + 1 }
+  | Typed typed -> { model with typed }
+
+let view model =
+  <div className="widget">
+    <button className="press" onClick=Press>(Html.int model.presses)</button>
+    <input className="field" value=model.typed onInput=(fun value -> Typed value) />
+    <span className="typed">(Html.text model.typed)</span>
+  </div>
+
+let start root = ignore (Program.sandbox ~init:{ presses = 0; typed = "" } ~update ~view root)
