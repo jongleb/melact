@@ -286,6 +286,23 @@ state a component was dirtied for ends where it started, as when a callback ref 
 the render is skipped, as React bails out. A component that renders nothing keeps its place with an
 empty text node.
 
+### A render runs only the steps a change reaches
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/graph-dark.svg">
+  <img src="assets/graph.svg" alt="The update graph of a row: melact-ppx numbers its sources, the props item and bulk, the context theme and the state cell fold, and gives every step of the body the bits it reads. When setFold changes fold, the row renders with that bit alone: useState is called as on every render, the context read and the label keep their values, the effect on bulk.generation is passed over without evaluating its dependencies, and the view, which reads fold, is refreshed; had no bit of the view changed, its holes would not be touched" width="100%">
+</picture>
+
+melact-ppx reads each component body as an update graph. Its sources are bits: the props (or the
+fields read of them), the hook slots and the context reads; every let, memo, effect and the view get
+the bits they read. A state cell, a provider or a parent tells the instance which bits changed, and
+the render runs only the steps they reach: a context or a prop that only an effect reads costs that
+effect's comparison and nothing else. A render that reads nothing mutable is pure, so its children
+given new props render at once inside its write, and a tree of components that read one context
+updates in one pass instead of one round per level. A custom hook carries its slots in its `.cmi`,
+so a component calling another module's hook keeps its graph under `staged_pps`. See
+[docs/compiler.md](docs/compiler.md#the-update-graph).
+
 ### Values are kept between renders
 
 <picture>

@@ -449,6 +449,46 @@ def updates(p):
     return svg(p, 880, 300, "A state update in TodoList re-renders TodoList only. The setter marks it dirty, and state set back to its rendered value renders nothing; after a click one microtask flushes, while timers and observers batch into one task, as React's lanes do; App and Header are not visited; each Row is kept while each of its inputs is physically equal, and values written inline in its props are cached by what they capture", body)
 
 
+def graph(p):
+    body = ""
+    sources = [("item", "blue"), ("bulk", "orange"), ("theme", "accent"), ("fold", "green")]
+    for i, (name, tone) in enumerate(sources):
+        x = 330 + i * 46
+        body += text(x, 44, name, size=11.5, cls=tone, weight=600, anchor="middle")
+    body += f'<circle cx="468" cy="24" r="8" fill="{p["green"]}" class="pulse"/>'
+    body += text(482, 28, "setFold", size=11.5, cls="green", weight=600)
+    rows = [
+        ("let theme = useContext ctx", [2], "kept"),
+        ("let fold, setFold = useState …", [3], "called"),
+        ("useEffect1 … [| bulk.generation |]", [1], "skipped"),
+        ("let label = item.title ^ theme", [0, 2], "kept"),
+        ("<li className=(label … fold) …>", [0, 2, 3], "runs"),
+    ]
+    for i, (code, bits, state) in enumerate(rows):
+        y = 64 + i * 44
+        live = state in ("runs", "called")
+        body += box(20, y, 520, 34, p["green_soft"] if live else p["card"], p["green"] if live else p["line"], rx=8, width=1.6 if live else 1)
+        body += text(34, y + 22, code, size=12.5, cls="mono" if live else "mono muted")
+        for k, (_, tone) in enumerate(sources):
+            x = 330 + k * 46
+            on = k in bits
+            body += f'<circle cx="{x}" cy="{y + 17}" r="6" fill="{p[tone] if on else "none"}" stroke="{p[tone] if on else p["line"]}" stroke-width="1.4"/>'
+        body += text(528, y + 22, state, size=11.5, cls="green" if live else "faint", weight=600, anchor="end")
+    steps = [
+        ("1", "Sources are bits", "inputs, hook slots, context reads"),
+        ("2", "Each step gets a mask", "the bits it reads, through its lets"),
+        ("3", "setFold flips one bit", "the instance renders with it alone"),
+        ("4", "Only matching steps run", "a view that reads no changed bit: untouched"),
+    ]
+    for i, (n, head, note) in enumerate(steps):
+        y = 74 + i * 52
+        body += f'<circle cx="584" cy="{y - 5}" r="12" fill="{p["accent"]}"/>'
+        body += text(584, y, n, size=12, weight=700, anchor="middle", fill="#ffffff")
+        body += text(606, y, head, size=13.5, weight=600)
+        body += text(606, y + 18, note, size=12, cls="muted")
+    return svg(p, 880, 290, "The update graph of a row: melact-ppx numbers its sources, the props item and bulk, the context theme and the state cell fold, and gives every step of the body the bits it reads. When setFold changes fold, the row renders with that bit alone: useState is called as on every render, the context read and the label keep their values, the effect on bulk.generation is passed over without evaluating its dependencies, and the view, which reads fold, is refreshed; had no bit of the view changed, its holes would not be touched", body)
+
+
 def hooks(p):
     body = ""
     heads = [(0, "1", "Your component"), (300, "2", "melact-ppx: a key per call site"), (620, "3", "The instance's slots")]
@@ -1345,7 +1385,7 @@ def speed(p):
 
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed)
+               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed)
 
 HEADERS = dict(
     overview=("Melact in one picture", "Your reason-react code, compiled: no React underneath",
@@ -1376,6 +1416,8 @@ HEADERS = dict(
             "The same view writes HTML natively or in Node, byte for byte what the browser build expects."),
     updates=("Re-rendering", "Only the component whose state changed renders",
              "Parents are not visited; children with equal props are skipped."),
+    graph=("The update graph", "A render runs only the steps a change reaches",
+           "Sources are bits; every let, effect and the view get the bits they read, at build time."),
     hooks=("Hooks", "Every hook call gets a key at compile time",
            "Hooks are slots found by key, and the Rules of Hooks are checked by the type checker."),
     family=("Two front ends, one compiler", "Meltea and Melact share the compiler and the runtime",

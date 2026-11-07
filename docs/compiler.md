@@ -721,7 +721,7 @@ So the user team's rows, which read `offsetTop` and re-render through a context,
 layout. A dual law counts DOM writes from inside each row's render and finds the same count in all
 of them under React 18 and under Melact; a mutant that writes each instance right after rendering it
 breaks it. A component that re-renders because its parent passed new props is put off to the next
-round too, so rows given new props by their parent also all render before any of them writes; a
+round too (unless its render is pure, see "The update graph"), so rows given new props by their parent also all render before any of them writes; a
 pass that put any off sorts its effects into the order of the tree, children first, as React runs
 them. Two dual laws check both, and a mutant without either fails one. A component without hooks
 has no instance and still renders inside its parent's write. Only instances of the same round count as dirty ancestors: a component whose own
@@ -738,6 +738,163 @@ a warning for the first two only; mutants that ignore holes, warn every time, or
 each break it. Rendering is
 meant to be pure, and React's docs say the same; this is the one place where code that bends the
 rule costs more under Melact.
+
+## The update graph
+
+A render is a function of what React lets it read: props, state, context and the values of hooks.
+`melact-ppx` reads every component body for two facts it can use at build time: whether the render
+reads anything else, and, for each value the body computes, which of those sources it comes from.
+Neither needs annotations or signals in the user's code; both come from the reason-react source as
+it is (`ppx/melact/graph.ml`).
+
+### Pure renders
+
+A render is pure when, evaluated now, it reads nothing a DOM write or another render can change: no
+`r.current`, `r.contents` or `!r` of a ref it did not make itself, no assignment to one, no loop, no
+`Js.Date` or `Js.Math.random`, no getter called with `()` alone (`dom_writes ()`), no method call
+and no hook the compiler does not know. A ref made by the same render (`let matched = ref ...` in a
+`useMemo`) may be written and read: that is local mutation, which React allows. A function's body
+counts as run while rendering (a row function, a `useMemo` or `useState` initialiser, a let-bound
+helper) unless the function is a JSX prop or the callback of an effect, of `useCallback` or a
+reducer: those run when the user or React calls them. Calls to other functions are taken as pure, as
+the props cache above already takes them. The answer goes into the component's definition,
+`Component.pure` or `Component.make`.
+
+Rounds exist for renders that read the page (see "Reading layout while rendering"): all of a round
+render before any of them writes. For a pure render that ordering cannot be seen, so the scheduler
+drops it where it costs work:
+
+- A pure child given new props by its parent renders at once, inside the parent's write, when the
+  parent patches its children in document order: a template's holes, or a list patched in place,
+  which now goes from the first row. A list that patches from its last row, reconciles moves, or
+  picks the rows a selection changed sets `View.patch_order` to `Out_of_order`, and a child reached
+  there is put off to the next round as before.
+- A round whose dirty instances are all pure is one pass in document order. An instance whose
+  ancestor rendered earlier in the pass comes after it: skipped if the ancestor's write reached it,
+  rendered with its current props if not. A tree of readers of one context renders in one round
+  instead of one round per level, and the page is walked once to order it instead of once per level.
+- Effects need sorting into the order of the tree only when an instance that queued effects
+  committed after one of its ancestors in the same pass. The scheduler now notes exactly that (it
+  keeps the instances committed in the pass and looks up the ancestors of the next one) and sorts
+  only then; before, any put-off child forced the sort, a walk over the whole document.
+
+A root rendered inside a discrete event now runs its passive effects at the next microtask, as React
+18 runs those of a commit in its sync lane, instead of after the next paint. Found while measuring:
+the app benchmark's first click on a row, after mounting with a click, raced the mount's effects.
+
+### Sources and masks
+
+The sources of an instance are numbered at build time: its inputs (each prop, or each field of a
+prop read only through fields), then its hook slots in order (slot 0 is the instance's memory), then
+its context reads. The body is read as steps (a hook called on every render: `useState`,
+`useReducer`, `useRef`, `useId` or a known custom hook; a context read; a memo or callback; an
+effect; a statement; a let) and the expression it returns. Each step gets a mask, the bits of the
+sources it reads, through the lets before it:
+
+```ocaml
+let theme = React.useContext theme_context in               (* the context's bit *)
+let fold, setFold = React.useState (fun () -> bulk.fold) in (* fold: the cell's bit; setFold: none *)
+React.useEffect1 (fun () -> setFold (fun _ -> bulk.fold); None) [| bulk.generation |]; (* bulk's bits *)
+let label = item.title ^ theme_class theme in               (* item's bits and the context's *)
+<li className=(label ^ ...) ...> ... </li>                  (* label, fold, highlight, item, ... *)
+```
+
+The runtime knows which sources changed: a state cell's bit when its value differs from the one the
+last render read, a context's bit when its provider's value changed (a provider keeps its readers in
+a `Map`, each with the bits its value is to it), the bits of the inputs that differ when a parent
+patches a child. Before the render, `Instance.changed ()` holds them. The body then runs only the
+steps whose mask meets them:
+
+```ocaml
+let theme =
+  let found = Melact_runtime.Memo.graph memory 1 changed 1073742336 in   (* the context's bit, or a full render *)
+  match Melact_runtime.Memo.kept found with
+  | Some kept -> kept
+  | None -> Melact_runtime.Memo.store memory 1 found (Melact_runtime.Instance.consume_source ... 512 ...)
+in
+...
+(match changed land 1073741848 with 0 -> Melact_runtime.Instance.skip_hook () | _ -> React.useEffect1 ...);
+...
+match changed land 1073742503 with
+| 0 -> React.of_child Melact_runtime.Instance.unchanged       (* nothing the view reads changed *)
+| _ -> <the template>
+```
+
+A let or a context read keeps its value in the instance's memory, a memo or an effect whose
+dependencies read no changed source is passed over without evaluating them (`skip_hook` moves the
+slot cursor on), and when the returned expression reads none of the changed sources the render
+returns `Instance.unchanged` and the instance's holes are not touched at all: a context or a prop
+that only an effect reads costs the effect's comparison and nothing else. Hooks called on every
+render and statements always run, so hook slots, render-phase logs and `useEffect` without
+dependencies behave as before. Bit 30 is in every mask, and a render that knows nothing of what
+changed (a mount, a boundary, a deferred value catching up, a component that set its own state while
+rendering) has every bit, so it runs every step. A value a later statement may change in place
+(`Frozen`) is made on every render.
+
+A body the compiler cannot read as steps renders whole, as before: a hook it does not know
+(`useSyncExternalStore`, `useDeferredValue`, a custom hook without a fact), a hook inside an
+expression, `open React` with bare hook names, more than thirty sources, or an impure render.
+
+### Across modules
+
+The graphs of a parent and a child are linked at run time, not through types: the parent's patch
+gives the child the bits of the inputs that changed, and the child's own graph, compiled in its own
+module, does the rest. That works under `pps`, through an `.mli` and across libraries.
+
+What a module boundary hides is a custom hook. A top-level `useX` whose body is pure and calls only
+React's hooks and known custom hooks at its top level gets a fact on its pattern, which reaches the
+`.cmi`: `[@melhole.hook (1, slots)]`, a format version and the hook slots it takes on every call. A
+component that calls it, in the same file or, under `staged_pps`, from another module (read with
+`Env.lookup_value`, as `melhole.inline` is), keeps its purity and its graph: the call is a step that
+runs on every render, and the hook's state cells are numbered after the component's slots before
+it, as the runtime numbers them. Without the fact (under `pps`, behind an `.mli` that hides it, or an
+older version) the hook is unknown and the component renders whole, as before. melact-ppx's bindings
+to npm's React hooks are such custom hooks too.
+
+### Laws and measurements
+
+- A QCheck law (`test/graph`) builds random bodies from pure pieces and reads of the world (a ref's
+  `current`, `!r` of an outer ref, `Js.Date`, a getter, an assignment, an unknown hook, a method
+  call) placed while rendering or in a handler, effect, callback or reducer, with render-local refs
+  and a known custom hook, and checks that a body is impure exactly when a read of the world runs
+  while it renders. Treating JSX props as run now, ignoring `.current`, taking `useMemo`'s function
+  as run later or allowing getters each break it.
+- Dual laws, under React 18 and Melact: a tree of pure components that read a context and pass a
+  prop down, through random context changes, new props and keyed moves in one batch, shows every
+  change and runs effects children first in the order of the page; a component with a state cell,
+  a reducer, a context, two props, lets, a memo, a callback passed to a memo child and effects with
+  and without dependencies shows, computes and runs what React does after any batch of changes to
+  any of its sources; a root rendered inside a click runs its passive effects at the next microtask.
+  The existing laws of rounds (all render before any writes, effects children first) hold.
+- A Melact law counts renders and page walks: a context read by a tree of pure components three
+  levels deep renders every reader once per change and walks the page once.
+- Under `staged_pps` a component of `test/xmodule` that calls another module's custom hook is
+  compiled with its graph, under `pps` it renders whole, and both show what React shows.
+- Mutants, each caught: rendering pure children at once whatever the patch order, patching in place
+  from the last row unmarked, dropping the ancestor check before effects, taking every render as
+  pure, a fused pass without document order, no fused pass, deferring a root's passive effects; a
+  kept value that ignores its mask, a context read without its bit, effects that never run again,
+  a view whose mask reads nothing, hook slots numbered from 0, input bits shifted by one, a
+  provider that drops its readers' bits, a patch that drops the changed input bits, a let whose
+  bits are not passed on; a custom hook's slots counted one short, a fact of another version accepted.
+
+Measured against main (`8526b22`) on a machine other sessions were benchmarking on too. The app
+benchmark (4× CPU, 7 loads, Melact's script and task ms): collapse all 50.9 and 83.8 → 35.8 and
+70.9, expand all 36.9 and 174.5 → 28.0 and 164.8, clear search 32.9 and 111.3 → 31.7 and 106.1; the
+other operations stay within run-to-run noise. Of that, the scheduler's part (pure renders, fused
+passes, the effect sort only when needed) is nearly all: measured alone on the earlier base it took
+collapse all from 52.2 to 35.1 ms of script, and the masks then took it to 33.4. The corpus (eight
+apps, 1×, three runs) moves from a geometric mean of 0.849 times React's time to 0.857, within its
+noise; the steps where Melact was slowest improve: jsontree search typing 1.21 → 1.08 and collapse
+all 1.17 → 1.09 (one round instead of one per level), logs live batches 1.14 → 0.66, appending
+batches 1.12 → 0.90, pausing follow 1.47 → 1.08. Two steps measured worse: jsontree hover
+0.34 → 0.51 and chat reply in thread 1.09 → 1.40 (reruns: 0.74 and 1.01 before, 1.05 and 1.16
+after). js-framework-benchmark's rows are hookless and have no instance: 1.08 → 1.11 of vanilla, run
+to run.
+
+The masks save less than the scheduler work did: profiles of these apps spend little in hook calls
+and guards, and much in ordering instances by the page and in rounds; skipping a context read, a
+memo or an effect's dependencies is a few comparisons per instance.
 
 ## Controlled inputs
 
@@ -834,3 +991,5 @@ Accepted only with these holding, by property-based tests:
 - **Guard soundness:** a hole is evaluated whenever one of its free variables changed.
 - **Guard economy:** a hole whose free variables are all unchanged is not evaluated.
 - **Volatility:** a hole that reads mutable state is evaluated on every render.
+- **Graph soundness:** a step of a component's update graph runs whenever a source in its mask changed,
+  and a render that knows nothing of what changed runs every step.
