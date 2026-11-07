@@ -213,6 +213,14 @@ and every row that stays keeps its node in whatever group it lands; a Melact law
 within and across groups and they keep their counts. Making moved rows again, or rebuilding the
 groups, breaks them. Groups are written on the client only; a server page shows the rows ungrouped.
 
+### A few rows that change places
+
+When a compiled loop keeps its length and its outer values, and at most 64 rows changed places
+among themselves (a swap, a short shuffle), it does not plan the whole list: it finds the rows
+whose key changed, matches each to the row it came from, moves exactly those, last first, and
+refreshes only rows whose item changed. Swapping two rows of 1,000 moves two rows, as hand-written
+code does. A law with repeated keys checks that no old row is taken twice.
+
 ### Moves that keep state
 
 A keyed row that moves is moved with `parentNode.moveBefore` where the browser has it (Chrome 133,

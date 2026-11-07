@@ -693,3 +693,46 @@ let () =
                          expect (List.map fst seen) |. to_equal (List.map snd seen)))
                     [%mel.obj { numRuns = 300 }])))
     selections
+
+let twins = Array.init 9 (fun index -> { (Array.get fresh_items index) with key = "d" ^ string_of_int (index mod 3) })
+
+let shuffled tape items =
+  let count = Array.length items in
+  match (draw tape 4, count) with
+  | 0, _ | _, (0 | 1) -> Array.of_list (List.filter (fun _ -> draw tape 2 = 0) (Array.to_list twins))
+  | 1, _ -> Array.of_list (List.rev (Array.to_list items))
+  | _, _ ->
+      let next = Array.copy items in
+      for _ = 0 to draw tape 3 do
+        let first = draw tape count and second = draw tape count in
+        let kept = next.(first) in
+        next.(first) <- next.(second);
+        next.(second) <- kept
+      done;
+      next
+
+let () =
+  List.iter
+    (fun (title, kind) ->
+      describe ("Keyed loop laws with repeated keys: " ^ title) (fun () ->
+          test "after any reorderings, patching shows what mounting from scratch shows" (fun () ->
+              check
+                (property (tapes ~shortest:10 ~longest:80) (fun values ->
+                     let tape = tape values in
+                     let start = Array.sub twins 0 (3 + draw tape 7) in
+                     let outer = outers.(0) in
+                     let root = create_element document "ul" in
+                     let mounted = View.mount (looped kind start outer) ~parent:root ~before:None in
+                     let rec run items remaining =
+                       match remaining with
+                       | 0 -> []
+                       | _ ->
+                           let next = shuffled tape items in
+                           View.patch mounted (looped kind next outer);
+                           (shapes (as_node root), shown (looped kind next outer)) :: run next (remaining - 1)
+                     in
+                     let seen = run start (2 + draw tape 12) in
+                     View.unmount mounted;
+                     expect (List.map fst seen) |. to_equal (List.map snd seen)))
+                [%mel.obj { numRuns = 400 }])))
+    loops
