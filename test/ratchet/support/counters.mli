@@ -22,6 +22,7 @@ type kind =
   | Keyed  (** A row's key computed. *)
   | Projected  (** A row's projection computed. *)
   | Refreshed  (** A row drawn again by its refresh or row function. *)
+  | Walked  (** A step of a DOM walk: a TreeWalker or NodeIterator move, compareDocumentPosition, contains. *)
 
 val kinds : kind list
 val name : kind -> string
