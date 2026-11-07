@@ -1487,16 +1487,24 @@ let prop_hole element name : Hole.prop = { element; name; value = unset; echo = 
 let set_prop (hole : Hole.prop) value =
   let (Input old) = hole.value in
   if not (Dom_api.same old value) then (
+    let shown name =
+      match (Dom_api.same hole.value unset, Dom_api.same (Dom_api.property hole.element name) value) with
+      | false, true -> ()
+      | true, _ | false, false -> Dom_api.set_property hole.element name value
+    in
     (match (!medium.adoption, hole.name, Dom_api.same hole.value unset) with
     | Server_nodes, "innerHTML", true -> ()
-    | _ -> Dom_api.set_property hole.element hole.name value);
+    | _ -> (
+        match hole.echo with
+        | Default_value -> shown hole.name
+        | Alone | Default_checked_at_mount | Select_value -> Dom_api.set_property hole.element hole.name value));
     (match hole.echo with
     | Alone -> ()
     | Default_value -> (
         Events.track hole.element;
         match (Dom_api.property hole.element "type" : string) with
         | "number" when Dom_api.same (Dom_api.active_element Dom_api.document) (Js.Null.return hole.element) -> ()
-        | _ -> Dom_api.set_property hole.element "defaultValue" value)
+        | _ -> shown "defaultValue")
     | Default_checked_at_mount -> (
         Events.track hole.element;
         match Dom_api.same hole.value unset with
