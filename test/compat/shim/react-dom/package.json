@@ -1,0 +1,12 @@
+{
+  "name": "react-dom",
+  "version": "18.3.1",
+  "private": true,
+  "description": "melact.compat's react-dom, as an app's bundler alias would give it",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  }
+}

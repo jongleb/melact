@@ -303,6 +303,17 @@ let put_off = ref None_put_off
 let committed = audience ()
 let enqueued = ref 0
 
+let mounting = ref 0
+
+let tree_order = ref None
+let parent instance = instance.parent
+
+let last_node instance =
+  let last = ref None in
+  visit_nodes instance (fun [@u] node -> last := Some node);
+  let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
+  Option.map deepest !last
+
 (** Whether the effects of an instance's write go to the queues when it ends, or wait: in a pass of
     pure instances, until the instances below it that the pass renders later have queued theirs, so
     that the queues come out children first without sorting them. *)
@@ -843,9 +854,12 @@ let rec settle () =
                 | _ :: _ :: _ ->
                     let ordered =
                       List.stable_sort
-                        (fun (_, first, first_depth) (_, second, second_depth) ->
-                          match earlier first second with
-                          | 0 -> Int.compare second_depth first_depth
+                        (fun (first_job, first, first_depth) (second_job, second, second_depth) ->
+                          match Option.fold ~none:0 ~some:(fun order -> order (host first_job) (host second_job)) !tree_order with
+                          | 0 -> (
+                              match earlier first second with
+                              | 0 -> Int.compare second_depth first_depth
+                              | order -> order)
                           | order -> order)
                         jobs
                     in
@@ -951,9 +965,23 @@ let born kind =
   in
   instance
 
+(** Siblings that one patch builds from the last one: where the last of them went, and the effect
+    queues below the first of them and above the last. *)
+type 'job siblings = {
+  parent : Dom.node;
+  mutable front : Dom.node Js.null;
+  base : 'job list * 'job list * 'job list * 'job list;
+  mutable above : 'job list * 'job list * 'job list * 'job list;
+}
+
+let siblings : job siblings option ref = ref None
+
 let mount_instance position kind =
   let instance = born kind in
   let since = !enqueued in
+  let queued () = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
+  let before = match (!View.patch_order, !mounting) with View.Out_of_order, 0 -> Some (queued ()) | _ -> None in
+  incr mounting;
   (match
      let child = render instance in
      within owner (Some instance) (fun () ->
@@ -967,12 +995,41 @@ let mount_instance position kind =
    with
   | output ->
       instance.output <- output;
-      commit ~since position instance
+      commit ~since position instance;
+      decr mounting
   | exception error ->
       instance.pending <- [];
       commit ~since position instance;
+      decr mounting;
       !suspension.rescue While_rendering instance error [@u]);
-  View.live instances instance
+  let live = View.live instances instance in
+  (match (before, !enqueued > since) with
+  | Some before, true -> (
+      let front = View.front live Js.null in
+      let rec above stop list = match list == stop with true -> [] | false -> ( match list with job :: rest -> job :: above stop rest | [] -> []) in
+      match !siblings with
+      | Some ({ above = a1, a2, a3, a4; _ } as run)
+        when Dom_api.same run.parent position.parent
+             && (let e1, e2, e3, e4 = before in a1 == e1 && a2 == e2 && a3 == e3 && a4 == e4)
+             &&
+             let rec reaches node =
+               match Js.Null.toOption node with
+               | None -> `Elsewhere
+               | Some node when Dom_api.same (Js.Null.return node) run.front -> `Before_it
+               | Some node -> reaches (Dom_api.following_sibling node)
+             in
+             reaches position.before = `Before_it ->
+          let b1, b2, b3, b4 = run.base and e1, e2, e3, e4 = before in
+          let splice queue base earlier = queue := above base earlier @ above earlier !queue @ base in
+          splice layout_cleanups b1 e1;
+          splice layout_runs b2 e2;
+          splice passive_cleanups b3 e3;
+          splice passive_runs b4 e4;
+          run.front <- front;
+          run.above <- queued ()
+      | Some _ | None -> siblings := Some { parent = position.parent; front; base = before; above = queued () })
+  | (Some _ | None), _ -> ());
+  live
 
 let component definition inputs render =
   View.host

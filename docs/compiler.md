@@ -1040,6 +1040,103 @@ plus duration of its computed transition or animation. An element that leaves is
 elements still leaving go with it. meltea-ppx looks through `Html.transition_group` for
 `Html.list (List.map …)`, so the list inside is still the keyed loop with selectors.
 
+## Components from npm: melact.compat
+
+`melact.compat` is npm's `react`, `react-dom`, `react-dom/client` and `react/jsx-runtime` written on
+Melact's runtime. An app that wants a component library from npm aliases those four imports to it
+in its bundler, as preact/compat is aliased, and the library's own code then runs on Melact: no React
+is shipped. It is a spike; its laws cover react-select 5, @radix-ui/react-popover 1 and
+react-window 2.
+
+The shim interprets React elements at run time, which compiled Melact code never does, so it is
+used only inside library components. Compiled code does not link it: an app without npm components
+carries no byte of it.
+
+- **Elements** are plain objects with React 18's `$$typeof` symbols, so `react-is` and
+  `isValidElement` recognise them. `createElement`, `jsx`, `cloneElement`, `Children` and default
+  props follow React 18's code, keys included.
+- **Components** are Melact instances. A function component, `forwardRef`, `memo` and a context
+  consumer each get one, and their hooks are Melact's hook slots read in call order. A class
+  component keeps its object in a slot. It gets `getDerivedStateFromProps`, `shouldComponentUpdate`
+  and `PureComponent`, and `getSnapshotBeforeUpdate` before the instance writes.
+  `componentDidMount`, `componentDidUpdate` and `setState` callbacks run at layout-effect time, and
+  `componentWillUnmount` runs when the instance is released. A React context is a Melact context, so
+  it flows through Melact components between library components.
+- **DOM elements** follow react-dom's prop rules: `class` and `for`, boolean and booleanish
+  attributes, `aria-` and `data-` values, hyphenated SVG names, `px` on numbers in styles that take
+  units, custom properties, `autoFocus`, and `value` and `checked` controlled as Melact's own inputs
+  are.
+- **Events.** A bubbling handler is put in melhole's delegated walk as a synthetic event:
+  `nativeEvent`, `currentTarget` for each handler, `isPropagationStopped`, `isDefaultPrevented` and
+  `persist`. A library's handlers and compiled Melact handlers therefore run in one walk, in tree
+  order. Capture props walk from the document down to the target, `onMouseEnter` and `onMouseLeave`
+  are made from over and out events, and events that reach only their target (scroll, load, media)
+  listen on the element. A portal leaves an empty text node at its place. Events from inside the
+  portal go on from that place, and effects are ordered by it.
+
+In mlx, `[@react.component] external make : … = "default" [@@mel.module "react-select"]` no longer
+fails to compile. melact-ppx writes reason-react's `makeProps`, and a `make` that mounts the
+library's component through `Melact_compat.Bridge`. JSX written among such a component's
+children, DOM tags and other components bound in the same file, compiles to React elements, so
+`asChild`, `cloneElement` and `Children` see elements. Anything else stays compiled Melact content
+and is rendered as it is, with Melact's context, scheduler and effect order. A server build of such
+a file does not compile: these components render on the client only.
+
+The laws found two bugs in Melact's ordering of effects. The fixes apply to every Melact app:
+
+- Siblings mounted by one patch, such as the rows of a list whose keys all changed, ran their
+  effects in reverse tree order, because a patch builds new siblings from the last one. Each such
+  mount now puts its effects below those of the siblings the same patch built just before it,
+  which follow it in the tree. This needs no DOM reads. A dual law edits a keyed list of components
+  with layout and passive effects at random, and after every edit the effects of the new rows must
+  run as under React 18: layout effects first, each kind in list order. Before the fix it failed
+  on its eighth run.
+- Effects across a portal were sorted by document position instead of by the tree. The sort now
+  runs a descendant's effects before its ancestor's. Inside a portal it orders by the portal's
+  place, an empty text node, and then by position within the portal. This order is installed by
+  melact.compat, through `Instance.tree_order`, so apps without its portals do not carry it.
+
+Laws ([`test/compat`](../test/compat)). They are fast-check runs in jsdom: the same app on npm's
+React 18 and on the shim, or `mixed.mlx` built with reason-react and with Melact, must show the same
+DOM, focus and callback log after every step:
+
+- react-select: a scripted session and random ones (typing, keys, menu, options, a portal menu, a
+  value controlled from outside);
+- Radix Popover: open and close by trigger, Escape and outside pointer, controlled and modal modes,
+  `asChild`, a field in the content;
+- react-window: scrolling, rows with state, changing row count and height, `scrollToRow`;
+- mixed: random trees of OCaml components and library components (a box with bubble and capture
+  handlers, a context provider and consumer, a portal, a class component) under random clicks,
+  `stopPropagation` and re-renders (DOM, handler order, context, layout and passive effect order);
+  react-select controlled from OCaml, a Popover whose trigger is a DOM tag written in mlx, and
+  react-window rendering OCaml rows with state.
+
+Each law has a mutant that fails it:
+
+- numbers in styles without `px`;
+- a controlled field put back from stale props;
+- portals that do not pass events on;
+- a provider that provides nothing;
+- Melact content mounted again on every render;
+- class lifecycles at passive time;
+- capture handlers dropped;
+- `useLayoutEffect` at passive time;
+- each of the two ordering fixes reverted.
+
+Known differences. Ids from `useId` are Melact's (`:m1:`), not React's (`:r0:`). `findDOMNode`,
+`React.lazy`, error boundaries written as classes (`componentDidCatch`) and Suspense inside library
+code are not supported. `StrictMode` and `Profiler` render their children. `onChange` on an element
+that is not a field is approximate. A Melact component given a style object with numbers (react-window's row
+`style`) does not add `px`, since compiled style holes take strings: put the style on a DOM tag
+written among the library component's children. Melact does not render again a child whose inputs
+are unchanged, so effects without dependencies, and functions passed as components, behave as with
+React Compiler rather than as with React.
+
+On this spike's measurements (esbuild, minified, gzip -9), a counter on the shim is 23.4 kB, against
+45.6 kB on React 18 and react-dom. react-select is 54.6 kB against 75.8 kB, Radix Popover 49.9
+against 69.9, react-window 30.7 against 52.1. The sibling ordering fix and the hook for the portal order add
+1.1 kB (0.4 kB gzip) to every Melact app; Meltea is unchanged.
+
 ## Laws
 
 Accepted only with these holding, by property-based tests:

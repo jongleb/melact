@@ -1221,8 +1221,8 @@ A binding to npm's Fragment with a type of its own is left alone:
   external fragmentType : elementType = "Fragment"[@@mel.module "react"]
   let a = fragmentType
 
-A [@react.component] external binds a component of a JavaScript React library, which Melact cannot
-render, and says so:
+A [@react.component] external binds a component of a JavaScript React library. It becomes a component
+that renders the library's own code on melact.compat, npm's React API on Melact's runtime:
 
   $ cat > external.ml <<'EOF'
   > module Ext = struct
@@ -1230,11 +1230,21 @@ render, and says so:
   > end
   > EOF
   $ ./pp.exe -impl external.ml
-  File "external.ml", line 2, characters 2-114:
-  2 |   external make : src:string -> loop:bool -> React.element = "Thing" [@@mel.module "some-lib"] [@@react.component]
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  Error: melact: [@react.component] external binds a component of a JavaScript React library. It is React code and needs React itself to render; Melact cannot run it. Write the component in Reason or OCaml, or keep this part of the app on reason-react.
-  [1]
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  module Ext =
+    struct
+      include
+        struct
+          external makeProps :
+            src:string ->
+              loop:bool -> ?key:string -> unit -> Melact_compat.Bridge.props =
+              ""[@@mel.obj ]
+          external make__foreign : Melact_compat.Bridge.foreign = "Thing"
+          [@@mel.module "some-lib"]
+          let make props = Melact_compat.Bridge.mount make__foreign props
+        end
+    end
 
 Lists in the forms reason-react code writes them, piped or not, compile to keyed loops, also Reason's
 `items->Belt.Array.map(f)->React.array`, which refmt parses as `(items |. Belt.Array.map) f` and
