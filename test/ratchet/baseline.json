@@ -226,7 +226,7 @@
     "attributes": 5,
     "texts": 5,
     "created nodes": 46,
-    "forced layouts": 4,
+    "forced layouts": 1,
     "frame layouts": 7,
     "layout reads": 121,
     "renders": 173,
@@ -272,7 +272,7 @@
     "layout reads": 10,
     "renders": 74,
     "hole evaluations": 41,
-    "nodes walked": 37
+    "nodes walked": 34
   },
   "melact: memo rows given fresh callbacks": {
     "moves": 50,
@@ -327,7 +327,7 @@
     "renders": 41,
     "effects": 2,
     "hole evaluations": 33,
-    "nodes walked": 5
+    "nodes walked": 3
   },
   "melact: random program, seed 4": {
     "insertions": 1,
@@ -459,10 +459,10 @@
     "row refreshes": 215
   },
   "Law A: Melact's excess over React 18 on the generated programs": {
-    "forced layouts": 103,
+    "forced layouts": 96,
     "keys": 63,
     "row refreshes": 305,
-    "nodes walked": 669
+    "nodes walked": 657
   },
   "event table: Melact, through its scenario": {
     "moves": 1325,
@@ -472,14 +472,12 @@
     "texts": 1466,
     "properties": 1,
     "created nodes": 17062,
-    "forced layouts": 30,
     "frame layouts": 70,
     "layout reads": 11498,
     "nodes walked": 305503
   },
   "Law A: Melact's excess over React 18 on the event table": {
     "insertions": 1,
-    "forced layouts": 30,
     "nodes walked": 305503
   }
 }
