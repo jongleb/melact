@@ -48,9 +48,12 @@ try {
   rmSync(join(base, "bench/classics"), { recursive: true, force: true });
   run(["rsync", "-a", "--exclude", "_dist", "--exclude", "results*", "--exclude", "RESULTS.md", here + "/", join(base, "bench/classics") + "/"]);
   const measure = (tree, app) => {
-    const file = join(out, `${app}-${tree === repo ? "head" : "base"}.json`);
+    const file = join(out, `${app.replaceAll("/", "-")}-${tree === repo ? "head" : "base"}.json`);
     run(["node", join(tree, "bench/classics/run.mjs"), `--apps=${app}`, `--cpu=${cpu}`, `--runs=${runs}`, `--out=${file}`], { cwd: tree });
-    return JSON.parse(readFileSync(file, "utf8"))[app].rates[cpu].rows;
+    const measured = JSON.parse(readFileSync(file, "utf8"))[app].rates[cpu];
+    for (const [framework, crashes] of Object.entries(measured.crashes ?? {}))
+      for (const crash of crashes) log(`${app} ${framework} crashed at ${crash.step}: ${crash.error.split("\n")[0]}`);
+    return measured.rows.filter((row) => row.react.task !== undefined && row.melact.task !== undefined);
   };
   const flagged = [];
   const table = [];
