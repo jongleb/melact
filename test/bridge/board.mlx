@@ -1,0 +1,32 @@
+(** Whether the board shows its picker. *)
+type shown = Shown | Hidden
+
+type model = { picks : string list; label : string; relabels : int; shown : shown; bumps : int }
+type message = Relabel | Toggle | Picked of string | Bump
+
+let init = { picks = []; label = "a0"; relabels = 0; shown = Shown; bumps = 0 }
+
+let update message model =
+  match message with
+  | Relabel -> { model with label = "a" ^ string_of_int (model.relabels + 1); relabels = model.relabels + 1 }
+  | Toggle -> { model with shown = (match model.shown with Shown -> Hidden | Hidden -> Shown); bumps = 0 }
+  | Picked choice -> { model with picks = choice :: model.picks }
+  | Bump -> { model with bumps = model.bumps + 1 }
+
+let view widget model =
+  <section>
+    <button className="relabel" onClick=Relabel>(Html.text "relabel")</button>
+    <button className="toggle" onClick=Toggle>(Html.text "toggle")</button>
+    (match model.shown with Shown -> widget model | Hidden -> Html.none)
+    <ol>(Html.list (List.rev_map (fun choice -> <li>(Html.text choice)</li>) model.picks))</ol>
+  </section>
+
+let hooked model = Picker_html.view ~label:model.label ~picked:(fun choice -> Picked choice)
+
+let pure model =
+  <div className="picker">
+    <span>(Html.text model.label)</span>
+    <output>(Html.int model.bumps)</output>
+    <button className="bump" onClick=Bump>(Html.text "bump")</button>
+    <button className="pick" onClick=(Picked (model.label ^ "/" ^ string_of_int model.bumps))>(Html.text "pick")</button>
+  </div>

@@ -1,0 +1,13 @@
+{
+  "name": "react",
+  "version": "18.3.1",
+  "private": true,
+  "description": "melact.compat's react, as an app's bundler alias would give it: npm's react implemented on Melact's runtime",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./jsx-runtime": "./jsx-runtime.js",
+    "./jsx-dev-runtime": "./jsx-runtime.js",
+    "./package.json": "./package.json"
+  }
+}

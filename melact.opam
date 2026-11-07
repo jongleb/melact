@@ -22,6 +22,7 @@ depends: [
   "mlx" {with-test}
   "odoc" {with-doc}
 ]
+depopts: ["meltea"]
 build: [
   ["dune" "subst"] {dev}
   [

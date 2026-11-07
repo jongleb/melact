@@ -1,0 +1,340 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> int -> unit = "test"
+external window_object : prototype = "window"
+external find : Dom.element -> string -> Dom.element option = "querySelector" [@@mel.send] [@@mel.return nullable]
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external input_value : Dom.node -> string = "value" [@@mel.get]
+external bubbling : string -> < bubbles : bool > Js.t -> Dom.event = "Event" [@@mel.new]
+external add_listener : string -> (Dom.event -> unit) -> unit = "addEventListener" [@@mel.scope "window"]
+external remove_listener : string -> (Dom.event -> unit) -> unit = "removeEventListener" [@@mel.scope "window"]
+external location_hash : string = "hash" [@@mel.scope "window", "location"]
+external remove : Dom.element -> unit = "remove" [@@mel.send]
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+
+let type_into : Dom.element -> string -> unit =
+  [%mel.raw
+    {|function (element, text) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, text);
+      }|}]
+
+let go_to : string -> unit =
+  [%mel.raw
+    {|function (hash) { history.replaceState(null, "", hash); window.dispatchEvent(new Event("hashchange")); }|}]
+
+let settled : unit -> unit Js.Promise.t =
+  [%mel.raw {|function () { return new Promise((resolve) => setTimeout(resolve, 0)); }|}]
+
+let frame : unit -> unit Js.Promise.t =
+  [%mel.raw {|function () { return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))); }|}]
+
+let quick_frames : unit -> unit -> unit =
+  [%mel.raw
+    {|function () {
+        const kept = window.requestAnimationFrame;
+        window.requestAnimationFrame = (run) => setTimeout(() => run(performance.now()), 0);
+        return () => { window.requestAnimationFrame = kept; };
+      }|}]
+
+let trail = ref []
+let note entry = trail := entry :: !trail
+
+(** Whether a part of a page is mounted. *)
+type shown = Shown | Hidden
+
+(** Whether a component is still mounted, as an effect's cleanup leaves it. *)
+type mounting = Mounted | Unmounted
+
+module Host = struct
+  let[@react.component] make ~(child : step:int -> onReport:(string -> unit) -> React.element) =
+    let step, setStep = React.useState (fun () -> 1) in
+    let shown, setShown = React.useState (fun () -> Shown) in
+    let log, setLog = React.useState (fun () -> []) in
+    <section>
+      <button
+        className="step"
+        onClick=(fun _ ->
+          note "step";
+          setStep (fun step -> step + 1))>
+        (React.string "step")
+      </button>
+      <button
+        className="toggle"
+        onClick=(fun _ ->
+          note "toggle";
+          setShown (fun shown -> match shown with Shown -> Hidden | Hidden -> Shown))>
+        (React.string "toggle")
+      </button>
+      (match shown with
+      | Shown ->
+          child ~step ~onReport:(fun entry ->
+              let entry = entry ^ "@" ^ string_of_int step ^ "#" ^ string_of_int (List.length log) in
+              note entry;
+              setLog (fun log -> entry :: log))
+      | Hidden -> React.null)
+      <ol>(React.list (List.rev_map (fun entry -> <li>(React.string entry)</li>) log))</ol>
+    </section>
+end
+
+module Tally_hooks = struct
+  let[@react.component] make ~step ~onReport =
+    let count, setCount = React.useState (fun () -> 0) in
+    let text, setText = React.useState (fun () -> "") in
+    let hash, setHash = React.useState (fun () -> "") in
+    let mounted = React.useRef Mounted in
+    let report = React.useRef onReport in
+    report.current <- onReport;
+    React.useEffect0 (fun () ->
+        let listener _ =
+          let hash = location_hash in
+          setHash (fun _ -> hash)
+        in
+        add_listener "hashchange" listener;
+        Some
+          (fun () ->
+            mounted.current <- Unmounted;
+            remove_listener "hashchange" listener));
+    <div className="tally">
+      <button
+        className="take"
+        onClick=(fun _ ->
+          setCount (fun count -> count - step);
+          onReport "take")>
+        (React.string "-")
+      </button>
+      <output>(React.int count)</output>
+      <button
+        className="add"
+        onClick=(fun _ ->
+          setCount (fun count -> count + step);
+          onReport "add")>
+        (React.string "+")
+      </button>
+      <button
+        className="reset"
+        onClick=(fun _ ->
+          setCount (fun _ -> 0);
+          onReport "reset")
+        disabled=(count = 0)>
+        (React.string "reset")
+      </button>
+      <input
+        className="note"
+        value=text
+        onChange=(fun event ->
+          let text = (React.Event.Form.target event)##value in
+          setText (fun _ -> text);
+          onReport ("note " ^ text)) />
+      <i>(React.string hash)</i>
+      <button
+        className="later"
+        onClick=(fun _ ->
+          ignore
+            (Js.Promise.then_
+               (fun () ->
+                 (match mounted.current with Mounted -> report.current "landed" | Unmounted -> ());
+                 Js.Promise.resolve ())
+               (Js.Promise.resolve ())))>
+        (React.string "later")
+      </button>
+    </div>
+end
+
+let views = ref 0
+
+let tally =
+  MelteaProgram.element ~init:Tally.init ~update:Tally.update
+    ~view:(fun model ->
+      incr views;
+      Tally.view model)
+    ~subscriptions:Tally.subscriptions
+    ~receive:(fun step -> Some (Tally.Step step))
+    ~report:Tally.report "Tally"
+
+(** How the tally inside the host is written. *)
+type style = Embedded | Hooked
+
+(** One input on the host page. *)
+type input =
+  | Press of string
+  | Type of string
+  | Go of string
+  | Later_then_hide
+
+(** What the test predicts of the host page: whether the tally is shown, its count and step. *)
+type predicted = { shown : shown; count : int; step : int }
+
+let snapshot root =
+  ( shapes (as_node root),
+    Array.to_list (Array.map input_value (nodes (select_all root "input"))) )
+
+let live adds removes kind =
+  let counted spy =
+    Array.length (Js.Array.filter ~f:(fun arguments -> arguments.(0) = kind) (calls (mock spy)))
+  in
+  counted adds - counted removes
+
+let press root selector = Option.iter click (find root selector)
+
+let host_steps tape =
+  List.init (1 + draw tape 24) (fun index ->
+      match draw tape 9 with
+      | 0 -> Press ".step"
+      | 1 -> Press ".toggle"
+      | 2 -> Press ".take"
+      | 3 -> Press ".add"
+      | 4 -> Press ".reset"
+      | 5 -> Type ("t" ^ string_of_int index)
+      | 6 -> Go ("#h" ^ string_of_int index)
+      | 7 -> Press ".later"
+      | _ -> Later_then_hide)
+
+let predicted_views predicted input =
+  match (predicted.shown, input) with
+  | Hidden, (Press ".toggle" | Later_then_hide) -> ({ predicted with shown = Shown; count = 0 }, 1)
+  | Shown, Press ".toggle" -> ({ predicted with shown = Hidden }, 0)
+  | Shown, Later_then_hide -> ({ predicted with shown = Hidden }, 0)
+  | Hidden, Press ".step" -> ({ predicted with step = predicted.step + 1 }, 0)
+  | Shown, Press ".step" -> ({ predicted with step = predicted.step + 1 }, 1)
+  | Shown, Press ".take" -> ({ predicted with count = predicted.count - predicted.step }, 1)
+  | Shown, Press ".add" -> ({ predicted with count = predicted.count + predicted.step }, 1)
+  | Shown, Press ".reset" -> ({ predicted with count = 0 }, match predicted.count with 0 -> 0 | _ -> 1)
+  | Shown, (Type _ | Go _) -> (predicted, 1)
+  | Shown, Press _ | Hidden, (Press _ | Type _ | Go _) -> (predicted, 0)
+
+let run_host style inputs =
+  let adds = spy_on window_object "addEventListener" in
+  let removes = spy_on window_object "removeEventListener" in
+  let child =
+    match style with
+    | Embedded -> fun ~step ~onReport -> <MelteaProgram program=tally input=step onReport />
+    | Hooked -> fun ~step ~onReport -> <Tally_hooks step onReport />
+  in
+  let root = attached () in
+  let client = ReactDOM.Client.createRoot root in
+  trail := [];
+  views := 0;
+  let* () = React.act (fun () -> ReactDOM.Client.render client <Host child />) in
+  let first = (snapshot root, List.rev !trail, live adds removes "hashchange") in
+  let rec go inputs predicted seen =
+    match inputs with
+    | [] -> Js.Promise.resolve (List.rev seen)
+    | input :: rest ->
+        views := 0;
+        let* () =
+          React.act (fun () ->
+              match input with
+              | Press selector -> press root selector
+              | Type text ->
+                  Option.iter
+                    (fun field ->
+                      type_into field text;
+                      dispatch field (bubbling "input" [%mel.obj { bubbles = true }]))
+                    (find root ".note")
+              | Go hash -> go_to hash
+              | Later_then_hide ->
+                  press root ".later";
+                  press root ".toggle")
+        in
+        let* () = settled () in
+        let* () = React.act ignore in
+        let predicted, expected = predicted_views predicted input in
+        go rest predicted
+          (( (snapshot root, List.rev !trail, live adds removes "hashchange"),
+             (!views, expected, match predicted.shown with Shown -> 1 | Hidden -> 0) )
+          :: seen)
+  in
+  let* seen = go inputs { shown = Shown; count = 0; step = 1 } [] in
+  ReactDOM.Client.unmount client ();
+  let left = live adds removes "hashchange" in
+  restore adds;
+  restore removes;
+  remove root;
+  Js.Promise.resolve (first, seen, left)
+
+let run_board widget steps =
+  let frames_back = quick_frames () in
+  let adds = spy_on window_object "addEventListener" in
+  let removes = spy_on window_object "removeEventListener" in
+  let root = attached () in
+  let program = Program.sandbox ~init:Board.init ~update:Board.update ~view:(Board.view widget) root in
+  let settle () =
+    let* () = frame () in
+    frame ()
+  in
+  let* () = settle () in
+  let rec go steps shown seen =
+    match steps with
+    | [] -> Js.Promise.resolve (List.rev seen)
+    | selector :: rest ->
+        press root selector;
+        let shown =
+          match (selector, shown) with
+          | ".toggle", Shown -> Hidden
+          | ".toggle", Hidden -> Shown
+          | _, shown -> shown
+        in
+        let* () = settle () in
+        go rest shown ((snapshot root, live adds removes "resize", shown) :: seen)
+  in
+  let* seen = go steps Shown [] in
+  Program.stop program;
+  let left = live adds removes "resize" in
+  frames_back ();
+  restore adds;
+  restore removes;
+  remove root;
+  Js.Promise.resolve (seen, left)
+
+let board_steps tape =
+  List.init (1 + draw tape 24) (fun _ -> [| ".relabel"; ".toggle"; ".bump"; ".pick" |].(draw tape 4))
+
+let () =
+  describe "Meltea inside Melact" (fun () ->
+      test_async
+        "a Meltea program in a Melact app shows the page and reports the trail of the same app written with hooks"
+        (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:40) (fun values ->
+                 let inputs = host_steps (tape values) in
+                 let* embedded = run_host Embedded inputs in
+                 let* hooked = run_host Hooked inputs in
+                 let page (first, seen, left) = (first, List.map fst seen, left) in
+                 expect (page embedded) |. to_equal (page hooked);
+                 Js.Promise.resolve ()))
+            [%mel.obj { numRuns = 60 }])
+        60000;
+      test_async
+        "the program's view runs once for each input that changes its model and never for the host's own renders"
+        (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:40) (fun values ->
+                 let inputs = host_steps (tape values) in
+                 let* _, seen, left = run_host Embedded inputs in
+                 let counted = List.map (fun (_, (views, _, _)) -> views) seen in
+                 let predicted = List.map (fun (_, (_, expected, _)) -> expected) seen in
+                 expect counted |. to_equal predicted;
+                 let listening = List.map (fun ((_, _, live), _) -> live) seen in
+                 let mounted = List.map (fun (_, (_, _, mounted)) -> mounted) seen in
+                 expect (listening, left) |. to_equal (mounted, 0);
+                 Js.Promise.resolve ()))
+            [%mel.obj { numRuns = 60 }])
+        60000);
+  describe "Melact inside Meltea" (fun () ->
+      test_async
+        "a Meltea app with a Melact widget shows the page of the same app with the widget written in Meltea"
+        (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:40) (fun values ->
+                 let steps = board_steps (tape values) in
+                 let* hooked, hooked_left = run_board Board.hooked steps in
+                 let* pure, _ = run_board Board.pure steps in
+                 let pages seen = List.map (fun (page, _, _) -> page) seen in
+                 expect (pages hooked) |. to_equal (pages pure);
+                 let listening = List.map (fun (_, live, _) -> live) hooked in
+                 let mounted = List.map (fun (_, _, shown) -> match shown with Shown -> 1 | Hidden -> 0) hooked in
+                 expect (listening, hooked_left) |. to_equal (mounted, 0);
+                 Js.Promise.resolve ()))
+            [%mel.obj { numRuns = 60 }])
+        60000)

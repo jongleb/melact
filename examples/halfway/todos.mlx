@@ -1,0 +1,60 @@
+(** Which items the list shows. *)
+type filter = All | Active | Done
+
+type item = { id : int; title : string; finished : bool; stars : int }
+type model = { items : item list; draft : string; next : int; filter : filter }
+
+type message =
+  | Type of string
+  | Add
+  | Toggle of int
+  | Remove of int
+  | Rate of int * int
+  | Show of filter
+  | Keep
+
+let init filter = { items = []; draft = ""; next = 0; filter }
+
+let update message model =
+  match message with
+  | Type draft -> { model with draft }
+  | Add -> (
+      match String.trim model.draft with
+      | "" -> model
+      | title ->
+          {
+            model with
+            items = model.items @ [ { id = model.next; title; finished = false; stars = 0 } ];
+            draft = "";
+            next = model.next + 1;
+          })
+  | Toggle id ->
+      { model with items = List.map (fun item -> if item.id = id then { item with finished = not item.finished } else item) model.items }
+  | Remove id -> { model with items = List.filter (fun item -> item.id <> id) model.items }
+  | Rate (id, stars) -> { model with items = List.map (fun item -> if item.id = id then { item with stars } else item) model.items }
+  | Show filter -> { model with filter }
+  | Keep -> model
+
+let row item =
+  <li key=(string_of_int item.id) className=(if item.finished then "done" else "")>
+    <input type_="checkbox" checked=item.finished onCheck=(fun _ -> Toggle item.id) />
+    <span className="title">(Html.text item.title)</span>
+    (Stars_html.view ~stars:item.stars ~rated:(fun stars -> Rate (item.id, stars)))
+    <button className="remove" onClick=(Remove item.id)>(Html.text "×")</button>
+  </li>
+
+let view model =
+  let shown =
+    List.filter
+      (fun item -> match model.filter with All -> true | Active -> not item.finished | Done -> item.finished)
+      model.items
+  in
+  <section className="todos">
+    <input
+      className="new"
+      placeholder="What needs doing?"
+      value=model.draft
+      onInput=(fun text -> Type text)
+      onKeyDown=(fun key -> match key with "Enter" -> Add | _ -> Keep) />
+    <ul>(Html.list (List.map row shown))</ul>
+  </section>

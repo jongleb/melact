@@ -1,0 +1,1 @@
+let view ~label ~picked = MelactHtml.element (fun send -> <Picker label onPick=(fun choice -> send (picked choice)) />)

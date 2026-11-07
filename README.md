@@ -456,6 +456,31 @@ let view model =
 .fade-enter-active, .fade-leave-active, .fade-move { transition: all 200ms; }
 ```
 
+### From Melact to Meltea, one screen at a time
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/bridges-dark.svg">
+  <img src="assets/bridges.svg" alt="Moving one screen at a time: a Melact shell with hooks renders MelteaProgram with a program, an input and onReport; the Meltea screen in the middle has init of the input, a pure update of message and model, and a view; a new input becomes the message receive input, drawn in the same render, and each message the program sends itself is offered to report message model and then to the latest onReport. Inside its view, MelactHtml.element shows a Melact leaf widget that still has hooks, with props from the model; the widget's callbacks send messages, and its effects run after the program's draw. Both sides share one melhole: one listener per event type on document, and the screen draws in Melact's own flush; unmounting either side stops subscriptions, drops late commands and runs the widget's cleanups" width="100%">
+</picture>
+
+Hooks are not needed once every hole is guarded, so a Melact app can drop them a screen at a time.
+`melact.meltea` has two bridges on the same runtime: `<MelteaProgram program input onReport />` runs
+a Meltea program inside a Melact app, its props arriving as messages and its messages reported to
+callbacks, and `MelactHtml.element` puts a Melact widget, hooks and all, into a Meltea view.
+
+```ocaml
+let todos =
+  MelteaProgram.sandbox ~init:Todos.init ~update:Todos.update ~view:Todos.view
+    ~receive:(fun filter -> Some (Todos.Show filter))
+    "Todos"
+
+let[@react.component] make ~filter = <MelteaProgram program=todos input=filter />
+```
+
+[`docs/migration.md`](docs/migration.md) walks through the steps, from the two `dune` lines to an
+app without Melact, and maps every hook to its Meltea counterpart;
+[`examples/halfway`](examples/halfway/app.mlx) is an app halfway there.
+
 ## Status
 
 [`compat/run.sh`](compat/run.sh) clones reason-react, melange-opam-template and reason-seoul's TodoMVC, changes two lines
@@ -475,8 +500,9 @@ rewrites such bindings to Melact's hooks (`useState`, `useReducer`, `useEffect` 
 | **Tests** | 175 vitest + jsdom tests and 25 native QCheck laws: the View layer, transitions under fake timers, the keyed loop and its projections, pure components, hooks against `View` directly, and one suite in mlx built twice, against reason-react with React 18 and against melact, with identical assertions. `melact-ppx` has expect tests for every JSX shape in [`test/ppx/jsx.t`](test/ppx/jsx.t) |
 | **Examples** | Melact in reason-react style: [`examples/counter`](examples/counter/counter.mlx) and [`examples/todomvc`](examples/todomvc/app.mlx), the full TodoMVC; Meltea: [`meltea/examples/counter`](meltea/examples/counter/main.mlx) and [`meltea/examples/todomvc`](meltea/examples/todomvc/todomvc.mlx) |
 | **Server** | `ReactDOMServer.renderToString` and `ReactDOM.Client.hydrateRoot`; Meltea has `Program.render` and `~start:Program.hydrate`. The HTML is in React's format, so React's own and server-reason-react's hydrate too; hydration code is compiled under `-hydratable`. `meltea-ppx -server` and `melact-ppx -server` compile views and components to code that writes their HTML with no DOM, natively or in Node ([`meltea/examples/served`](meltea/examples/served)), against `meltea.server`, `melact.server` or `melact.server.native`; Melact's is byte for byte React 18's `renderToString`, `useId` included. `ReactDOM.Client.resumeRoot` (Melact's own) and Meltea's `Program.resume` leave a served page untouched until its first input. `Melhole_server.capture`, a script for the page's head, keeps clicks and typing made before the code arrives and hydration delivers them |
+| **npm components** | a spike, `melact.compat`: npm's `react`, `react-dom` and `react/jsx-runtime` on Melact's runtime, aliased by the bundler, so that react-select, Radix Popover and react-window run on Melact without React. Laws in [`test/compat`](test/compat) check these three against React 18 after every random step, alone and inside mlx apps. On those measurements a counter is 23.4 kB gzip on the shim against 45.6 kB on React. Apps that use no npm component link none of it. See [the compiler notes](docs/compiler.md#components-from-npm-melactcompat) |
 | **Not yet** | a working `useActionState` (reason-react 0.17's own binding cannot give its action to a form), `ReactDOMTestUtils.isElementOfType`, reading a `domProps` back field by field, Suspense on the server |
-| **Limits** | a child whose props are all equal does not render again when its parent does, as with React Compiler: a render that reads a ref (`ref.current##offsetTop`) or other mutable state keeps the value it read until the child's own state, a context or new props make it render, and a controlled radio that the browser unchecked because another radio of its `name` came and went is checked again only when it renders; read geometry in a layout effect and keep radio groups' names apart; reading layout while rendering (`offsetTop`, `getBoundingClientRect`) is cheap under React, which renders every component before it touches the DOM; Melact renders all the components that their own state, a context or their parent's new props made dirty before it writes, so a read in those costs one layout, as in React; a component without hooks has no instance and renders inside its parent's write, so a read there forces a layout per component; read geometry in `useLayoutEffect` or a ref callback, which run after the whole write, as in React; `MelactDebug.warnLayoutReadsInRender ()` warns in the console, once per component, about each such read; an element is compiled code, not React's element object: it has no `props`, `type` or `key` to read back, so code that inspects its children (`(Obj.magic child)##props##label`) gets `undefined`; give the parent the data itself (a list of records) and render the children from it; an element compares with `React.null` by structural equality (Reason's `==`), but two other elements do not compare structurally, as they hold functions; reason-react and Melact both define the module `React`, so a build must not contain both: a library that requires reason-react has to require melact instead (same API); every file melact-ppx compiles checks it, failing with `Unbound value React.reason_react_is_also_in_this_build_remove_it` (or, if only the JavaScript import went to reason-react, at load with that name); a `make` written by hand with labels and no `[@react.component]` is not a component in JSX (it is not in reason-react either): mark it `[@react.component]`; a hand-written `make` that calls hooks runs them in its parent, so call it unconditionally; hooks are found as `React.useX`, as `useX` under `open React`, `include React` or `React.( )`, and as `M.useX` for a module of the same file that includes React; a module in another file that includes React is named with `-hook-modules M` (`(pps melange.ppx melact-ppx -- -hook-modules Hooks)`); a `[@react.component] external` to a component of a JavaScript React library is a compile error, since only React can render it |
+| **Limits** | a child whose props are all equal does not render again when its parent does, as with React Compiler: a render that reads a ref (`ref.current##offsetTop`) or other mutable state keeps the value it read until the child's own state, a context or new props make it render, and a controlled radio that the browser unchecked because another radio of its `name` came and went is checked again only when it renders; read geometry in a layout effect and keep radio groups' names apart; reading layout while rendering (`offsetTop`, `getBoundingClientRect`) is cheap under React, which renders every component before it touches the DOM; Melact renders all the components that their own state, a context or their parent's new props made dirty before it writes, so a read in those costs one layout, as in React; a component without hooks has no instance and renders inside its parent's write, so a read there forces a layout per component; read geometry in `useLayoutEffect` or a ref callback, which run after the whole write, as in React; `MelactDebug.warnLayoutReadsInRender ()` warns in the console, once per component, about each such read; an element is compiled code, not React's element object: it has no `props`, `type` or `key` to read back, so code that inspects its children (`(Obj.magic child)##props##label`) gets `undefined`; give the parent the data itself (a list of records) and render the children from it; an element compares with `React.null` by structural equality (Reason's `==`), but two other elements do not compare structurally, as they hold functions; reason-react and Melact both define the module `React`, so a build must not contain both: a library that requires reason-react has to require melact instead (same API); every file melact-ppx compiles checks it, failing with `Unbound value React.reason_react_is_also_in_this_build_remove_it` (or, if only the JavaScript import went to reason-react, at load with that name); a `make` written by hand with labels and no `[@react.component]` is not a component in JSX (it is not in reason-react either): mark it `[@react.component]`; a hand-written `make` that calls hooks runs them in its parent, so call it unconditionally; hooks are found as `React.useX`, as `useX` under `open React`, `include React` or `React.( )`, and as `M.useX` for a module of the same file that includes React; a module in another file that includes React is named with `-hook-modules M` (`(pps melange.ppx melact-ppx -- -hook-modules Hooks)`); a `[@react.component] external` to a component of a JavaScript React library renders it on melact.compat, the shim below, on the client only |
 
 A whole tree compiles to one template. This mlx counter is one `<template>` with six holes,
 the same as the hand-written one:
@@ -573,11 +599,12 @@ melhole/compiler    melhole.compiler  shared compiler: templates, scopes, guards
 ppx/melact         melact-ppx       JSX, [@react.component], hook keys
 ppx/meltea         meltea-ppx       mlx views with messages
 react/             melact           React (with React.Event), ReactDOM, ReasonReactRouter
+react/meltea       melact.meltea    bridges: a Meltea program in Melact, a Melact widget in Meltea
 meltea/            meltea           the Elm architecture: Program, Cmd, Sub, Html
 meltea/server      meltea.server    the same modules on a server: views write HTML
-meltea/examples                     counter, todomvc, served (Meltea)
+meltea/examples                     counter, todomvc, served, migrated (Meltea)
 test/                               laws: QCheck, fast-check in jsdom, React vs Melact
-examples/                           counter, todomvc (Melact)
+examples/                           counter, todomvc (Melact), halfway (Melact and Meltea)
 compat/                             real reason-react apps built against Melact
 assets/                             the figures above: python3 assets/make.py
 ```

@@ -1,0 +1,1 @@
+let view ~stars ~rated = MelactHtml.element (fun send -> <Stars stars onRate=(fun value -> send (rated value)) />)

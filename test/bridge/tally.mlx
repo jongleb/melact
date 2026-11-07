@@ -1,0 +1,47 @@
+type model = { count : int; step : int; note : string; hash : string }
+
+type message =
+  | Add
+  | Take
+  | Reset
+  | Step of int
+  | Note of string
+  | Hash of string
+  | Later
+  | Landed
+
+let init step = ({ count = 0; step; note = ""; hash = "" }, Cmd.none)
+
+let update message model =
+  match message with
+  | Add -> ({ model with count = model.count + model.step }, Cmd.none)
+  | Take -> ({ model with count = model.count - model.step }, Cmd.none)
+  | Reset -> ({ model with count = 0 }, Cmd.none)
+  | Step step -> ({ model with step }, Cmd.none)
+  | Note note -> ({ model with note }, Cmd.none)
+  | Hash hash -> ({ model with hash }, Cmd.none)
+  | Later -> (model, Cmd.perform (fun () -> Js.Promise.resolve ()) (fun () -> Landed))
+  | Landed -> (model, Cmd.none)
+
+let view model =
+  <div className="tally">
+    <button className="take" onClick=Take>(Html.text "-")</button>
+    <output>(Html.int model.count)</output>
+    <button className="add" onClick=Add>(Html.text "+")</button>
+    <button className="reset" onClick=Reset disabled=(model.count = 0)>(Html.text "reset")</button>
+    <input className="note" value=model.note onInput=(fun text -> Note text) />
+    <i>(Html.text model.hash)</i>
+    <button className="later" onClick=Later>(Html.text "later")</button>
+  </div>
+
+let subscriptions _ = Sub.hash (fun hash -> Hash hash)
+
+let report message _ =
+  match message with
+  | Add -> Some "add"
+  | Take -> Some "take"
+  | Reset -> Some "reset"
+  | Note note -> Some ("note " ^ note)
+  | Landed -> Some "landed"
+  | Step step -> Some ("step " ^ string_of_int step)
+  | Hash _ | Later -> None
