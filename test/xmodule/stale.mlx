@@ -1,0 +1,4 @@
+open Stdlib
+
+let[@react.component] [@melhole.inline (0, fun ~label -> <em>(React.string ("stale " ^ label))</em>)] make ~label =
+  <u>(React.string (String.lowercase_ascii label))</u>

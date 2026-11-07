@@ -1,0 +1,3 @@
+let mark = "#"
+
+let[@react.component] make ~label = <i>(React.string (mark ^ label))</i>

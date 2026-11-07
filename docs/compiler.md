@@ -550,6 +550,32 @@ its place mounts afresh, as React does. Only components that call hooks get an i
 slots, effects and a place in the scheduler. A dual test checks the remount against React 18:
 replacing one hookless component by another with the same output resets the state below it.
 
+### Spliced into the caller
+
+Where a hookless component is used at a place that never holds anything else, a child slot of a DOM
+element or the row of a `map`, `melact-ppx` splices its body in: the props become `let`s and the
+body joins the caller's template, so a list of such rows compiles to `View.rows` with one template
+and no child per row. An element that flows as a value (passed to `render`, returned from a branch)
+keeps the component, since two places of one component must keep its state when they swap. The
+body is spliced only when no name it reads is shadowed where it lands, it takes required labelled
+props and no `children`, and `React.memo` carries no comparison of its own. On the keyed benchmark
+creating 1,000 rows went from 20.7 to 16.6 ms and 10,000 rows from 193.9 to 179.0 ms.
+
+Across modules the body travels in the component's signature. When a file's top-level `make` can
+be spliced, `melact-ppx` puts it, with a format version, on the `external make` it emits, as the
+attribute `melhole.inline`; names of the file that the body reads (values, constructors, fields,
+types, modules, each in its own namespace) are written as paths of the module itself. The attribute
+reaches the `.cmi`. A caller compiled under `(preprocess (staged_pps melange.ppx melact-ppx))` has
+the dependencies' `.cmi` on its load path: at `<Row …/>` it finds `Row.make`, reads the attribute,
+replaces the module placeholder by `Row` and splices the body as for a component of its own file.
+Under `pps` the load path is empty and every call stays a call; a file with `open` or `include`, a
+parameter named like a value of its file, an older format version or a shadowed name keep the call
+too. A law runs one app of four files three ways, reason-react with React 18, Melact under
+`staged_pps` and Melact under `pps`: every build shows what React shows through random reorders,
+clicks and prop changes, children's state stays with its key, and the `staged_pps` build calls no
+spliced component, the `pps` build calls them all. Accepting any format version, ignoring a shadowed
+name, or not writing the module's own names as its paths each break it.
+
 ## Values written in props
 
 reason-react code writes closures, style records, arrays, tuples and child elements straight into

@@ -1,0 +1,3 @@
+let[@react.component] make ~label =
+  let count, setCount = React.useState (fun () -> 0) in
+  <button onClick=(fun _ -> setCount (fun count -> count + 1))>(React.string (label ^ string_of_int count))</button>

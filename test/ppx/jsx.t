@@ -937,7 +937,20 @@ Reason input:
            | Some key ->
                React.of_child
                  (Melhole.View.with_key key (React.to_child __melhole_element)))
-      external make : make_props -> React.element = "%identity"
+      external make : make_props -> React.element = "%identity"[@@melhole.inline
+                                                                 (1,
+                                                                   (fun ~name
+                                                                      ->
+                                                                      ((
+                                                                      span
+                                                                      ~className:"greeting"
+                                                                      ~children:
+                                                                      [
+                                                                      React.string
+                                                                      ("Hello, "
+                                                                      ^ name)]
+                                                                      ())
+                                                                      [@JSX ])))]
     end
 
 mlx input:
@@ -1029,7 +1042,19 @@ mlx input:
            | Some key ->
                React.of_child
                  (Melhole.View.with_key key (React.to_child __melhole_element)))
-      external make : make_props -> React.element = "%identity"
+      external make : make_props -> React.element = "%identity"[@@melhole.inline
+                                                                 (1,
+                                                                   (fun ~name
+                                                                      ->
+                                                                      ((
+                                                                      span ()
+                                                                      ~children:
+                                                                      [
+                                                                      React.string
+                                                                      ("Hello, "
+                                                                      ^ name)]
+                                                                      ~className:"greeting")
+                                                                      [@JSX ])))]
     end
 
 Errors point at the source:

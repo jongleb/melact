@@ -16,6 +16,9 @@ let keyed_hooks =
       ]
 
 let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionState" ]
+let inline_fact = "melhole.inline"
+let inline_version = 1
+let own_module = "Melhole_own_module__"
 
 let without_component attributes =
   match
@@ -617,6 +620,9 @@ let mapper =
                   ~numbering row items));
       }
 
+    method! attribute attribute =
+      match String.equal attribute.attr_name.txt inline_fact with true -> attribute | false -> super#attribute attribute
+
     val mutable react : opened = Closed
     val mutable modules : string list = []
     val mutable hooks : string list = []
@@ -753,12 +759,21 @@ let mapper =
                   };
                 ];
             ],
-            { binding with pvb_pat = pvar ~loc (props_name name); pvb_attributes = attributes; pvb_expr = builder },
+            {
+              binding with
+              pvb_pat = pvar ~loc (props_name name);
+              pvb_attributes = List.filter (fun attribute -> not (String.equal attribute.attr_name.txt inline_fact)) attributes;
+              pvb_expr = builder;
+            },
             [
               pstr_primitive ~loc
-                (value_description ~loc ~name:{ loc; txt = name }
-                   ~type_:[%type: [%t ptyp_constr ~loc { loc; txt = Lident type_name } []] -> React.element]
-                   ~prim:[ "%identity" ]);
+                {
+                  (value_description ~loc ~name:{ loc; txt = name }
+                     ~type_:[%type: [%t ptyp_constr ~loc { loc; txt = Lident type_name } []] -> React.element]
+                     ~prim:[ "%identity" ])
+                  with
+                  pval_attributes = List.filter (fun attribute -> String.equal attribute.attr_name.txt inline_fact) attributes;
+                };
             ] ))
         (without_component binding.pvb_attributes)
 
@@ -934,11 +949,197 @@ let structure items =
         | _ -> None)
     | _ -> None
   in
+  let annotated items =
+    let defined item =
+      match item.pstr_desc with
+      | Pstr_value (_, bindings) -> List.map (fun name -> (`Value, name)) (List.concat_map (fun binding -> Free.bound binding.pvb_pat) bindings)
+      | Pstr_primitive description -> [ (`Value, description.pval_name.txt) ]
+      | Pstr_type (_, declarations) ->
+          List.concat_map
+            (fun declaration ->
+              (`Type, declaration.ptype_name.txt)
+              :: (match declaration.ptype_kind with
+                 | Ptype_variant constructors -> List.map (fun constructor -> (`Constructor, constructor.pcd_name.txt)) constructors
+                 | Ptype_record labels -> List.map (fun label -> (`Field, label.pld_name.txt)) labels
+                 | Ptype_abstract | Ptype_open -> []))
+            declarations
+      | Pstr_module { pmb_name = { txt = Some name; _ }; _ } -> [ (`Module, name) ]
+      | Pstr_exception exception_ -> [ (`Constructor, exception_.ptyexn_constructor.pext_name.txt) ]
+      | _ -> []
+    in
+    let fact names named body =
+      let among space = List.filter_map (fun (kind, name) -> match kind = space with true -> Some name | false -> None) names in
+      let values = among `Value and modules = among `Module in
+      let binders =
+        let collector =
+          object
+            inherit [string list] Ast_traverse.fold as super
+
+            method! pattern pattern found =
+              super#pattern pattern (match pattern.ppat_desc with Ppat_var { txt; _ } | Ppat_alias (_, { txt; _ }) -> txt :: found | _ -> found)
+          end
+        in
+        List.map snd named @ collector#expression body []
+      in
+      match List.exists (fun binder -> List.mem binder values) binders with
+      | true -> None
+      | false ->
+          let rec moduled lid =
+            match lid with
+            | Lident name when List.mem name modules -> Ldot (Lident own_module, name)
+            | Lident _ | Lapply _ -> lid
+            | Ldot (inner, name) -> Ldot (moduled inner, name)
+          in
+          let own space (located : longident loc) =
+            {
+              located with
+              txt =
+                (match located.txt with
+                | Lident name when List.mem name (among space) -> Ldot (Lident own_module, name)
+                | Lident _ | Lapply _ -> located.txt
+                | Ldot (inner, name) -> Ldot (moduled inner, name));
+            }
+          in
+          let qualified =
+            (object
+               inherit Ast_traverse.map as super
+
+               method! expression expression =
+                 let expression = super#expression expression in
+                 match expression.pexp_desc with
+                 | Pexp_ident name -> { expression with pexp_desc = Pexp_ident (own `Value name) }
+                 | Pexp_construct (name, argument) -> { expression with pexp_desc = Pexp_construct (own `Constructor name, argument) }
+                 | Pexp_field (record, name) -> { expression with pexp_desc = Pexp_field (record, own `Field name) }
+                 | Pexp_setfield (record, name, value) -> { expression with pexp_desc = Pexp_setfield (record, own `Field name, value) }
+                 | Pexp_record (fields, base) ->
+                     { expression with pexp_desc = Pexp_record (List.map (fun (name, value) -> (own `Field name, value)) fields, base) }
+                 | _ -> expression
+
+               method! pattern pattern =
+                 let pattern = super#pattern pattern in
+                 match pattern.ppat_desc with
+                 | Ppat_construct (name, argument) -> { pattern with ppat_desc = Ppat_construct (own `Constructor name, argument) }
+                 | Ppat_record (fields, closed) ->
+                     { pattern with ppat_desc = Ppat_record (List.map (fun (name, value) -> (own `Field name, value)) fields, closed) }
+                 | _ -> pattern
+
+               method! core_type core_type =
+                 let core_type = super#core_type core_type in
+                 match core_type.ptyp_desc with
+                 | Ptyp_constr (name, arguments) -> { core_type with ptyp_desc = Ptyp_constr (own `Type name, arguments) }
+                 | _ -> core_type
+            end)
+              #expression body
+          in
+          let loc = body.pexp_loc in
+          let lambda =
+            {
+              body with
+              pexp_desc =
+                Pexp_function
+                  ( List.map
+                      (fun (label, variable) -> { pparam_loc = loc; pparam_desc = Pparam_val (Labelled label, None, pvar ~loc variable) })
+                      named,
+                    None,
+                    Pfunction_body qualified );
+              pexp_attributes = [];
+            }
+          in
+          Some
+            (attribute ~loc ~name:{ loc; txt = inline_fact }
+               ~payload:(PStr [ pstr_eval ~loc (pexp_tuple ~loc [ eint ~loc inline_version; lambda ]) [] ]))
+    in
+    match List.exists (fun item -> match item.pstr_desc with Pstr_open _ | Pstr_include _ -> true | _ -> false) items with
+    | true -> items
+    | false ->
+        List.rev
+          (snd
+             (List.fold_left
+                (fun (names, done_) item ->
+                  let item =
+                    match (item.pstr_desc, inlinable item) with
+                    | Pstr_value (flag, [ binding ]), Some (named, body, _) ->
+                        Option.fold ~none:item
+                          ~some:(fun attribute ->
+                            { item with pstr_desc = Pstr_value (flag, [ { binding with pvb_attributes = attribute :: binding.pvb_attributes } ]) })
+                          (fact names named body)
+                    | _ -> item
+                  in
+                  (defined item @ names, item :: done_))
+                ([], []) items))
+  in
+  let environment = lazy (match Ocaml_common.Compmisc.initial_env () with environment -> Some environment | exception _ -> None) in
+  let imported path =
+    match Option.bind (Longident.flatten_exn (Ldot (path, "make")) |> Ocaml_common.Longident.unflatten) (fun lid -> Option.map (fun environment -> (lid, environment)) (Lazy.force environment)) with
+    | None -> None
+    | Some (lid, environment) -> (
+        match Ocaml_common.Env.lookup_value ~use:false ~loc:Ocaml_common.Location.none lid environment with
+        | exception _ -> None
+        | _, description ->
+            List.find_map
+              (fun (attribute : Ocaml_common.Typedtree.attribute) ->
+                match (attribute.attr_name.txt, attribute.attr_payload) with
+                | name, PStr payload when String.equal name inline_fact -> (
+                    match Ppxlib_ast.Selected_ast.of_ocaml Structure payload with
+                    | [
+                     {
+                       pstr_desc =
+                         Pstr_eval
+                           ( {
+                               pexp_desc =
+                                 Pexp_tuple
+                                   [ { pexp_desc = Pexp_constant (Pconst_integer (version, None)); _ }; lambda ];
+                               _;
+                             },
+                             _ );
+                       _;
+                     };
+                    ]
+                      when int_of_string version = inline_version -> (
+                        let rec resolved lid =
+                          match lid with
+                          | Lident name when String.equal name own_module -> path
+                          | Lident _ -> lid
+                          | Ldot (inner, name) -> Ldot (resolved inner, name)
+                          | Lapply (left, right) -> Lapply (resolved left, resolved right)
+                        in
+                        let lambda =
+                          (object
+                             inherit Ast_traverse.map
+                             method! longident lid = resolved lid
+                          end)
+                            #expression lambda
+                        in
+                        match lambda.pexp_desc with
+                        | Pexp_function (params, None, Pfunction_body body) -> (
+                            let named =
+                              List.filter_map
+                                (fun param ->
+                                  match param.pparam_desc with
+                                  | Pparam_val (Labelled label, None, { ppat_desc = Ppat_var { txt; _ }; _ }) -> Some (label, txt)
+                                  | Pparam_val _ | Pparam_newtype _ -> None)
+                                params
+                            in
+                            match Free.of_expression body with
+                            | Reads reads when List.length named = List.length params ->
+                                Some (named, body, List.filter (fun read -> not (List.mem read (List.map snd named))) reads)
+                            | Reads _ | Volatile -> None)
+                        | _ -> None)
+                    | _ -> None
+                    | exception _ -> None)
+                | _ -> None)
+              description.val_attributes)
+    | exception Invalid_argument _ -> None
+  in
   let inliner =
     object (self)
       inherit Scope.mapper as super
       val mutable known : (string * ((string * string) list * expression * string list)) list = []
       val mutable shadowed : (string * string list) list = []
+      val mutable toplevel : string list = []
+
+      method! attribute attribute =
+        match String.equal attribute.attr_name.txt inline_fact with true -> attribute | false -> super#attribute attribute
 
       method! structure_item item =
         let mapped = super#structure_item item in
@@ -956,17 +1157,26 @@ let structure items =
             shadowed <- List.remove_assoc name shadowed
         | Pstr_value (_, bindings) ->
             let names = List.concat_map (fun binding -> Free.bound binding.pvb_pat) bindings in
+            toplevel <- names @ toplevel;
             shadowed <- List.map (fun (name, list) -> (name, names @ list)) shadowed
         | _ -> ());
         mapped
 
       method private expanded expression =
         match expression.pexp_desc with
-        | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident name, "createElement"); _ }; _ }, arguments)
+        | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, "createElement"); _ }; _ }, arguments)
           when jsx expression -> (
-            match List.assoc_opt name known with
+            let found =
+              match path with
+              | Lident name -> (
+                  match List.assoc_opt name known with
+                  | Some (named, body, reads) -> Some (named, body, reads, Option.value ~default:[] (List.assoc_opt name shadowed))
+                  | None -> Option.map (fun (named, body, reads) -> (named, body, reads, toplevel)) (imported path))
+              | Ldot _ | Lapply _ -> Option.map (fun (named, body, reads) -> (named, body, reads, toplevel)) (imported path)
+            in
+            match found with
             | None -> None
-            | Some (named, body, reads) -> (
+            | Some (named, body, reads, blocked) -> (
                 let given =
                   List.filter_map
                     (fun (label, value) -> match label with Labelled label | Optional label -> Some (label, value) | Nolabel -> None)
@@ -987,7 +1197,7 @@ let structure items =
                 let clear =
                   List.for_all
                     (fun read ->
-                      not (List.mem read self#locals || List.mem read (Option.value ~default:[] (List.assoc_opt name shadowed))))
+                      not (List.mem read self#locals || List.mem read blocked))
                     reads
                 in
                 match (children_empty, exact, clear) with
@@ -1072,7 +1282,7 @@ let structure items =
     end
   in
   [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
-  :: mapper#structure (inliner#structure items)
+  :: mapper#structure (inliner#structure (annotated items))
 let signature items = mapper#signature items
 let () =
   Driver.add_arg "-hook-modules"

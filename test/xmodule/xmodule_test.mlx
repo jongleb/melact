@@ -1,0 +1,97 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external read_file : string -> string -> string = "readFileSync" [@@mel.module "node:fs"]
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+let act run = adopt (React.act run)
+
+(** What the page shows: the labels of the rows, how loud the badge is and a tick. *)
+type state = { labels : string array; tone : Badge.tone; tick : int }
+
+let send = ref (fun (_ : state -> state) -> ())
+
+module App = struct
+  let[@react.component] make () =
+    let state, setState = React.useState (fun () -> { labels = [| "a"; "b"; "c" |]; tone = Badge.Quiet; tick = 0 }) in
+    send := setState;
+    let string_of_int _ = "shadow" in
+    <div>
+      <Badge label=("t" ^ string_of_int state.tick) tone=state.tone />
+      <Tag label=(Stdlib.string_of_int state.tick) />
+      <Stale label="OLD" />
+      <Holder label="fixed" />
+      (React.array (Array.map (fun label -> <Holder key=label label />) state.labels))
+      (React.array (Array.map (fun label -> <Tag key=label label />) state.labels))
+    </div>
+end
+
+let calls file name =
+  let text = read_file ("_build/default/test/xmodule/" ^ file ^ "/output/test/xmodule/" ^ file ^ "/xmodule_test.mjs") "utf8" in
+  Array.length (Js.String.split ~sep:(name ^ ".makeProps") text) - 1
+
+let () =
+  describe "components of other modules" (fun () ->
+      test "are spliced in under staged_pps, and called under pps, unless a name they read is shadowed where they are used" (fun () ->
+          expect
+            ( (calls "melact" "Tag", calls "melact" "Holder", calls "melact" "Badge" > 0, calls "melact" "Stale" > 0),
+              (calls "plain" "Tag" > 0, calls "plain" "Holder" > 0) )
+          |. to_equal ((0, 0, true, true), (true, true)));
+      test_async "show what React shows, keep their children's state by key and in place, and read their own module's values" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+                 let tape = tape values in
+                 let root = attached () in
+                 let client = ReactDOM.Client.createRoot root in
+                 let* () = act (fun () -> ReactDOM.Client.render client <App />) in
+                 let counts = Hashtbl.create 8 in
+                 let count label = Option.value ~default:0 (Hashtbl.find_opt counts label) in
+                 let rec step remaining state =
+                   match remaining with
+                   | 0 ->
+                       let shown = text_content root in
+                       let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                       let badge = "tshadow" in
+                       expect shown
+                       |. to_equal
+                            ((match state.tone with
+                             | Badge.Loud -> String.uppercase_ascii badge ^ "!"
+                             | Badge.Quiet -> badge)
+                            ^ Stdlib.string_of_int (String.length badge)
+                            ^ "#" ^ Stdlib.string_of_int state.tick
+                            ^ "old"
+                            ^ "[fixed" ^ Stdlib.string_of_int (count "fixed") ^ "]"
+                            ^ String.concat "" (List.map (fun label -> "[" ^ label ^ Stdlib.string_of_int (count label) ^ "]") (Array.to_list state.labels))
+                            ^ String.concat "" (List.map (fun label -> "#" ^ label) (Array.to_list state.labels)));
+                       Js.Promise.resolve ()
+                   | _ -> (
+                       match draw tape 4 with
+                       | 0 ->
+                           let ranked = Array.map (fun label -> (draw tape 100, label)) [| "a"; "b"; "c"; "d" |] in
+                           Array.stable_sort compare ranked;
+                           let labels = Array.sub (Array.map snd ranked) 0 (1 + draw tape 4) in
+                           Array.iter (fun label -> if not (Array.mem label labels) then Hashtbl.remove counts label) state.labels;
+                           let next = { state with labels } in
+                           let* () = act (fun () -> !send (fun _ -> next)) in
+                           step (remaining - 1) next
+                       | 1 ->
+                           let next = { state with tick = state.tick + 1 } in
+                           let* () = act (fun () -> !send (fun _ -> next)) in
+                           step (remaining - 1) next
+                       | 2 ->
+                           let next = { state with tone = (match state.tone with Badge.Loud -> Badge.Quiet | Badge.Quiet -> Badge.Loud) } in
+                           let* () = act (fun () -> !send (fun _ -> next)) in
+                           step (remaining - 1) next
+                       | _ ->
+                           let buttons = Array.map element_of (nodes (select_all root "button")) in
+                           let index = draw tape (Array.length buttons) in
+                           let label = match index with 0 -> "fixed" | _ -> state.labels.(index - 1) in
+                           Hashtbl.replace counts label (count label + 1);
+                           let* () = act (fun () -> click buttons.(index)) in
+                           step (remaining - 1) state)
+                 in
+                 step 10 { labels = [| "a"; "b"; "c" |]; tone = Badge.Quiet; tick = 0 }))
+            [%mel.obj { numRuns = 80 }]))

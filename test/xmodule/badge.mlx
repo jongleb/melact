@@ -1,0 +1,10 @@
+(** How loud a badge is. *)
+type tone = Loud | Quiet
+
+let mark = "!"
+let shown tone label = match tone with Loud -> String.uppercase_ascii label ^ mark | Quiet -> label
+
+let[@react.component] make ~label ~tone =
+  <b className=(match tone with Loud -> "loud" | Quiet -> "quiet")>
+    (React.string (shown tone label ^ string_of_int (String.length label)))
+  </b>

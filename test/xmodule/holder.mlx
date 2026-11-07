@@ -1,0 +1,1 @@
+let[@react.component] make ~label = <span>(React.string "[")<Counter label />(React.string "]")</span>
