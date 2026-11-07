@@ -7,9 +7,10 @@ type timing = Rendering | Later
 type body = { source : string; rendering : Melact_ppx.Graph.rendering }
 
 let reads_the_world =
-  [ "row.current"; "!counter"; "Js.Date.now ()"; "measure ()"; "(counter := 1; 0)"; "useThing x"; "(object_ # size)" ]
+  [ "row.current"; "!counter"; "Js.Date.now ()"; "measure ()"; "(counter := 1; 0)"; "useThing x"; "(object_ # size)"; "(let cell = counter in cell := 1; 0)" ]
 
-let pure_atoms = [ "x"; "count"; "item.title"; "String.length name"; "(count + 1)"; "\"text\""; "Some x" ]
+let pure_atoms =
+  [ "x"; "count"; "item.title"; "String.length name"; "(count + 1)"; "\"text\""; "Some x"; "(let cell = ref 0 in cell := 1; incr cell; !cell)" ]
 
 let both first second =
   match (first.rendering, second.rendering) with
