@@ -1318,6 +1318,24 @@ module Holders = struct
     </div>
 end
 
+(** What the rows of the outer-field law read: [title] directly, [noise] through a let or a function. *)
+type board = { title : string; noise : int; spare : int }
+
+let board_send = ref (fun (_ : board -> board) -> ())
+let board_text board = board.title ^ "/" ^ string_of_int board.noise
+
+module Board = struct
+  let[@react.component] make ~count =
+    let board, setBoard = React.useState (fun () -> { title = "a"; noise = 0; spare = 0 }) in
+    board_send := setBoard;
+    let shown = board.noise in
+    <div>
+      <ul>(React.array (Array.map (fun index -> <li key=(string_of_int index)>(React.string (board.title ^ string_of_int index))</li>) (Array.init count (fun index -> index))))</ul>
+      <ol>(React.array (Array.map (fun index -> <li key=(string_of_int index)>(React.string (board.title ^ "+" ^ string_of_int shown))</li>) (Array.init count (fun index -> index))))</ol>
+      <p>(React.array (Array.map (fun index -> <b key=(string_of_int index)>(React.string (board.title ^ board_text board))</b>) (Array.init count (fun index -> index))))</p>
+    </div>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -3262,6 +3280,37 @@ let () =
                        step (remaining - 1) labels tick)
              in
              step 10 [| "a"; "b"; "c" |] 0))
+        [%mel.obj { numRuns = 80 }]));
+  describe "rows reading fields of an outer record" (fun () ->
+    test_async "follow the fields they read, a let that reads another field, and a function given the whole record" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:12) (fun values ->
+             let tape = tape values in
+             let count = 1 + draw tape 6 in
+             let* root, client = mount <Board count /> in
+             let rec step remaining board =
+               match remaining with
+               | 0 ->
+                   let shown = text_content root in
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   let rows text = String.concat "" (List.init count text) in
+                   expect shown
+                   |. to_equal
+                        (rows (fun index -> board.title ^ string_of_int index)
+                        ^ rows (fun _ -> board.title ^ "+" ^ string_of_int board.noise)
+                        ^ rows (fun _ -> board.title ^ board_text board));
+                   finish ()
+               | _ ->
+                   let next =
+                     match draw tape 3 with
+                     | 0 -> { board with title = [| "a"; "b" |].(draw tape 2) }
+                     | 1 -> { board with noise = draw tape 4 }
+                     | _ -> { board with spare = draw tape 4 }
+                   in
+                   let* () = act (fun () -> !board_send (fun _ -> next)) in
+                   step (remaining - 1) next
+             in
+             step 8 { title = "a"; noise = 0; spare = 0 }))
         [%mel.obj { numRuns = 80 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->

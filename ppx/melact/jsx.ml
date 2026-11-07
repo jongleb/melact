@@ -162,25 +162,7 @@ let component ~loc ~name ~props_constructor expression =
         match param.pparam_desc with
         | Pparam_val ((Labelled _ | Optional _), None, { ppat_desc = Ppat_var { txt; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt; _ }; _ }, _); _ })
           ->
-            let usage =
-              object
-                 inherit [[ `Fields of longident loc list | `Whole ]] Ast_traverse.fold as super
-
-                 method! expression expression found =
-                   match (found, expression.pexp_desc) with
-                   | `Whole, _ -> `Whole
-                   | `Fields fields, Pexp_field ({ pexp_desc = Pexp_ident { txt = Lident name; _ }; _ }, field) when String.equal name txt ->
-                       `Fields (match List.exists (fun known -> known.txt = field.txt) fields with true -> fields | false -> field :: fields)
-                   | `Fields _, Pexp_ident { txt = Lident name; _ } when String.equal name txt -> `Whole
-                   | `Fields _, _ -> super#expression expression found
-
-                 method! pattern pattern found =
-                   match pattern.ppat_desc with
-                   | (Ppat_var { txt = name; _ } | Ppat_alias (_, { txt = name; _ })) when String.equal name txt -> `Whole
-                   | _ -> super#pattern pattern found
-              end
-            in
-            [ (txt, usage#expression body (`Fields [])) ]
+            [ (txt, Free.use txt body) ]
         | Pparam_val _ | Pparam_newtype _ -> [])
       params
   in
@@ -201,9 +183,9 @@ let component ~loc ~name ~props_constructor expression =
           | _ -> None
         in
         match (default, Option.bind variable (fun variable -> List.assoc_opt variable read_fields)) with
-        | None, Some (`Fields fields) ->
+        | None, Some (Free.Fields fields) ->
             List.rev_map (fun field -> [%expr Melhole.View.Input [%e pexp_field ~loc (evar ~loc name) field]]) fields
-        | (None | Some _), (Some (`Fields _ | `Whole) | None) -> [ [%expr Melhole.View.Input [%e evar ~loc name]] ])
+        | (None | Some _), (Some (Free.Fields _ | Whole) | None) -> [ [%expr Melhole.View.Input [%e evar ~loc name]] ])
       names
       (List.filteri (fun index _ -> index < List.length names) labelled)
   in

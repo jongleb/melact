@@ -590,6 +590,15 @@ passes the whole record to a function renders on every change and shows the thir
 child whose prop default reads a field follows it; comparing the record whole, or treating a whole
 use as a field use, break it.
 
+The same holds for a compiled list. A loop's rows are refreshed when one of its outer inputs
+changes, the values of the component the rows read. A record the rows use only as `r.f` counts by
+those fields: in the keyed benchmark the rows read `state.selection`, so updating every tenth row
+or swapping two, which make a new `state`, no longer project all the other rows again. A name a row
+reaches through a `let` of the component, or uses whole anywhere in the row, stays a whole input. A
+dual law reads one record three ways (a field, a let of another field, a function given the whole
+record) through random changes; refining through the let, or treating a whole use as fields, each
+break it.
+
 ## Values written in props
 
 reason-react code writes closures, style records, arrays, tuples and child elements straight into
