@@ -1,0 +1,140 @@
+(* An event viewer like the team's: 400 events over 200 spans, rows that read their offsetTop while
+   they render, a search field debounced by an effect, and a popover placed by a layout effect. *)
+
+external set_timeout : (unit -> unit) -> int -> int = "setTimeout"
+external clear_timeout : int -> unit = "clearTimeout"
+external bounding_top : Dom.element -> float = "top" [@@mel.get]
+external rect : Dom.element -> Dom.element = "getBoundingClientRect" [@@mel.send]
+
+type level = Debug | Info | Warn | Error
+
+type event = { id : int; span : int; level : level; service : string; message : string; duration : int }
+
+let events =
+  let seed = Classic.Seed.make 42 in
+  Array.init 400 (fun id ->
+      {
+        id;
+        span = Classic.Seed.next seed 200;
+        level = [| Debug; Info; Warn; Error |].(Classic.Seed.next seed 4);
+        service = Classic.Seed.pick seed Classic.words;
+        message = Classic.sentence seed 6;
+        duration = Classic.Seed.next seed 900;
+      })
+
+let level_name = function Debug -> "debug" | Info -> "info" | Warn -> "warn" | Error -> "error"
+
+module Level_cell = struct
+  let[@react.component] make ~level = <td className=("level " ^ level_name level)>(React.string (level_name level))</td>
+end
+
+module Text_cell = struct
+  let[@react.component] make ~text ~className = <td className>(React.string text)</td>
+end
+
+module Duration_cell = struct
+  let[@react.component] make ~duration =
+    <td className="duration">
+      <span className="bar" style=(ReactDOM.Style.make ~width:(string_of_int (duration / 10) ^ "px") ()) />
+      (React.string (string_of_int duration ^ " ms"))
+    </td>
+end
+
+module Expandable_row = struct
+  let[@react.component] make ~event ~onPopover =
+    let expanded, setExpanded = React.useState (fun () -> false) in
+    let row = React.useRef Js.Nullable.null in
+    let top = Js.Nullable.toOption row.current |> Option.fold ~none:0 ~some:Classic.offset_top in
+    <React.Fragment>
+      <tr ref=(ReactDOM.Ref.domRef row) className="event-row" onClick=(fun _ -> setExpanded (fun value -> not value))>
+        <Text_cell text=(string_of_int event.id) className="id" />
+        <Level_cell level=event.level />
+        <Text_cell text=event.service className="service" />
+        <Text_cell text=event.message className="message" />
+        <Duration_cell duration=event.duration />
+        <td>
+          <button className="span-button" onClick=(fun click -> React.Event.Mouse.stopPropagation click; onPopover event)>
+            (React.string ("span " ^ string_of_int event.span))
+          </button>
+        </td>
+      </tr>
+      (match expanded with
+       | true ->
+           <tr className="details">
+             <td colSpan=6 style=(ReactDOM.Style.make ~paddingTop:(string_of_int (top mod 4) ^ "px") ())>
+               (React.string event.message)
+             </td>
+           </tr>
+       | false -> React.null)
+    </React.Fragment>
+end
+
+module Event_line = struct
+  let[@react.component] make ~event ~onPopover = <Expandable_row event onPopover />
+end
+
+let use_debounce value delay =
+  let settled, setSettled = React.useState (fun () -> value) in
+  React.useEffect1
+    (fun () ->
+      let timer = set_timeout (fun () -> setSettled (fun _ -> value)) delay in
+      Some (fun () -> clear_timeout timer))
+    [| value |];
+  settled
+
+module Popover = struct
+  let[@react.component] make ~event ~onClose =
+    let box = React.useRef Js.Nullable.null in
+    let top, setTop = React.useState (fun () -> -1.) in
+    React.useLayoutEffect1
+      (fun () ->
+        Js.Nullable.toOption box.current |> Option.iter (fun element -> setTop (fun _ -> bounding_top (rect element) +. 8.));
+        None)
+      [| event.id |];
+    <div
+      ref=(ReactDOM.Ref.domRef box)
+      className="popover"
+      style=(ReactDOM.Style.make ~top:(Js.Float.toString top ^ "px") ())>
+      <strong>(React.string ("span " ^ string_of_int event.span))</strong>
+      <p>(React.string event.message)</p>
+      <button className="close" onClick=(fun _ -> onClose ())>(React.string "close")</button>
+    </div>
+end
+
+(** The event a popover is open for, if any. *)
+type popover = Closed | Open of event
+
+let contains text query =
+  match query with
+  | "" -> true
+  | _ -> Js.String.includes ~search:query text
+
+module App = struct
+  let[@react.component] make () =
+    let draft, setDraft = React.useState (fun () -> "") in
+    let query = use_debounce draft 500 in
+    let popover, setPopover = React.useState (fun () -> Closed) in
+    let shown = Js.Array.filter ~f:(fun event -> contains event.message query || contains event.service query) events in
+    <div className="viewer">
+      <input
+        className="search"
+        value=draft
+        onChange=(fun change ->
+          let value = (React.Event.Form.target change)##value in
+          setDraft (fun _ -> value)) />
+      <span className="count">(React.string (string_of_int (Array.length shown) ^ " events"))</span>
+      <table>
+        <tbody>
+          (shown
+          |> Array.map (fun event ->
+                 <Event_line key=(string_of_int event.id) event onPopover=(fun event -> setPopover (fun _ -> Open event)) />)
+          |> React.array)
+        </tbody>
+      </table>
+      (match popover with
+       | Closed -> React.null
+       | Open event -> <Popover event onClose=(fun () -> setPopover (fun _ -> Closed)) />)
+    </div>
+end
+
+let () = Classic.start (fun () -> <App />)
