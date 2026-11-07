@@ -348,3 +348,82 @@ let () =
                  in
                  step 10 (Array.init 12 (fun index -> "k" ^ string_of_int index))))
             [%mel.obj { numRuns = 60 }]))
+
+external document_object : prototype = "document"
+
+(** Named nodes, each with its children. *)
+type tree = Tree of (string * tree) array
+
+let tick_context = React.createContext 0
+let tick_send = ref (fun (_ : int -> int) -> ())
+let rendered = ref []
+let note name = rendered := name :: !rendered
+
+module Tick_provider = struct
+  let make = React.Context.provider tick_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Node_leaf = struct
+  let[@react.component] make ~name ~seen =
+    let tick = React.useContext tick_context in
+    note name;
+    <i>(React.string (name ^ string_of_int tick ^ string_of_int seen))</i>
+end
+
+module Node_low = struct
+  let[@react.component] make ~name ~tree =
+    let tick = React.useContext tick_context in
+    note name;
+    let (Tree children) = tree in
+    <p>(React.string (name ^ string_of_int tick))(React.array (Array.map (fun (key, _) -> <Node_leaf key name=key seen=tick />) children))</p>
+end
+
+module Node_top = struct
+  let[@react.component] make ~name ~tree =
+    let tick = React.useContext tick_context in
+    note name;
+    let (Tree children) = tree in
+    <div>(React.string (name ^ string_of_int tick))(React.array (Array.map (fun (key, sub) -> <Node_low key name=key tree=sub />) children))</div>
+end
+
+module Ticking = struct
+  let[@react.component] make ~tree =
+    let tick, setTick = React.useState (fun () -> 0) in
+    tick_send := setTick;
+    <Tick_provider value=tick><Node_top name="r" tree /></Tick_provider>
+end
+
+let () =
+  describe "a context read by a deep tree of pure components" (fun () ->
+      test_async "renders every reader once per change and walks the page once, whatever the depth" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:4 ~longest:40) (fun values ->
+                 let tape = tape values in
+                 let tree =
+                   Tree
+                     (Array.init (17 + draw tape 4) (fun index ->
+                          let key = "r." ^ string_of_int index in
+                          (key, Tree (Array.init (1 + draw tape 3) (fun leaf -> (key ^ "." ^ string_of_int leaf, Tree [||]))))))
+                 in
+                 let readers = match tree with Tree low -> 1 + Array.fold_left (fun sum (_, Tree leaves) -> sum + 1 + Array.length leaves) 0 low in
+                 let root = attached () in
+                 let client = ReactDOM.Client.createRoot root in
+                 let* () = act (fun () -> ReactDOM.Client.render client <Ticking tree />) in
+                 let rec step remaining =
+                   match remaining with
+                   | 0 -> act (fun () -> ReactDOM.Client.unmount client ())
+                   | _ ->
+                       rendered := [];
+                       let walks = spy_on document_object "createTreeWalker" in
+                       let* () = act (fun () -> !tick_send (fun tick -> tick + 1)) in
+                       let walked = Array.length (calls (mock walks)) in
+                       restore walks;
+                       expect (List.length !rendered, List.length (List.sort_uniq compare !rendered), walked <= 1)
+                       |. to_equal (readers, readers, true);
+                       step (remaining - 1)
+                 in
+                 step (1 + draw tape 3)))
+            [%mel.obj { numRuns = 30 }]))

@@ -1102,9 +1102,7 @@ module Tick_provider = struct
   [@@mel.obj]
 end
 
-module rec Forest_node : sig
-  val make : name:string -> n:int -> tree:tree -> React.element [@@react.component]
-end = struct
+module Forest_leaf = struct
   let[@react.component] make ~name ~n ~tree =
     let tick = React.useContext tick_context in
     React.useLayoutEffect2
@@ -1120,7 +1118,67 @@ end = struct
     let (Tree children) = tree in
     <div>
       (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
-      (React.array (Array.map (fun (key, sub) -> <Forest_node key name=key n tree=sub />) children))
+      (React.array (Array.map (fun (key, _) -> <b key>(React.string key)</b>) children))
+    </div>
+end
+
+module Forest_low = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, sub) -> <Forest_leaf key name=key n tree=sub />) children))
+    </div>
+end
+
+module Forest_middle = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, sub) -> <Forest_low key name=key n tree=sub />) children))
+    </div>
+end
+
+module Forest_node = struct
+  let[@react.component] make ~name ~n ~tree =
+    let tick = React.useContext tick_context in
+    React.useLayoutEffect2
+      (fun () ->
+        log ("layout " ^ name);
+        Some (fun () -> log ("unlayout " ^ name)))
+      (tick, n);
+    React.useEffect2
+      (fun () ->
+        log ("passive " ^ name);
+        Some (fun () -> log ("unpassive " ^ name)))
+      (tick, n);
+    let (Tree children) = tree in
+    <div>
+      (React.string (name ^ ":" ^ string_of_int tick ^ ":" ^ string_of_int n ^ ";"))
+      (React.array (Array.map (fun (key, sub) -> <Forest_middle key name=key n tree=sub />) children))
     </div>
 end
 
