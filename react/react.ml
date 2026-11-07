@@ -302,7 +302,29 @@ let useId key () =
 let useSyncExternalStoreWithServer key ~subscribe ~getSnapshot ~getServerSnapshot:_ =
   useSyncExternalStore key ~subscribe ~getSnapshot
 
-let[@warning "-16"] useDeferredValue value ?initialValue:_ = value
+(** Whether a deferred value's catch-up render is already asked for. *)
+type due = Due | Settled
+
+type 'a deferred = { mutable shown : 'a; mutable wanted : 'a; mutable due : due }
+
+let[@warning "-16"] useDeferredValue key value ?initialValue:_ =
+  let instance = Instance.current () in
+  match Instance.found instance key with
+  | None ->
+      Instance.put instance key { shown = value; wanted = value; due = Settled };
+      value
+  | Some cell -> (
+      cell.wanted <- value;
+      match (Melhole.Dom_api.same cell.shown value, cell.due) with
+      | true, _ -> value
+      | false, Due -> cell.shown
+      | false, Settled ->
+          cell.due <- Due;
+          Instance.defer (fun () ->
+              cell.due <- Settled;
+              cell.shown <- cell.wanted;
+              Instance.invalidate instance);
+          cell.shown)
 let startTransition run = run ()
 let useTransition () = (false, startTransition)
 
@@ -424,6 +446,8 @@ let useTransitionAsync () =
 let act run =
   run ();
   Instance.flush ();
+  let rec caught_up () = match Instance.run_deferred () with `Ran -> Instance.flush (); caught_up () | `Idle -> () in
+  caught_up ();
   View.restore_controlled ();
   Js.Promise.resolve ()
 
@@ -431,6 +455,8 @@ let actAsync run =
   Js.Promise.then_
     (fun () ->
       Instance.flush ();
+      let rec caught_up () = match Instance.run_deferred () with `Ran -> Instance.flush (); caught_up () | `Idle -> () in
+      caught_up ();
       View.restore_controlled ();
       Js.Promise.resolve ())
     (run ())

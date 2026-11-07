@@ -406,7 +406,10 @@ val useSyncExternalStoreWithServer :
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 (** Melact renders without interruption, so the deferred value is the value itself. *)
-val useDeferredValue : 'a -> ?initialValue:'a -> 'a
+(** A deferred value's cell. *)
+type 'a deferred
+
+val useDeferredValue : 'a deferred Melact_runtime.Hook.key -> 'a -> ?initialValue:'a -> 'a
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useDebugValue : 'value -> ?format:('value -> string) -> unit -> unit

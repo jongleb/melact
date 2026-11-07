@@ -71,3 +71,9 @@ val on_unmount : instance -> (unit -> unit) -> unit
 val consume : instance -> 'value Context.t -> 'value
 val settle : unit -> unit
 val flush : unit -> unit
+
+(** Runs [job] in a later task, outside any render: a deferred value catching up. *)
+val defer : (unit -> unit) -> unit
+
+(** Runs the deferred jobs now, as [act] does. *)
+val run_deferred : unit -> [ `Ran | `Idle ]

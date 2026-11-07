@@ -666,6 +666,20 @@ let flush () =
 
 let () = Events.after_controlled := flush
 
+let deferred = ref []
+
+let rec defer job =
+  (match !deferred with [] -> Dom_api.set_timeout (fun () -> ignore (run_deferred ())) 0 | _ :: _ -> ());
+  deferred := job :: !deferred
+
+and run_deferred () =
+  match List.rev !deferred with
+  | [] -> `Idle
+  | jobs ->
+      deferred := [];
+      List.iter (fun job -> job ()) jobs;
+      `Ran
+
 let position = ref Melhole_server.Tree.root
 let around = ref []
 

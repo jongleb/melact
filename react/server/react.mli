@@ -399,7 +399,7 @@ val useSyncExternalStoreWithServer :
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 (** The value itself, as on React's server. *)
-val useDeferredValue : 'a -> ?initialValue:'a -> 'a
+val useDeferredValue : unit Melact_server.Hook.key -> 'a -> ?initialValue:'a -> 'a
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
 val useDebugValue : 'value -> ?format:('value -> string) -> unit -> unit

@@ -1282,6 +1282,17 @@ module Popovers = struct
     match shown with Some opening -> <Popover opening /> | None -> React.null
 end
 
+let deferring_send = ref (fun (_ : string -> string) -> ())
+
+module Deferring = struct
+  let[@react.component] make () =
+    let text, setText = React.useState (fun () -> "") in
+    deferring_send := setText;
+    let deferred = React.useDeferredValue text ~initialValue:text in
+    log (text ^ "/" ^ deferred);
+    <p>(React.string (text ^ "/" ^ deferred))</p>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -3164,6 +3175,29 @@ let () =
              in
              step 5 [] []))
         [%mel.obj { numRuns = 40 }]));
+  describe "a deferred value" (fun () ->
+    test_async "shows the old value in the urgent render and catches up in its own render, as React does" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:1 ~longest:10) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Deferring /> in
+             let words = [| "a"; "b"; "ab"; "" |] in
+             let rec step remaining current seen expected =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   expect (List.rev seen) |. to_equal (List.rev expected);
+                   finish ()
+               | _ ->
+                   let others = List.filter (fun other -> not (String.equal other current)) (Array.to_list words) in
+                   let word = List.nth others (draw tape (List.length others)) in
+                   let* () = act (fun () -> !deferring_send (fun _ -> word)) in
+                   step (remaining - 1) word
+                     ((take (), text_content root) :: seen)
+                     (([ word ^ "/" ^ current; word ^ "/" ^ word ], word ^ "/" ^ word) :: expected)
+             in
+             step 6 "" [] []))
+        [%mel.obj { numRuns = 60 }]));
   describe "text outside ASCII" (fun () ->
     test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->
       let* root, client = mount <Unicode /> in

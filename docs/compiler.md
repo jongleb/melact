@@ -591,6 +591,17 @@ a prop through random changes: the text and what the effect saw match React; a m
 the first attempt's effect breaks it. A component that sets its own state on every render throws
 "too many re-renders", as React does.
 
+### Deferred values
+
+`useDeferredValue` gives the render that changed its value the value it showed before, and asks
+for a render of its own in a later task, where the deferred value catches up, as React's background
+render does without interrupting it. A keystroke in a search field paints at once and the long list
+that reads the deferred text renders in the next task; several keystrokes before it runs catch up
+once. `act` runs that work too, as React's does. A dual law logs every render's pair of text and
+deferred text through random changes and finds React's two renders per change; the hook that
+returned its value at once breaks it. On the corpus's playlist search Melact went from 1.14 to 1.21
+times React's time to 0.75 to 1.07.
+
 ### Reading layout while rendering
 
 React renders every dirty component first and writes the DOM afterwards, in its commit, so a

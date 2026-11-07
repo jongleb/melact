@@ -143,7 +143,7 @@ let useSyncExternalStore _ ~subscribe:_ ~getSnapshot:_ =
     "Missing getServerSnapshot, which is required for server-rendered content. Will revert to client rendering."
 
 let useSyncExternalStoreWithServer _ ~subscribe:_ ~getSnapshot:_ ~getServerSnapshot = getServerSnapshot ()
-let[@warning "-16"] useDeferredValue value ?initialValue:_ = value
+let[@warning "-16"] useDeferredValue (_ : unit Melact_server.Hook.key) value ?initialValue:_ = value
 let useDebugValue _ ?format:_ () = ()
 let useImperativeHandle0 _ _ _ = ()
 let useImperativeHandle1 _ _ _ _ = ()
