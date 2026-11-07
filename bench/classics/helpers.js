@@ -114,11 +114,13 @@
         changed = true;
       });
       observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+      const idle = () => new Promise((done) => requestIdleCallback(() => done(), { timeout: 5000 }));
       while (changed && rounds < limit) {
         changed = false;
         await frame();
         await frame();
         await tick();
+        if (!changed) await idle();
         rounds++;
       }
       observer.disconnect();

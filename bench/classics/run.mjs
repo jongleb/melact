@@ -245,6 +245,7 @@ const measureApp = async (browser, origin, app) => {
       return row;
     });
     report.rates[rate] = {
+      runs,
       rows,
       heap: Object.fromEntries(frameworks.map((framework) => [framework, median(samples[framework].map((sample) => sample.heap))])),
       crashes: Object.fromEntries(
@@ -266,7 +267,8 @@ const writeMarkdown = (all) => {
     "(React 18.3.1, production build) and against Melact, bundled by esbuild, and driven through its",
     "`scenario.mjs` in headless Chromium (Playwright). Per step: median over the runs of the main-thread",
     "busy time (CDP `TaskDuration` delta, from before the step until the page has settled: no DOM mutation",
-    "during two animation frames and a task), and of the `LayoutCount` and `RecalcStyleCount` deltas.",
+    "during two animation frames, a task and an idle callback), and of the `LayoutCount` and `RecalcStyleCount`",
+    "deltas. Runs per app: 5 at 1x; 5 at 4x except the apps marked with their run count.",
     "Ratio is Melact / React; above 1 Melact is slower. DOM: the root's and the portal container's",
     "markup after the step (attributes sorted, form fields' `value`/`checked` added), React's first run",
     "against Melact's first run.",
@@ -290,7 +292,19 @@ const writeMarkdown = (all) => {
         for (const crash of data.crashes[framework]) crashes.push({ app: report.app, rate, framework, crash });
     }
   }
-  lines.push("## Where Melact is slower (ratio > 1.05)", "");
+  lines.push("## Summary", "");
+  for (const rate of rates) {
+    const measured = Object.values(all)
+      .flatMap((report) => report.rates[rate]?.rows ?? [])
+      .filter((row) => row.react.task >= 5 && row.melact.task > 0);
+    const ratios = measured.map((row) => row.melact.task / row.react.task);
+    const mean = Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length);
+    lines.push(
+      `- CPU ${rate}x: ${measured.length} steps of at least 5 ms under React; geometric mean Melact/React ${format(mean, 2)}; ` +
+        `Melact slower (> 1.05) in ${ratios.filter((ratio) => ratio > 1.05).length}, faster (< 0.95) in ${ratios.filter((ratio) => ratio < 0.95).length}.`,
+    );
+  }
+  lines.push("", "## Where Melact is slower (ratio > 1.05)", "");
   lines.push("| app | cpu | step | React ms | Melact ms | ratio | layouts R/M | styles R/M |", "|---|---|---|---:|---:|---:|---:|---:|");
   for (const { app, rate, row, ratio } of losses.sort((a, b) => b.ratio - a.ratio))
     lines.push(
@@ -304,12 +318,16 @@ const writeMarkdown = (all) => {
     );
   lines.push("", "## DOM differences and crashes", "");
   if (!differences.length && !crashes.length) lines.push("None.");
-  for (const { app, row } of differences)
+  const byApp = Map.groupBy(differences, ({ app }) => app);
+  for (const [app, found] of byApp) {
+    const { row } = found[0];
+    const steps = Object.values(all).find((report) => report.app === app).rates[rates[0]].rows.length - 1;
     lines.push(
-      `- **${app}**, after \`${row.step}\`: first difference at character ${row.difference.at}`,
+      `- **${app}**: differs after ${found.length} of ${steps} steps (${found.map(({ row }) => "`" + row.step + "`").join(", ")}); after \`${row.step}\`, at character ${row.difference.at}:`,
       "  - React: `" + row.difference.react.replace(/`/g, "'").replace(/\n/g, " ") + "`",
       "  - Melact: `" + row.difference.melact.replace(/`/g, "'").replace(/\n/g, " ") + "`",
     );
+  }
   for (const { app, rate, framework, crash } of crashes)
     lines.push(`- **${app}** (${rate}x, ${framework}) crashed at \`${crash.step}\`: \`${crash.error.split("\n")[0].replace(/`/g, "'")}\``);
   if (rawOnly.size)
@@ -331,7 +349,7 @@ const writeMarkdown = (all) => {
       if (!data) continue;
       for (const row of data.rows)
         lines.push(
-          `| ${report.app} | ${row.step} | ${format(row.react.task)} | ${format(row.melact.task)} | ${format(row.melact.task / row.react.task, 2)} | ${format(row.react.layouts, 0)}/${format(row.melact.layouts, 0)} | ${format(row.react.styles, 0)}/${format(row.melact.styles, 0)} | ${row.identical === undefined ? "–" : row.identical ? "yes" : "**no**"} |`,
+          `| ${report.app}${(data.runs ?? 5) === 5 ? "" : ` (${data.runs} runs)`} | ${row.step} | ${format(row.react.task)} | ${format(row.melact.task)} | ${format(row.melact.task / row.react.task, 2)} | ${format(row.react.layouts, 0)}/${format(row.melact.layouts, 0)} | ${format(row.react.styles, 0)}/${format(row.melact.styles, 0)} | ${row.identical === undefined ? "–" : row.identical ? "yes" : "**no**"} |`,
         );
     }
   }
@@ -346,7 +364,10 @@ const writeMarkdown = (all) => {
         })
         .join(" | ")} |`,
     );
-  writeFileSync(args.out ? resultsPath.replace(/\.json$/, ".md") : join(here, "RESULTS.md"), lines.join("\n") + "\n");
+  const target = args.out ? resultsPath.replace(/\.json$/, ".md") : join(here, "RESULTS.md");
+  const kept = existsSync(target) ? readFileSync(target, "utf8").match(/<!-- findings -->[\s\S]*?<!-- \/findings -->\n/) : null;
+  if (kept) lines.splice(lines.indexOf("## Summary"), 0, kept[0]);
+  writeFileSync(target, lines.join("\n") + "\n");
 };
 
 const resultsPath = resolve(here, args.out ?? "results.json");
