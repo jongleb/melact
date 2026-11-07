@@ -448,35 +448,45 @@ let rec settle () =
                let placed = List.filter_map (fun (front, instance) -> Option.map (fun node -> (node, instance)) front) fronted in
                let unplaced = List.filter (fun (front, _) -> Option.is_none front) fronted in
                let starts = nodes_of () in
+               let remaining = ref 0 in
                List.iter
                  (fun (node, instance) ->
-                   Option.fold ~none:(found_set starts node [ instance ])
-                     ~some:(fun others -> found_set starts node (instance :: others))
-                     (Js.Undefined.toOption (found_get starts node)))
+                   match Js.Undefined.toOption (found_get starts node) with
+                   | Some others -> found_set starts node (instance :: others)
+                   | None ->
+                       incr remaining;
+                       found_set starts node [ instance ])
                  placed;
-               let rec common candidate =
-                 match List.for_all (fun (node, _) -> node_contains candidate node) placed with
-                 | true -> Some candidate
-                 | false -> Option.bind (Dom_api.parent_node candidate) common
+               let common first =
+                 List.fold_left
+                   (fun candidate (node, _) ->
+                     let rec up candidate =
+                       match node_contains candidate node with
+                       | true -> Some candidate
+                       | false -> Option.bind (Dom_api.parent_node candidate) up
+                     in
+                     Option.bind candidate up)
+                   (Some first) placed
                in
                let walked = ref [] in
                let take node =
-                 Option.iter
-                   (fun instances ->
+                 match Js.Undefined.toOption (found_get starts node) with
+                 | None -> ()
+                 | Some instances ->
                      walked := List.rev_append (by_depth (List.map (fun instance -> (Some node, instance)) instances)) !walked;
-                     found_delete starts node)
-                   (Js.Undefined.toOption (found_get starts node))
+                     decr remaining;
+                     found_delete starts node
                in
                Option.iter
                  (fun ancestor ->
                    take ancestor;
                    let walker = tree_walker Dom_api.document ancestor (-1) in
                    let rec next () =
-                     match Js.Null.toOption (next_node walker) with
-                     | Some node ->
+                     match (!remaining, Js.Null.toOption (next_node walker)) with
+                     | 0, _ | _, None -> ()
+                     | _, Some node ->
                          take node;
                          next ()
-                     | None -> ()
                    in
                    next ())
                  (Option.bind first common);
@@ -517,10 +527,11 @@ let rec settle () =
               in
               let roots, later =
                 List.partition
-                  (fun (_, instance) ->
+                  (fun instance ->
                     match (instance.status, topmost instance) with Dirty _, `Topmost -> true | (Dirty _ | Clean | Unmounted), _ -> false)
-                  (ordered pending)
+                  pending
               in
+              let roots = ordered roots in
               let rendered =
                 List.filter_map
                   (fun (_, instance) ->
@@ -543,9 +554,7 @@ let rec settle () =
                       | Clean | Dirty _ -> wrote (position_of instance) instance result)
                     rendered);
               dirty :=
-                List.filter_map
-                  (fun (_, instance) -> match instance.status with Dirty _ -> Some instance | Clean | Unmounted -> None)
-                  later
+                List.filter (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false) later
                 @ !dirty;
               rendering `Later
         in
