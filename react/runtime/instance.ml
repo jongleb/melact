@@ -205,7 +205,11 @@ external each_reader : readers -> ((sources -> instance -> unit)[@mel.uncurry]) 
 external clear_readers : readers -> unit = "clear" [@@mel.send]
 
 let read readers instance bits =
-  set_bits readers instance (Option.fold ~none:bits ~some:(union bits) (Js.Undefined.toOption (read_bits readers instance)))
+  match (Js.Undefined.toOption (read_bits readers instance), bits) with
+  | Some Every, _ -> ()
+  | Some (Bits known), Bits more when known lor more = known -> ()
+  | Some known, _ -> set_bits readers instance (union known bits)
+  | None, _ -> set_bits readers instance bits
 
 (** A JavaScript [Map] from a DOM node to the dirty instances that start at it. *)
 type starts
@@ -1054,7 +1058,7 @@ let rec provided : type value. instance -> sources -> value Context.t -> instanc
   | None -> context.default
   | Some above -> (
       match above.kind with
-      | Provides provision -> (
+      | Provides provision when Dom_api.same provision.context.witness context.witness -> (
           match Type.Id.provably_equal provision.context.witness context.witness with
           | Some Equal ->
               if not (member provision.known instance) then (
@@ -1065,20 +1069,20 @@ let rec provided : type value. instance -> sources -> value Context.t -> instanc
               read provision.consumers instance bits;
               provision.value
           | None -> provided instance bits context above.parent)
-      | Renders _ | Catches _ | Suspends _ -> provided instance bits context above.parent)
+      | Provides _ | Renders _ | Catches _ | Suspends _ -> provided instance bits context above.parent)
 
 let consume_source : type value. instance -> sources -> value Context.t -> value =
  fun instance bits context ->
   let rec known providers =
     match providers with
     | [] -> provided instance bits context instance.parent
-    | { kind = Provides provision; _ } :: rest -> (
+    | { kind = Provides provision; _ } :: rest when Dom_api.same provision.context.witness context.witness -> (
         match Type.Id.provably_equal provision.context.witness context.witness with
         | Some Equal ->
             read provision.consumers instance bits;
             provision.value
         | None -> known rest)
-    | { kind = Renders _ | Catches _ | Suspends _; _ } :: rest -> known rest
+    | { kind = Provides _ | Renders _ | Catches _ | Suspends _; _ } :: rest -> known rest
   in
   known instance.providers
 
