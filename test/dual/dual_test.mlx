@@ -1078,6 +1078,21 @@ module Effect_top = struct
     </div>
 end
 
+let unicode_send = ref (fun (_ : int -> int) -> ())
+
+module Unicode = struct
+  let[@react.component] make () =
+    let count, setCount = React.useState (fun () -> 0) in
+    unicode_send := setCount;
+    <div title={js|Закрыть ×|js}>
+      <b>(React.string {js|Привет, мир 🙂|js})</b>
+      <i>(React.string "×")</i>
+      <svg><text>(React.string {js|→ ✓|js})</text></svg>
+      <u>(React.string (match count mod 2 with 0 -> {js|▸|js} | _ -> {js|▾|js}))</u>
+      <s>(React.int count)</s>
+    </div>
+end
+
 module Served = struct
   let[@react.component] make ~start =
     let count, setCount = React.useState (fun () -> start) in
@@ -2788,6 +2803,18 @@ let () =
              ignore (take ());
              finish ()))
         [%mel.obj { numRuns = 60 }]));
+  describe "text outside ASCII" (fun () ->
+    test_async "static text and attributes show the characters written, js strings as Unicode and plain strings as bytes, as reason-react shows them" (fun () ->
+      let* root, client = mount <Unicode /> in
+      let first = (text_content root, get_attribute (select root "div") "title") in
+      let* () = act (fun () -> !unicode_send (fun count -> count + 1)) in
+      let second = text_content root in
+      let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+      expect (first, second)
+      |. to_equal
+           ( ({js|Привет, мир 🙂|js} ^ "×" ^ {js|→ ✓|js} ^ {js|▸|js} ^ "0", {js|Закрыть ×|js}),
+             {js|Привет, мир 🙂|js} ^ "×" ^ {js|→ ✓|js} ^ {js|▾|js} ^ "1" );
+      finish ()));
   describe "styles and React.null" (fun () ->
     test_async "a custom CSS property is set, changed and removed beside an ordinary one, as React does" (fun () ->
       check_async

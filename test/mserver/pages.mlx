@@ -270,7 +270,12 @@ let rec page node =
   | Memo label -> <Memo label />
   | Picked picked -> <Picker picked />
 
-let shown values = <main>(page (decode values))</main>
+let shown values =
+  <main>
+    <b title={js|Закрыть ×|js}>(React.string {js|Привет 🙂|js})</b>
+    <i>(React.string "×")</i>
+    (page (decode values))
+  </main>
 
 let rec on_client node =
   let either first second = match first with `Renders -> second | `Sets_state | `Throws -> first in
