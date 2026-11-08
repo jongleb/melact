@@ -66,9 +66,10 @@ averaged over the runs (`--top=N`, default 15); results go to `bench/profile.jso
 [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) with Meltea and Melact
 added as two more keyed frameworks, the way [dartea](https://github.com/jongleb/dartea) does it. It
 clones the benchmark at a pinned commit into `~/.cache/melact-jfb` (`JFB=dir` moves it), copies the
-Melange output of `bench/meltea` and `bench/melact` into `frameworks/keyed/meltea` and
-`frameworks/keyed/melact` ([`official/meltea`](official/meltea), [`official/melact`](official/melact):
-`package.json`, lockfile, `index.html`; bundled by esbuild and terser into `dist/main.js`), builds
+page rendered at build time and the resuming client of `bench/meltea/prerendered` and
+`bench/melact/prerendered` into `frameworks/keyed/meltea` and `frameworks/keyed/melact`
+([`official/meltea`](official/meltea), [`official/melact`](official/melact): `package.json` and
+lockfile; bundled by esbuild and terser into `dist/main.js`), builds
 the other frameworks from the benchmark's own folders, and runs the official runner in headless
 Chrome. Every other implementation is the benchmark's own; React 18 is the benchmark's
 `react-hooks` with `react@18.3.1` pinned (`react-hooks-18`).

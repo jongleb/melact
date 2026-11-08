@@ -25,9 +25,10 @@ if step build; then
       meltea | melact)
         rm -rf "$keyed/$f"
         mkdir -p "$keyed/$f"
-        cp "$here/$f/package.json" "$here/$f/package-lock.json" "$here/$f/index.html" "$keyed/$f/"
-        cp -R "$repo/_build/default/bench/$f/output" "$keyed/$f/output"
-        chmod -R u+w "$keyed/$f/output"
+        cp "$here/$f/package.json" "$here/$f/package-lock.json" "$keyed/$f/"
+        cp "$repo/_build/default/bench/$f/prerendered/index.html" "$keyed/$f/index.html"
+        cp -R "$repo/_build/default/bench/$f/prerendered/output" "$keyed/$f/output"
+        chmod -R u+w "$keyed/$f/output" "$keyed/$f/index.html"
         (cd "$keyed/$f" && npm ci && npm run build-prod)
         ;;
       react-hooks-18)
