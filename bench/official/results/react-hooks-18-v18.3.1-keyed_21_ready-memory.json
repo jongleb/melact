@@ -1,0 +1,1 @@
+{"framework":"react-hooks-18-v18.3.1-keyed","keyed":true,"benchmark":"21_ready-memory","type":"memory","values":{"DEFAULT":{"min":1.0981025695800781,"max":1.0981025695800781,"median":1.0981025695800781,"mean":1.0981025695800781,"stddev":null,"values":[1.0981025695800781]}}}

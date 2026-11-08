@@ -55,6 +55,53 @@ averaged over the runs (`--top=N`, default 15); results go to `bench/profile.jso
   creating 1,000 rows, and after five more create/clear cycles.
 - Size: the gzip (-9) size of all JS in the production bundle.
 
+# The official js-framework-benchmark
+
+[`official/run.sh`](official/run.sh) runs the real
+[js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) with Meltea and Melact
+added as two more keyed frameworks, the way [dartea](https://github.com/jongleb/dartea) does it. It
+clones the benchmark at a pinned commit into `~/.cache/melact-jfb` (`JFB=dir` moves it), copies the
+Melange output of `bench/meltea` and `bench/melact` into `frameworks/keyed/meltea` and
+`frameworks/keyed/melact` ([`official/meltea`](official/meltea), [`official/melact`](official/melact):
+`package.json`, lockfile, `index.html`; bundled by esbuild and terser into `dist/main.js`), builds
+the other frameworks from the benchmark's own folders, and runs the official runner in headless
+Chrome. Every other implementation is the benchmark's own; React 18 is the benchmark's
+`react-hooks` with `react@18.3.1` pinned (`react-hooks-18`).
+
+```console
+$ bench/official/run.sh                       # build, bench, results
+$ FRAMEWORKS="meltea melact" bench/official/run.sh build bench results
+```
+
+Steps can be named (`build`, `bench`, `results`). `FRAMEWORKS` (default: vanillajs meltea melact
+react-hooks react-hooks-18 svelte vue-vapor solid inferno elm ivi), `BENCHMARKS` (id prefixes),
+`PORT` (default 8080), `CHROME`, `MAX_LOAD` (default 3: before each framework it waits, up to 30
+minutes, for the 1-minute load average to drop below it). `bench` first runs the benchmark's
+`isKeyed` check on every framework. `results` builds the benchmark's results page, copies the raw
+results to [`official/results`](official/results) and saves a screenshot,
+[`official/result.png`](official/result.png).
+
+It measures what the official table measures: the nine CPU operations (median of total duration,
+15 runs, 25 for select row, with the official CPU slowdowns), memory after load, after 1,000 rows
+and after five create/clear cycles, and the size of the implementation files (uncompressed and
+brotli) with first paint. Startup is not in the benchmark's default set at this commit.
+
+Latest run: Apple M5, Chrome 151.0.7922.138 headless, November 8, 2026, benchmark commit `fa510a7`.
+This is my machine, not the official published table. Factors are against the fastest
+implementation in each row, as on the results page.
+
+| | Meltea | Vue Vapor 3.6 | Melact | vanilla | Inferno | Svelte 5 | Solid | ivi | Elm | React 19 | React 18 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CPU, weighted geometric mean | **1.03** | 1.04 | **1.06** | 1.06 | 1.15 | 1.16 | 1.29 | 1.45 | 1.49 | 1.51 | 1.51 |
+| memory, geometric mean | **1.26** | 1.50 | **1.40** | 1.00 | 1.27 | 1.34 | 1.23 | 1.13 | 1.52 | 2.46 | 2.37 |
+| size and first paint, geometric mean | **2.67** | 3.92 | **4.35** | 1.06 | 2.87 | 2.46 | 1.30 | 1.32 | 2.71 | 11.47 | 8.73 |
+| JS, brotli, kB | 10.6 | 18.7 | 18.0 | 2.5 | 9.3 | 9.7 | 4.5 | 4.0 | 10.4 | 51.4 | 39.9 |
+
+The sizes of this run are of an esbuild-only bundle; the terser pass now in the build makes the
+gzip of both about 10% smaller. Other work shared the machine: all numbers come from one pass over
+the eleven frameworks, each started at a 1-minute load between 2.3 and 3 except vanilla (4.5); a
+later rerun of four of them under heavier load was discarded.
+
 # App benchmark
 
 js-framework-benchmark is one list component. [`app/`](app) measures what one state change costs

@@ -1,0 +1,1 @@
+{"framework":"vue-vapor-v3.6.0-rc.5-keyed","keyed":true,"benchmark":"21_ready-memory","type":"memory","values":{"DEFAULT":{"min":0.6974344253540039,"max":0.6974344253540039,"median":0.6974344253540039,"mean":0.6974344253540039,"stddev":null,"values":[0.6974344253540039]}}}

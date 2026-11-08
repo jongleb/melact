@@ -1,0 +1,1 @@
+{"framework":"ivi-v5.1.0-keyed","keyed":true,"benchmark":"21_ready-memory","type":"memory","values":{"DEFAULT":{"min":0.5864286422729492,"max":0.5864286422729492,"median":0.5864286422729492,"mean":0.5864286422729492,"stddev":null,"values":[0.5864286422729492]}}}

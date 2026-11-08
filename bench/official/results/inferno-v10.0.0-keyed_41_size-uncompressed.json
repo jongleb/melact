@@ -1,0 +1,1 @@
+{"framework":"inferno-v10.0.0-keyed","keyed":true,"benchmark":"41_size-uncompressed","type":"size","values":{"DEFAULT":{"min":28.1,"max":28.1,"median":28.1,"mean":28.1,"stddev":null,"values":[28.1]}}}

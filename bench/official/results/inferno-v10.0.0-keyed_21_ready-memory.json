@@ -1,0 +1,1 @@
+{"framework":"inferno-v10.0.0-keyed","keyed":true,"benchmark":"21_ready-memory","type":"memory","values":{"DEFAULT":{"min":0.6335010528564453,"max":0.6335010528564453,"median":0.6335010528564453,"mean":0.6335010528564453,"stddev":null,"values":[0.6335010528564453]}}}
