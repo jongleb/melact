@@ -8,7 +8,7 @@ type row = { id : int; label : string }
 (** The row whose label was clicked last. *)
 type selection = Unselected | Selected of int
 
-type model = { rows : row list; next : int; seed : int; selection : selection }
+type model = { rows : row array; next : int; seed : int; selection : selection }
 
 type message = Run | Run_lots | Add | Update | Clear | Swap_rows | Select of int | Remove of int
 
@@ -28,7 +28,7 @@ let build model count =
   let pick words seed = words.((seed lsr 8) mod Array.length words) in
   let rec rows made id seed count =
     match count with
-    | 0 -> (List.rev made, id, seed)
+    | 0 -> (Array.of_list (List.rev made), id, seed)
     | _ ->
         let adjective = step seed in
         let colour = step adjective in
@@ -50,28 +50,27 @@ let update message model =
       { rows; next; seed; selection = Unselected }
   | Add ->
       let rows, next, seed = build model 1000 in
-      { model with rows = model.rows @ rows; next; seed }
+      { model with rows = Array.append model.rows rows; next; seed }
   | Update ->
       {
         model with
         rows =
-          List.mapi
+          Array.mapi
             (fun index row ->
               match index mod 10 with 0 -> { row with label = row.label ^ " !!!" } | _ -> row)
             model.rows;
       }
-  | Clear -> { model with rows = []; selection = Unselected }
+  | Clear -> { model with rows = [||]; selection = Unselected }
   | Swap_rows -> (
-      let rows = Array.of_list model.rows in
-      match Array.length rows > 998 with
+      match Array.length model.rows > 998 with
       | true ->
-          let second = rows.(1) in
-          rows.(1) <- rows.(998);
-          rows.(998) <- second;
-          { model with rows = Array.to_list rows }
+          let rows = Array.copy model.rows in
+          rows.(1) <- model.rows.(998);
+          rows.(998) <- model.rows.(1);
+          { model with rows }
       | false -> model)
   | Select id -> { model with selection = Selected id }
-  | Remove id -> { model with rows = List.filter (fun row -> row.id <> id) model.rows }
+  | Remove id -> { model with rows = Js.Array.filter ~f:(fun row -> row.id <> id) model.rows }
 
 let view { rows; selection; _ } =
   let button id title message =
@@ -112,7 +111,7 @@ let view { rows; selection; _ } =
       </div>
     </div>
     <table className="table table-hover table-striped test-data">
-      <tbody>(Html.list (List.map row rows))</tbody>
+      <tbody>(Html.array (Array.map row rows))</tbody>
     </table>
     <span className="preloadicon glyphicon glyphicon-remove" ariaHidden=true />
   </div>
@@ -124,7 +123,7 @@ let () =
         (Program.sandbox
            ~init:
              {
-               rows = [];
+               rows = [||];
                next = 1;
                seed = int_of_float (Js.Math.random () *. 1e9);
                selection = Unselected;

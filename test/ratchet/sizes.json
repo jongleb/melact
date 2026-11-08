@@ -1,7 +1,7 @@
 {
   "sizes": {
     "bench/melact": 20550,
-    "bench/meltea": 12124,
+    "bench/meltea": 11746,
     "bench/ssr/melact client": 20249,
     "bench/ssr/meltea client": 12805,
     "examples/counter": 13887,

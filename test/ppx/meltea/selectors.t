@@ -79,3 +79,14 @@ guard that is not an equality:
   Melhole.View.Unselecting
   $ row '~className:(match chosen with Some k when k > id -> "on" | _ -> "")'
   Melhole.View.Unselecting
+
+Html.array over Array.map is the same keyed loop, reading the array as it is, and Html.list over
+List.map makes its array from the list only when the list changes:
+
+  $ cat > arrays.ml <<'EOF_'
+  > let by_array rows = ((ul ~children:[ Html.array (Array.map (fun id -> ((li ~key:(string_of_int id) ~children:[ Html.int id ] ()) [@JSX])) rows) ] ()) [@JSX])
+  > let by_list rows = ((ul ~children:[ Html.list (List.map (fun id -> ((li ~key:(string_of_int id) ~children:[ Html.int id ] ()) [@JSX])) rows) ] ()) [@JSX])
+  > EOF_
+  $ ./pp.exe -impl arrays.ml | grep -o "Melhole.View.rows [a-z_]* [A-Za-z_.]*"
+  Melhole.View.rows rows Melhole.View.arrayed
+  Melhole.View.rows rows Stdlib.Array.of_list
