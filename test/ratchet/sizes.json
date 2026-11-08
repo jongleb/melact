@@ -1,40 +1,40 @@
 {
   "sizes": {
-    "bench/melact": 20542,
-    "bench/meltea": 11743,
-    "bench/ssr/melact client": 20251,
-    "bench/ssr/meltea client": 12796,
-    "examples/counter": 13889,
-    "examples/todomvc": 20143,
-    "bench/classics/admin": 31508,
-    "bench/classics/autocomplete": 28686,
-    "bench/classics/blocks": 31003,
-    "bench/classics/calendar": 45286,
-    "bench/classics/chat": 30747,
+    "bench/melact": 20544,
+    "bench/meltea": 11745,
+    "bench/ssr/melact client": 20259,
+    "bench/ssr/meltea client": 12794,
+    "examples/counter": 13891,
+    "examples/todomvc": 20142,
+    "bench/classics/admin": 31503,
+    "bench/classics/autocomplete": 28697,
+    "bench/classics/blocks": 31004,
+    "bench/classics/calendar": 45280,
+    "bench/classics/chat": 30745,
     "bench/classics/chess": 29829,
-    "bench/classics/conduit": 32515,
-    "bench/classics/dashboard": 33807,
-    "bench/classics/datagrid": 31606,
-    "bench/classics/diff": 35312,
-    "bench/classics/email": 31838,
-    "bench/classics/eventtable": 30572,
-    "bench/classics/feed": 28756,
+    "bench/classics/conduit": 32516,
+    "bench/classics/dashboard": 33808,
+    "bench/classics/datagrid": 31610,
+    "bench/classics/diff": 35311,
+    "bench/classics/email": 31839,
+    "bench/classics/eventtable": 30571,
+    "bench/classics/feed": 28761,
     "bench/classics/filetree": 28558,
-    "bench/classics/gallery": 29971,
-    "bench/classics/gantt": 44540,
-    "bench/classics/hackernews": 27790,
-    "bench/classics/jsontree": 26429,
-    "bench/classics/kanban": 32781,
-    "bench/classics/logs": 29945,
+    "bench/classics/gallery": 29966,
+    "bench/classics/gantt": 44542,
+    "bench/classics/hackernews": 27792,
+    "bench/classics/jsontree": 26433,
+    "bench/classics/kanban": 32783,
+    "bench/classics/logs": 29942,
     "bench/classics/markdown": 31692,
-    "bench/classics/minesweeper": 22383,
-    "bench/classics/playlist": 45925,
-    "bench/classics/settings": 32555,
-    "bench/classics/shop": 30630,
-    "bench/classics/spreadsheet": 31413,
-    "bench/classics/todomvc": 23508,
-    "bench/classics/trace": 32572,
-    "bench/classics/virtuallist": 26553,
+    "bench/classics/minesweeper": 22387,
+    "bench/classics/playlist": 45923,
+    "bench/classics/settings": 32560,
+    "bench/classics/shop": 30635,
+    "bench/classics/spreadsheet": 31415,
+    "bench/classics/todomvc": 23507,
+    "bench/classics/trace": 32579,
+    "bench/classics/virtuallist": 26544,
     "bench/classics/wizard": 34079
   },
   "growth": [
@@ -369,6 +369,92 @@
         "bench/classics/wizard": [
           34078,
           34079
+        ]
+      }
+    },
+    {
+      "date": "2026-11-08",
+      "reason": "content-visibility groups merge lazily (approved by the user 2026-11-08)",
+      "grown": {
+        "bench/melact": [
+          20542,
+          20544
+        ],
+        "bench/meltea": [
+          11743,
+          11745
+        ],
+        "bench/ssr/melact client": [
+          20251,
+          20259
+        ],
+        "examples/counter": [
+          13889,
+          13891
+        ],
+        "bench/classics/autocomplete": [
+          28686,
+          28697
+        ],
+        "bench/classics/blocks": [
+          31003,
+          31004
+        ],
+        "bench/classics/conduit": [
+          32515,
+          32516
+        ],
+        "bench/classics/dashboard": [
+          33807,
+          33808
+        ],
+        "bench/classics/datagrid": [
+          31606,
+          31610
+        ],
+        "bench/classics/email": [
+          31838,
+          31839
+        ],
+        "bench/classics/feed": [
+          28756,
+          28761
+        ],
+        "bench/classics/gantt": [
+          44540,
+          44542
+        ],
+        "bench/classics/hackernews": [
+          27790,
+          27792
+        ],
+        "bench/classics/jsontree": [
+          26429,
+          26433
+        ],
+        "bench/classics/kanban": [
+          32781,
+          32783
+        ],
+        "bench/classics/minesweeper": [
+          22383,
+          22387
+        ],
+        "bench/classics/settings": [
+          32555,
+          32560
+        ],
+        "bench/classics/shop": [
+          30630,
+          30635
+        ],
+        "bench/classics/spreadsheet": [
+          31413,
+          31415
+        ],
+        "bench/classics/trace": [
+          32572,
+          32579
         ]
       }
     }
