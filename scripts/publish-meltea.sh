@@ -41,6 +41,7 @@ cp "$root"/assets/compiled.svg "$root"/assets/compiled-dark.svg "$root"/assets/m
   "$root"/assets/served.svg "$root"/assets/served-dark.svg \
   "$root"/assets/fanout.svg "$root"/assets/fanout-dark.svg \
   "$root"/assets/remember.svg "$root"/assets/remember-dark.svg \
+  "$root"/assets/slices.svg "$root"/assets/slices-dark.svg \
   "$root"/assets/hot.svg "$root"/assets/hot-dark.svg \
   "$root"/assets/speed.svg "$root"/assets/speed-dark.svg assets/
 
