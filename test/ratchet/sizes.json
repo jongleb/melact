@@ -1,41 +1,41 @@
 {
   "sizes": {
-    "bench/melact": 20550,
-    "bench/meltea": 11746,
-    "bench/ssr/melact client": 20249,
-    "bench/ssr/meltea client": 12805,
-    "examples/counter": 13887,
-    "examples/todomvc": 20133,
-    "bench/classics/admin": 31506,
-    "bench/classics/autocomplete": 28695,
+    "bench/melact": 20542,
+    "bench/meltea": 11743,
+    "bench/ssr/melact client": 20251,
+    "bench/ssr/meltea client": 12796,
+    "examples/counter": 13889,
+    "examples/todomvc": 20143,
+    "bench/classics/admin": 31508,
+    "bench/classics/autocomplete": 28686,
     "bench/classics/blocks": 31003,
-    "bench/classics/calendar": 45271,
-    "bench/classics/chat": 30740,
-    "bench/classics/chess": 29828,
-    "bench/classics/conduit": 32519,
-    "bench/classics/dashboard": 33818,
-    "bench/classics/datagrid": 31605,
-    "bench/classics/diff": 35315,
-    "bench/classics/email": 31841,
-    "bench/classics/eventtable": 30558,
-    "bench/classics/feed": 28747,
-    "bench/classics/filetree": 28542,
-    "bench/classics/gallery": 29977,
-    "bench/classics/gantt": 44525,
-    "bench/classics/hackernews": 27798,
-    "bench/classics/jsontree": 26419,
-    "bench/classics/kanban": 32777,
+    "bench/classics/calendar": 45286,
+    "bench/classics/chat": 30747,
+    "bench/classics/chess": 29829,
+    "bench/classics/conduit": 32515,
+    "bench/classics/dashboard": 33807,
+    "bench/classics/datagrid": 31606,
+    "bench/classics/diff": 35312,
+    "bench/classics/email": 31838,
+    "bench/classics/eventtable": 30572,
+    "bench/classics/feed": 28756,
+    "bench/classics/filetree": 28558,
+    "bench/classics/gallery": 29971,
+    "bench/classics/gantt": 44540,
+    "bench/classics/hackernews": 27790,
+    "bench/classics/jsontree": 26429,
+    "bench/classics/kanban": 32781,
     "bench/classics/logs": 29945,
-    "bench/classics/markdown": 31685,
-    "bench/classics/minesweeper": 22382,
-    "bench/classics/playlist": 45919,
-    "bench/classics/settings": 32569,
-    "bench/classics/shop": 30636,
-    "bench/classics/spreadsheet": 31419,
-    "bench/classics/todomvc": 23503,
-    "bench/classics/trace": 32565,
-    "bench/classics/virtuallist": 26549,
-    "bench/classics/wizard": 34078
+    "bench/classics/markdown": 31692,
+    "bench/classics/minesweeper": 22383,
+    "bench/classics/playlist": 45925,
+    "bench/classics/settings": 32555,
+    "bench/classics/shop": 30630,
+    "bench/classics/spreadsheet": 31413,
+    "bench/classics/todomvc": 23508,
+    "bench/classics/trace": 32572,
+    "bench/classics/virtuallist": 26553,
+    "bench/classics/wizard": 34079
   },
   "growth": [
     {
@@ -279,6 +279,96 @@
         "bench/classics/virtuallist": [
           26514,
           26549
+        ]
+      }
+    },
+    {
+      "date": "2026-11-08",
+      "reason": "content-visibility groups rewritten (approved by the user 2026-11-08); bundles without groups change by at most 16 bytes of gzip of view.mjs, with no group code in them",
+      "grown": {
+        "bench/ssr/melact client": [
+          20249,
+          20251
+        ],
+        "examples/counter": [
+          13887,
+          13889
+        ],
+        "examples/todomvc": [
+          20133,
+          20143
+        ],
+        "bench/classics/admin": [
+          31506,
+          31508
+        ],
+        "bench/classics/calendar": [
+          45271,
+          45286
+        ],
+        "bench/classics/chat": [
+          30740,
+          30747
+        ],
+        "bench/classics/chess": [
+          29828,
+          29829
+        ],
+        "bench/classics/datagrid": [
+          31605,
+          31606
+        ],
+        "bench/classics/eventtable": [
+          30558,
+          30572
+        ],
+        "bench/classics/feed": [
+          28747,
+          28756
+        ],
+        "bench/classics/filetree": [
+          28542,
+          28558
+        ],
+        "bench/classics/gantt": [
+          44525,
+          44540
+        ],
+        "bench/classics/jsontree": [
+          26419,
+          26429
+        ],
+        "bench/classics/kanban": [
+          32777,
+          32781
+        ],
+        "bench/classics/markdown": [
+          31685,
+          31692
+        ],
+        "bench/classics/minesweeper": [
+          22382,
+          22383
+        ],
+        "bench/classics/playlist": [
+          45919,
+          45925
+        ],
+        "bench/classics/todomvc": [
+          23503,
+          23508
+        ],
+        "bench/classics/trace": [
+          32565,
+          32572
+        ],
+        "bench/classics/virtuallist": [
+          26549,
+          26553
+        ],
+        "bench/classics/wizard": [
+          34078,
+          34079
         ]
       }
     }

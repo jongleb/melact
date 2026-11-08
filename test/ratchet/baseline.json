@@ -741,13 +741,13 @@
     "listeners kept": 2
   },
   "classics: repro/logs-chunked, Melact": {
-    "moves": 29467,
-    "insertions": 12764,
-    "removals": 10744,
+    "moves": 16233,
+    "insertions": 12825,
+    "removals": 10747,
     "attributes": 497,
     "texts": 304,
     "properties": 24,
-    "created nodes": 367162,
+    "created nodes": 367223,
     "forced layouts": 46,
     "frame layouts": 32,
     "layout reads": 105,
@@ -757,7 +757,7 @@
     "promise reactions": 80,
     "listeners added": 3,
     "listeners removed": 1,
-    "mutation records": 83253,
+    "mutation records": 56849,
     "listeners kept": 2
   },
   "classics: filetree, Melact": {
@@ -778,14 +778,14 @@
     "listeners kept": 2
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 6": {
-    "moves": 29467,
-    "insertions": 125,
-    "removals": 105,
+    "moves": 16233,
+    "insertions": 186,
+    "removals": 108,
     "nodes walked": 243341,
     "timers": 5,
     "animation frames": 5,
     "microtasks": 40,
-    "mutation records": 59164
+    "mutation records": 32760
   },
   "classics: playlist, Melact": {
     "moves": 7628,

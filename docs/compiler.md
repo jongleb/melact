@@ -203,9 +203,14 @@ creation of 10,000 rows and makes updates slower (496 → 253 ms and 66.5 → 85
 CPU), because each row becomes its own containment. On groups of 100 rows it gives 65.5 ms and
 6.4 ms. `View.chunks`, offered as `Html.chunks` in Meltea and `MelactLayout.chunked` in Melact,
 cuts a keyed list into groups of `size` rows (default 100), each a wrapper (default `div`) with
-`content-visibility: auto; contain-intrinsic-size: auto <size × row height>px`. A group whose keys
-did not change patches its rows in place; when keys move, every row that stays is moved into its
-group with its node, its component instance and its state, and only new rows are made. It is a
+`content-visibility: auto; contain-intrinsic-size: auto <size × row height>px`. Groups are elastic,
+as in a B-tree: a row stays in its group while the group exists, so a filter only removes rows inside
+their groups and moves none; a new row joins the group it lands in while that group has room, and
+otherwise opens a group beside it; an insertion that overfills a group moves the rest of that group
+into a new one; and two neighbouring groups that would fit in one, one of them less than half full,
+are merged. Only rows that change places across groups move, with their node, component instance
+and state. On the log viewer this took the scenario's moves from 29,467 to 16,233 and its DOM
+mutation records from 83,253 to 56,849, for 61 more group wrappers made. It is a
 choice, not the default: the wrappers change the DOM, so selectors such as `:nth-child` and a
 `<ul>`'s content model see them, and a filter that removes most rows costs more than without groups.
 On the corpus's log viewer (a Melact build with groups against one without, 1x CPU, 5 runs):

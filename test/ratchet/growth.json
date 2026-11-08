@@ -1,0 +1,13 @@
+[
+  {
+    "date": "2026-11-08",
+    "reason": "content-visibility groups keep rows in their group: logs-chunked moves 29467 -> 16233 and mutation records 83253 -> 56849, for 61 more group wrappers created and inserted and 3 more removals (approved by the user 2026-11-08)",
+    "raised": [
+      "↑ classics: repro/logs-chunked, Melact · insertions: 12764 → 12825",
+      "↑ classics: repro/logs-chunked, Melact · removals: 10744 → 10747",
+      "↑ classics: repro/logs-chunked, Melact · created nodes: 367162 → 367223",
+      "↑ Law A: Melact's excess over React 18 on bench/classics, slow 6 · insertions: 125 → 186",
+      "↑ Law A: Melact's excess over React 18 on bench/classics, slow 6 · removals: 105 → 108"
+    ]
+  }
+]

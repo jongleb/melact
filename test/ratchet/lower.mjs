@@ -2,6 +2,8 @@
 // if a counter went up or a recorded run is gone, it changes nothing. New runs are added; each test
 // file writes the runs it owns into RATCHET_OUT. Usage: node test/ratchet/lower.mjs [--no-build]
 // [--admit=<counter>]: a counter that is new to the suite is recorded as measured, once, the first time.
+// [--allow-growth=<reason>]: counters that went up are recorded too, with the reason the user approved,
+// in test/ratchet/growth.json.
 // It runs the slow parts of bench/classics too (RATCHET_SLOW), so that every recorded run is measured.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -61,6 +63,15 @@ for (const [run, counts] of Object.entries(measured)) {
   }
 }
 
+const allowed = process.argv.find((arg) => arg.startsWith("--allow-growth="))?.slice("--allow-growth=".length);
+if (allowed && raised.length > 0 && dropped.length === 0) {
+  const growthPath = "test/ratchet/growth.json";
+  const history = existsSync(growthPath) ? JSON.parse(readFileSync(growthPath, "utf8")) : [];
+  history.push({ date: new Date().toISOString().slice(0, 10), reason: allowed, raised: raised.map((line) => line.trim()) });
+  writeFileSync(growthPath, JSON.stringify(history, null, 2) + "\n");
+  console.log(["Recorded approved growth:", ...raised].join("\n"));
+  raised.length = 0;
+}
 if (raised.length > 0 || dropped.length > 0) {
   console.error("\nRefusing to change the baseline: it only goes down.");
   if (raised.length > 0) console.error(["Counters above the baseline:", ...raised].join("\n"));
