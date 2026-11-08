@@ -385,7 +385,8 @@ def events(p):
     body += f'<circle cx="152" cy="246" r="6" fill="{p["orange"]}" class="pulse"/>'
     body += text(118, 276, "click", size=11.5, cls="orange", weight=600)
     body += text(0, 336, "From the target up, Melact calls each element's $$melhole:click; stopPropagation ends the walk.", size=12, cls="muted")
-    body += text(0, 354, "22 bubbling types are delegated; scroll, focus, load … get one listener on their element.", size=12, cls="muted")
+    body += text(0, 354, "Every bubbling type is delegated; enter and leave come from mouseover/out, only in apps that use them.", size=12, cls="muted")
+    body += text(0, 372, "scroll, load and media events get a listener on their element, as React does.", size=12, cls="muted")
 
     body += box(540, 0, 340, 300, p["card"], p["line"], rx=14, lift=True)
     blocks = [
@@ -399,7 +400,7 @@ def events(p):
         body += box(560, y + 12, 300, 28, p["accent_soft"], p["accent"], rx=7, width=1.2)
         body += text(572, y + 31, code, size=12, cls="mono accent", weight=600)
         body += text(560, y + 60, note, size=11.5, cls="muted")
-    return svg(p, 880, 360, "One listener per event type on the document; on a click Melact walks from the target up through parent nodes and calls the handler stored on each element, with event.currentTarget set to that element as React does; React.Event reads the native event directly, since ofNative is the identity; a handler is replaced with one property write, and only when a value it reads changed", body)
+    return svg(p, 880, 380, "One listener per event type on the document; on a click Melact walks from the target up through parent nodes and calls the handler stored on each element, with event.currentTarget set to that element as React does; every bubbling type is delegated, and mouseenter and mouseleave are worked out from mouseover and mouseout, with that code only in apps that use them; scroll, load and media events get a listener on their element, as React does; React.Event reads the native event directly, since ofNative is the identity; a handler is replaced with one property write, and only when a value it reads changed", body)
 
 
 def updates(p):

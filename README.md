@@ -218,7 +218,7 @@ one handler per site that reads the row's data from the element it was clicked o
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/events-dark.svg">
-  <img src="assets/events.svg" alt="One listener per event type on the document; on a click melact walks from the target up through parent nodes and calls the handler stored on each element; replacing a handler is one property write" width="100%">
+  <img src="assets/events.svg" alt="One listener per event type on the document; on a click Melact walks from the target up through parent nodes and calls the handler stored on each element; every bubbling type is delegated, and mouseenter and mouseleave are worked out from mouseover and mouseout, with that code only in apps that use them; scroll, load and media events get a listener on their element, as React does; replacing a handler is one property write" width="100%">
 </picture>
 
 The 22 delegated types are the bubbling set Solid uses: `click`, `input`, `keydown`, `focusin`,
