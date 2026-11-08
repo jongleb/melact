@@ -207,10 +207,10 @@ cuts a keyed list into groups of `size` rows (default 100), each a wrapper (defa
 as in a B-tree: a row stays in its group while the group exists, so a filter only removes rows inside
 their groups and moves none; a new row joins the group it lands in while that group has room, and
 otherwise opens a group beside it; an insertion that overfills a group moves the rest of that group
-into a new one; and two neighbouring groups that would fit in one, one of them less than half full,
-are merged. Only rows that change places across groups move, with their node, component instance
-and state. On the log viewer this took the scenario's moves from 29,467 to 16,233 and its DOM
-mutation records from 83,253 to 56,849, for 61 more group wrappers made. It is a
+into a new one; and only when there are more than twice as many groups as a dense packing would make, two
+neighbouring groups that would fit in one, one of them less than half full, are merged. Only rows that change places across groups move, with their node, component instance
+and state. On the log viewer this took the scenario's moves from 29,467 to 13,678 and its DOM
+mutation records from 83,253 to 51,733, for 64 more group wrappers made. It is a
 choice, not the default: the wrappers change the DOM, so selectors such as `:nth-child` and a
 `<ul>`'s content model see them, and a filter that removes most rows costs more than without groups.
 On the corpus's log viewer (a Melact build with groups against one without, 1x CPU, 5 runs):

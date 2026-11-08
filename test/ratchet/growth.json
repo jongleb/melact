@@ -9,5 +9,14 @@
       "↑ Law A: Melact's excess over React 18 on bench/classics, slow 6 · insertions: 125 → 186",
       "↑ Law A: Melact's excess over React 18 on bench/classics, slow 6 · removals: 105 → 108"
     ]
+  },
+  {
+    "date": "2026-11-08",
+    "reason": "content-visibility groups merge only when there are more than twice as many as a dense packing: logs-chunked moves 16233 -> 13678, mutation records 56849 -> 51733, removals 10747 -> 10738, for 3 more group wrappers (approved by the user 2026-11-08)",
+    "raised": [
+      "↑ classics: repro/logs-chunked, Melact · insertions: 12825 → 12828",
+      "↑ classics: repro/logs-chunked, Melact · created nodes: 367223 → 367226",
+      "↑ Law A: Melact's excess over React 18 on bench/classics, slow 6 · insertions: 186 → 189"
+    ]
   }
 ]

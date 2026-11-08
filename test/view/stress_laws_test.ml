@@ -89,7 +89,7 @@ let small_edit tape words =
 
 let () =
   describe "A chunked list" (fun () ->
-      test "shows its rows in order, in groups of at most size that no two neighbours could share, and every row that stays keeps its node, in any group"
+      test "shows its rows in order, in groups of at most size, never more than twice as many groups as a dense packing, and every row that stays keeps its node, in any group"
         (fun () ->
           check
             (property (tapes ~shortest:2 ~longest:40) (fun values ->
@@ -105,15 +105,9 @@ let () =
                  let shape words =
                    let groups = Array.map element_of (nodes (query_all root "section > div")) in
                    let rows = Array.map (fun group -> Array.map element_of (nodes (query_all group "li"))) groups in
-                   let counts = Array.map Array.length rows in
-                   let rec settled index =
-                     index + 1 >= Array.length counts
-                     ||
-                     let first = counts.(index) and second = counts.(index + 1) in
-                     (first + second > size || 2 * min first second >= size) && settled (index + 1)
-                   in
+                   let packed = (List.length words + size - 1) / size in
                    ( text_content root = String.concat "" words,
-                     settled 0 && Array.length groups >= (List.length words + size - 1) / size,
+                     Array.length groups >= packed && Array.length groups <= (2 * packed) + 1,
                      Array.for_all (fun group -> Array.length group <= size && Array.length group > 0) rows,
                      rows )
                  in

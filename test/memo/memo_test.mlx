@@ -309,7 +309,7 @@ external element_of_node : Dom.node -> Dom.element = "%identity"
 
 let () =
   describe "rows in groups with content-visibility" (fun () ->
-      test_async "keep their state by key when they move within and across groups, in groups no two neighbours could share" (fun () ->
+      test_async "keep their state by key when they move within and across groups, in never more than twice as many groups as a dense packing" (fun () ->
           check_async
             (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
                  let tape = tape values in
@@ -328,13 +328,12 @@ let () =
                            (fun group -> Array.length (nodes (query_buttons (element_of_node group) "button")))
                            (nodes (query_buttons root "[style*=content-visibility]"))
                        in
-                       let rec settled index =
-                         index + 1 >= Array.length counts
-                         ||
-                         let first = counts.(index) and second = counts.(index + 1) in
-                         (first + second > size || 2 * min first second >= size) && settled (index + 1)
+                       let packed = (Array.length labels + size - 1) / size in
+                       let groups =
+                         Array.for_all (fun count -> count > 0 && count <= size) counts
+                         && Array.length counts >= packed
+                         && Array.length counts <= (2 * packed) + 1
                        in
-                       let groups = Array.for_all (fun count -> count > 0 && count <= size) counts && settled 0 in
                        let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
                        expect (shown, groups)
                        |. to_equal
