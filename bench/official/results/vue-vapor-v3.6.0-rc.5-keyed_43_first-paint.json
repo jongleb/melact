@@ -1,0 +1,1 @@
+{"framework":"vue-vapor-v3.6.0-rc.5-keyed","keyed":true,"benchmark":"43_first-paint","type":"size","values":{"DEFAULT":{"min":81.5,"max":81.5,"median":81.5,"mean":81.5,"stddev":null,"values":[81.5]}}}

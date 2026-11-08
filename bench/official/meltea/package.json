@@ -1,0 +1,18 @@
+{
+  "name": "js-framework-benchmark-meltea",
+  "version": "1.0.0",
+  "description": "Meltea: the Elm architecture in OCaml, views in mlx, compiled by Melange",
+  "js-framework-benchmark": {
+    "frameworkVersion": "0.1.0-dev",
+    "frameworkHomeURL": "https://github.com/jongleb/melact",
+    "language": "OCaml"
+  },
+  "scripts": {
+    "build-prod": "esbuild output/bench/meltea/main.mjs --bundle --minify --format=iife --target=es2020 --outfile=dist/main.js && terser dist/main.js --compress passes=2 --mangle --toplevel -o dist/main.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "terser": "5.37.0"
+  }
+}

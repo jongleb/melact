@@ -1,0 +1,1 @@
+{"framework":"meltea-v0.1.0-dev-keyed","keyed":true,"benchmark":"42_size-compressed","type":"size","values":{"DEFAULT":{"min":10.6,"max":10.6,"median":10.6,"mean":10.6,"stddev":null,"values":[10.6]}}}

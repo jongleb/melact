@@ -1,0 +1,1 @@
+{"framework":"ivi-v5.1.0-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":0.7152528762817383,"max":0.7152528762817383,"median":0.7152528762817383,"mean":0.7152528762817383,"stddev":null,"values":[0.7152528762817383]}}}

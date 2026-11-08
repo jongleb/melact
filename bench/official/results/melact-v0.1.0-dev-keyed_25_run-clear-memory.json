@@ -1,0 +1,1 @@
+{"framework":"melact-v0.1.0-dev-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":1.0731086730957031,"max":1.0731086730957031,"median":1.0731086730957031,"mean":1.0731086730957031,"stddev":null,"values":[1.0731086730957031]}}}

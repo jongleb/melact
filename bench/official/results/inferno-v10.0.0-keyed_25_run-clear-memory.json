@@ -1,0 +1,1 @@
+{"framework":"inferno-v10.0.0-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":0.8452901840209961,"max":0.8452901840209961,"median":0.8452901840209961,"mean":0.8452901840209961,"stddev":null,"values":[0.8452901840209961]}}}
