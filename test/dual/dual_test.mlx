@@ -3878,3 +3878,127 @@ let () =
              ignore (take ());
              finish ()))
         [%mel.obj { numRuns = 100 }]))
+
+external pointer_event : string -> < bubbles : bool ; relatedTarget : Dom.element Js.null > Js.t -> Dom.event = "MouseEvent"
+[@@mel.new]
+
+external focus_element : Dom.element -> unit = "focus" [@@mel.send]
+
+(** A box of the hover and focus law: its name and the boxes inside it. *)
+type box = Box of string * box list
+
+let boxes = Box ("r", [ Box ("a", [ Box ("a1", []); Box ("a2", []) ]); Box ("b", [ Box ("b1", []); Box ("built", []) ]) ])
+
+module Hovered = struct
+  let[@react.component] make () =
+    let rec drawn (Box (name, inner)) =
+      match name with
+      | "built" ->
+          ReactDOM.createDOMElementVariadic "div"
+            ~props:
+              (ReactDOM.domProps ~key:name ~id:("box-" ^ name)
+                 ~onMouseEnter:(fun _ -> log ("enter " ^ name))
+                 ~onMouseLeave:(fun _ -> log ("leave " ^ name))
+                 ~onFocus:(fun _ -> log ("focus " ^ name))
+                 ~onBlur:(fun _ -> log ("blur " ^ name))
+                 ())
+            [| ReactDOM.createDOMElementVariadic "input" ~props:(ReactDOM.domProps ~id:("field-" ^ name) ()) [||] |]
+      | _ ->
+      <div
+        key=name
+        id=("box-" ^ name)
+        onMouseEnter=(fun _ -> log ("enter " ^ name))
+        onMouseLeave=(fun _ -> log ("leave " ^ name))
+        onFocus=(fun _ -> log ("focus " ^ name))
+        onBlur=(fun _ -> log ("blur " ^ name))>
+        <input id=("field-" ^ name) />
+        (React.array (Array.of_list (List.map drawn inner)))
+      </div>
+    in
+    drawn boxes
+end
+
+let rec path_to target (Box (name, inner)) =
+  match String.equal name target with
+  | true -> Some [ name ]
+  | false -> List.find_map (fun box -> Option.map (fun path -> name :: path) (path_to target box)) inner
+
+let () =
+  describe "pointer and focus moving between nested elements" (fun () ->
+      test_async "enter, leave, focus and blur reach exactly the elements React reaches, in its order" (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:40) (fun values ->
+                 let tape = tape values in
+                 let names = [| "r"; "a"; "a1"; "a2"; "b"; "b1"; "built" |] in
+                 let* root, client = mount <Hovered /> in
+                 ignore (take ());
+                 let element kind name = select root ("#" ^ kind ^ "-" ^ name) in
+                 let rec run steps pointer focused expected =
+                   match steps with
+                   | 0 -> Js.Promise.resolve expected
+                   | _ -> (
+                       let next = names.(draw tape (Array.length names)) in
+                       let from = Option.value ~default:[] (Option.bind pointer (fun name -> path_to name boxes)) in
+                       let towards = Option.value ~default:[] (path_to next boxes) in
+                       let rec common left right =
+                         match (left, right) with
+                         | l :: left, r :: right when String.equal l r -> common left right
+                         | _ -> (left, right)
+                       in
+                       match draw tape 2 with
+                       | 0 when not (Option.equal String.equal pointer (Some next)) ->
+                           let left, entered = common from towards in
+                           let* () =
+                             act (fun () ->
+                                 let towards_element = Js.Null.return (element "box" next) in
+                                 let from_element = Js.Null.fromOption (Option.map (element "box") pointer) in
+                                 Option.iter
+                                   (fun name ->
+                                     ignore
+                                       (dispatch_kept (element "box" name)
+                                          (pointer_event "mouseout" [%mel.obj { bubbles = true; relatedTarget = towards_element }])))
+                                   pointer;
+                                 List.iter
+                                   (fun name ->
+                                     ignore
+                                       (dispatch_kept (element "box" name)
+                                          (pointer_event "mouseleave" [%mel.obj { bubbles = false; relatedTarget = towards_element }])))
+                                   (List.rev left);
+                                 ignore
+                                   (dispatch_kept (element "box" next)
+                                      (pointer_event "mouseover" [%mel.obj { bubbles = true; relatedTarget = from_element }]));
+                                 List.iter
+                                   (fun name ->
+                                     ignore
+                                       (dispatch_kept (element "box" name)
+                                          (pointer_event "mouseenter" [%mel.obj { bubbles = false; relatedTarget = from_element }])))
+                                   entered)
+                           in
+                           run (steps - 1) (Some next) focused
+                             (expected
+                             @ List.rev_map (fun name -> "leave " ^ name) left
+                             @ List.map (fun name -> "enter " ^ name) entered)
+                       | _ ->
+                           let* () = act (fun () -> focus_element (element "field" next)) in
+                           let blurred =
+                             Option.fold ~none:[]
+                               ~some:(fun name ->
+                                 match String.equal name next with
+                                 | true -> []
+                                 | false -> List.rev_map (fun name -> "blur " ^ name) (Option.value ~default:[] (path_to name boxes)))
+                               focused
+                           in
+                           let gained =
+                             match Option.equal String.equal focused (Some next) with
+                             | true -> []
+                             | false -> List.rev_map (fun name -> "focus " ^ name) towards
+                           in
+                           run (steps - 1) pointer (Some next) (expected @ blurred @ gained))
+                 in
+                 let* expected = run (1 + draw tape 12) None None [] in
+                 let logged = take () in
+                 let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                 Option.iter (fun _ -> ()) (Some root);
+                 expect (Array.of_list logged) |. to_equal (Array.of_list expected);
+                 Js.Promise.resolve ()))
+            [%mel.obj { numRuns = 150 }]))

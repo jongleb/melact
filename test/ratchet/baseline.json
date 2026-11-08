@@ -52,8 +52,7 @@
     "animation frames": 145,
     "microtasks": 60,
     "promise reactions": 130,
-    "listeners added": 53746,
-    "listeners removed": 53744,
+    "listeners added": 2,
     "mutation records": 4367,
     "listeners kept": 2
   },
@@ -72,8 +71,6 @@
     "animation frames": 83,
     "microtasks": 48,
     "promise reactions": 100,
-    "listeners added": 4,
-    "listeners removed": 4,
     "mutation records": 245359
   },
   "classics: blocks, Melact": {
@@ -93,8 +90,7 @@
     "animation frames": 946,
     "microtasks": 1821,
     "promise reactions": 452,
-    "listeners added": 3594,
-    "listeners removed": 3592,
+    "listeners added": 2,
     "mutation records": 950,
     "listeners kept": 2
   },
@@ -137,9 +133,7 @@
     "nodes walked": 519345,
     "timers": 583,
     "animation frames": 434,
-    "microtasks": 1376,
-    "listeners added": 56116,
-    "listeners removed": 57340
+    "microtasks": 1376
   },
   "classics: conduit, Melact": {
     "insertions": 2126,
@@ -154,8 +148,7 @@
     "animation frames": 239,
     "microtasks": 1006,
     "promise reactions": 247,
-    "listeners added": 3,
-    "listeners removed": 1,
+    "listeners added": 2,
     "mutation records": 4632,
     "listeners kept": 2
   },
@@ -254,8 +247,8 @@
     "timers": 321,
     "animation frames": 125,
     "microtasks": 1164,
-    "listeners added": 2,
-    "listeners removed": 2,
+    "listeners added": 1,
+    "listeners removed": 1,
     "mutation records": 103,
     "listeners kept": 5
   },
@@ -402,8 +395,8 @@
     "animation frames": 332,
     "microtasks": 1255,
     "promise reactions": 285,
-    "listeners added": 53,
-    "listeners removed": 52,
+    "listeners added": 32,
+    "listeners removed": 31,
     "mutation records": 5198,
     "listeners kept": 1
   },
@@ -422,8 +415,7 @@
     "animation frames": 143,
     "microtasks": 95,
     "promise reactions": 148,
-    "listeners added": 876,
-    "listeners removed": 874,
+    "listeners added": 2,
     "mutation records": 1643,
     "listeners kept": 2
   },
@@ -440,8 +432,7 @@
     "animation frames": 330,
     "microtasks": 2035,
     "promise reactions": 310,
-    "listeners added": 3,
-    "listeners removed": 2,
+    "listeners added": 1,
     "mutation records": 393,
     "listeners kept": 1
   },
@@ -462,8 +453,8 @@
     "animation frames": 93,
     "microtasks": 334,
     "promise reactions": 94,
-    "listeners added": 13,
-    "listeners removed": 12,
+    "listeners added": 7,
+    "listeners removed": 6,
     "mutation records": 4268,
     "listeners kept": 1
   },
@@ -563,8 +554,7 @@
     "timers": 148,
     "animation frames": 41,
     "microtasks": 2980,
-    "listeners added": 745,
-    "listeners removed": 904,
+    "listeners removed": 1,
     "mutation records": 75,
     "listeners kept": 2
   },
@@ -629,8 +619,7 @@
     "animation frames": 224,
     "microtasks": 1050,
     "promise reactions": 223,
-    "listeners added": 12,
-    "listeners removed": 10,
+    "listeners added": 2,
     "mutation records": 33106,
     "listeners kept": 2
   },
@@ -647,8 +636,7 @@
     "animation frames": 154,
     "microtasks": 384,
     "promise reactions": 149,
-    "listeners added": 12262,
-    "listeners removed": 12260,
+    "listeners added": 2,
     "mutation records": 226297,
     "listeners kept": 2
   },
@@ -660,8 +648,6 @@
     "timers": 10,
     "animation frames": 10,
     "microtasks": 1064,
-    "listeners added": 12260,
-    "listeners removed": 12270,
     "mutation records": 20,
     "listeners kept": 2
   },
@@ -816,8 +802,8 @@
     "animation frames": 133,
     "microtasks": 130,
     "promise reactions": 119,
-    "listeners added": 13656,
-    "listeners removed": 13654,
+    "listeners added": 3,
+    "listeners removed": 1,
     "mutation records": 37544,
     "listeners kept": 2
   },
@@ -844,9 +830,7 @@
     "nodes walked": 1167136,
     "timers": 53,
     "animation frames": 25,
-    "microtasks": 124,
-    "listeners added": 13523,
-    "listeners removed": 13653
+    "microtasks": 124
   },
   "classics: hackernews, Melact": {
     "insertions": 2136,
@@ -861,8 +845,7 @@
     "animation frames": 229,
     "microtasks": 354,
     "promise reactions": 199,
-    "listeners added": 4,
-    "listeners removed": 2,
+    "listeners added": 2,
     "mutation records": 12471,
     "listeners kept": 2
   },
@@ -899,8 +882,8 @@
     "animation frames": 364,
     "microtasks": 1209,
     "promise reactions": 333,
-    "listeners added": 7385,
-    "listeners removed": 7383,
+    "listeners added": 13,
+    "listeners removed": 11,
     "mutation records": 3398,
     "listeners kept": 2
   },
@@ -939,8 +922,8 @@
     "timers": 77,
     "animation frames": 75,
     "microtasks": 1832,
-    "listeners added": 7234,
-    "listeners removed": 7376,
+    "listeners added": 1,
+    "listeners removed": 2,
     "mutation records": 22,
     "listeners kept": 3
   },
