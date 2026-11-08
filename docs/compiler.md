@@ -109,7 +109,10 @@ child.
 ## Compiled lists
 
 `Html.list (List.map row items)` in a content hole compiles to a keyed loop, `View.each`, instead
-of a list of row descriptions. The compiler finds what a row reads besides its item: the free
+of a list of row descriptions. `Html.array (Array.map row items)` compiles to the same loop over the
+array as it is, so a model that keeps its rows in an array swaps two of them with one copy of the
+array instead of converting a list both ways: on the keyed benchmark's swap that took Meltea's
+script from 0.67 to 0.41 ms. The compiler finds what a row reads besides its item: the free
 variables of `row`, looking through local `let` definitions. If none of them changed and an item is
 physically the same as before, the loop keeps the row as it is and never calls `row`.
 
