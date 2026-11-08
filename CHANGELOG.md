@@ -14,6 +14,14 @@
   `renderToString` and `renderToStaticMarkup` write, `useId` and Suspense included, and Melact's
   client hydrates it with the same ids. A 1,000-row page takes 0.26 ms natively and 0.15 ms in Node,
   React 1.1 ms.
+- Hydration and resume take the server's nodes over without writing them again: a template whose
+  holes are all on elements needs no off-page clone, and `-hydratable` templates leave alone values
+  the server's nodes already show. Melact hydrating bench/ssr's 1,000 rows went from 1,001
+  attribute writes, 2,005 text writes and 8,012 created nodes to 1, 4 and 12, as React 18 does.
+- Pages rendered at build time: `melhole-prerender` puts the HTML a native `-server` build prints
+  into `index.html`, with the capture script, and the client resumes it with `Program.resume` or
+  `ReactDOM.Client.resumeRoot`. On js-framework-benchmark's runner the benchmark apps paint first in
+  70 ms (Meltea) and 72 ms (Melact), vanilla JS in 80 ms; mounted, they took 125 and 164 ms.
 
 ## 0.1.0
 

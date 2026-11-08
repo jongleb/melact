@@ -7,12 +7,17 @@ Melact against hand-written vanilla JS and React 18.
 | app | what it is |
 |---|---|
 | [`vanilla/`](vanilla/main.js) | hand-written keyed DOM code in the style of the benchmark's `vanillajs-keyed`: one cloned `<tr>` template, event delegation on `tbody`, manual keyed operations |
-| [`meltea/`](meltea/main.mlx) | the Elm architecture: model, messages, pure `update`, a `view` with a `row` function and a keyed `Html.list` of `<tr key=…>` |
-| [`melact/`](melact/main.mlx) | reason-react style: `useReducer` in an `App` component, a `React.memo` `Row` component |
+| [`meltea/`](meltea/page.mlx) | the Elm architecture: model, messages, pure `update`, a `view` with a `row` function and a keyed `Html.list` of `<tr key=…>`; [`main.ml`](meltea/main.ml) mounts it |
+| [`melact/`](melact/page.mlx) | reason-react style: `useReducer` in an `App` component, a `React.memo` `Row` component; [`main.mlx`](melact/main.mlx) mounts it |
 | [`react/`](react/main.js) | React 18.3 with hooks, like the benchmark's `react-hooks`: `useReducer`, `memo` rows, `createElement` |
 
 All four render the same markup and share [`style.css`](style.css), a small inline stand-in for the
 benchmark's Bootstrap sheet (the harness downloads nothing).
+
+`meltea/prerendered` and `melact/prerendered` are the same two apps rendered at build time (see
+[Rendered at build time](../docs/compiler.md#rendered-at-build-time)): a native `render/` executable
+writes the first page into the official runner's `index.html`, and the client resumes it. They are
+the folders of js-framework-benchmark's own runner, `frameworks/keyed/{meltea,melact}`.
 
 ## Run
 

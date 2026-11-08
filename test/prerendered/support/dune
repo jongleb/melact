@@ -1,0 +1,6 @@
+(library
+ (name prerendering)
+ (modes melange)
+ (libraries testing melange.dom)
+ (preprocess
+  (pps melange.ppx)))

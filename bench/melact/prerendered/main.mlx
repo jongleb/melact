@@ -1,0 +1,7 @@
+external document : Dom.document = "document"
+
+external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
+[@@mel.send] [@@mel.return nullable]
+
+let () =
+  Option.iter (fun root -> ignore (ReactDOM.Client.resumeRoot root <Page.App />)) (element_by_id document "main")

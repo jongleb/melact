@@ -1,0 +1,7 @@
+let renders = ref 0
+
+module App = struct
+  let[@react.component] make () =
+    incr renders;
+    <Shipped_page.App />
+end

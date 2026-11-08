@@ -1,8 +1,3 @@
-external document : Dom.document = "document"
-
-external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
-[@@mel.send] [@@mel.return nullable]
-
 type row = { id : int; label : string }
 
 (** The row whose label was clicked last. *)
@@ -70,7 +65,13 @@ let update message model =
           { model with rows }
       | false -> model)
   | Select id -> { model with selection = Selected id }
-  | Remove id -> { model with rows = Js.Array.filter ~f:(fun row -> row.id <> id) model.rows }
+  | Remove id -> (
+      let count = Array.length model.rows in
+      let rec found index = match index = count with true -> None | false -> if model.rows.(index).id = id then Some index else found (index + 1) in
+      Option.fold ~none:model
+        ~some:(fun index ->
+          { model with rows = Array.append (Array.sub model.rows 0 index) (Array.sub model.rows (index + 1) (count - index - 1)) })
+        (found 0))
 
 let view { rows; selection; _ } =
   let button id title message =
@@ -116,17 +117,4 @@ let view { rows; selection; _ } =
     <span className="preloadicon glyphicon glyphicon-remove" ariaHidden=true />
   </div>
 
-let () =
-  Option.iter
-    (fun root ->
-      ignore
-        (Program.sandbox
-           ~init:
-             {
-               rows = [||];
-               next = 1;
-               seed = int_of_float (Js.Math.random () *. 1e9);
-               selection = Unselected;
-             }
-           ~update ~view root))
-    (element_by_id document "main")
+let init ~seed = { rows = [||]; next = 1; seed; selection = Unselected }
