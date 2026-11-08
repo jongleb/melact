@@ -31,7 +31,7 @@ let laws ~framework ~page ~renders ~import =
     [%mel.raw
       {|function (page) {
     const parsed = new DOMParser().parseFromString(page, "text/html");
-    return [parsed.getElementById("main").innerHTML, Array.from(parsed.querySelectorAll("script:not([src])"), (script) => script.textContent)];
+    return [parsed.getElementById("main").innerHTML, Array.from(parsed.head.querySelectorAll("script:not([src])"), (script) => script.textContent)];
   }|}]
   in
   let seeded : int -> unit =

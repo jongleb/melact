@@ -463,9 +463,9 @@ A page whose first view does not depend on the request can be rendered once, whe
 built. The server renderer is native, so dune runs it as a build step: the module with the model and
 the view builds a third time, natively under `-server`, a one-line executable prints the HTML of the
 initial model or element, and `melhole-prerender` puts that HTML into the app's `index.html`. The
-browser paints the page as soon as it has parsed the HTML; the script is deferred (`type="module"`
-or `defer`), so nothing waits for the code, and the client resumes the page instead of mounting it:
-no view runs and no node changes until the first input takes the page over.
+browser paints the page as soon as it has parsed the HTML and its styles, and the client resumes
+the page instead of mounting it: no view runs and no node changes until the first input takes the
+page over.
 
 An app opts in with four pieces ([`bench/meltea/prerendered`](../bench/meltea/prerendered) and
 [`bench/melact/prerendered`](../bench/melact/prerendered) are complete examples):
@@ -509,6 +509,32 @@ the output the same way.
 What the build renders is what the first input takes over, so it must be the page the client starts
 from. Values the view does not read may differ: the benchmark's Meltea model holds a random seed for
 its labels, drawn in the browser, and the build renders it with seed 0.
+
+Where the script goes decides whether the build-time page is seen sooner. A deferred script that
+arrives quickly runs before the first frame, and a large one competes with the stylesheets for the
+connection, so with `defer` the benchmark pages painted no sooner than the mounted ones. The shells
+of `bench/*/prerendered` load the bundle from a one-line script at the end of the body that adds the
+`<script src>` after the first frame (`requestAnimationFrame`, then `setTimeout`), and the capture
+script keeps any input made meanwhile. On js-framework-benchmark's own runner (its `40_sizes` and
+`21_ready-memory`; 15 rounds, one framework per run, the five in a shuffled order each round, on a
+machine at a load of 10 to 18, so that load weighs on all alike), first paint, median:
+
+| | first paint | ÷ vanilla, same round | compressed | ready memory |
+|---|---|---|---|---|
+| vanillajs | 80.3 ms | 1.00 | 2.5 kB | 0.49 MB |
+| Meltea, mounted | 125.3 ms | 1.43 | 9.6 kB | 0.60 MB |
+| Meltea, rendered at build time | 69.7 ms | 0.84 | 12.0 kB | 0.56 MB |
+| Melact, mounted | 164.3 ms | 2.01 | 15.9 kB | 0.66 MB |
+| Melact, rendered at build time | 72.2 ms | 0.83 | 17.0 kB | 0.60 MB |
+
+Traces of 15 fresh loads each, in turns (headless Chrome, load 6 to 8), agree: first paint 53.6 ms
+for vanilla, 46.5 for Meltea (mounted: 78.1) and 48.3 for Melact (mounted: 102.2); at 4× CPU
+throttling 92.6, 82.6 (112.6) and 82.0 (139.0); `DOMContentLoaded` 37.8, 28.8 (59.7) and 28.6
+(80.4). The `load` event comes later than when mounting (68.8 and 82.0 ms against 61.3 and 82.5),
+since the bundle is fetched after the paint. The compressed size grows by the page's markup, the
+capture script and the hydration code (`-hydratable` and `resume`): the gzip of the benchmark's
+client goes from 11,954 to 14,568 bytes for Meltea and from 20,335 to 21,369 for Melact. The
+runner's keyed check and its smoke test, which runs every benchmark with its checks, pass.
 
 Laws ([`test/prerendered`](../test/prerendered)), fast-check in jsdom, on the pages the build
 writes for `bench/meltea` and `bench/melact` and on their own clients, loaded fresh for every run

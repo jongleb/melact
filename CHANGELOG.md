@@ -20,7 +20,8 @@
   attribute writes, 2,005 text writes and 8,012 created nodes to 1, 4 and 12, as React 18 does.
 - Pages rendered at build time: `melhole-prerender` puts the HTML a native `-server` build prints
   into `index.html`, with the capture script, and the client resumes it with `Program.resume` or
-  `ReactDOM.Client.resumeRoot`.
+  `ReactDOM.Client.resumeRoot`. On js-framework-benchmark's runner the benchmark apps paint first in
+  70 ms (Meltea) and 72 ms (Melact), vanilla JS in 80 ms; mounted, they took 125 and 164 ms.
 
 ## 0.1.0
 

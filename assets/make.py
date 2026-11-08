@@ -1254,7 +1254,7 @@ def prerendered(p):
             [("<head>…<script>", ""), ("capture", "blue")],
             [("<div id='main'>", "")],
             [("  <div class=…>", ""), ("…", "green")],
-            [("<script defer src=…>", "")],
+            [("<script>", ""), ("after the paint", "accent")],
         ]),
     ]
     for x, fill, stroke, title, subtitle, lines in stages:
@@ -1289,7 +1289,7 @@ def prerendered(p):
     y = rows[1][0]
     body += segment(left, 262, y, "green_soft", "green", "HTML: the page")
     body += paint(286, y, "first paint")
-    body += segment(310, 600, y, "accent_soft", "accent", "deferred bundle: resume listens, runs no view", dash="5 4")
+    body += segment(310, 600, y, "accent_soft", "accent", "bundle loaded after it: resume listens, no view", dash="5 4")
     body += f'<line x1="640" y1="{y - 2}" x2="640" y2="{y + 32}" stroke="{p["blue"]}" stroke-width="2"/>'
     body += text(640, y - 8, "first input", size=11.5, cls="blue", anchor="middle", weight=700)
     body += segment(652, 800, y, "blue_soft", "blue", "take over, then handle")
@@ -1297,7 +1297,7 @@ def prerendered(p):
     body += box(0, 372, 880, 66, p["card"], p["line"], rx=14, width=1.2)
     body += text(18, 398, "the takeover keeps every element the build sent and creates none of them again", size=13, weight=700)
     body += text(18, 420, "clicks before the code arrives wait in the capture script and are replayed; a page that does not match the view is mounted anew", size=11.5, cls="muted")
-    return svg(p, 880, 438, "Rendered at build time. One dune rule: page.mlx, with the model, update, view and the initial model, builds natively under -server into render.exe, which prints the first page with Program.render (or ReactDOMServer.renderToString for Melact); melhole-prerender --capture main shell.html puts that HTML right inside the empty root of the app's own index.html, refusing a filled root, and puts the capture script in the head; index.html is what the server sends, with a deferred script. In the browser, a mounted page shows an empty root until the bundle has been fetched, parsed and run and the view has mounted, and only then paints; the page built at build time paints as soon as the HTML is parsed, then the deferred bundle resumes it, listening without running any view, and the first input takes it over and is then handled. The takeover keeps every element the build sent and creates none of them again; clicks before the code arrives wait in the capture script and are replayed, and a page that does not match the view is mounted anew", body)
+    return svg(p, 880, 438, "Rendered at build time. One dune rule: page.mlx, with the model, update, view and the initial model, builds natively under -server into render.exe, which prints the first page with Program.render (or ReactDOMServer.renderToString for Melact); melhole-prerender --capture main shell.html puts that HTML right inside the empty root of the app's own index.html, refusing a filled root, and puts the capture script in the head; index.html is what the server sends, with a small script that loads the bundle after the first paint. In the browser, a mounted page shows an empty root until the bundle has been fetched, parsed and run and the view has mounted, and only then paints; the page built at build time paints as soon as the HTML is parsed, then the bundle, loaded by a small script after that first frame, resumes it, listening without running any view, and the first input takes it over and is then handled. The takeover keeps every element the build sent and creates none of them again; clicks before the code arrives wait in the capture script and are replayed, and a page that does not match the view is mounted anew", body)
 
 
 def fanout(p):

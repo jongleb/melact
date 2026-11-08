@@ -7,6 +7,6 @@
 </head>
 <body>
   <div id='main'></div>
-  <script src='dist/main.js' defer></script>
+  <script>requestAnimationFrame(function () { setTimeout(function () { var code = document.createElement("script"); code.src = "dist/main.js"; document.body.appendChild(code); }); });</script>
 </body>
 </html>
