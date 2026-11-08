@@ -34,12 +34,13 @@ type kind =
   | Kept_global
   | Sent
   | Jobs_moved
+  | Expando
 
 let kinds =
   [
     Moved; Inserted; Removed; Attribute; Class; Text; Style; Property; Created; Forced_layout; Frame_layout; Layout_read; Rendered;
     Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked; Timer; Frame; Task; Microtask; Reaction; Listened;
-    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global; Sent; Jobs_moved;
+    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global; Sent; Jobs_moved; Expando;
   ]
 
 let name kind =
@@ -79,6 +80,7 @@ let name kind =
   | Kept_global -> "globals kept"
   | Sent -> "bytes served"
   | Jobs_moved -> "queued jobs moved"
+  | Expando -> "node expandos"
 
 type t = int Js.Dict.t
 
@@ -345,6 +347,15 @@ let () =
     if (traced) console.log("ratchet: the step ends");
     if (hushed === 0) recorded(observer.takeRecords()); else observer.takeRecords();
     if (state.dirty) state.counts["frame layouts"] = (state.counts["frame layouts"] || 0) + 1;
+    var expandos = 0, stack = document.documentElement ? [document.documentElement] : [];
+    while (stack.length > 0) {
+      var node = stack.pop();
+      expandos += Object.keys(node).length;
+      for (var child = node.firstChild; child; child = child.nextSibling) stack.push(child);
+    }
+    var grown = expandos - (state.expandos || 0);
+    state.expandos = expandos;
+    if (grown > 0) state.counts["node expandos"] = (state.counts["node expandos"] || 0) + grown;
     var taken = state.counts;
     state.counts = Object.create(null);
     state.dirty = false;

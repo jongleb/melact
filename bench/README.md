@@ -164,3 +164,13 @@ temporary worktree) and at the working tree, runs them app by app in turn and fl
 Melact does more layouts or style recalculations than before, or where its time against React (the
 control, built from the same app) grew by more than 15%. It exits with 1 when a step is flagged.
 `--apps=eventtable,trace`, `--runs`, `--cpu` and `--threshold` narrow it.
+
+## The working tree against a base commit, in time
+
+`node bench/ab.mjs --base=<commit>` builds the base in a temporary worktree and runs
+`bench/run.mjs` on the base and on the working tree in turns (base, head, base, head…, 3 rounds of
+8 runs by default), with vanilla in every turn as the control, so that a loaded machine weighs on
+both alike. It compares the median script time of every operation and exits with 1 when Meltea or
+Melact got more than 8% slower on one beyond what vanilla moved. Run it before handing over any
+change to the runtime or the compiler; the ratchet (`test/ratchet`) counts the DOM work, this
+checks the time the JavaScript itself takes.

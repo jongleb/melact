@@ -15,7 +15,8 @@
     "promise reactions": 8,
     "listeners added": 2,
     "mutation records": 86,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 205
   },
   "big page: 2000 rows, Melact": {
     "insertions": 2,
@@ -31,7 +32,8 @@
     "animation frames": 2,
     "microtasks": 10,
     "promise reactions": 8,
-    "mutation records": 86
+    "mutation records": 86,
+    "node expandos": 2005
   },
   "Law A: Melact's excess over React 18 on the big page": {
     "nodes walked": 2778,
@@ -54,7 +56,8 @@
     "promise reactions": 130,
     "listeners added": 2,
     "mutation records": 4367,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 48170
   },
   "classics: dashboard, Melact": {
     "insertions": 2885,
@@ -71,7 +74,8 @@
     "animation frames": 83,
     "microtasks": 48,
     "promise reactions": 100,
-    "mutation records": 245359
+    "mutation records": 245359,
+    "node expandos": 26
   },
   "classics: blocks, Melact": {
     "moves": 17,
@@ -92,7 +96,8 @@
     "promise reactions": 452,
     "listeners added": 2,
     "mutation records": 950,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 7489
   },
   "classics: repro/stale-layout-read, Melact": {
     "insertions": 1,
@@ -102,7 +107,8 @@
     "frame layouts": 3,
     "microtasks": 2,
     "promise reactions": 3,
-    "mutation records": 3
+    "mutation records": 3,
+    "node expandos": 1
   },
   "classics: repro/unicode-static-text, Melact": {
     "insertions": 1,
@@ -112,7 +118,8 @@
     "frame layouts": 3,
     "microtasks": 2,
     "promise reactions": 3,
-    "mutation records": 4
+    "mutation records": 4,
+    "node expandos": 1
   },
   "classics: repro/select-value, Melact": {
     "insertions": 1,
@@ -124,7 +131,8 @@
     "promise reactions": 2,
     "listeners added": 1,
     "mutation records": 2,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 11
   },
   "Law A: Melact's excess over React 18 on bench/classics, quick 1": {
     "insertions": 2,
@@ -150,7 +158,8 @@
     "promise reactions": 247,
     "listeners added": 2,
     "mutation records": 4632,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 2438
   },
   "classics: spreadsheet, Melact": {
     "insertions": 33,
@@ -167,7 +176,8 @@
     "promise reactions": 298,
     "listeners added": 2,
     "mutation records": 10294,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 10008
   },
   "classics: repro/deferred-value, Melact": {
     "insertions": 8652,
@@ -181,7 +191,8 @@
     "promise reactions": 26,
     "listeners added": 2,
     "mutation records": 17322,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 3
   },
   "classics: feed, Melact": {
     "insertions": 23,
@@ -200,7 +211,8 @@
     "listeners added": 13,
     "listeners removed": 11,
     "mutation records": 77,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 609
   },
   "classics: repro/menu-measure, Melact": {
     "insertions": 81,
@@ -213,7 +225,8 @@
     "animation frames": 80,
     "microtasks": 81,
     "promise reactions": 82,
-    "mutation records": 162
+    "mutation records": 162,
+    "node expandos": 240
   },
   "classics: repro/controlled-input-flush, Melact": {
     "insertions": 1,
@@ -227,7 +240,8 @@
     "promise reactions": 5,
     "listeners added": 2,
     "mutation records": 6,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 4
   },
   "classics: repro/rows-context, Melact": {
     "insertions": 2,
@@ -237,7 +251,8 @@
     "frame layouts": 3,
     "microtasks": 2,
     "promise reactions": 3,
-    "mutation records": 10
+    "mutation records": 10,
+    "node expandos": 1
   },
   "Law A: Melact's excess over React 18 on bench/classics, quick 2": {
     "insertions": 66,
@@ -263,7 +278,8 @@
     "animation frames": 2,
     "microtasks": 6,
     "promise reactions": 7,
-    "mutation records": 27782
+    "mutation records": 27782,
+    "node expandos": 2
   },
   "classics: chess, Melact": {
     "moves": 315,
@@ -283,7 +299,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 75655,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 216
   },
   "classics: gantt, Melact": {
     "insertions": 1044,
@@ -302,7 +319,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 5635,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 4268
   },
   "classics: eventtable, Melact": {
     "moves": 1325,
@@ -323,7 +341,8 @@
     "promise reactions": 76,
     "listeners added": 1,
     "mutation records": 8121,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 894
   },
   "classics: minesweeper, Melact": {
     "insertions": 1,
@@ -336,7 +355,8 @@
     "animation frames": 139,
     "microtasks": 142,
     "promise reactions": 143,
-    "mutation records": 2691
+    "mutation records": 2691,
+    "node expandos": 5002
   },
   "classics: repro/popover-focus, Melact": {
     "insertions": 82,
@@ -351,7 +371,8 @@
     "animation frames": 200,
     "microtasks": 162,
     "promise reactions": 203,
-    "mutation records": 326
+    "mutation records": 326,
+    "node expandos": 5
   },
   "classics: repro/set-state-in-render, Melact": {
     "insertions": 1,
@@ -362,7 +383,8 @@
     "animation frames": 1,
     "microtasks": 4,
     "promise reactions": 5,
-    "mutation records": 5
+    "mutation records": 5,
+    "node expandos": 2
   },
   "Law A: Melact's excess over React 18 on bench/classics, quick 3": {
     "insertions": 1,
@@ -381,7 +403,8 @@
     "frame layouts": 4,
     "microtasks": 3,
     "promise reactions": 4,
-    "mutation records": 4
+    "mutation records": 4,
+    "node expandos": 1
   },
   "classics: admin, Melact": {
     "insertions": 2708,
@@ -398,7 +421,8 @@
     "listeners added": 32,
     "listeners removed": 31,
     "mutation records": 5198,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 4031
   },
   "classics: trace, Melact": {
     "insertions": 270,
@@ -417,7 +441,8 @@
     "promise reactions": 148,
     "listeners added": 2,
     "mutation records": 1643,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 1502
   },
   "classics: wizard, Melact": {
     "insertions": 44,
@@ -434,7 +459,8 @@
     "promise reactions": 310,
     "listeners added": 1,
     "mutation records": 393,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 990
   },
   "classics: calendar, Melact": {
     "moves": 1,
@@ -456,7 +482,8 @@
     "listeners added": 7,
     "listeners removed": 6,
     "mutation records": 4268,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 437
   },
   "classics: repro/change-event, Melact": {
     "insertions": 1,
@@ -469,7 +496,8 @@
     "promise reactions": 4,
     "listeners added": 1,
     "mutation records": 5,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 7
   },
   "classics: repro/search-debounce, Melact": {
     "insertions": 295,
@@ -488,7 +516,8 @@
     "promise reactions": 20,
     "listeners added": 2,
     "mutation records": 617,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 1390
   },
   "classics: repro/list-in-match, Melact": {
     "insertions": 1,
@@ -499,7 +528,8 @@
     "animation frames": 60,
     "microtasks": 61,
     "promise reactions": 62,
-    "mutation records": 122
+    "mutation records": 122,
+    "node expandos": 2
   },
   "classics: virtuallist, Melact": {
     "insertions": 120,
@@ -519,7 +549,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 292,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 50
   },
   "classics: repro/layout-read-after-parent-write, Melact": {
     "insertions": 5,
@@ -534,7 +565,8 @@
     "animation frames": 40,
     "microtasks": 42,
     "promise reactions": 43,
-    "mutation records": 109
+    "mutation records": 109,
+    "node expandos": 2
   },
   "classics: repro/radio-same-name, Melact": {
     "insertions": 2,
@@ -545,7 +577,8 @@
     "promise reactions": 4,
     "listeners added": 2,
     "mutation records": 4,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 13
   },
   "Law A: Melact's excess over React 18 on bench/classics, quick 4": {
     "insertions": 43,
@@ -556,7 +589,8 @@
     "microtasks": 2980,
     "listeners removed": 1,
     "mutation records": 75,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 30
   },
   "classics: settings, Melact": {
     "insertions": 105,
@@ -572,7 +606,8 @@
     "promise reactions": 98,
     "listeners added": 1,
     "mutation records": 7534,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 6485
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 1": {
     "properties": 104,
@@ -596,7 +631,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 24089,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 12780
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 2": {
     "insertions": 2,
@@ -621,7 +657,8 @@
     "promise reactions": 223,
     "listeners added": 2,
     "mutation records": 33106,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 14091
   },
   "classics: autocomplete, Melact": {
     "moves": 5,
@@ -638,7 +675,8 @@
     "promise reactions": 149,
     "listeners added": 2,
     "mutation records": 226297,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 2004
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 3": {
     "insertions": 10,
@@ -649,7 +687,8 @@
     "animation frames": 10,
     "microtasks": 1064,
     "mutation records": 20,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 1091
   },
   "classics: chat, Melact": {
     "insertions": 21188,
@@ -668,7 +707,8 @@
     "promise reactions": 313,
     "listeners added": 2,
     "mutation records": 42799,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 14900
   },
   "classics: todomvc, Melact": {
     "insertions": 5023,
@@ -685,7 +725,8 @@
     "promise reactions": 128,
     "listeners added": 2,
     "mutation records": 20218,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 41837
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 4": {
     "nodes walked": 16,
@@ -711,7 +752,8 @@
     "listeners added": 96,
     "listeners removed": 94,
     "mutation records": 30956,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 48425
   },
   "classics: gallery, Melact": {
     "insertions": 6568,
@@ -728,7 +770,8 @@
     "promise reactions": 140,
     "listeners added": 2,
     "mutation records": 14061,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 10044
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 5": {
     "insertions": 1,
@@ -758,7 +801,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 51733,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 12780
   },
   "classics: filetree, Melact": {
     "insertions": 19261,
@@ -775,7 +819,8 @@
     "promise reactions": 100,
     "listeners added": 2,
     "mutation records": 32045,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 31995
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 6": {
     "moves": 13678,
@@ -805,7 +850,8 @@
     "listeners added": 3,
     "listeners removed": 1,
     "mutation records": 37544,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 23925
   },
   "classics: shop, Melact": {
     "moves": 1298,
@@ -822,7 +868,8 @@
     "promise reactions": 91,
     "listeners added": 1,
     "mutation records": 12220,
-    "listeners kept": 1
+    "listeners kept": 1,
+    "node expandos": 6065
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 7": {
     "insertions": 21,
@@ -847,7 +894,8 @@
     "promise reactions": 199,
     "listeners added": 2,
     "mutation records": 12471,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 10369
   },
   "classics: markdown, Melact": {
     "insertions": 301,
@@ -867,7 +915,8 @@
     "listeners added": 4,
     "listeners removed": 2,
     "mutation records": 1087,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 81
   },
   "classics: kanban, Melact": {
     "insertions": 1465,
@@ -885,7 +934,8 @@
     "listeners added": 13,
     "listeners removed": 11,
     "mutation records": 3398,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 14543
   },
   "classics: repro/nested-context-consumers, Melact": {
     "insertions": 1,
@@ -896,7 +946,8 @@
     "animation frames": 6,
     "microtasks": 7,
     "promise reactions": 2,
-    "mutation records": 2
+    "mutation records": 2,
+    "node expandos": 2
   },
   "classics: datagrid, Melact": {
     "moves": 226,
@@ -913,7 +964,8 @@
     "promise reactions": 78,
     "listeners added": 2,
     "mutation records": 17449,
-    "listeners kept": 2
+    "listeners kept": 2,
+    "node expandos": 4056
   },
   "Law A: Melact's excess over React 18 on bench/classics, slow 8": {
     "insertions": 14,
@@ -925,7 +977,8 @@
     "listeners added": 1,
     "listeners removed": 2,
     "mutation records": 22,
-    "listeners kept": 3
+    "listeners kept": 3,
+    "node expandos": 5
   },
   "meltea: keyed edits": {
     "moves": 107,
@@ -942,7 +995,8 @@
     "row refreshes": 194,
     "microtasks": 21,
     "listeners added": 3,
-    "mutation records": 382
+    "mutation records": 382,
+    "node expandos": 1
   },
   "meltea: selection only": {
     "insertions": 1,
@@ -956,7 +1010,8 @@
     "keys": 200,
     "row refreshes": 200,
     "microtasks": 6,
-    "mutation records": 9
+    "mutation records": 9,
+    "node expandos": 1
   },
   "meltea: random program, seed 1": {
     "moves": 1,
@@ -970,7 +1025,8 @@
     "keys": 23,
     "row refreshes": 20,
     "microtasks": 11,
-    "mutation records": 29
+    "mutation records": 29,
+    "node expandos": 1
   },
   "meltea: random program, seed 2": {
     "moves": 8,
@@ -984,7 +1040,8 @@
     "keys": 18,
     "row refreshes": 10,
     "microtasks": 6,
-    "mutation records": 27
+    "mutation records": 27,
+    "node expandos": 1
   },
   "meltea: random program, seed 3": {
     "moves": 2,
@@ -998,7 +1055,8 @@
     "keys": 24,
     "row refreshes": 13,
     "microtasks": 15,
-    "mutation records": 26
+    "mutation records": 26,
+    "node expandos": 1
   },
   "meltea: random program, seed 4": {
     "insertions": 4,
@@ -1013,7 +1071,8 @@
     "keys": 5,
     "row refreshes": 5,
     "microtasks": 12,
-    "mutation records": 15
+    "mutation records": 15,
+    "node expandos": 1
   },
   "meltea: random program, seed 5": {
     "moves": 6,
@@ -1028,7 +1087,8 @@
     "keys": 19,
     "row refreshes": 13,
     "microtasks": 14,
-    "mutation records": 35
+    "mutation records": 35,
+    "node expandos": 1
   },
   "meltea: random program, seed 6": {
     "moves": 1,
@@ -1044,7 +1104,8 @@
     "keys": 9,
     "row refreshes": 7,
     "microtasks": 8,
-    "mutation records": 12
+    "mutation records": 12,
+    "node expandos": 1
   },
   "meltea: random program, seed 7": {
     "insertions": 2,
@@ -1057,7 +1118,8 @@
     "keys": 2,
     "row refreshes": 2,
     "microtasks": 10,
-    "mutation records": 5
+    "mutation records": 5,
+    "node expandos": 1
   },
   "meltea: random program, seed 8": {
     "moves": 2,
@@ -1071,7 +1133,8 @@
     "keys": 16,
     "row refreshes": 14,
     "microtasks": 4,
-    "mutation records": 12
+    "mutation records": 12,
+    "node expandos": 1
   },
   "meltea: random program, seed 9": {
     "moves": 1,
@@ -1087,7 +1150,8 @@
     "keys": 14,
     "row refreshes": 10,
     "microtasks": 17,
-    "mutation records": 23
+    "mutation records": 23,
+    "node expandos": 1
   },
   "meltea: random program, seed 10": {
     "moves": 3,
@@ -1103,7 +1167,8 @@
     "keys": 13,
     "row refreshes": 6,
     "microtasks": 11,
-    "mutation records": 18
+    "mutation records": 18,
+    "node expandos": 1
   },
   "meltea: random program, seed 11": {
     "insertions": 5,
@@ -1117,7 +1182,8 @@
     "keys": 15,
     "row refreshes": 15,
     "microtasks": 13,
-    "mutation records": 16
+    "mutation records": 16,
+    "node expandos": 1
   },
   "meltea: random program, seed 12": {
     "insertions": 11,
@@ -1131,7 +1197,8 @@
     "keys": 22,
     "row refreshes": 17,
     "microtasks": 8,
-    "mutation records": 23
+    "mutation records": 23,
+    "node expandos": 1
   },
   "melact: spliced rows, keyed edits": {
     "moves": 107,
@@ -1166,7 +1233,8 @@
     "nodes walked": 1,
     "microtasks": 17,
     "promise reactions": 90,
-    "mutation records": 378
+    "mutation records": 378,
+    "node expandos": 193
   },
   "melact: rows reading offsetTop, sorted and selected": {
     "moves": 79,
@@ -1183,7 +1251,8 @@
     "nodes walked": 1,
     "microtasks": 7,
     "promise reactions": 40,
-    "mutation records": 169
+    "mutation records": 169,
+    "node expandos": 1
   },
   "melact: memo rows reading the selection from a context and offsetTop": {
     "moves": 39,
@@ -1216,7 +1285,8 @@
     "nodes walked": 16,
     "microtasks": 7,
     "promise reactions": 40,
-    "mutation records": 42
+    "mutation records": 42,
+    "node expandos": 2
   },
   "melact: controlled field, debounce and popover": {
     "insertions": 3,
@@ -1235,7 +1305,8 @@
     "animation frames": 5,
     "microtasks": 33,
     "promise reactions": 59,
-    "mutation records": 22
+    "mutation records": 22,
+    "node expandos": 6
   },
   "melact: memo boundaries, contexts at several depths and fresh callbacks": {
     "insertions": 1,
@@ -1251,7 +1322,8 @@
     "nodes walked": 32,
     "microtasks": 7,
     "promise reactions": 40,
-    "mutation records": 42
+    "mutation records": 42,
+    "node expandos": 2
   },
   "melact: rows with effects, 200 mounted by one patch between kept ones": {
     "insertions": 401,
@@ -1280,7 +1352,8 @@
     "hole evaluations": 59,
     "microtasks": 5,
     "promise reactions": 30,
-    "mutation records": 105
+    "mutation records": 105,
+    "node expandos": 50
   },
   "melact: random program, seed 1": {
     "insertions": 1,
@@ -1297,7 +1370,8 @@
     "nodes walked": 17,
     "microtasks": 17,
     "promise reactions": 65,
-    "mutation records": 14
+    "mutation records": 14,
+    "node expandos": 5
   },
   "melact: random program, seed 2": {
     "insertions": 2,
@@ -1315,7 +1389,8 @@
     "animation frames": 1,
     "microtasks": 15,
     "promise reactions": 73,
-    "mutation records": 16
+    "mutation records": 16,
+    "node expandos": 6
   },
   "melact: random program, seed 3": {
     "insertions": 1,
@@ -1333,7 +1408,8 @@
     "animation frames": 1,
     "microtasks": 16,
     "promise reactions": 91,
-    "mutation records": 15
+    "mutation records": 15,
+    "node expandos": 2
   },
   "melact: random program, seed 4": {
     "insertions": 1,
@@ -1349,7 +1425,8 @@
     "nodes walked": 2,
     "microtasks": 9,
     "promise reactions": 56,
-    "mutation records": 8
+    "mutation records": 8,
+    "node expandos": 1
   },
   "melact: random program, seed 5": {
     "insertions": 1,
@@ -1389,7 +1466,8 @@
     "hole evaluations": 12,
     "microtasks": 5,
     "promise reactions": 31,
-    "mutation records": 5
+    "mutation records": 5,
+    "node expandos": 4
   },
   "melact: random program, seed 8": {
     "moves": 2,
@@ -1406,7 +1484,8 @@
     "nodes walked": 1,
     "microtasks": 12,
     "promise reactions": 79,
-    "mutation records": 31
+    "mutation records": 31,
+    "node expandos": 24
   },
   "melact: random program, seed 9": {
     "insertions": 1,
@@ -1434,7 +1513,8 @@
     "hole evaluations": 19,
     "microtasks": 12,
     "promise reactions": 69,
-    "mutation records": 9
+    "mutation records": 9,
+    "node expandos": 3
   },
   "melact: random program, seed 11": {
     "insertions": 1,
@@ -1449,7 +1529,8 @@
     "hole evaluations": 22,
     "microtasks": 20,
     "promise reactions": 78,
-    "mutation records": 8
+    "mutation records": 8,
+    "node expandos": 3
   },
   "melact: random program, seed 12": {
     "insertions": 2,
@@ -1514,7 +1595,8 @@
     "animation frames": 3,
     "microtasks": 7,
     "promise reactions": 8,
-    "mutation records": 38
+    "mutation records": 38,
+    "node expandos": 22
   },
   "served: bench/ssr's page, 100 rows, Melact's HTML": {
     "bytes served": 22277
@@ -1529,7 +1611,8 @@
     "animation frames": 3,
     "microtasks": 7,
     "promise reactions": 8,
-    "mutation records": 308
+    "mutation records": 308,
+    "node expandos": 202
   },
   "served: bench/ssr's page, 1000 rows, Melact's HTML": {
     "bytes served": 221850
@@ -1544,7 +1627,8 @@
     "animation frames": 3,
     "microtasks": 7,
     "promise reactions": 8,
-    "mutation records": 3008
+    "mutation records": 3008,
+    "node expandos": 2002
   },
   "Law A: Melact's excess over React 18 hydrating bench/ssr's page": {},
   "Law A: Melact's excess over React 18 in the hydration itself, bench/ssr's page": {
@@ -1570,7 +1654,8 @@
     "microtasks": 87,
     "promise reactions": 390,
     "listeners added": 1,
-    "mutation records": 7301
+    "mutation records": 7301,
+    "node expandos": 893
   },
   "Law A: Melact's excess over React 18 on the event table": {
     "insertions": 1,

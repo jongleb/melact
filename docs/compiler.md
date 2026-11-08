@@ -1173,7 +1173,9 @@ Accepted only with these holding, by property-based tests:
   slots again, sending `View.rows` always through the general keyed path, dropping a loop's no-op
   for the same list, unguarding the first hole of every template, or ordering effects by walking
   the whole document each break a law. A counter new to the suite is recorded once with
-  `--admit=<counter>`.
+  `--admit=<counter>`. At the end of every step it also counts how many more properties script
+  set on the page's nodes than at the end of the last step (`node expandos`), so that row data or
+  handlers moved onto elements show up.
 
   What else is counted. Timers (`setTimeout`, `setInterval`, `requestIdleCallback`), animation
   frames, tasks (`setImmediate`, `MessagePort.postMessage`), microtasks (`queueMicrotask`) and

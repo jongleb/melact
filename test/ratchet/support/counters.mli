@@ -37,6 +37,7 @@ type kind =
   | Kept_global  (** After unmount, a property the run added to [window] or [document]. *)
   | Sent  (** A byte of the HTML a server renderer wrote. *)
   | Jobs_moved  (** A cell of an effect queue copied to put effects back in the order of the tree. *)
+  | Expando  (** A property script set on a node of the page, counted when the page holds more of them than at the end of the last step. *)
 
 val kinds : kind list
 val name : kind -> string
