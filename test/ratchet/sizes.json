@@ -1,41 +1,41 @@
 {
   "sizes": {
-    "bench/melact": 20544,
-    "bench/meltea": 11745,
-    "bench/ssr/melact client": 20259,
-    "bench/ssr/meltea client": 12794,
-    "examples/counter": 13891,
-    "examples/todomvc": 20142,
-    "bench/classics/admin": 31503,
-    "bench/classics/autocomplete": 28697,
-    "bench/classics/blocks": 31004,
-    "bench/classics/calendar": 45280,
-    "bench/classics/chat": 30745,
-    "bench/classics/chess": 29829,
-    "bench/classics/conduit": 32516,
-    "bench/classics/dashboard": 33808,
-    "bench/classics/datagrid": 31610,
-    "bench/classics/diff": 35311,
-    "bench/classics/email": 31839,
-    "bench/classics/eventtable": 30571,
-    "bench/classics/feed": 28761,
-    "bench/classics/filetree": 28558,
+    "bench/melact": 20325,
+    "bench/meltea": 11645,
+    "bench/ssr/melact client": 20305,
+    "bench/ssr/meltea client": 12843,
+    "examples/counter": 13894,
+    "examples/todomvc": 20139,
+    "bench/classics/admin": 31499,
+    "bench/classics/autocomplete": 28695,
+    "bench/classics/blocks": 31002,
+    "bench/classics/calendar": 45279,
+    "bench/classics/chat": 30750,
+    "bench/classics/chess": 29825,
+    "bench/classics/conduit": 32512,
+    "bench/classics/dashboard": 33807,
+    "bench/classics/datagrid": 31615,
+    "bench/classics/diff": 35308,
+    "bench/classics/email": 31838,
+    "bench/classics/eventtable": 30569,
+    "bench/classics/feed": 28760,
+    "bench/classics/filetree": 28553,
     "bench/classics/gallery": 29966,
     "bench/classics/gantt": 44542,
-    "bench/classics/hackernews": 27792,
-    "bench/classics/jsontree": 26433,
-    "bench/classics/kanban": 32783,
-    "bench/classics/logs": 29942,
-    "bench/classics/markdown": 31692,
-    "bench/classics/minesweeper": 22387,
-    "bench/classics/playlist": 45923,
-    "bench/classics/settings": 32560,
-    "bench/classics/shop": 30635,
-    "bench/classics/spreadsheet": 31415,
+    "bench/classics/hackernews": 27789,
+    "bench/classics/jsontree": 26434,
+    "bench/classics/kanban": 32784,
+    "bench/classics/logs": 29939,
+    "bench/classics/markdown": 31690,
+    "bench/classics/minesweeper": 22383,
+    "bench/classics/playlist": 45924,
+    "bench/classics/settings": 32562,
+    "bench/classics/shop": 30632,
+    "bench/classics/spreadsheet": 31414,
     "bench/classics/todomvc": 23507,
-    "bench/classics/trace": 32579,
-    "bench/classics/virtuallist": 26544,
-    "bench/classics/wizard": 34079
+    "bench/classics/trace": 32576,
+    "bench/classics/virtuallist": 26540,
+    "bench/classics/wizard": 34078
   },
   "growth": [
     {
@@ -455,6 +455,48 @@
         "bench/classics/trace": [
           32572,
           32579
+        ]
+      }
+    },
+    {
+      "date": "2026-11-08",
+      "reason": "hydration adopts the server's nodes without rewriting them (ssr clients) and build-time prerender (approved by the user 2026-11-08)",
+      "grown": {
+        "bench/ssr/melact client": [
+          20259,
+          20305
+        ],
+        "bench/ssr/meltea client": [
+          12794,
+          12843
+        ],
+        "examples/counter": [
+          13891,
+          13894
+        ],
+        "bench/classics/chat": [
+          30745,
+          30750
+        ],
+        "bench/classics/datagrid": [
+          31610,
+          31615
+        ],
+        "bench/classics/jsontree": [
+          26433,
+          26434
+        ],
+        "bench/classics/kanban": [
+          32783,
+          32784
+        ],
+        "bench/classics/playlist": [
+          45923,
+          45924
+        ],
+        "bench/classics/settings": [
+          32560,
+          32562
         ]
       }
     }
