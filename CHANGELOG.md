@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Meltea's update graph: `meltea-ppx` reads what each branch of `update` does to each field (kept,
+  set to one of a few constants, or set), through helpers, model-valued `let`s and a `match` on
+  `(message, …)`. After the mount `Program` calls the view's slice, its page without the statements
+  it does not read, with the fields written since the last draw, and every hole of a template there
+  is evaluated only when a field it reads was written; a gate no message can close is not emitted.
+  On the ratchet's Meltea runs view calls fall from 237 to 94 and hole evaluations from 222 to 104.
 - `melact.meltea`, a migration path from hooks to Meltea: `<MelteaProgram program input onReport />`
   runs a Meltea program inside a Melact app (props become messages, messages are reported to
   callbacks, the view is drawn in Melact's flush), and `MelactHtml.element` puts a Melact widget into

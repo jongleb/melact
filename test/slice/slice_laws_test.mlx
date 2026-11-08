@@ -1,0 +1,290 @@
+open Testing
+
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+
+type item = { id : int; label : string }
+
+(** How the heading is drawn. *)
+type mode = Plain | Fancy of int
+
+(** What the button inside [Html.map] sends. *)
+type press = Press
+
+type model = {
+  a : int;
+  b : int;
+  title : string;
+  label : string;
+  mode : mode;
+  alt : string option;
+  tag : int;
+  items : item list;
+  picked : int option;
+  constant : string;  (** Never written by [update]. *)
+  marked : int list;  (** The tags the button sent, last first. *)
+}
+
+type message =
+  | Bump_a
+  | Bump_b
+  | Retitle of string
+  | Relabel of string
+  | Plainly
+  | Fancily of int
+  | Alternate of string option
+  | Retag of int
+  | Add
+  | Drop of int
+  | Pick of int option
+  | Keep_title
+  | Same
+  | Tagged of int * press
+
+let init =
+  {
+    a = 0;
+    b = 0;
+    title = "t";
+    label = "l";
+    mode = Plain;
+    alt = None;
+    tag = 0;
+    items = [ { id = 0; label = "zero" }; { id = 1; label = "one" } ];
+    picked = None;
+    constant = "fixed";
+    marked = [];
+  }
+
+let update message model =
+  let listed items = { model with items; picked = None } in
+  match (message, model.items) with
+  | Bump_a, _ -> { model with a = model.a + 1 }
+  | Bump_b, _ :: _ -> { model with b = model.b + 1 }
+  | Bump_b, [] -> { model with a = model.a + 1; b = model.b + 1 }
+  | Retitle title, _ -> { model with title }
+  | Relabel label, _ -> { model with label }
+  | Plainly, _ -> { model with mode = Plain }
+  | Fancily count, _ -> { model with mode = Fancy count }
+  | Alternate alt, _ -> { model with alt }
+  | Retag tag, _ -> { model with tag }
+  | Add, items -> listed (items @ [ { id = List.fold_left (fun top item -> max top (item.id + 1)) 0 items; label = "new" } ])
+  | Drop id, _ :: _ -> listed (List.filter (fun item -> item.id <> id) model.items)
+  | Drop _, [] -> model
+  | Pick picked, _ -> { model with picked }
+  | Keep_title, _ -> { model with title = model.title }
+  | Same, _ -> model
+  | Tagged (tag, Press), _ -> { model with marked = tag :: model.marked }
+
+(** The fields each message writes, as the laws expect the compiler to find them. *)
+let writes message =
+  match message with
+  | Bump_a -> [ "a" ]
+  | Bump_b -> [ "a"; "b" ]
+  | Retitle _ -> [ "title" ]
+  | Relabel _ -> [ "label" ]
+  | Plainly | Fancily _ -> [ "mode" ]
+  | Alternate _ -> [ "alt" ]
+  | Retag _ -> [ "tag" ]
+  | Add | Drop _ -> [ "items"; "picked" ]
+  | Pick _ -> [ "picked" ]
+  | Keep_title | Same -> []
+  | Tagged _ -> [ "marked" ]
+
+let evaluations = Array.make 4 0
+
+let seen hole value =
+  evaluations.(hole) <- evaluations.(hole) + 1;
+  value
+
+let summarised model = string_of_int (model.a + model.b) ^ model.title ^ model.label
+
+let view model =
+  let title = model.title in
+  let pair = (model.a, model.b) in
+  let badge count = <b className="badge">(Html.text (model.label ^ string_of_int count))</b> in
+  let shown = List.filter (fun item -> item.id mod 2 = 0 || model.a > 2) model.items in
+  let whole = summarised model in
+  <main title>
+    <p className="a">(Html.text (seen 0 (string_of_int model.a)))</p>
+    <p className="pair">(Html.text (seen 1 (match pair with first, second -> string_of_int (first + second))))</p>
+    <p className="constant">(Html.text (seen 2 model.constant))</p>
+    <p className="title">(Html.text (seen 3 model.title))</p>
+    (match model.mode with
+    | Plain -> <h1>(Html.text title)</h1>
+    | Fancy count -> <h2>(badge count) (Html.text title) <i>(Html.int model.b)</i></h2>)
+    (match model.alt with Some title -> <em>(Html.text (title ^ model.label))</em> | None -> Html.none)
+    (Html.map (fun inner -> Tagged (model.tag, inner)) (<button className="press" onClick=Press>(Html.text "go")</button>))
+    <p className="marked">(Html.text (String.concat "," (List.map string_of_int model.marked)))</p>
+    <ul>
+      (Html.list
+         (List.map
+            (fun item ->
+              <li key=(string_of_int item.id) className=(match model.picked with Some id when id = item.id -> "on" | _ -> "")>
+                (Html.text item.label)
+              </li>)
+            shown))
+    </ul>
+    <footer>(Html.text whole)</footer>
+  </main>
+
+let views = ref 0
+
+let listed_view { items; picked; title; _ } =
+  let () = incr views in
+  let heading = String.uppercase_ascii title in
+  <section>
+    <h3>(Html.text heading)</h3>
+    <ol>
+      (Html.list
+         (List.map
+            (fun item ->
+              <li key=(string_of_int item.id) className=(match picked with Some id when id = item.id -> "on" | _ -> "")>
+                (Html.text item.label)
+              </li>)
+            items))
+    </ol>
+  </section>
+
+(** One step of a generated run. *)
+type step = Send of message | Click | Flush
+
+let step tape model =
+  let ids = List.map (fun item -> item.id) model.items in
+  let pick () = List.nth_opt ids (draw tape (max 1 (List.length ids))) in
+  match draw tape 16 with
+  | 1 -> Send (Alternate [| Some "x"; Some "y"; None |].(draw tape 3))
+  | 2 -> Send (Fancily (draw tape 3))
+  | 3 -> Send Bump_a
+  | 4 -> Send Bump_b
+  | 5 -> Send (Retitle [| "t"; "u"; "v" |].(draw tape 3))
+  | 6 -> Send (Relabel [| "l"; "m" |].(draw tape 2))
+  | 7 -> Send Plainly
+  | 8 -> Send (Retag (draw tape 4))
+  | 9 -> Send Add
+  | 10 -> Send (Option.fold ~none:Add ~some:(fun id -> Drop id) (pick ()))
+  | 11 -> Send (Pick (pick ()))
+  | 12 -> Send Keep_title
+  | 13 -> Click
+  | 0 -> Send Same
+  | _ -> Flush
+
+let switching tape _ =
+  match draw tape 7 with
+  | 0 -> Send (Alternate [| Some "x"; Some "y"; Some "z"; None |].(draw tape 4))
+  | 1 -> Send (Fancily (draw tape 3))
+  | 2 -> Send Plainly
+  | 3 -> Send (Retitle [| "t"; "u" |].(draw tape 2))
+  | 4 -> Send Bump_b
+  | 5 -> Send (Relabel [| "l"; "m" |].(draw tape 2))
+  | _ -> Flush
+
+let follows next =
+  (property (tapes ~shortest:4 ~longest:80) (fun values ->
+       let tape = tape values in
+       let root = attached () in
+       let program = Program.sandbox ~init ~update ~view root in
+       let model = ref init and drawn = ref init in
+       let compare () =
+         let fresh = create_element document "div" in
+         let expected = Program.sandbox ~init:!model ~update ~view fresh in
+         let shown = (shapes (as_node root), shapes (as_node fresh)) in
+         Program.stop expected;
+         expect (fst shown) |. to_equal (snd shown)
+       in
+       List.iter
+         (fun _ ->
+           match next tape !model with
+           | Send message ->
+               model := update message !model;
+               Program.dispatch program message
+           | Click ->
+               model := update (Tagged (!drawn.tag, Press)) !model;
+               click (select root "button.press")
+           | Flush ->
+               Program.flush program;
+               drawn := !model;
+               compare ())
+         (List.init (Array.length values / 2) Fun.id);
+       Program.flush program;
+       compare ();
+       Program.stop program;
+       remove_root root))
+
+let () =
+  describe "Program slices" (fun () ->
+      test "after any messages and batches the page is the view of the model, mounted fresh" (fun () ->
+          check (follows step) [%mel.obj { numRuns = 1000 }]);
+      test "after messages that switch the nested templates the page is the view of the model, mounted fresh" (fun () ->
+          check (follows switching) [%mel.obj { numRuns = 500 }]);
+      test "a hole is evaluated once when mounted and then exactly at the draws after a message wrote a field it reads"
+        (fun () ->
+          check
+            (property (tapes ~shortest:4 ~longest:80) (fun values ->
+                 let tape = tape values in
+                 Array.fill evaluations 0 4 0;
+                 let root = attached () in
+                 let program = Program.sandbox ~init ~update ~view root in
+                 let model = ref init and drawn = ref init and pending = ref [] in
+                 let expected = Array.make 4 1 in
+                 let drawing () =
+                   (match !pending with
+                   | [] -> ()
+                   | written ->
+                       List.iteri
+                         (fun hole fields ->
+                           match List.exists (fun field -> List.mem field written) fields with
+                           | true -> expected.(hole) <- expected.(hole) + 1
+                           | false -> ())
+                         [ [ "a" ]; [ "a"; "b" ]; [ "constant" ]; [ "title" ] ]);
+                   pending := [];
+                   drawn := !model
+                 in
+                 List.iter
+                   (fun _ ->
+                     match step tape !model with
+                     | Send message ->
+                         pending := writes message @ !pending;
+                         model := update message !model;
+                         Program.dispatch program message
+                     | Click ->
+                         let message = Tagged (!drawn.tag, Press) in
+                         pending := writes message @ !pending;
+                         model := update message !model;
+                         click (select root "button.press")
+                     | Flush ->
+                         Program.flush program;
+                         drawing ())
+                   (List.init (Array.length values / 2) Fun.id);
+                 Program.flush program;
+                 drawing ();
+                 Program.stop program;
+                 remove_root root;
+                 expect (Js.Array.join ~sep:"," evaluations) |. to_equal (Js.Array.join ~sep:"," expected)))
+            [%mel.obj { numRuns = 300 }]);
+      test "a sliced view is called once, to mount, and its page follows every message" (fun () ->
+          check
+            (property (tapes ~shortest:4 ~longest:60) (fun values ->
+                 let tape = tape values in
+                 views := 0;
+                 let root = create_element document "div" in
+                 let program = Program.sandbox ~init ~update ~view:listed_view root in
+                 let model = ref init in
+                 List.iter
+                   (fun _ ->
+                     match step tape !model with
+                     | Send message ->
+                         model := update message !model;
+                         Program.dispatch program message
+                     | Click | Flush -> Program.flush program)
+                   (List.init (Array.length values / 2) Fun.id);
+                 Program.flush program;
+                 let called = !views in
+                 let fresh = create_element document "div" in
+                 let expected = Program.sandbox ~init:!model ~update ~view:listed_view fresh in
+                 let shown = (shapes (as_node root), shapes (as_node fresh)) in
+                 Program.stop program;
+                 Program.stop expected;
+                 expect (called, fst shown) |. to_equal (1, snd shown)))
+            [%mel.obj { numRuns = 200 }]))
+

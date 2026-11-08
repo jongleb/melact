@@ -595,6 +595,124 @@ new one, with no classes and no FLIP code; where the API is missing, the draw is
 stubs the API and checks that a transition starts exactly for the draws that follow an update that
 asked for one, and that the page is the view after the transitions finish.
 
+## Meltea's update graph
+
+The compiler sees `update` and `view` of a module whole, and links them: for every message it knows
+which fields can change, and for every hole of the view which fields it reads. `Program` then does
+only the part of a draw that a message can reach.
+
+### What update does to each field
+
+`meltea-ppx` reads each branch of `update` as a small abstract interpreter (`ppx/meltea/fields.ml`).
+For every field a branch can touch it finds one of three answers: the field is kept, it is set to
+one of a few constants (a constructor without payload, a number, a string), or it is set to
+something else. It follows:
+
+- `{ model with f = model.f }`, which keeps `f`, and records built without a base, which name every
+  field;
+- `let`s of `update` before its `match`: helper functions such as
+  `let listed items = { model with items; shown = … }`, whose calls write what their bodies write,
+  and model values such as `let next = { model with … } in { next with … }`;
+- a `match` on a tuple whose first part is the message, `match (message, size) with`. A case that
+  another part of the tuple or a guard decides also counts the later cases of the same constructor,
+  and only those.
+
+Joined over all branches this gives a lattice per field (`Fields.lattice`). A field no branch writes
+is a constant after `init`. A field only ever set to constants, such as a filter `All | Active |
+Completed`, has finitely many values; the compiler notes them for later work on templates per state
+and uses nothing of it yet. The masks `Program` keeps are built from this reading, so `Same -> model`,
+`f = model.f` and the helpers of the ratchet's generated programs no longer count as "every field".
+The fanout alerts read the same lattice, and now also see lists drawn with
+`Html.array (Array.map row items)`.
+
+### Holes gated by the fields they read
+
+Each hole of a template in the view gets the bits of the fields it reads, through `model.field`, the
+record pattern, and the `let`s before the page. The refresh of the template computes once the bits
+that changed since its frame was last drawn (every bit for a new frame) and evaluates the hole only
+when they meet its bits, or when a local the compiler cannot follow (a name bound by a `match` arm,
+the dispatch, a value read from the whole model) is not the one it was:
+
+```ocaml
+let __melhole_open = Program.opened __melhole_frame.slot_0 __melhole_changed in
+...
+if __melhole_open land 0x40000004 <> 0 then
+  (match changed_model with Unchanged -> () | Changed -> View.write_sole_text hole (string_of_int model.tick))
+```
+
+A hole that holds a nested template, a loop or `Html.memo` has no guard of its own, because the code
+inside it writes frame slots; its gate is the union of what everything inside reads, so a message
+that reaches none of it skips the whole subtree without evaluating any guard in it. A hole whose
+guard is already exact (a field from the record pattern, a remembered `let`) keeps its guard alone.
+
+Gates are put only on templates of the view's page and of its `let`s, not inside functions. A row
+of a compiled loop is drawn on the loop's own schedule (items and projections), not every time the
+fields it reads change, so the bits since the last draw say nothing about its frame.
+
+A gate that no message of the module's `update` can close is not emitted. On the benchmark every
+message writes `rows` or `selection`, and its one loop reads both, so bench/meltea compiles as before.
+A field that is never written is never in the bits, so a hole that reads only constants is evaluated
+once, at mount, and never again, with no guard compared.
+
+### Program slices
+
+A view is split into the `let`s its page reads and the statements it does not (`let () = log …`,
+`e; …`). The page part becomes the slice, a function of the changed bits and the model; the view
+calls it with every bit:
+
+```ocaml
+let __melhole_slice_3 __melhole_changed model = let query = model.query in <main …> … </main>
+let view model = let () = Counters.bump Viewed in __melhole_slice_3 (-1) model
+let __melhole_slice_view = Program.Sliced { analysed = view; draw = __melhole_slice_3 }
+```
+
+`Program.track` checks once that the slice describes the view in use, like the other companions.
+The view mounts the page; after every message `Program` calls the slice with the bits the messages
+since the last draw wrote, so the view function itself is not called again, and the slice evaluates
+only the holes those bits reach. A view whose statements read a `let` of the page is not split.
+Rendering is pure, so a statement that is skipped and a hole that is not evaluated show what they
+showed. The slice is emitted only when it gates a hole or skips a statement.
+
+### Laws and measurements
+
+- `test/slice`: random messages, clicks and batches against a view with a record of eleven fields,
+  `let`s of each kind (a field, a pair made on every draw, a function that reads a field, a remembered
+  filter, a value of the whole model), nested templates in `match` arms whose binders shadow a `let`,
+  `Html.map` over a field, a loop and a constant field; after every draw the page equals a fresh mount
+  of the model. A second property switches the nested templates often. A counted law checks that four
+  holes are evaluated once at mount and then exactly at the draws after a message whose write set
+  contains a field they read, the constant one never again; and a sliced view is called once, to
+  mount, while its page follows every message.
+- A QCheck law (`test/laws`) generates `update`s whose branches write fields directly, through a
+  helper, through a model-valued `let`, in both arms of an `if`, or not at all, over a message or a
+  tuple, and checks every branch's write set and the joined lattice against a model of the code.
+- Mutants, each caught: a slice that skips a hole it should refresh, a wrong mask bit for a pattern
+  field and for a model field, a kept field taken as written, a new frame narrowed like a mounted
+  one, a match-arm binder taken for the `let` it shadows, a helper call taken to write nothing, a
+  case decided by another part of the tuple taken as total, a gate that ignores the locals it cannot
+  follow, a value made on every draw taken as exact, a slice that keeps the statements; and for the
+  lattice a field kept in one branch and written in another taken as set, the constants of two
+  branches joined to one, the base of a record update ignored, a helper call or a model-valued
+  `let` taken to write nothing, `f = model.f` taken as a write, a match on a tuple not read, and the
+  `else` of an `if` dropped.
+
+On the ratchet's Meltea runs (`test/ratchet/meltea`), whose view counts its calls and its holes:
+
+| Run | view calls | hole evaluations |
+|---|---|---|
+| keyed edits | 31 → 12 | 30 → 13 |
+| selection only | 8 → 2 | 7 → 3 |
+| twelve random programs, total | 198 → 80 | 185 → 88 |
+
+The view calls left are the mount and the calls of `summary`, which `Html.memo` makes when the items
+change.
+
+On js-framework-benchmark every message of bench/meltea writes `rows` or `selection`, and its one
+loop reads both, so no gate is emitted and its code is the base's but for `Program` and sharper
+masks (a replace now writes four fields, not every field); its script times do not move. Sizes,
+gzip: bench/meltea +61 B, for `Program`'s slice and the masks; the server-rendered page's client
++84 B, where the counter's clicks now skip the hole of the 1,000 rows without building the loop.
+
 ## Components without hooks
 
 By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body

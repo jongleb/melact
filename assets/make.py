@@ -713,7 +713,7 @@ def fields(p):
 
     decisions = [
         (112, "green", "Ignore", "{ }", "the view is not called at all"),
-        (210, "accent", "Type \"milk\"", "{ field }", "the view runs; one === per local picks the holes"),
+        (210, "accent", "Type \"milk\"", "{ field }", "the slice runs: only holes that read field"),
     ]
     for y, color, message, changed, outcome in decisions:
         body += box(520, y, 360, 88, p[color + "_soft"], p[color], rx=14, width=1.4)
@@ -722,7 +722,58 @@ def fields(p):
         body += text(538, y + 74, outcome, size=11.5, cls="muted")
     body += text(440, 330, "The masks are generated next to update and view; Program keeps the fields changed since the last draw.", size=12, cls="muted", anchor="middle", weight=600)
     body += text(440, 352, "Subscriptions are read the same way: TodoMVC's reads no field, so it is asked once, at the start.", size=12, cls="muted", anchor="middle")
-    return svg(p, 880, 360, "Fields an update changes, in Meltea's TodoMVC: meltea-ppx reads update and finds what each message can change: Type changes field, Route changes filter, Add changes todos, field and next, Ignore changes nothing, and Edit, which it does not recognise, changes all fields. It reads view the same way: todos, field, editing and filter, never next. After Ignore nothing the view reads changed, so the view is not called; after Type the view runs and one === per local picks the holes to write. subscriptions are read the same way, and are asked again only after a draw that changed a field they read", body)
+    return svg(p, 880, 360, "Fields an update changes, in Meltea's TodoMVC: meltea-ppx reads update and finds what each message can change: Type changes field, Route changes filter, Add changes todos, field and next, Ignore changes nothing, and Edit, which it does not recognise, changes all fields. It reads view the same way: todos, field, editing and filter, never next. After Ignore nothing the view reads changed, so the view is not called; after Type the view's slice runs and evaluates only the holes that read field. subscriptions are read the same way, and are asked again only after a draw that changed a field they read", body)
+
+
+def slices(p):
+    char = 6.93
+    body = box(0, 0, 500, 330, p["card"], p["line"], rx=14, lift=True)
+    body += text(18, 28, "the view, split by the compiler", size=13.5, weight=700)
+    lines = [
+        ("let view model =", "", None),
+        ("  let () = log model in", "faint", "statement: the slice skips it"),
+        ("  let query = model.query in", "", "read by the page: kept"),
+        ("  <main title=query>", "", None),
+        ("    <p>(Html.int model.tick)</p>", "", "tick"),
+        ("    <input value=model.query />", "", "query"),
+        ("    (Html.list (List.map row model.shown))", "", "shown · picked"),
+        ("    (Html.memo summary model.items)", "", "items"),
+        ("  </main>", "", None),
+    ]
+    for i, (code, cls, note) in enumerate(lines):
+        y = 62 + i * 26
+        body += text(18, y, code, size=11.5, cls=("mono " + cls).strip())
+        if note and i >= 4:
+            w = len(note) * char + 16
+            body += box(482 - w, y - 15, w, 21, p["blue_soft"], p["blue"], rx=10.5, width=1.2)
+            body += text(482 - w / 2, y, note, size=11, cls="mono blue", weight=700, anchor="middle")
+        elif note:
+            body += text(482, y, note, size=11, cls="muted", anchor="end")
+    body += text(18, 300, "each hole's gate: the bits of the fields it reads,", size=11.5, cls="muted")
+    body += text(18, 318, "through model.field, the record pattern and the lets", size=11.5, cls="muted")
+
+    body += text(530, 24, "Tick", size=13.5, cls="mono accent", weight=700)
+    body += text(574, 24, "writes { tick }", size=13.5, weight=700)
+    rows = [
+        ("<p> tick", "evaluated, written", "accent"),
+        ("<input> query", "gate closed", "green"),
+        ("the loop", "gate closed: no row, no guard", "green"),
+        ("Html.memo", "gate closed", "green"),
+    ]
+    y = 42
+    for name, verdict, color in rows:
+        body += box(520, y, 360, 34, p[color + "_soft"], p[color], rx=9, width=1.3, lift=color == "accent")
+        body += text(536, y + 22, name, size=12, cls="mono", weight=700)
+        body += text(866, y + 22, verdict, size=12, cls=color, weight=700, anchor="end")
+        y += 42
+    body += box(520, y + 6, 360, 112, p["card"], p["line"], rx=14, lift=True)
+    body += text(536, y + 32, "Program, after the mount", size=13, weight=700)
+    body += text(536, y + 56, "calls the slice with the bits written", size=11.5, cls="muted")
+    body += text(536, y + 74, "since the last draw, not the view;", size=11.5, cls="muted")
+    body += text(536, y + 92, "a new frame opens every gate, and", size=11.5, cls="muted")
+    body += text(536, y + 110, "a name only a guard can follow is compared", size=11.5, cls="muted")
+    body += text(440, 360, "A gate no message of update can close is not emitted; a field no message writes is drawn once, at mount.", size=12, cls="muted", anchor="middle", weight=600)
+    return svg(p, 880, 370, "Program slices in Meltea: the compiler splits the view into the lets its page reads and the statements it does not, here let () = log model, and gives every hole the bits of the fields it reads: tick, query, shown and picked for the loop, items for Html.memo. After Tick, which writes tick, Program calls the slice with that bit instead of the view: the paragraph of tick is evaluated and written, and the input, the loop and the memo are skipped without looking at any guard inside them. A new frame opens every gate, a local only a guard can follow is compared as before, a gate no message can close is not emitted, and a field no message writes is drawn once, at mount", body)
 
 
 def vdom(p):
@@ -1431,7 +1482,7 @@ def speed(p):
 
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed, bridges=bridges)
+               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed, bridges=bridges, slices=slices)
 
 HEADERS = dict(
     overview=("Melact in one picture", "A click writes one text node, chosen at build time",
@@ -1472,6 +1523,8 @@ HEADERS = dict(
               "Messages, a pure update and a view in mlx; one click writes one text node."),
     fields=("A compiler that sees writers", "It knows what each message changes",
             "So a message that changes nothing the view reads does not even call the view."),
+    slices=("Program slices", "After a message, only the holes it reaches",
+            "Program calls the page's slice with the fields written; the view runs once, to mount."),
     fanout=("Fanout alerts", "The compiler warns when typing would check a whole list",
             "From the event to the message, the fields it writes and the lists that read them, with no annotations."),
     remember=("Remembered values", "Derived data is computed again only when its fields change",

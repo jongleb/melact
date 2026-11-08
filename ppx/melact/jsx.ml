@@ -695,6 +695,7 @@ let mapper =
         ids = Element.Tree_ids;
         classify = react_text;
         extra = (fun _ -> None);
+        gates = (fun _ -> Element.Ungated);
         each =
           (fun loc item ->
             let rec piped expression =
