@@ -1523,54 +1523,50 @@
   },
   "served: bench/ssr's page, 10 rows, hydrated by Melact": {
     "removals": 2,
-    "attributes": 11,
-    "texts": 25,
-    "created nodes": 94,
-    "frame layouts": 7,
+    "attributes": 1,
+    "texts": 4,
+    "created nodes": 14,
+    "frame layouts": 6,
     "timers": 2,
     "animation frames": 3,
     "microtasks": 7,
     "promise reactions": 8,
-    "mutation records": 38
+    "mutation records": 7
   },
   "served: bench/ssr's page, 100 rows, Melact's HTML": {
     "bytes served": 22277
   },
   "served: bench/ssr's page, 100 rows, hydrated by Melact": {
     "removals": 2,
-    "attributes": 101,
-    "texts": 205,
-    "created nodes": 812,
-    "frame layouts": 7,
+    "attributes": 1,
+    "texts": 4,
+    "created nodes": 12,
+    "frame layouts": 6,
     "timers": 2,
     "animation frames": 3,
     "microtasks": 7,
     "promise reactions": 8,
-    "mutation records": 308
+    "mutation records": 7
   },
   "served: bench/ssr's page, 1000 rows, Melact's HTML": {
     "bytes served": 221850
   },
   "served: bench/ssr's page, 1000 rows, hydrated by Melact": {
     "removals": 2,
-    "attributes": 1001,
-    "texts": 2005,
-    "created nodes": 8012,
-    "frame layouts": 7,
+    "attributes": 1,
+    "texts": 4,
+    "created nodes": 12,
+    "frame layouts": 6,
     "timers": 2,
     "animation frames": 3,
     "microtasks": 7,
     "promise reactions": 8,
-    "mutation records": 3008
+    "mutation records": 7
   },
   "Law A: Melact's excess over React 18 hydrating bench/ssr's page": {},
   "Law A: Melact's excess over React 18 in the hydration itself, bench/ssr's page": {
-    "attributes": 1110,
-    "texts": 2223,
-    "created nodes": 8918,
-    "frame layouts": 3,
-    "promise reactions": 3,
-    "mutation records": 3333
+    "created nodes": 38,
+    "promise reactions": 3
   },
   "event table: Melact, through its scenario": {
     "moves": 1325,

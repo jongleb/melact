@@ -1,0 +1,19 @@
+(copy_files
+ (files ../page.mlx))
+
+(melange.emit
+ (target output)
+ (libraries meltea melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (pps melange.ppx meltea-ppx -hydratable)))
+
+(rule
+ (target index.html)
+ (action
+  (with-stdout-to
+   %{target}
+   (pipe-stdout
+    (run %{exe:render/render.exe})
+    (run %{bin:melhole-prerender} --capture main %{dep:shell.html})))))

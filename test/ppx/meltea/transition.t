@@ -263,8 +263,9 @@ With -hydratable, every template also gets the code that takes over a server's n
       } { Melhole.View.placed = None; released = None; forgotten = None }
       {
         Js.Fn.I2 =
-          (fun __melhole_node __melhole_collected ->
-             ((let __melhole_from__melhole_hole_0 =
+          (fun __melhole_node __melhole_collect ->
+             ((let __melhole_collected = __melhole_collect () in
+               let __melhole_from__melhole_hole_0 =
                  __melhole_collected.__melhole_frame_1_hole_0 in
                let __melhole_cursor = Melhole.View.inside __melhole_node in
                Melhole.View.adopt_static __melhole_cursor "count: ";
@@ -300,7 +301,7 @@ With -hydratable, every template also gets the code that takes over a server's n
                     (match __melhole_changed_0 with
                      | Melhole.View.Unchanged -> ()
                      | _ ->
-                         Melhole.Dom_api.set_data __melhole_hole_0
+                         Melhole.View.served_write_text __melhole_hole_0
                            (string_of_int (count : int)));
                     ())
                   [@ocaml.warning "-26-27"]))

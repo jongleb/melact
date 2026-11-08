@@ -252,12 +252,25 @@ function next to the walk and the refresh: it goes through the template's static
 the server's nodes together, checks every static element and text, takes a text hole's node, puts
 back the anchors the template keeps between neighbours, and hands each content hole's child a
 cursor; the child takes exactly its own nodes (a text one, a template one element, a list as many
-rows as it has) and the cursor moves on. The values come first, from the template's own refresh
-run on an off-page clone whose content holes only remember their children; then `adopt` runs on
-the server's element, and the refresh runs once more on the adopted holes to set handlers. If the
-HTML does not match, hydration falls back to a plain render, as React does, and the error says what
-it expected and what it found. Hand-written templates (`Template.make`) are taken over by an
-interpreter that follows their hole paths.
+rows as it has) and the cursor moves on. A template with text or child holes needs their values
+first: `adopt` asks for them, and the template's own refresh runs on an off-page clone whose content
+holes only remember their children. A template whose holes are all on elements (attributes, a sole
+text, handlers), like a table row, needs no clone. Then the refresh runs once more on the adopted
+holes, to set handlers; templates compiled with `-hydratable` write through functions that, while
+hydration is taking nodes over, leave alone an attribute, a text, a field's value or a checkbox's
+state the server's node already shows. If the HTML does not match, hydration falls back to a plain
+render, as React does, and the error says what it expected and what it found. Hand-written
+templates (`Template.make`) are taken over by an interpreter that follows their hole paths.
+
+Melact hydrating bench/ssr's page of 1,000 rows rewrote what the server had written: a clone of the
+row template per row and, on the page, a class and two texts per row (1,001 attribute writes, 2,005
+text writes, 8,012 nodes created, 3,008 mutation records). Now it writes 1 attribute and 4 texts and
+creates 12 nodes (the page's outer template, once), with 7 mutation records, as React 18 hydrating
+the same HTML does (1, 4, 0 and 7). A law on random pages with every kind of part
+([`test/served`](../test/served)) watches the page while it is hydrated: no attribute, no text, no
+element and no non-empty text is written, added or taken away. Writing attributes, texts or field
+values without looking at the server's node breaks it, and always making the clone breaks the
+ratchet's count of created nodes.
 
 `adopt` costs about a fifth of a small app's bundle, so it is generated only with the ppx's
 `-hydratable` flag, as Svelte's `hydratable` option: `(pps melact-ppx -hydratable)`. Without it the
@@ -443,6 +456,75 @@ main thread's work over the load falls from 1,119 to 1,012 ms and its blocking t
 609 ms, while the first click pays the takeover (to paint 38 → 175 ms); with 1,000 rows at 4×, 243
 to 193 ms and 95 to 74 ms. The rest of the load is the browser parsing, styling and laying out the
 page. `hydrateRoot` stays the default; `resumeRoot` is for long pages that are mostly read.
+
+### Rendered at build time
+
+A page whose first view does not depend on the request can be rendered once, when the app is
+built. The server renderer is native, so dune runs it as a build step: the module with the model and
+the view builds a third time, natively under `-server`, a one-line executable prints the HTML of the
+initial model or element, and `melhole-prerender` puts that HTML into the app's `index.html`. The
+browser paints the page as soon as it has parsed the HTML; the script is deferred (`type="module"`
+or `defer`), so nothing waits for the code, and the client resumes the page instead of mounting it:
+no view runs and no node changes until the first input takes the page over.
+
+An app opts in with four pieces ([`bench/meltea/prerendered`](../bench/meltea/prerendered) and
+[`bench/melact/prerendered`](../bench/melact/prerendered) are complete examples):
+
+1. The model, `update`, `view` and the initial model in a module that also builds natively, with no
+   `Js` and no DOM. Melact code that calls `Js` keeps those calls in a small module with a native
+   twin (`bench/melact/host.ml`: a random word and an array filter, `Random` and `List` natively).
+2. The client resumes: `Program.sandbox ~start:Program.resume ~init:Page.init …` or
+   `ReactDOM.Client.resumeRoot root <Page.App />`, compiled with `-hydratable`.
+3. A native executable that prints the first page, against `meltea.server` with `meltea-ppx
+   -server` or `melact.server.native` with `melact-ppx -server`:
+
+   ```ocaml
+   let () = print_string (Program.render ~view:Page.view Page.init)
+   let () = print_string (ReactDOMServer.renderToString <Page.App />)
+   ```
+
+4. A rule that writes the page from the app's own `index.html`, here called `shell.html`:
+
+   ```
+   (rule
+    (target index.html)
+    (action
+     (with-stdout-to %{target}
+      (pipe-stdout
+       (run %{exe:render/render.exe})
+       (run %{bin:melhole-prerender} --capture main %{dep:shell.html})))))
+   ```
+
+`melhole-prerender [--capture] ROOT_ID SHELL.html` reads the HTML on its standard input and finds
+the start tag whose `id` is `ROOT_ID` (in double or single quotes, after a space; comments are
+skipped and a `>` inside a quoted attribute does not end the tag). The element must be empty: a
+newline left inside it would be a text node the view does not have, and the takeover would mount
+the page anew. The HTML goes right inside it, and with `--capture`, `Melhole_server.capture` goes in
+a script right before `</head>`, so that clicks and typing before the code arrives are replayed when
+it takes the page over. A shell with no such element, a filled root, or no head before the root for
+the capture script is refused with a message. The tool does not care who wrote the HTML: a Melact
+app whose code calls `Js` everywhere can render under Node with `melact.server` instead and pipe
+the output the same way.
+
+What the build renders is what the first input takes over, so it must be the page the client starts
+from. Values the view does not read may differ: the benchmark's Meltea model holds a random seed for
+its labels, drawn in the browser, and the build renders it with seed 0.
+
+Laws ([`test/prerendered`](../test/prerendered)), fast-check in jsdom, on the pages the build
+writes for `bench/meltea` and `bench/melact` and on their own clients, loaded fresh for every run
+(the shipped `main` modules, with a view or a root component that counts its runs): after random
+clicks on the buttons, labels and remove icons, some before the code arrives, the resumed page
+shows after every step exactly what the client-mounted page shows; its first input keeps every
+element the build sent and creates only what that input creates on a mounted page; and until then it
+runs no view and changes no node. Mounting instead of resuming breaks all three, hydrating at
+startup breaks the third, building a different first page (a model with a row for Meltea, the app
+inside an extra `div` for Melact) breaks the first two, building without `--capture` breaks the
+first (the early clicks are lost), and a tool that leaves a newline inside the root breaks the first
+two. Native laws (QCheck, `test/laws`) on random shells with decoys (comments naming the id, a
+`data-id`, `>` in a quoted attribute, other ids) check that the HTML lands right inside the root and
+nothing else moves, that the capture script lands right before `</head>`, and that a filled root, a
+missing root and a head after the root are refused; reading comments as tags, ignoring quotes,
+taking an `id` without a space before it, accepting a filled root or a late head each break them.
 
 ## Types, where dune can give them
 

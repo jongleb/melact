@@ -18,7 +18,8 @@ let word_line =
     (fun [@u] node ->
       { root = Template.element node; text = View.text_at { parent = node; before = Template.first_or_end node }; written = View.unset })
     { placed = None; released = None; forgotten = None }
-    (fun [@u] node collected ->
+    (fun [@u] node collect ->
+      let collected = collect () in
       let cursor = View.inside node in
       let text = View.adopt_text cursor (View.collected_text collected.text) in
       View.adopt_finish cursor;

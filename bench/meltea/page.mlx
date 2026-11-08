@@ -1,8 +1,3 @@
-external document : Dom.document = "document"
-
-external element_by_id : Dom.document -> string -> Dom.element option = "getElementById"
-[@@mel.send] [@@mel.return nullable]
-
 type row = { id : int; label : string }
 
 (** The row whose label was clicked last. *)
@@ -117,17 +112,4 @@ let view { rows; selection; _ } =
     <span className="preloadicon glyphicon glyphicon-remove" ariaHidden=true />
   </div>
 
-let () =
-  Option.iter
-    (fun root ->
-      ignore
-        (Program.sandbox
-           ~init:
-             {
-               rows = [];
-               next = 1;
-               seed = int_of_float (Js.Math.random () *. 1e9);
-               selection = Unselected;
-             }
-           ~update ~view root))
-    (element_by_id document "main")
+let init ~seed = { rows = []; next = 1; seed; selection = Unselected }

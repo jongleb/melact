@@ -1225,6 +1225,81 @@ def served(p):
     return svg(p, 920, 414, "One Meltea module, page.mlx, built twice. meltea-ppx for the browser compiles the view into a template parsed once and cloned, a walk to the output and a refresh that writes the text only when count changed. meltea-ppx -server compiles the same view into code that writes strings with no DOM, natively or in Node: the static markup joined into a few strings at compile time and one call per dynamic part, the class and the count. The server writes HTML in React's format, the same bytes natively and under Melange, and the browser build hydrates it, at startup or, resumed, at the first input. melact-ppx -server does the same for reason-react components and writes what React 18's renderToString writes, useId included", body)
 
 
+def prerendered(p):
+    def mono(x, y, parts, size=11.5):
+        line = "".join(span(t, c) if c else escape(t) for t, c in parts)
+        return text(x, y, line, size=size, cls="mono", raw=True)
+
+    body = text(0, 12, "AT BUILD TIME · ONE DUNE RULE", size=11, cls="muted", weight=800)
+    stages = [
+        (0, "card", "line", "page.mlx", "model, update, view, init", [
+            [("let ", "faint"), ("init", "orange"), (" = { rows = [] }", "")],
+            [("let ", "faint"), ("view", "accent"), (" model =", "")],
+            [("  <div className=…>", "")],
+            [("builds natively too", "faint")],
+        ]),
+        (226, "green_soft", "green", "render.exe", "-server, native, no DOM", [
+            [("Program.render", "green")],
+            [("  ~view:Page.", ""), ("view", "accent")],
+            [("  Page.", ""), ("init", "orange")],
+            [("prints the first page", "faint")],
+        ]),
+        (452, "accent_soft", "accent", "melhole-prerender", "into the empty root", [
+            [("--capture main", "accent")],
+            [("  shell.html", "")],
+            [("< the HTML on stdin", "")],
+            [("refuses a filled root", "faint")],
+        ]),
+        (678, "blue_soft", "blue", "index.html", "what the server sends", [
+            [("<head>…<script>", ""), ("capture", "blue")],
+            [("<div id='main'>", "")],
+            [("  <div class=…>", ""), ("…", "green")],
+            [("<script defer src=…>", "")],
+        ]),
+    ]
+    for x, fill, stroke, title, subtitle, lines in stages:
+        body += box(x, 24, 202, 150, p[fill], p[stroke], rx=14, width=1.4, lift=True)
+        body += text(x + 16, 50, title, size=13.5, weight=700, cls=stroke if stroke != "line" else "")
+        body += text(x + 16, 68, subtitle, size=11.5, cls="muted")
+        for i, parts in enumerate(lines):
+            body += mono(x + 16, 96 + i * 19, parts)
+        if x:
+            body += arrow(p, x - 22, 99, x - 4, 99, stroke, flow=True, width=1.8)
+
+    body += text(0, 214, "IN THE BROWSER", size=11, cls="muted", weight=800)
+    left, right = 150, 880
+    rows = [(248, "mounted", "the empty root"), (318, "built", "the page itself")]
+    for y, name, _ in rows:
+        body += text(0, y + 20, name, size=13, weight=700)
+        body += f'<line x1="{left}" y1="{y + 15}" x2="{right}" y2="{y + 15}" stroke="{p["line"]}" stroke-width="1"/>'
+
+    def segment(x1, x2, y, fill, stroke, label, dash=None):
+        return box(x1, y, x2 - x1, 30, p[fill], p[stroke], rx=8, width=1.2, dash=dash) + text((x1 + x2) / 2, y + 20, label, size=11.5, anchor="middle", weight=600)
+
+    def paint(x, y, label):
+        return (f'<circle cx="{x}" cy="{y + 15}" r="7" fill="{p["green"]}" class="pulse"/>'
+                + text(x, y - 8, label, size=11.5, cls="green", anchor="middle", weight=700))
+
+    y = rows[0][0]
+    body += segment(left, 262, y, "card", "line", "HTML: empty")
+    body += segment(268, 600, y, "orange_soft", "orange", "fetch, parse, run the bundle; mount: view, clone, fill")
+    body += paint(624, y, "first paint")
+    body += segment(648, 800, y, "card", "line", "live, handles input")
+
+    y = rows[1][0]
+    body += segment(left, 262, y, "green_soft", "green", "HTML: the page")
+    body += paint(286, y, "first paint")
+    body += segment(310, 600, y, "accent_soft", "accent", "deferred bundle: resume listens, runs no view", dash="5 4")
+    body += f'<line x1="640" y1="{y - 2}" x2="640" y2="{y + 32}" stroke="{p["blue"]}" stroke-width="2"/>'
+    body += text(640, y - 8, "first input", size=11.5, cls="blue", anchor="middle", weight=700)
+    body += segment(652, 800, y, "blue_soft", "blue", "take over, then handle")
+
+    body += box(0, 372, 880, 66, p["card"], p["line"], rx=14, width=1.2)
+    body += text(18, 398, "the takeover keeps every element the build sent and creates none of them again", size=13, weight=700)
+    body += text(18, 420, "clicks before the code arrives wait in the capture script and are replayed; a page that does not match the view is mounted anew", size=11.5, cls="muted")
+    return svg(p, 880, 438, "Rendered at build time. One dune rule: page.mlx, with the model, update, view and the initial model, builds natively under -server into render.exe, which prints the first page with Program.render (or ReactDOMServer.renderToString for Melact); melhole-prerender --capture main shell.html puts that HTML right inside the empty root of the app's own index.html, refusing a filled root, and puts the capture script in the head; index.html is what the server sends, with a deferred script. In the browser, a mounted page shows an empty root until the bundle has been fetched, parsed and run and the view has mounted, and only then paints; the page built at build time paints as soon as the HTML is parsed, then the deferred bundle resumes it, listening without running any view, and the first input takes it over and is then handled. The takeover keeps every element the build sent and creates none of them again; clicks before the code arrives wait in the capture script and are replayed, and a page that does not match the view is mounted anew", body)
+
+
 def fanout(p):
     def chip(x, y, label, color, soft):
         w = len(label) * 6.9 + 16
@@ -1431,7 +1506,7 @@ def speed(p):
 
 FIGURES = dict(logo=logo, overview=overview, family=family, compiled=compiled, controlled=controlled, vdom=vdom, hooks=hooks,
                surface=surface, hydration=hydration, selectors=selectors, fields=fields, pipeline=pipeline, patch=patch,
-               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed, bridges=bridges)
+               reconcile=reconcile, events=events, updates=updates, graph=graph, transition=transition, row=row, roadmap=roadmap, served=served, prerendered=prerendered, fanout=fanout, remember=remember, cached=cached, hot=hot, speed=speed, bridges=bridges)
 
 HEADERS = dict(
     overview=("Melact in one picture", "A click writes one text node, chosen at build time",
@@ -1460,6 +1535,8 @@ HEADERS = dict(
                "No markers. The server's elements are kept, and clicks made before the code arrives are replayed."),
     served=("A server without a DOM", "One module, two outputs: templates and strings",
             "The same view writes HTML natively or in Node, byte for byte what the browser build expects."),
+    prerendered=("Rendered at build time", "The first page is already in index.html",
+                 "dune renders the initial view natively; the browser paints before the code loads, and the code resumes it."),
     updates=("Re-rendering", "Only the component whose state changed renders",
              "Parents are not visited; children with equal props are skipped."),
     graph=("The update graph", "A render runs only the steps a change reaches",
