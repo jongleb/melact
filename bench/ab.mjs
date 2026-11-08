@@ -5,8 +5,8 @@
 //
 //   node bench/ab.mjs --base=<commit> [--frameworks=meltea,melact] [--ops=...] [--rounds=3] [--runs=8] [--threshold=1.08]
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,31 @@ const run = (command, cwd) => {
   if (done.status !== 0) throw new Error(`${command.join(" ")} failed in ${cwd}`);
 };
 
+// One comparison at a time on the machine: others wait for the lock, so that runs never load each other.
+const lock = join(homedir(), ".cache", "melact-bench.lock");
+mkdirSync(dirname(lock), { recursive: true });
+for (;;) {
+  try {
+    mkdirSync(lock);
+    writeFileSync(join(lock, "pid"), String(process.pid));
+    break;
+  } catch {
+    const holder = Number(existsSync(join(lock, "pid")) ? readFileSync(join(lock, "pid"), "utf8") : 0);
+    const alive = (() => {
+      try {
+        return holder > 0 && process.kill(holder, 0);
+      } catch {
+        return false;
+      }
+    })();
+    if (!alive && holder > 0) rmSync(lock, { recursive: true, force: true });
+    else {
+      log(`waiting for the comparison of pid ${holder} to finish`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+    }
+  }
+}
+process.on("exit", () => rmSync(lock, { recursive: true, force: true }));
 const out = mkdtempSync(join(tmpdir(), "melact-ab-"));
 const base = join(out, "base");
 const commit = spawnSync("git", ["rev-parse", "--short", args.base], { cwd: repo, encoding: "utf8" }).stdout.trim();
