@@ -1,9 +1,9 @@
 {
   "sizes": {
     "bench/melact": 20325,
-    "bench/meltea": 11645,
+    "bench/meltea": 11697,
     "bench/ssr/melact client": 20305,
-    "bench/ssr/meltea client": 12843,
+    "bench/ssr/meltea client": 12918,
     "examples/counter": 13894,
     "examples/todomvc": 20139,
     "bench/classics/admin": 31499,
@@ -497,6 +497,20 @@
         "bench/classics/settings": [
           32560,
           32562
+        ]
+      }
+    },
+    {
+      "date": "2026-11-08",
+      "reason": "Meltea program slices: view calls 237 -> 94 and hole evaluations 222 -> 104 on the ratchet's Meltea runs (approved by the user in principle 2026-11-08: real wins may grow)",
+      "grown": {
+        "bench/meltea": [
+          11645,
+          11697
+        ],
+        "bench/ssr/meltea client": [
+          12843,
+          12918
         ]
       }
     }
