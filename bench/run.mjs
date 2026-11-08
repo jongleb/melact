@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,7 @@ const log = (...parts) => process.stderr.write(parts.join(" ") + "\n");
 
 const build = async () => {
   log("dune build ./bench");
-  const dune = spawnSync("opam", ["exec", "--", "dune", "build", "./bench"], { cwd: repo, stdio: "inherit" });
+  const dune = spawnSync("opam", ["exec", "--", "dune", "build", "--root", ".", "./bench"], { cwd: repo, stdio: "inherit" });
   if (dune.status !== 0) throw new Error("dune build failed");
   const { build: viteBuild } = await import(join(repo, "node_modules/vite/dist/node/index.js"));
   for (const name of frameworks) {
@@ -379,6 +379,46 @@ const operations = [
     done: `__rows().length === 0`,
     expect: { ids: [] },
   },
+  // Long lists, run only when named in --ops: where work per row outside the DOM would show.
+  {
+    name: "swap rows of 10k",
+    detail: "swap 2 rows of 10,000 (6 warmups, 4x CPU slowdown)",
+    throttle: 4,
+    named: true,
+    init: async (page) => {
+      await runAndWait(page, "#runlots", `__rows().length === 10000`);
+      for (let i = 0; i <= W; i++) await runAndWait(page, "#swaprows", `__id(2) === ${i % 2 === 0 ? 999 : 2}`);
+    },
+    act: "#swaprows",
+    done: `__id(2) === 999`,
+    expect: { ids: range(1, 10000).map((id) => (id === 2 ? 999 : id === 999 ? 2 : id)) },
+  },
+  {
+    name: "partial update of 10k",
+    detail: "update every 10th of 10,000 rows (3 warmups, 4x CPU slowdown)",
+    throttle: 4,
+    named: true,
+    init: async (page) => {
+      await runAndWait(page, "#runlots", `__rows().length === 10000`);
+      for (let i = 0; i < 3; i++) await runAndWait(page, "#update", `__label(1).endsWith("${" !!!".repeat(i + 1)}")`);
+    },
+    act: "#update",
+    done: `__label(1).endsWith("${" !!!".repeat(4)}")`,
+    expect: { ids: range(1, 10000), bangs: (index) => (index % 10 === 0 ? 4 : 0) },
+  },
+  {
+    name: "append rows to 10k",
+    detail: "append 1,000 to 10,000 rows (1 warmup)",
+    throttle: 1,
+    named: true,
+    init: async (page) => {
+      await runAndWait(page, "#runlots", `__rows().length === 10000`);
+      await runAndWait(page, "#add", `__rows().length === 11000`);
+    },
+    act: "#add",
+    done: `__rows().length === 12000`,
+    expect: { ids: range(1, 12000) },
+  },
 ];
 
 export const CATEGORIES = [
@@ -568,7 +608,7 @@ const main = async () => {
   const browser = await launch();
   try {
     results.chrome = (await browser.send("Browser.getVersion")).product;
-    const chosen = operations.filter((operation) => !only || only.includes(operation.name));
+    const chosen = operations.filter((operation) => (only ? only.includes(operation.name) : !operation.named));
     for (const operation of chosen) {
       results.cpu[operation.name] = { detail: operation.detail };
       const samples = Object.fromEntries(frameworks.map((name) => [name, []]));
@@ -672,7 +712,7 @@ const report = (results) => {
 
 // The app suite (bench/app) reuses the browser, page, trace and statistics code above.
 // bench/ssr/run.mjs imports the helpers above without running a suite.
-if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+if (realpathSync(resolve(process.argv[1] ?? "")) === realpathSync(fileURLToPath(import.meta.url))) {
   if (args.suite === "app")
     await (await import("./app/suite.mjs")).run({ args, log, repo, launch, openPage, serve, measureSizes, covered, median, CATEGORIES, SCRIPT, STYLE, PAINT, TASK });
   else await main();

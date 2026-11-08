@@ -5,7 +5,7 @@
 //
 //   node bench/ab.mjs --base=<commit> [--frameworks=meltea,melact] [--ops=...] [--rounds=3] [--runs=8] [--threshold=1.08]
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,8 @@ const commit = spawnSync("git", ["rev-parse", "--short", args.base], { cwd: repo
 run(["git", "worktree", "add", "--detach", base, commit], repo);
 try {
   for (const shared of ["_opam", "node_modules"]) symlinkSync(join(repo, shared), join(base, shared));
+  // The working tree's harness measures both trees, so that both run the same operations the same way.
+  copyFileSync(join(repo, "bench/run.mjs"), join(base, "bench/run.mjs"));
   for (const app of ["vanilla", ...frameworks])
     if (existsSync(join(repo, "bench", app, "node_modules")) && !existsSync(join(base, "bench", app, "node_modules")))
       symlinkSync(join(repo, "bench", app, "node_modules"), join(base, "bench", app, "node_modules"));
