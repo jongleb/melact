@@ -4,7 +4,7 @@ type message =
   | Add
   | Take
   | Reset
-  | Step of int
+  | Step of int [@alert "-dead_message"]  (** Sent by the bridge. *)
   | Note of string
   | Hash of string
   | Later

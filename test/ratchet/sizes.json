@@ -1,9 +1,9 @@
 {
   "sizes": {
     "bench/melact": 20325,
-    "bench/meltea": 11697,
+    "bench/meltea": 11719,
     "bench/ssr/melact client": 20305,
-    "bench/ssr/meltea client": 12918,
+    "bench/ssr/meltea client": 12939,
     "examples/counter": 13894,
     "examples/todomvc": 20139,
     "bench/classics/admin": 31499,
@@ -511,6 +511,20 @@
         "bench/ssr/meltea client": [
           12843,
           12918
+        ]
+      }
+    },
+    {
+      "date": "2026-11-08",
+      "reason": "dead code elimination, approved by the user 2026-11-08",
+      "grown": {
+        "bench/meltea": [
+          11697,
+          11719
+        ],
+        "bench/ssr/meltea client": [
+          12918,
+          12939
         ]
       }
     }

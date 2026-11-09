@@ -10,7 +10,7 @@ type message =
   | Toggle of int
   | Remove of int
   | Rate of int * int
-  | Show of filter
+  | Show of filter [@alert "-dead_message"]  (** Sent by the bridge in app.mlx. *)
   | Keep
 
 let init filter = { items = []; draft = ""; next = 0; filter }

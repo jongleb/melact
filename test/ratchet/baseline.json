@@ -993,7 +993,7 @@
     "view calls": 12,
     "keys": 366,
     "row refreshes": 194,
-    "microtasks": 21,
+    "microtasks": 20,
     "listeners added": 3,
     "mutation records": 382,
     "node expandos": 1
@@ -1009,7 +1009,7 @@
     "view calls": 2,
     "keys": 200,
     "row refreshes": 200,
-    "microtasks": 6,
+    "microtasks": 5,
     "mutation records": 9,
     "node expandos": 1
   },
@@ -1054,7 +1054,7 @@
     "view calls": 9,
     "keys": 24,
     "row refreshes": 13,
-    "microtasks": 15,
+    "microtasks": 14,
     "mutation records": 26,
     "node expandos": 1
   },
@@ -1070,7 +1070,7 @@
     "view calls": 7,
     "keys": 5,
     "row refreshes": 5,
-    "microtasks": 12,
+    "microtasks": 11,
     "mutation records": 15,
     "node expandos": 1
   },
@@ -1086,7 +1086,7 @@
     "view calls": 7,
     "keys": 19,
     "row refreshes": 13,
-    "microtasks": 14,
+    "microtasks": 13,
     "mutation records": 35,
     "node expandos": 1
   },
@@ -1103,7 +1103,7 @@
     "view calls": 4,
     "keys": 9,
     "row refreshes": 7,
-    "microtasks": 8,
+    "microtasks": 7,
     "mutation records": 12,
     "node expandos": 1
   },
@@ -1117,7 +1117,7 @@
     "view calls": 4,
     "keys": 2,
     "row refreshes": 2,
-    "microtasks": 10,
+    "microtasks": 7,
     "mutation records": 5,
     "node expandos": 1
   },
@@ -1132,7 +1132,7 @@
     "view calls": 5,
     "keys": 16,
     "row refreshes": 14,
-    "microtasks": 4,
+    "microtasks": 3,
     "mutation records": 12,
     "node expandos": 1
   },
@@ -1149,7 +1149,7 @@
     "view calls": 10,
     "keys": 14,
     "row refreshes": 10,
-    "microtasks": 17,
+    "microtasks": 15,
     "mutation records": 23,
     "node expandos": 1
   },
@@ -1181,7 +1181,7 @@
     "view calls": 8,
     "keys": 15,
     "row refreshes": 15,
-    "microtasks": 13,
+    "microtasks": 12,
     "mutation records": 16,
     "node expandos": 1
   },

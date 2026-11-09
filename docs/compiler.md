@@ -672,6 +672,51 @@ whose branches write random fields, whose views read them through chains of `let
 whose handlers send random messages on input, on keys (with literal branches) and on clicks, and
 checks that alerts stand at exactly the handlers an independent model of the path predicts.
 
+### Dead messages and dead handlers
+
+The same reading of `update` finds code that never does anything. A message is dead when nothing in
+the file builds its constructor outside its own branch of `update`: no handler, no command of
+another branch, no subscription and no `init`. A `Tick` that only its own branch sends again with
+`Cmd.after` is dead too, since nothing starts it. A handler is dead when every message it can send
+reaches a branch that returns the model as it is and runs no command, `model` or
+`(model, Cmd.none)`, also through a `match` or an `if` whose arms all do so. `meltea-ppx` says so
+with two alerts, at the constructor and at the handler:
+
+```
+File "page.mlx", line 7, characters 2-9:
+7 |   | Orphan
+      ^^^^^^^
+Alert dead_message: nothing in this file sends Orphan: no handler, command, subscription or init
+builds it outside its own branch of update, so that branch runs only if another module sends it
+```
+
+```
+Alert dead_handler: this handler sends only Ignore, which leaves the model as it is and runs no
+command: it does nothing
+```
+
+`onKeyDown=(fun key -> match key with "Enter" -> Add | _ -> Ignore)` is not dead, since it can send
+`Add`. A message sent from another module, as a bridge from Melact does, is not seen; its
+constructor takes `[@alert "-dead_message"]` (test/bridge/tally.mlx and examples/halfway do that),
+and a handler takes `[@alert "-dead_handler"]`. The alerts cost no code: each is a local module
+whose one value Melange drops. In this repository they found one message nothing sends, `Pick` in
+the served tests' fixture. A native law generates modules with random cases (or-patterns, a
+catch-all, branches that keep the model, write it, send another message by a command, or choose
+between both), messages sent by `init` and handlers on clicks and keys, and checks that alerts stand
+at exactly the constructors and handlers an independent model predicts; 6 of 6 mutants are caught
+(a message sent only by its own branch taken as live, a handler dead when any of its messages does
+nothing, a command not taken as an effect, a catch-all ignored, the alert at the wrong place, one
+message of a handler looked at).
+
+A message whose branch changes no field, by the masks above, no longer queues a draw: before, it
+queued a microtask whose draw did nothing. A dead handler is the extreme case, but the gain is for
+every such message, like TodoMVC's `Ignore` on each key that is not Enter: ten of the ratchet's
+fixed and random Meltea programs queue 1 to 3 fewer microtasks (keyed edits 21 → 20, selection only
+6 → 5, random seed 7 10 → 7), for 22 bytes gzipped. A message that asks for a view transition still
+queues its draw. A law sends random messages, some that keep the model, and
+checks the number of microtasks queued against a model of the schedule and that the page is the
+view; removing the skip, or skipping every message, breaks it.
+
 ### Pacing
 
 A program draws at the next microtask after a message, so every click and keystroke is on screen

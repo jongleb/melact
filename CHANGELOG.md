@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Dead messages and dead handlers: `meltea-ppx` alerts at a message nothing in the file sends
+  (`dead_message`) and at a handler whose every message leaves the model as it is and runs no command
+  (`dead_handler`). A message whose branch changes no field no longer queues a draw: ten of the
+  ratchet's Meltea programs queue 1 to 3 fewer microtasks.
 - Meltea's update graph: `meltea-ppx` reads what each branch of `update` does to each field (kept,
   set to one of a few constants, or set), through helpers, model-valued `let`s and a `match` on
   `(message, …)`. After the mount `Program` calls the view's slice, its page without the statements

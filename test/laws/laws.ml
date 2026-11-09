@@ -804,5 +804,149 @@ let lattice_laws =
       ~count:1000 ~print:lattice_source lattice_program (fun program -> lattice_found program = Some (lattice_expected program));
   ]
 
+(** What a branch of a generated [update] does. *)
+type branch =
+  | Leaves  (** [(model, Cmd.none)]. *)
+  | Writes  (** Changes a field. *)
+  | Commands of int  (** Leaves the model and sends the message through a command. *)
+  | Chooses of bool * bool  (** A [match] on a field whose two arms leave the model ([true]) or write it. *)
+
+(** A generated module for the dead-code alerts: cases of [update] (the messages each takes, or
+    every remaining one, and its branch), messages [init] sends and the messages each handler
+    sends. *)
+type dead_program = {
+  messages : int;
+  cases : (int list option * branch) list;
+  started : int list;
+  clicks : int list list;
+}
+
+let dead_program =
+  let open Gen in
+  let* messages = int_range 2 5 in
+  let message = int_bound (messages - 1) in
+  let branch =
+    oneof
+      [ pure Leaves; pure Writes; map (fun sent -> Commands sent) message; map2 (fun first second -> Chooses (first, second)) bool bool ]
+  in
+  let* order = shuffle_list (List.init messages Fun.id) in
+  let* sizes = list_size (pure messages) (int_range 1 2) in
+  let rec grouped order sizes =
+    match (order, sizes) with
+    | [], _ | _, [] -> []
+    | _, size :: sizes ->
+        let taken = List.filteri (fun index _ -> index < size) order in
+        taken :: grouped (List.filteri (fun index _ -> index >= size) order) sizes
+  in
+  let groups = grouped order sizes in
+  let* rest = int_range 1 (List.length groups) in
+  let* catch_all = bool in
+  let groups = match catch_all with true -> List.filteri (fun index _ -> index < rest) groups | false -> groups in
+  let* named = list_size (pure (List.length groups)) branch in
+  let* last = branch in
+  let cases = List.map2 (fun group branch -> (Some group, branch)) groups named @ match catch_all with true -> [ (None, last) ] | false -> [] in
+  let* started = list_size (int_bound 1) message in
+  let* clicks = list_size (int_bound 4) (list_size (int_range 1 2) message) in
+  pure { messages; cases; started; clicks }
+
+let dead_source program =
+  let constructor index = Printf.sprintf "M%d" index in
+  let arm branch =
+    match branch with
+    | Leaves -> "(model, Cmd.none)"
+    | Writes -> "({ model with f = 1 }, Cmd.none)"
+    | Commands sent -> Printf.sprintf "(model, Cmd.after 1 %s)" (constructor sent)
+    | Chooses (first, second) ->
+        let side leaves = match leaves with true -> "(model, Cmd.none)" | false -> "({ model with f = 2 }, Cmd.none)" in
+        Printf.sprintf "(match model.f with 0 -> %s | _ -> %s)" (side first) (side second)
+  in
+  let lines =
+    [ "type message =" ]
+    @ List.init program.messages (fun index -> "  | " ^ constructor index)
+    @ [
+        Printf.sprintf "let init = ({ f = 0 }, %s)"
+          (match program.started with [] -> "Cmd.none" | sent :: _ -> "Cmd.after 1 " ^ constructor sent);
+        "let update message model =";
+        "  match message with";
+      ]
+    @ List.map
+        (fun (taken, branch) ->
+          Printf.sprintf "  | %s -> %s"
+            (Option.fold ~none:"_" ~some:(fun taken -> String.concat " | " (List.map constructor taken)) taken)
+            (arm branch))
+        program.cases
+    @ [ "let view model =";
+        "  ((div ~children:[" ]
+    @ List.map
+        (fun sent ->
+          match sent with
+          | [ only ] -> Printf.sprintf "    ((button ~onClick:%s ()) [@JSX]);" (constructor only)
+          | first :: second :: _ ->
+              Printf.sprintf "    ((input ~onKeyDown:(fun key -> match key with \"Enter\" -> %s | _ -> %s) ()) [@JSX]);"
+                (constructor first) (constructor second)
+          | [] -> "")
+        program.clicks
+    @ [ "  ] ()) [@JSX])" ]
+  in
+  String.concat "\n" lines
+
+let dead_expected program =
+  let taking message = List.find_opt (fun (taken, _) -> Option.fold ~none:true ~some:(List.mem message) taken) program.cases in
+  let sent message =
+    List.mem message program.started
+    || List.exists (List.mem message) program.clicks
+    || List.exists
+         (fun (taken, branch) ->
+           match branch with
+           | Commands target -> target = message && not (Option.fold ~none:false ~some:(List.mem message) taken)
+           | Leaves | Writes | Chooses _ -> false)
+         program.cases
+  in
+  let inert message =
+    match taking message with
+    | Some (_, Leaves) | Some (_, Chooses (true, true)) -> true
+    | Some (_, (Writes | Commands _ | Chooses _)) | None -> false
+  in
+  let first_handler = program.messages + 7 + List.length program.cases in
+  List.sort compare
+    (List.filter_map
+       (fun message -> match sent message with true -> None | false -> Some ("dead_message", 2 + message))
+       (List.init program.messages Fun.id)
+    @ List.filter_map Fun.id
+        (List.mapi
+           (fun index sends ->
+             match List.for_all inert sends with true -> Some ("dead_handler", first_handler + index) | false -> None)
+           program.clicks))
+
+let dead_alerted program =
+  let items = Ppxlib.Parse.implementation (Lexing.from_string (dead_source program)) in
+  let found =
+    object
+      inherit [(string * int) list] Ppxlib.Ast_traverse.fold as super
+
+      method! expression expression alerts =
+        match expression.pexp_desc with
+        | Pexp_letmodule
+            ( { txt = Some "Melhole_dead"; _ },
+              { pmod_desc = Pmod_constraint (_, { pmty_desc = Pmty_signature [ { psig_desc = Psig_value here; _ } ]; _ }); _ },
+              reference ) ->
+            List.fold_left
+              (fun alerts (attribute : Ppxlib.attribute) ->
+                match attribute.attr_payload with
+                | PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident kind; _ }; _ }, _); _ }, _); _ } ] ->
+                    (kind, reference.pexp_loc.loc_start.pos_lnum) :: alerts
+                | _ -> alerts)
+              alerts here.pval_attributes
+        | _ -> super#expression expression alerts
+    end
+  in
+  List.sort compare (found#structure (Meltea_ppx.Dead.annotate items) [])
+
+let dead_laws =
+  [
+    Test.make ~name:"Dead code: alerts stand at exactly the messages nothing sends and the handlers whose messages do nothing"
+      ~count:1000 ~print:dead_source dead_program (fun program -> dead_alerted program = dead_expected program);
+  ]
+
 let () =
-  exit (QCheck_base_runner.run_tests ~verbose:true (reconcile_laws ("random pairs", reconcile_input) @ reconcile_laws ("edits", edited_input) @ markup_laws @ dom_props_laws @ fanout_laws @ shell_laws @ lattice_laws))
+  exit (QCheck_base_runner.run_tests ~verbose:true (reconcile_laws ("random pairs", reconcile_input) @ reconcile_laws ("edits", edited_input) @ markup_laws @ dom_props_laws @ fanout_laws @ shell_laws @ lattice_laws @ dead_laws))
