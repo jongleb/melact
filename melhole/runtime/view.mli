@@ -187,11 +187,20 @@ type positions = { fork : (int -> int -> unit[@u]); join : (unit -> unit[@u]) }
 
 val positions : positions ref
 
-(** In what order the patch under way reaches the children it patches: [Out_of_order] while a list
-    patches its items from the last one or picks the rows a selection changed. *)
-type order = In_document_order | Out_of_order
+(** In what order the patch under way reaches the children it patches. *)
+type order =
+  | In_document_order
+  | Out_of_order  (** A list moves its items or picks the rows a selection changed. *)
+  | Last_item_first  (** A list patches its items from the last one, each item's children in this order. *)
 
 val patch_order : order ref
+
+(** What a list that patches its items from the last one tells: [Opened] as it starts, [Next_item]
+    before an item it patches, [Closed] as it is done. *)
+type visit = Opened | Next_item | Closed
+
+(** Told of every [visit]; by default nothing listens. *)
+val item_visits : (visit -> unit[@u]) ref
 
 val backwards :
   int ->

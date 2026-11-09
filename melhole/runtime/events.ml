@@ -226,10 +226,16 @@ let early root =
 
 let restore target kept_value kept_checked =
   Option.iter
-    (fun kept -> if not (Js.Undefined.toOption (value target) = Some kept) then set_value target kept)
+    (fun kept ->
+      match Js.Undefined.toOption (value target) with
+      | Some current when String.equal current kept -> ()
+      | Some _ | None -> set_value target kept)
     (Js.Undefined.toOption kept_value);
   Option.iter
-    (fun kept -> if not (Js.Undefined.toOption (checked target) = Some kept) then set_checked target kept)
+    (fun kept ->
+      match Js.Undefined.toOption (checked target) with
+      | Some current when Bool.equal current kept -> ()
+      | Some _ | None -> set_checked target kept)
     (Js.Undefined.toOption kept_checked)
 
 let preserving native run =

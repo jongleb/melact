@@ -12,10 +12,13 @@ let reads_the_world =
 let pure_atoms =
   [ "x"; "count"; "item.title"; "String.length name"; "(count + 1)"; "\"text\""; "Some x"; "(let cell = ref 0 in cell := 1; incr cell; !cell)"; "(fst (useTracked x))" ]
 
-let both first second =
-  match (first.rendering, second.rendering) with
-  | Melact_ppx.Graph.Pure, Melact_ppx.Graph.Pure -> Melact_ppx.Graph.Pure
+let joined first second =
+  match (first, second) with
   | Melact_ppx.Graph.Impure, _ | _, Melact_ppx.Graph.Impure -> Melact_ppx.Graph.Impure
+  | Melact_ppx.Graph.Reads_the_page, _ | _, Melact_ppx.Graph.Reads_the_page -> Melact_ppx.Graph.Reads_the_page
+  | Melact_ppx.Graph.Pure, Melact_ppx.Graph.Pure -> Melact_ppx.Graph.Pure
+
+let both first second = joined first.rendering second.rendering
 
 let rec body depth timing =
   let open Gen in
@@ -55,10 +58,35 @@ let rec body depth timing =
           two (Printf.sprintf "(fst (React.useState (fun () -> %s)) + String.length %s)") now now;
           two (Printf.sprintf "(Array.map (fun i -> ignore i; %s) %s)") now now;
           two (Printf.sprintf "(let f = fun w -> ignore w; %s in f %s)") now now;
+          map2
+            (fun a b ->
+              {
+                source = Printf.sprintf "(let mine = React.useRef 0 in ignore (%s); mine.current + String.length (%s))" a.source b.source;
+                rendering =
+                  joined (both a b) (match timing with Rendering -> Melact_ppx.Graph.Reads_the_page | Later -> Melact_ppx.Graph.Pure);
+              })
+            now now;
+          map2
+            (fun a b ->
+              {
+                source = Printf.sprintf "(let mine = React.useRef 0 in mine.current <- String.length (%s); %s)" a.source b.source;
+                rendering = joined (both a b) (match timing with Rendering -> Melact_ppx.Graph.Impure | Later -> Melact_ppx.Graph.Pure);
+              })
+            now now;
+          map2
+            (fun a b ->
+              {
+                source = Printf.sprintf "(let mine = React.useRef 0 in let mine = row in ignore (%s); mine.current + String.length (%s))" a.source b.source;
+                rendering = joined (both a b) (match timing with Rendering -> Melact_ppx.Graph.Impure | Later -> Melact_ppx.Graph.Pure);
+              })
+            now now;
         ]
 
 let law =
-  Test.make ~name:"Graph: a render reads the world exactly when a read of the world is evaluated while it renders"
+  Test.make
+    ~name:
+      "Graph: a render reads the world exactly when a read of the world is evaluated while it renders, and only the page when \
+       that read is the current of a ref it made"
     ~count:2000
     ~print:(fun { source; _ } -> source)
     (Gen.sized_size (Gen.int_bound 5) (fun depth -> body depth Rendering))

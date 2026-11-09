@@ -4,7 +4,7 @@ open Melhole
 type content =
   | Nothing
   | Showing of View.mounted
-  | Resuming of Served.resumable  (** A server's page, taken over at its first input. *)
+  | Resuming of { taken : unit -> View.mounted; left : unit -> unit }  (** A server's page, taken over at its first input. *)
 
 type root = { container : Dom.element; mutable content : content }
 
@@ -14,8 +14,8 @@ let render root element =
   let child = React.to_child element in
   (match root.content with
   | Showing mounted -> View.patch mounted child
-  | Resuming page ->
-      let mounted = Served.resumed page in
+  | Resuming { taken; _ } ->
+      let mounted = taken () in
       root.content <- Showing mounted;
       View.patch mounted child
   | Nothing -> root.content <- Showing (View.mount child ~parent:root.container ~before:None));
@@ -30,13 +30,14 @@ let hydrateRoot container element =
 
 let resumeRoot container element =
   let root = createRoot container in
-  root.content <-
-    Resuming
-      (Served.resumable
-         (fun () ->
-           Melact_runtime.Instance.number_from_root ();
-           React.to_child element)
-         ~taken:Melact_runtime.Instance.flush ~parent:container);
+  let page =
+    Served.resumable
+      (fun () ->
+        Melact_runtime.Instance.number_from_root ();
+        React.to_child element)
+      ~taken:Melact_runtime.Instance.flush ~parent:container
+  in
+  root.content <- Resuming { taken = (fun () -> Served.resumed page); left = (fun () -> Served.leave page) };
   root
 
 let unmount root () =
@@ -44,7 +45,7 @@ let unmount root () =
   | Showing mounted ->
       View.unmount mounted;
       root.content <- Nothing
-  | Resuming page ->
-      Served.leave page;
+  | Resuming { left; _ } ->
+      left ();
       root.content <- Nothing
   | Nothing -> ()

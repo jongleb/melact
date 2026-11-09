@@ -437,3 +437,90 @@ let () =
                  in
                  step (1 + draw tape 3)))
             [%mel.obj { numRuns = 30 }]))
+
+external tree_walker_prototype : prototype = "prototype" [@@mel.scope "TreeWalker"]
+external offset_top : Dom.element -> int = "offsetTop" [@@mel.get]
+external set_timeout : (unit -> unit) -> int -> int = "setTimeout"
+external clear_timeout : int -> unit = "clearTimeout"
+
+let settled : int -> unit Js.Promise.t =
+  [%mel.raw {|function (delay) { return new Promise(function (done) { setTimeout(done, delay); }); }|}]
+
+(** Whether a placed row is the one picked. *)
+type placing = Placed_here | Placed_elsewhere
+
+let picked_context = React.createContext 0
+let pick_send = ref (fun (_ : int -> int) -> ())
+let query_send = ref (fun (_ : string -> string) -> ())
+
+module Picked_provider = struct
+  let make = React.Context.provider picked_context
+
+  external makeProps : value:int -> children:React.element -> unit -> < value : int ; children : React.element > Js.t = ""
+  [@@mel.obj]
+end
+
+module Placed_row = struct
+  let[@react.component] make ~index ~placing =
+    let picked = React.useContext picked_context in
+    let self = React.useRef Js.Nullable.null in
+    let top = Option.fold ~none:0 ~some:offset_top (Js.Nullable.toOption self.current) in
+    <li
+      ref=(ReactDOM.Ref.domRef self)
+      className=(match placing with Placed_here -> "picked" | Placed_elsewhere -> "row")
+      title=(string_of_int (top + picked))>
+      (React.int index)
+    </li>
+end
+
+module Searched_page = struct
+  let[@react.component] make ~count =
+    let picked, setPicked = React.useState (fun () -> 0) in
+    let query, setQuery = React.useState (fun () -> "") in
+    let applied, setApplied = React.useState (fun () -> "") in
+    React.useEffect0 (fun () ->
+        pick_send := setPicked;
+        query_send := setQuery;
+        None);
+    React.useEffect1
+      (fun () ->
+        let timer = set_timeout (fun () -> setApplied (fun _ -> query)) 1 in
+        Some (fun () -> clear_timeout timer))
+      [| query |];
+    <Picked_provider value=picked>
+      <div>
+        <input value=query onChange=(fun _ -> ()) />
+        <b>(React.string applied)</b>
+        <ul>(React.array (Array.init count (fun index -> <Placed_row
+                    key=(string_of_int index)
+                    index
+                    placing=(match index - picked with 0 -> Placed_here | _ -> Placed_elsewhere)
+                  />)))</ul>
+      </div>
+    </Picked_provider>
+end
+
+let walked_on count =
+  let root = attached () in
+  let client = ReactDOM.Client.createRoot root in
+  let* () = act (fun () -> ReactDOM.Client.render client <Searched_page count />) in
+  let steps = spy_on tree_walker_prototype "nextNode"
+  and compared = spy_on node_prototype "compareDocumentPosition"
+  and contained = spy_on node_prototype "contains" in
+  let* () = act (fun () -> !query_send (fun query -> query ^ "a")) in
+  let* () = act (fun () -> ()) in
+  let* () = settled 5 in
+  let* () = act (fun () -> ()) in
+  let* () = act (fun () -> !pick_send (fun picked -> picked + 1)) in
+  let walked = List.fold_left (fun sum spy -> sum + Array.length (calls (mock spy))) 0 [ steps; compared; contained ] in
+  List.iter restore [ steps; compared; contained ];
+  let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+  Js.Promise.resolve walked
+
+let () =
+  describe "a keystroke on a page of rows that read the page" (fun () ->
+      test_async "walks the page in proportion to the change, not to the page: 2,000 rows walk at most 16 more nodes than 200 rows" (fun () ->
+          let* small = walked_on 200 in
+          let* large = walked_on 2000 in
+          expect (large - small) |. to_equal (Int.min (large - small) 16);
+          Js.Promise.resolve ()))

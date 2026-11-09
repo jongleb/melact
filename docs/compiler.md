@@ -463,7 +463,10 @@ hydration is cheap, so the gain is modest: on a served page of 5,000 rows at 4×
 main thread's work over the load falls from 1,119 to 1,012 ms and its blocking time from 645 to
 609 ms, while the first click pays the takeover (to paint 38 → 175 ms); with 1,000 rows at 4×, 243
 to 193 ms and 95 to 74 ms. The rest of the load is the browser parsing, styling and laying out the
-page. `hydrateRoot` stays the default; `resumeRoot` is for long pages that are mostly read.
+page. `hydrateRoot` stays the default; `resumeRoot` is for long pages that are mostly read. A root
+keeps the takeover as closures that `resumeRoot` makes, so a client that only calls `createRoot`
+links none of it (`Served.resumed`, hydration, the replay of early inputs): about 0.9 KB gzip less in
+every such bundle.
 
 ### Rendered at build time
 
@@ -1046,10 +1049,10 @@ drops it where it costs work:
 - A pure child given new props renders at once, inside the parent's write, when the parent patches
   its children in document order (a template's holes, or a list patched in place, which now goes
   from the first row) and no component that may read the page is due to render later in the same
-  flush. A list that patches from its last row, reconciles moves, shuffles or picks the rows a
-  selection changed sets `View.patch_order` to `Out_of_order`; a child reached there, or while an
-  impure component waits for a later round, is put off to the next round as before, so that its
-  writes stay behind those reads. (Rendering it at once there cost eventtable's selection one forced
+  flush. A list that patches from its last row sets `View.patch_order` to `Last_item_first`; one
+  that shuffles or picks the rows a selection changed sets it to `Out_of_order`; a child reached
+  under either, or while an impure component waits for a later round, is put off to the next round
+  as before, so that its writes stay behind those reads. (Rendering it at once there cost eventtable's selection one forced
   style recalculation more per key: its inspector wrote its portal before the rows read `offsetTop`.)
 - A round whose dirty instances are all pure is one pass in document order. An instance whose
   ancestor rendered earlier in the pass comes after it: skipped if the ancestor's write reached it,
@@ -1127,6 +1130,31 @@ A body the compiler cannot read as steps renders whole, as before: a hook it doe
 (`useSyncExternalStore`, `useDeferredValue`, a custom hook without a fact), a hook inside an
 expression, `open React` with bare hook names, more than thirty sources, or an impure render.
 
+### Refs
+
+`melact-ppx` sorts the refs of a body by where they are used. A ref read only in effects, handlers
+or callbacks leaves the render pure, as before. A body whose only read of the world is the
+`current` of a ref it made with `useRef` reads the page (`Graph.Reads_the_page`): an element it
+measures, or a value an effect or a handler left there. Any write to a ref while rendering, the
+`current` of a ref it did not make (a prop, a forwarded ref, a module's), a reference cell, the clock
+or a getter keep it impure. A component that reads the page is scheduled as an impure one: it waits
+for its round, so it reads the page after the writes before it. It keeps its update graph, though:
+a step whose value may read mutable state runs on every render, and so does every step made from
+it, while the rest are masked as in a pure body. Before, such a component rendered whole.
+
+The `offsetTop` reads of the event table and the ratchet's `Measure` and `Measured_row` are of
+this kind: these are the components "props before writes" would render ahead, and only these, since
+rendering a component twice that writes a ref while rendering is not safe.
+
+Laws: the QCheck law of `test/graph` generates bodies with a ref they made, read or written while
+rendering or later, and shadowed by another value of the same name; a body reads the page exactly
+when its only read of the world is such a read. Two dual laws, under React 18 and Melact: a
+component shows a ref a handler adds to through a let, through any changes of its own state and its
+props; rows that read the page through their own refs, all given new props by their parent, see the
+same count of DOM writes, as React's render phase sees them. Mutants, each caught: a read of an own ref taken as pure, a shadowed ref still taken
+as its own, a step that reads mutable state masked as reading nothing, and a component that reads
+the page scheduled as a pure one.
+
 ### Across modules
 
 The graphs of a parent and a child are linked at run time, not through types: the parent's patch
@@ -1190,6 +1218,122 @@ to run.
 The masks save less than the scheduler work did: profiles of these apps spend little in hook calls
 and guards, and much in ordering instances by the page and in rounds; skipping a context read, a
 memo or an effect's dependencies is a few comparisons per instance.
+
+### Walking the page
+
+A round renders its instances in the order of the page, and a pass whose children committed after
+an ancestor sorts its effects into the order of the tree. Both used to ask the DOM: a handful of
+instances by `compareDocumentPosition`, more with a `TreeWalker` from their common ancestor, so a
+keystroke that put off every row of a long list walked the whole list. The writes that put the
+instances off already reach them in the page's order, so the scheduler now keeps that order instead
+of finding it again:
+
+- `Instance.reached` holds the instances a round's writes put off, newest first, while the order the
+  writes reached them is the page's. A child reached in document order joins it; a child reached
+  under `Out_of_order` (a shuffle, a selection's picks) drops it to `Out_of_page_order`, and the
+  next round falls back to the walk.
+- A list that patches from its last item (a keyed list or an array of children patched in place,
+  each item placed before the next one) sets `View.patch_order` to `Last_item_first` and tells the
+  scheduler through `View.item_visits` when it starts, before each item and when it ends
+  (`Opened`, `Next_item`, `Closed`). The scheduler moves what each item reached, in the page's
+  order, in front of what the items after it reached, and when the list ends puts the whole behind
+  what was reached before the list. Lists inside items nest as a stack. The listener is a no-op until
+  `melact.runtime` sets it; Meltea never does.
+- The next round takes that order as it is when every instance it renders is in it, without
+  touching the DOM. Readers of a context that rendered ahead at their provider's patch go last,
+  as before, and are not ordered at all: they write in any order, since all of them already
+  rendered.
+- While the order holds, the effect sort runs only when effects were queued after a write put an
+  instance off in the same round (`putting`), the one case left where an ancestor's effects can
+  come before its children's; out of the page's order, or with renders made ahead, it runs as
+  before.
+
+Laws:
+
+- A Melact law (`test/memo`): one keystroke on a page whose rows read their own `offsetTop` and the
+  selection from a context, with a debounced effect, then a pick that gives two rows new props and
+  all of them a new context value. The DOM steps it takes (`TreeWalker.nextNode`,
+  `compareDocumentPosition` and `contains`) on 2,000 rows are at most 16 more than on 200 rows; they
+  are 0 on both. On main they were 601 and 6,001.
+- A dual law under React 18 and Melact: memo components that read their own `offsetTop`, two to
+  an item of a keyed list written either as `Array.map` (a compiled loop) or as `Array.init` (a
+  list built at run time), render in the page's order and show what React shows after random
+  shuffles, drops and new props.
+- Mutants, each caught: laying a list's groups out last item first, keeping a group in the order
+  it was reached, a list that does not mark its items, and `Last_item_first` taken as
+  `Out_of_order`.
+
+The ratchet's generated programs walk 28 nodes more than React over their scenarios, from 155; the
+scenario of rows of components without hooks before a layout read walks none, from 16, and the
+controlled field with a debounce and a popover 2, from 15. The event table still walks 84,356 nodes
+(305,503 on main before the first step of this work): what is left orders rows whose state their
+own passive effects set, which reach the next pass as state, not through a write, and sorts the
+effects of an app whose children were put off after its own effects were queued. Ranking the page
+once per flush, or a key kept on each instance at mount and on keyed moves, would take those too.
+
+### Not yet: props before writes
+
+Rows that read the page and are given new props by their parent still cost a forced layout per
+level: the parent's write changes the DOM, and the child, put off to the next round, reads
+`offsetTop` after it. React renders the whole tree first and commits afterwards. Readers of a
+context already render ahead at their provider's patch, before the provider writes; doing the same
+for props needs a render phase in the compiled refresh:
+
+1. `melhole/compiler/element.ml` emits, for a template with component holes, a `prepare` beside its
+   `refresh`: it evaluates the guards of the component holes only, compares them with the stored
+   values without storing, and for each changed one calls `View.prepare` with the new description
+   and the hole's live state. Nothing is written and no guard cell moves, so `refresh`, which runs
+   after it, still sees the change.
+2. `View.prepare` is a read-only reconciliation beside `patch`: a template's site against its live
+   state, a list's keys against its live keys (a plan, no moves), and a host's own hook at the
+   leaves. In Melact, the hook of an impure instance whose inputs changed renders it ahead and keeps
+   the result (`Prepared`, as a provider's readers are), then prepares that result's own component
+   holes before returning, so grandchildren render ahead too. Pure instances and new rows are
+   skipped: their renders cannot see the page or see it empty.
+3. The parent's round then writes as now; a prepared child is written with its kept result in the
+   next round and is dropped back to a plain render if new state or props reach it first, as
+   providers' readers are now.
+
+What it must keep: hole expressions run twice (once to prepare, once to write), which is safe only
+because renders are pure apart from the page reads this exists for, and costs a second evaluation
+of every component hole that changed. Laws to add with it: the dual law that children given new
+props by their parent all render before any of them writes must hold with the rounds removed for
+them; the ratchet's "rows reading offsetTop, sorted and selected" and the generated programs'
+Measure and Measured_row must reach React's forced layouts; mutants: a `prepare` that stores guard
+values (holes stop updating), a `prepare` that writes, a prepared result kept after new props.
+The components to render ahead are those `melact-ppx` now finds reading the page (see "Refs"); an
+impure one that writes a ref while rendering waits for its round as now.
+
+### Not yet: empty instances without a marker
+
+An instance whose output has no nodes inserts an empty text node to hold its place (`commit`,
+`Marker`), so that a render of its own, later, knows where to put what it shows. React keeps that
+place in its fibers and finds the next host node from the fiber's siblings (`getHostSibling`). On
+the event table such markers are part of 13 empty text nodes, and on the team's page part of
+Melact's 33,292 nodes against React's 31,890. Melact cannot drop them yet: an instance knows its
+parent instance, not its place in its parent's view, and the node after it can change by renders
+the instance does not see (a sibling's own state, a keyed move). Doing it needs `View` to give a
+live part a way to its slot: the template frame and hole, or the list and index, it sits in, kept
+on moves, from which the next node is found as React does, walking later slots until one has a
+node. Laws to come with it: a dual law with empty components between keyed rows, conditional
+siblings and components that start and stop rendering nothing, through random moves; the DOM
+shows no empty text nodes; mutants: a slot not kept on a move, a search that stops at the first
+sibling.
+
+### Not yet: the parent's sources at build time
+
+Parent and child are linked at run time: the parent's patch compares a child's inputs and passes
+the bits that changed. Under `staged_pps` the compiler could go further, since it sees, at each
+child element, the mask of the parent's sources each prop expression reads: a child hole whose props
+read none of the sources that changed need not be compared at all, as `Instance.reaches` already
+skips steps. Today the hole's own guard does that comparison with `===` on the values the hole reads,
+which costs one comparison per value and needs no fact. The gain is the comparisons of the guards of
+holes that cannot have changed; it needs the hole masks of `melhole/compiler/element.ml` to take the
+graph's masks of the variables they read, a change to the shared compiler.
+
+A callback ref that captures nothing that changes could likewise be made once instead of per render;
+but React calls a new callback ref with `null` and then the element on every render, and a dual test
+would see Melact skip those calls, so this waits for a reason-react form that says the ref is stable.
 
 ## Controlled inputs
 

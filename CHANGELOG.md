@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Melact's scheduler keeps the page's order of the instances a round's writes put off, instead of
+  finding it again with `compareDocumentPosition` and a `TreeWalker`: a keystroke over 2,000 rows
+  that read their own `offsetTop` takes no DOM steps (6,001 before), and the event table walks 84,356
+  nodes (305,503). A component whose only read of the world is a ref it made reads the page
+  (`Graph.Reads_the_page`) and keeps its update graph. A `createRoot` client no longer links
+  hydration and resume: every Melact bundle is 0.3 to 1.3 kB gzip smaller.
 - Dead messages and dead handlers: `meltea-ppx` alerts at a message nothing in the file sends
   (`dead_message`) and at a handler whose every message leaves the model as it is and runs no command
   (`dead_handler`). A message whose branch changes no field no longer queues a draw: ten of the

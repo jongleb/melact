@@ -218,7 +218,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
       (Hoist.hoist ~loc "component"
          (match rendering with
          | Graph.Pure -> [%expr Melact_runtime.Component.pure ~name:[%e estring ~loc name]]
-         | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
+         | Graph.Reads_the_page | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
   in
   let read_fields =
     List.concat_map
@@ -460,7 +460,9 @@ let component ~loc ~name ~props_constructor ~hooks expression =
         in
         match
           match rendering with
-          | Graph.Pure -> Graph.plan ~hooks ~inputs:(List.length (List.concat field_inputs)) ~props body
+          | Graph.Pure -> Graph.plan ~hooks ~inputs:(List.length (List.concat field_inputs)) ~props ~volatile:Graph.Renders_whole body
+          | Graph.Reads_the_page ->
+              Graph.plan ~hooks ~inputs:(List.length (List.concat field_inputs)) ~props ~volatile:Graph.Runs_every_render body
           | Graph.Impure -> None
         with
         | Some plan ->

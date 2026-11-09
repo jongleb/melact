@@ -3,7 +3,12 @@
 (** Whether a render reads only what React lets it read. *)
 type rendering =
   | Pure  (** Props, state, context, hook values and constants: nothing a DOM write or another render can change. *)
-  | Impure  (** A ref, a reference cell, the clock, a getter called with [()], an unknown hook or construct. *)
+  | Reads_the_page
+      (** Also the [current] of a ref the body made with [useRef]: an element it reads the layout of, or a value
+          an effect or a handler left there. Nothing is written. *)
+  | Impure
+      (** Another ref, a write to a ref, a reference cell, the clock, a getter called with [()], an unknown hook or
+          construct. *)
 
 (** [rendering body]: how the body of a [@react.component] reads while it renders. A function's body
     counts as run during the render unless the function is a JSX prop or the callback of an effect, a
@@ -27,12 +32,22 @@ type plan = { steps : step list; result : Ppxlib.expression; reads : int }
 (** Every source bit: the mask of a step that runs on every render. *)
 val every_source : int
 
-(** [plan ~inputs ~props body]: the update graph of a pure body, given the number of inputs the
-    component compares and the input bits of each prop variable; [None] when a hook, a construct or
-    the number of sources is beyond it, and the component renders whole. The first hook slot is the
-    component's memory. *)
+(** What the update graph makes of a value that may read mutable state. *)
+type volatile =
+  | Renders_whole  (** Nothing: the component renders whole. A pure body. *)
+  | Runs_every_render  (** A step that reads it runs on every render, as does what is made from it. A body that reads the page. *)
+
+(** [plan ~inputs ~props ~volatile body]: the update graph of a body that writes nothing, given the
+    number of inputs the component compares and the input bits of each prop variable; [None] when a
+    hook, a construct or the number of sources is beyond it, and the component renders whole. The
+    first hook slot is the component's memory. *)
 val plan :
-  hooks:(Ppxlib.expression -> int option) -> inputs:int -> props:(string * int) list -> Ppxlib.expression -> plan option
+  hooks:(Ppxlib.expression -> int option) ->
+  inputs:int ->
+  props:(string * int) list ->
+  volatile:volatile ->
+  Ppxlib.expression ->
+  plan option
 
 (** [slots ~hooks definition]: the hook slots a custom hook takes on every call, when its body is pure,
     calls its hooks at its top level and calls only React's hooks and custom hooks known by [hooks]. *)

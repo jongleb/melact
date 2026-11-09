@@ -356,9 +356,13 @@ let remember memory inputs compute =
       memory.kept <- Some value;
       value
 
-type order = In_document_order | Out_of_order
+type order = In_document_order | Out_of_order | Last_item_first
 
 let patch_order = ref In_document_order
+
+type visit = Opened | Next_item | Closed
+
+let item_visits = ref (fun [@u] _ -> ())
 
 let out_of_order run =
   let saved = !patch_order in
@@ -371,15 +375,30 @@ let out_of_order run =
       patch_order := saved;
       raise error
 
+let last_item_first run =
+  let saved = !patch_order in
+  patch_order := (match saved with Out_of_order -> Out_of_order | In_document_order | Last_item_first -> Last_item_first);
+  !item_visits Opened [@u];
+  match run () with
+  | result ->
+      !item_visits Closed [@u];
+      patch_order := saved;
+      result
+  | exception error ->
+      !item_visits Closed [@u];
+      patch_order := saved;
+      raise error
+
 let backwards count (position : Template.position) make front =
   match count with
   | 0 -> [||]
   | _ ->
-      out_of_order (fun () ->
+      last_item_first (fun () ->
           let last = make (count - 1) position [@u] in
           let result = Array.make count last in
           let rec fill i before =
             if i >= 0 then (
+              !item_visits Next_item [@u];
               let made = make i { position with before } [@u] in
               Array.unsafe_set result i made;
               fill (i - 1) (front made before [@u]))
@@ -842,6 +861,7 @@ let each site numbering source listed render project pieces outer selectors =
                     (match Origin.kept_from (Array.unsafe_get origins index) with
                     | Some from when from = index -> ()
                     | Some _ | None ->
+                        !item_visits Next_item [@u];
                         Array.unsafe_set lives index
                           (update
                              { position with before = ahead (index + 1) }
@@ -849,7 +869,7 @@ let each site numbering source listed render project pieces outer selectors =
                              (described index)));
                     refresh (index - 1))
                 in
-                out_of_order (fun () -> refresh (count - 1));
+                last_item_first (fun () -> refresh (count - 1));
                 Some (Each_state { site; source = Input source; items; keys; outer; projections; lives; selectors; indexes = Unindexed })
             | _, (`Same | `Moved) ->
                 let plan = Reconcile.plan ~old:old.keys ~next:keys in
@@ -1940,9 +1960,9 @@ let tpl_instance markup values =
         Array.iteri
           (fun at hole ->
             match hole with
-            | Template.Text (parent, before) when before = index && List.equal Int.equal parent path ->
+            | Template.Text (parent, before) when before = index && List.equal (fun (a : int) b -> a = b) parent path ->
                 slot cursor at Before_next
-            | Child (parent, before) when before = index && List.equal Int.equal parent path ->
+            | Child (parent, before) when before = index && List.equal (fun (a : int) b -> a = b) parent path ->
                 slot cursor at ending;
                 taken := ending
             | Text _ | Child _ | Attr _ | Prop _ | Handler _ | Ref _ | Style _ | Class_list _ -> ())
@@ -1966,7 +1986,7 @@ let tpl_instance markup values =
       Template.element
         (Option.get
            (List.find_map
-              (fun (known, server) -> match List.equal Int.equal known path with true -> Some server | false -> None)
+              (fun (known, server) -> match List.equal (fun (a : int) b -> a = b) known path with true -> Some server | false -> None)
               !elements))
     in
     let sites =
@@ -2120,7 +2140,7 @@ let chunks ~size ~row_height ~tag child =
                   opened (`Kept from);
                   last := from
               | `Kept group, _, true when group = from && !filled < size -> ()
-              | (`Start | `Kept _ | `Fresh), _, _ -> if !filled >= size || !origin = `Start then opened `Fresh);
+              | (`Start | `Kept _ | `Fresh), _, _ -> if !filled >= size || (match !origin with `Start -> true | `Kept _ | `Fresh -> false) then opened `Fresh);
               rows := entry :: !rows;
               incr filled)
             entries;

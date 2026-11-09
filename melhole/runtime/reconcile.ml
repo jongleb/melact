@@ -50,7 +50,9 @@ let plan ~old ~next =
       let table = Array.make size (-1) and claimed = Array.make old_length 0 in
       let slot key =
         let code = ref 0 in
-        String.iter (fun letter -> code := ((!code * 31) + Char.code letter) land 0x3FFFFFFF) key;
+        for at = 0 to String.length key - 1 do
+          code := ((!code * 31) + Char.code (String.unsafe_get key at)) land 0x3FFFFFFF
+        done;
         !code land (size - 1)
       in
       for i = old_start to old_stop - 1 do

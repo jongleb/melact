@@ -2,6 +2,9 @@ open Testing
 
 external test_long : string -> (unit -> unit Js.Promise.t) -> int -> unit = "test"
 external print : string -> unit = "log" [@@mel.scope "console"]
+external check_seeded : property -> < numRuns : int ; seed : int > Js.t -> unit Js.Promise.t = "assert"
+[@@mel.module "fast-check"]
+external environment : string Js.Dict.t = "env" [@@mel.scope "process"]
 
 (** A build of the generated React programs. *)
 type dual =
@@ -47,7 +50,10 @@ let () =
           let* react, melact = Lazy.force builds in
           let totals = Hashtbl.create 32 and exceeded = Hashtbl.create 32 in
           let* () =
-            check_async
+            (fun property ->
+              match Option.bind (Js.Dict.get environment "RATCHET_SEED") int_of_string_opt with
+              | Some seed -> check_seeded property [%mel.obj { numRuns = 300; seed }]
+              | None -> check_async property [%mel.obj { numRuns = 300 }])
               (async_property (tapes ~shortest:20 ~longest:160) (fun values ->
                    let* react_outcome = react##random values in
                    let* melact_outcome = melact##random values in
@@ -63,7 +69,6 @@ let () =
                    expect (melact##described values, snd melact_outcome, Ratchet.exceeding melact_outcome react_outcome)
                    |. to_equal (melact##described values, snd react_outcome, [||]);
                    Js.Promise.resolve ()))
-              [%mel.obj { numRuns = 300 }]
           in
           print
             (String.concat "\n"

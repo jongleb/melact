@@ -201,6 +201,8 @@ external join : audience -> instance -> unit = "add" [@@mel.send]
 external member : audience -> instance -> bool = "has" [@@mel.send]
 external leave : audience -> instance -> unit = "delete" [@@mel.send]
 external disband : audience -> unit = "clear" [@@mel.send]
+external left : audience -> instance -> bool = "delete" [@@mel.send]
+external size : audience -> int = "size" [@@mel.get]
 external readers : unit -> readers = "Map" [@@mel.new]
 external read_bits : readers -> instance -> sources Js.undefined = "get" [@@mel.send]
 external set_bits : readers -> instance -> sources -> unit = "set" [@@mel.send]
@@ -236,6 +238,9 @@ type walker
 
 external tree_walker : Dom.document -> Dom.node -> int -> walker = "createTreeWalker" [@@mel.send]
 external next_node : walker -> Dom.node Js.null = "nextNode" [@@mel.send]
+external sorted : 'item array -> ('item -> 'item -> int[@u]) -> 'item array = "sort" [@@mel.send]
+
+let stably_sorted compare list = Array.to_list (sorted (Array.of_list list) compare)
 
 let thrown error =
   match error with
@@ -300,6 +305,43 @@ let front_node instance after =
 let patching = ref At_once
 
 let put_off = ref None_put_off
+
+(** The instances the writes of a round put off, newest first, in the order the writes reached them,
+    while that order is the page's: the next round renders them in it without looking at the page. *)
+type reached =
+  | In_page_order of { mutable seen : instance list; mutable lists : reversing list }
+      (** [lists]: the lists patching their items from the last one, innermost first. *)
+  | Out_of_page_order
+
+(** A list patching its items from the last one: what was reached before it, and what the items it
+    patched reached, in the page's order. *)
+and reversing = { before : instance list; mutable after : instance list }
+
+let reached = ref Out_of_page_order
+
+let () =
+  View.item_visits :=
+    fun [@u] visit ->
+      match (visit, !reached) with
+      | _, Out_of_page_order -> ()
+      | View.Opened, In_page_order order ->
+          order.lists <- { before = order.seen; after = [] } :: order.lists;
+          order.seen <- []
+      | View.Next_item, In_page_order ({ lists = list :: _; _ } as order) ->
+          list.after <- List.rev_append order.seen list.after;
+          order.seen <- []
+      | View.Closed, In_page_order ({ lists = list :: lists; _ } as order) ->
+          order.seen <- List.rev_append (List.rev_append order.seen list.after) list.before;
+          order.lists <- lists
+      | (View.Next_item | View.Closed), In_page_order { lists = []; _ } ->
+          reached := Out_of_page_order;
+          put_off := Some_put_off
+
+(** Whether a write of this round has put an instance off: effects queued after that would come
+    before the put-off instance's, so they are sorted. *)
+type putting = Nothing_put_off | Put_off_earlier
+
+let putting = ref Nothing_put_off
 let committed = audience ()
 let enqueued = ref 0
 
@@ -525,7 +567,13 @@ let enqueue instance nesting =
       in
       below instance.parent;
       join committed instance);
-  (match instance.pending with [] -> () | _ :: _ -> incr enqueued);
+  (match instance.pending with
+  | [] -> ()
+  | _ :: _ ->
+      incr enqueued;
+      match (!patching, !putting) with
+      | Next_round, Put_off_earlier -> put_off := Some_put_off
+      | (At_once | Next_round), (Nothing_put_off | Put_off_earlier) -> ());
   List.iter
     (fun job ->
       match job with
@@ -559,26 +607,6 @@ let commit ~since (position : Template.position) instance =
       held := (instance, nesting) :: !held
   | Deferring _ | Queue_now -> enqueue instance nesting
 
-let refresh (position : Template.position) instance =
-  let at =
-    match instance.region with
-    | Marker node -> { position with before = Js.Null.return (Dom_api.to_node node) }
-    | Nodes -> position
-  in
-  let since = !enqueued in
-  match
-    let child = render instance in
-    match child == unchanged with
-    | true -> instance.output
-    | false -> within owner (Some instance) (fun () -> View.update at instance.output child)
-  with
-  | output ->
-      instance.output <- output;
-      commit ~since position instance
-  | exception error ->
-      instance.pending <- [];
-      !suspension.rescue While_rendering instance error [@u]
-
 let wrote (position : Template.position) instance rendered =
   let at =
     match instance.region with
@@ -599,7 +627,33 @@ let wrote (position : Template.position) instance rendered =
       instance.pending <- [];
       !suspension.rescue While_rendering instance error [@u]
 
+let refresh position instance =
+  wrote position instance (match render instance with child -> Ok child | exception error -> Error error)
+
 let rec settle () =
+  let walk first nodes remaining take =
+    Option.iter
+      (fun ancestor ->
+        take ancestor;
+        let walker = tree_walker Dom_api.document ancestor (-1) in
+        let rec next () =
+          match (!remaining, Js.Null.toOption (next_node walker)) with
+          | 0, _ | _, None -> ()
+          | _, Some node ->
+              take node;
+              next ()
+        in
+        next ())
+      (List.fold_left
+         (fun candidate node ->
+           let rec up candidate =
+             match node_contains candidate node with
+             | true -> Some candidate
+             | false -> Option.bind (Dom_api.parent_node candidate) up
+           in
+           Option.bind candidate up)
+         first nodes)
+  in
   let position_of instance =
     let last = ref None in
     visit_nodes instance (fun [@u] node -> last := Some node);
@@ -614,68 +668,65 @@ let rec settle () =
     | _ ->
         !recovery.before_rendering () [@u];
         !suspension.before_rendering () [@u];
-        let ordered pending = (let fronted = List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending in
-           let by_depth = List.stable_sort (fun (_, a) (_, b) -> Int.compare a.depth b.depth) in
-           match fronted with
-           | [] | [ _ ] -> fronted
-           | _ when List.compare_length_with fronted 16 <= 0 ->
-               List.stable_sort
-                 (fun (front_a, a) (front_b, b) ->
-                   match (front_a, front_b) with
-                   | Some first, Some second when not (Dom_api.same first second) ->
-                       if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
-                   | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
-                 fronted
-           | (first, _) :: _ ->
-               let placed = List.filter_map (fun (front, instance) -> Option.map (fun node -> (node, instance)) front) fronted in
-               let unplaced = List.filter (fun (front, _) -> Option.is_none front) fronted in
-               let starts = nodes_of () in
-               let remaining = ref 0 in
-               List.iter
-                 (fun (node, instance) ->
-                   match Js.Undefined.toOption (found_get starts node) with
-                   | Some others -> found_set starts node (instance :: others)
-                   | None ->
-                       incr remaining;
-                       found_set starts node [ instance ])
-                 placed;
-               let common first =
-                 List.fold_left
-                   (fun candidate (node, _) ->
-                     let rec up candidate =
-                       match node_contains candidate node with
-                       | true -> Some candidate
-                       | false -> Option.bind (Dom_api.parent_node candidate) up
-                     in
-                     Option.bind candidate up)
-                   (Some first) placed
-               in
-               let walked = ref [] in
-               let take node =
-                 match Js.Undefined.toOption (found_get starts node) with
-                 | None -> ()
-                 | Some instances ->
-                     walked := List.rev_append (by_depth (List.map (fun instance -> (Some node, instance)) instances)) !walked;
-                     decr remaining;
-                     found_delete starts node
-               in
-               Option.iter
-                 (fun ancestor ->
-                   take ancestor;
-                   let walker = tree_walker Dom_api.document ancestor (-1) in
-                   let rec next () =
-                     match (!remaining, Js.Null.toOption (next_node walker)) with
-                     | 0, _ | _, None -> ()
-                     | _, Some node ->
-                         take node;
-                         next ()
-                   in
-                   next ())
-                 (Option.bind first common);
-               let missed = List.filter (fun (node, _) -> Js.Undefined.testAny (found_get starts node) |> not) placed in
-               List.rev !walked @ by_depth (List.map (fun (node, instance) -> (Some node, instance)) missed) @ by_depth unplaced) in
+        let ordered pending =
+          let by_depth = stably_sorted (fun [@u] a b -> Int.compare a.depth b.depth) in
+          let fronted = List.map (fun instance -> (Js.Null.toOption (front_node instance Js.null), instance)) pending in
+          match fronted with
+          | [] | [ _ ] -> pending
+          | _ when List.compare_length_with fronted 16 <= 0 ->
+              List.map snd
+                (stably_sorted
+                   (fun [@u] (front_a, a) (front_b, b) ->
+                     match (front_a, front_b) with
+                     | Some first, Some second when not (Dom_api.same first second) ->
+                         if Dom_api.compare_document_position first second land 4 <> 0 then -1 else 1
+                     | Some _, Some _ | None, _ | _, None -> Int.compare a.depth b.depth)
+                   fronted)
+          | (first, _) :: _ ->
+              let placed = List.filter_map (fun (front, instance) -> Option.map (fun node -> (node, instance)) front) fronted in
+              let starts = nodes_of () in
+              let remaining = ref 0 in
+              List.iter
+                (fun (node, instance) ->
+                  match Js.Undefined.toOption (found_get starts node) with
+                  | Some others -> found_set starts node (instance :: others)
+                  | None ->
+                      incr remaining;
+                      found_set starts node [ instance ])
+                placed;
+              let walked = ref [] in
+              walk first (List.map fst placed) remaining (fun node ->
+                  Option.iter
+                    (fun instances ->
+                      walked := List.rev_append (by_depth instances) !walked;
+                      decr remaining;
+                      found_delete starts node)
+                    (Js.Undefined.toOption (found_get starts node)));
+              List.rev_append !walked
+                (by_depth
+                   (List.filter_map
+                      (fun (node, instance) ->
+                        match Js.Undefined.testAny (found_get starts node) with true -> None | false -> Some instance)
+                      placed)
+                @ by_depth (List.filter_map (fun (front, instance) -> match front with None -> Some instance | Some _ -> None) fronted))
+        in
+        let arranged instances =
+          let order =
+            match !reached with
+            | In_page_order { seen; lists = [] } -> (
+                let wanted = audience () in
+                List.iter (join wanted) instances;
+                let order = List.filter (fun instance -> left wanted instance) (List.rev seen) in
+                match size wanted with 0 -> order | _ -> ordered instances)
+            | In_page_order _ | Out_of_page_order -> ordered instances
+          in
+          reached := In_page_order { seen = []; lists = [] };
+          putting := Nothing_put_off;
+          order
+        in
         let queued = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
         put_off := None_put_off;
+        reached := Out_of_page_order;
         disband committed;
         let waiting = ref [] in
         let rec rendering round =
@@ -735,7 +786,7 @@ let rec settle () =
                                 released next)
                       in
                       List.iter
-                        (fun (_, instance) ->
+                        (fun instance ->
                           match instance.status with
                           | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks -> instance.status <- Clean
                           | Dirty (Forced | Sourced _) -> (
@@ -745,7 +796,7 @@ let rec settle () =
                               | Unmounted -> ()
                               | Clean | Dirty _ -> within deferral (Deferring instance) (fun () -> wrote (position_of instance) instance result))
                           | Clean | Unmounted -> ())
-                        (ordered
+                        (arranged
                            (List.filter
                               (fun instance -> match instance.status with Dirty _ -> true | Clean | Unmounted -> false)
                               pending));
@@ -771,10 +822,20 @@ let rec settle () =
                   pending
               in
               List.iter reading later;
-              let roots = ordered roots in
+              let roots =
+                match
+                  List.partition (fun instance -> match instance.prepared with Unprepared -> true | Prepared _ -> false) roots
+                with
+                | unprepared, [] -> arranged unprepared
+                | unprepared, prepared ->
+                    put_off := Some_put_off;
+                    let order = arranged unprepared in
+                    reached := Out_of_page_order;
+                    order @ prepared
+              in
               let rendered =
                 List.filter_map
-                  (fun (_, instance) ->
+                  (fun instance ->
                     match instance.status with
                     | Dirty (Sourced { mask = Bits 0; checks }) when unchanged checks ->
                         instance.status <- Clean;
@@ -810,12 +871,6 @@ let rec settle () =
         | None_put_off -> ()
         | Some_put_off ->
             let host job = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
-            let ending job =
-              let last = ref None in
-              visit_nodes (host job) (fun [@u] node -> last := Some node);
-              let rec deepest node = Option.fold ~none:node ~some:deepest (Js.Null.toOption (Dom_api.last_child node)) in
-              Option.map deepest !last
-            in
             let rec fresh old list oldest_first =
               match list == old with
               | true -> oldest_first
@@ -824,7 +879,7 @@ let rec settle () =
             let old_layout_cleanups, old_layout_runs, old_passive_cleanups, old_passive_runs = queued in
             let batches =
               List.map
-                (fun (queue, old) -> (queue, old, List.map (fun job -> (job, ending job, (host job).depth)) (fresh old !queue [])))
+                (fun (queue, old) -> (queue, old, List.map (fun job -> (job, last_node (host job), (host job).depth)) (fresh old !queue [])))
                 [
                   (layout_cleanups, old_layout_cleanups);
                   (layout_runs, old_layout_runs);
@@ -854,39 +909,14 @@ let rec settle () =
                           incr remaining;
                           rank_set ranks node (-1))
                     endings;
-                  let common =
-                    List.fold_left
-                      (fun candidate node ->
-                        let rec up candidate =
-                          match node_contains candidate node with
-                          | true -> Some candidate
-                          | false -> Option.bind (Dom_api.parent_node candidate) up
-                        in
-                        Option.bind candidate up)
-                      (Some (List.hd endings)) endings
-                  in
                   let count = ref 0 in
-                  let mark node =
-                    (match Js.Undefined.toOption (rank_get ranks node) with
-                    | Some _ ->
-                        rank_set ranks node !count;
-                        decr remaining
-                    | None -> ());
-                    incr count
-                  in
-                  Option.iter
-                    (fun ancestor ->
-                      mark ancestor;
-                      let walker = tree_walker Dom_api.document ancestor (-1) in
-                      let rec next () =
-                        match (!remaining, Js.Null.toOption (next_node walker)) with
-                        | 0, _ | _, None -> ()
-                        | _, Some node ->
-                            mark node;
-                            next ()
-                      in
-                      next ())
-                    common;
+                  walk (Some (List.hd endings)) endings remaining (fun node ->
+                      Option.iter
+                        (fun _ ->
+                          rank_set ranks node !count;
+                          decr remaining)
+                        (Js.Undefined.toOption (rank_get ranks node));
+                      incr count);
                   let rank last =
                     Option.fold ~none:max_int
                       ~some:(fun node ->
@@ -903,8 +933,8 @@ let rec settle () =
                 | [] | [ _ ] -> ()
                 | _ :: _ :: _ ->
                     let ordered =
-                      List.stable_sort
-                        (fun (first_job, first, first_depth) (second_job, second, second_depth) ->
+                      stably_sorted
+                        (fun [@u] (first_job, first, first_depth) (second_job, second, second_depth) ->
                           match Option.fold ~none:0 ~some:(fun order -> order (host first_job) (host second_job)) !tree_order with
                           | 0 -> (
                               match earlier first second with
@@ -1019,7 +1049,7 @@ let mount_instance (position : Template.position) kind =
   let instance = born kind in
   let since = !enqueued in
   let queued () = (!layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
-  let before = match (!View.patch_order, !mounting) with View.Out_of_order, 0 -> Some (queued ()) | _ -> None in
+  let before = match (!View.patch_order, !mounting) with (View.Out_of_order | View.Last_item_first), 0 -> Some (queued ()) | _ -> None in
   let continued =
     Option.bind before (fun (e1, e2, e3, e4) ->
         match !siblings with
@@ -1032,7 +1062,7 @@ let mount_instance (position : Template.position) kind =
                  | Some node when Dom_api.same (Js.Null.return node) run.front -> `Before_it
                  | Some node -> reaches (Dom_api.following_sibling node)
                in
-               reaches position.before = `Before_it ->
+               (match reaches position.before with `Before_it -> true | `Elsewhere -> false) ->
             Some run
         | Some _ | None ->
             finish_siblings ();
@@ -1105,9 +1135,14 @@ let component definition inputs render =
                     rendered.render <- render;
                     match (!patching, instance.status, definition.rendering, !View.patch_order, !reads) with
                     | Next_round, (Clean | Dirty _), Component.Impure, _, _
-                    | Next_round, (Clean | Dirty _), _, View.Out_of_order, _
+                    | Next_round, (Clean | Dirty _), _, (View.Out_of_order | View.Last_item_first), _
                     | Next_round, (Clean | Dirty _), _, _, Reads_ahead ->
-                        put_off := Some_put_off;
+                        (match (!View.patch_order, !reached) with
+                        | (View.In_document_order | View.Last_item_first), In_page_order kept -> kept.seen <- instance :: kept.seen
+                        | View.Out_of_order, _ | _, Out_of_page_order ->
+                            reached := Out_of_page_order;
+                            put_off := Some_put_off);
+                        putting := Put_off_earlier;
                         mark_sourced instance bits
                     | (At_once | Next_round), _, (Component.Pure | Component.Impure), _, _ ->
                         sourced instance bits;

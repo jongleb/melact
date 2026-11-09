@@ -1,7 +1,13 @@
 open Ppxlib
 open Melhole_compiler
 
-type rendering = Pure | Impure
+type rendering =
+  | Pure
+  | Reads_the_page  (** Reads the [current] of a ref it made with [useRef], and nothing else of the world. *)
+  | Impure
+
+(** A name a body binds that its render may use: a [ref] it made, or a ref [useRef] made. *)
+type local = Own_cell of string | Own_ref of string
 
 exception Reads_the_world
 
@@ -21,9 +27,14 @@ let rendering ~hooks body =
         | true | false -> None)
     | _ -> None
   in
+  let found = ref Pure in
   let rec now cells expression =
     let each = List.iter (now cells) in
-    let unbound cells pattern = List.filter (fun name -> not (List.mem name (Free.bound pattern))) cells in
+    let unbound cells pattern =
+      List.filter
+        (fun local -> match local with Own_cell name | Own_ref name -> not (List.mem name (Free.bound pattern)))
+        cells
+    in
     let cases cells branches =
       List.iter
         (fun case ->
@@ -39,7 +50,7 @@ let rendering ~hooks body =
     | Pexp_apply
         ( { pexp_desc = Pexp_ident { txt = Lident ("!" | ":=" | "incr" | "decr"); _ }; _ },
           (Nolabel, { pexp_desc = Pexp_ident { txt = Lident cell; _ }; _ }) :: rest )
-      when List.mem cell cells ->
+      when List.mem (Own_cell cell) cells ->
         List.iter (fun (_, value) -> now cells value) rest
     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident ("!" | ":=" | "incr" | "decr"); _ }; _ }, _) ->
         raise Reads_the_world
@@ -68,6 +79,9 @@ let rendering ~hooks body =
         | None, _ ->
             now cells callee;
             each values)
+    | Pexp_field ({ pexp_desc = Pexp_ident { txt = Lident name; _ }; _ }, { txt = Lident "current" | Ldot (_, "current"); _ })
+      when List.mem (Own_ref name) cells ->
+        found := Reads_the_page
     | Pexp_field (_, { txt = Lident ("contents" | "current") | Ldot (_, ("contents" | "current")); _ }) ->
         raise Reads_the_world
     | Pexp_field (target, _) -> now cells target
@@ -78,7 +92,9 @@ let rendering ~hooks body =
              (fun cells binding ->
                match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
                | Ppat_var { txt; _ }, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident "ref"; _ }; _ }, [ _ ]) ->
-                   txt :: cells
+                   Own_cell txt :: unbound cells binding.pvb_pat
+               | Ppat_var { txt; _ }, Pexp_apply (callee, _) when Option.equal String.equal (hook callee) (Some "useRef") ->
+                   Own_ref txt :: unbound cells binding.pvb_pat
                | _ -> unbound cells binding.pvb_pat)
              cells bindings)
           rest
@@ -123,7 +139,7 @@ let rendering ~hooks body =
     | Pexp_letmodule _ | Pexp_letexception _ | Pexp_object _ | Pexp_pack _ | Pexp_letop _ | Pexp_extension _ ->
         raise Reads_the_world
   in
-  match now [] body with () -> Pure | exception Reads_the_world -> Impure
+  match now [] body with () -> !found | exception Reads_the_world -> Impure
 
 type step =
   | Statement of expression
@@ -157,7 +173,12 @@ type shape =
 
 exception Beyond
 
-let plan ~hooks ~inputs ~props body =
+(** What the update graph makes of a value that may read mutable state. *)
+type volatile =
+  | Renders_whole  (** Nothing: the component renders whole. *)
+  | Runs_every_render  (** A step that reads it runs on every render, as does what is made from it. *)
+
+let plan ~hooks ~inputs ~props ~volatile body =
   let hook expression =
     match expression.pexp_desc with
     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); _ }; _ }, arguments)
@@ -263,9 +284,10 @@ let plan ~hooks ~inputs ~props body =
       | false -> None
       | true -> (
           let mask env expression =
-            match Free.of_expression expression with
-            | Free.Volatile -> raise Beyond
-            | Free.Reads names ->
+            match (Free.of_expression expression, volatile) with
+            | Free.Volatile, Renders_whole -> raise Beyond
+            | Free.Volatile, Runs_every_render -> every_source
+            | Free.Reads names, (Renders_whole | Runs_every_render) ->
                 List.fold_left
                   (fun found name -> found lor Option.value ~default:0 (List.assoc_opt name env))
                   0 names
@@ -379,5 +401,5 @@ let slots ~hooks body =
     match expression.pexp_desc with Pexp_function (_, _, Pfunction_body body) -> inner body | _ -> expression
   in
   match rendering ~hooks body with
-  | Impure -> None
+  | Impure | Reads_the_page -> None
   | Pure -> ( match counted (inner body) with count -> Some count | exception Beyond -> None)

@@ -147,8 +147,8 @@ let resumable child ~taken ~parent =
       page
   | None ->
       let inputs = [ "click"; "dblclick"; "input"; "change"; "keydown"; "keyup"; "submit"; "pointerdown" ] in
-      let rec page = { child; taken; parent; state = Waiting disarm }
-      and listener native =
+      let page = { child; taken; parent; state = Left } in
+      let rec listener native =
         Option.iter
           (fun target ->
             match contains parent target with
@@ -156,6 +156,7 @@ let resumable child ~taken ~parent =
             | false -> ())
           (Dom_api.target native)
       and disarm () = List.iter (fun input -> remove_window_listener input listener [%mel.obj { capture = true }]) inputs in
+      page.state <- Waiting disarm;
       List.iter (fun input -> add_window_listener input listener [%mel.obj { capture = true }]) inputs;
       page
 

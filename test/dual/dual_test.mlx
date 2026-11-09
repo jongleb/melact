@@ -957,6 +957,93 @@ module Measured_row = struct
     <li>(React.string (label ^ match opened with true -> "+" | false -> "-"))</li>
 end
 
+external offset_top : Dom.element -> int = "offsetTop" [@@mel.get]
+
+let paired_send = ref (fun (_ : (string * int) array) -> ())
+
+(** How a list of pairs is written: mapped, which the compiler turns into a loop, or built at run time. *)
+type pairing = Mapped | Initialized
+
+module Paired_cell = struct
+  let[@react.component] make =
+    React.memo (fun ~name ~generation ->
+        let self = React.useRef Js.Nullable.null in
+        let top = Option.fold ~none:0 ~some:offset_top (Js.Nullable.toOption self.current) in
+        log name;
+        <span ref=(ReactDOM.Ref.domRef self) title=(string_of_int top)>(React.string (name ^ string_of_int generation))</span>)
+end
+
+module Paired = struct
+  let[@react.component] make ~start ~pairing =
+    let pairs, setPairs = React.useState (fun () -> start) in
+    (paired_send := fun next -> setPairs (fun _ -> next));
+    match pairing with
+    | Mapped ->
+        <ul>
+          (React.array
+             (Array.map
+                (fun (key, generation) ->
+                  <li key>
+                    <Paired_cell name=(key ^ "a") generation />
+                    <Paired_cell name=(key ^ "b") generation />
+                  </li>)
+                pairs))
+        </ul>
+    | Initialized ->
+        <ul>
+          (React.array
+             (Array.init (Array.length pairs) (fun index ->
+                  let key, generation = pairs.(index) in
+                  <li key>
+                    <Paired_cell name=(key ^ "a") generation />
+                    <Paired_cell name=(key ^ "b") generation />
+                  </li>)))
+        </ul>
+end
+
+let writes_seen : Dom.element -> int = [%mel.raw {|function (element) { return globalThis.__domWrites.count; }|}]
+let paged_send = ref (fun (_ : bool -> bool) -> ())
+
+module Paged_row = struct
+  let[@react.component] make ~label ~opened =
+    let row = React.useRef Js.Nullable.null in
+    Option.iter (fun element -> log (string_of_int (writes_seen element))) (Js.Nullable.toOption row.current);
+    <li ref=(ReactDOM.Ref.domRef row)>(React.string (label ^ match opened with true -> "+" | false -> "-"))</li>
+end
+
+module Paged = struct
+  let[@react.component] make ~count =
+    let opened, setOpened = React.useState (fun () -> false) in
+    paged_send := setOpened;
+    <ul>(React.array (Array.init count (fun index -> <Paged_row key=(string_of_int index) label=(string_of_int index) opened />)))</ul>
+end
+
+let latest_send = ref (fun (_ : int) -> ())
+
+module Latest_counter = struct
+  let[@react.component] make ~label =
+    let latest = React.useRef 0 in
+    let tick, setTick = React.useState (fun () -> 0) in
+    let seen = latest.current in
+    let shown = label ^ string_of_int seen in
+    React.useEffect0 (fun () ->
+        (latest_send :=
+           fun step ->
+             latest.current <- latest.current + step;
+             setTick (fun tick -> tick + 1));
+        None);
+    <b>(React.string (shown ^ ":" ^ string_of_int tick))</b>
+end
+
+let latest_label = ref (fun (_ : string) -> ())
+
+module Latest = struct
+  let[@react.component] make () =
+    let label, setLabel = React.useState (fun () -> "a") in
+    latest_label := (fun next -> setLabel (fun _ -> next));
+    <Latest_counter label />
+end
+
 module Echoed = struct
   let[@react.component] make ~value =
     let suffix, _ = React.useState (fun () -> "!") in
@@ -2711,6 +2798,103 @@ let () =
       expect (namespace_uri (select root "path"), inner_html root)
       |. to_equal ("http://www.w3.org/2000/svg", "<svg><path d=\"M0 0L9 9\"></path></svg>");
       finish ()));
+  describe "rows that read the page through their own refs, given new props by their parent" (fun () ->
+    test_async "all render before any of them writes, so they all see the page as it was" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:8) (fun values ->
+             let tape = tape values in
+             let count = 2 + draw tape 30 in
+             ignore (dom_writes ());
+             let* root, client = mount <Paged count /> in
+             let rec step remaining opened =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let next = not opened in
+                   let before = dom_writes () in
+                   let* () = act (fun () -> !paged_send (fun _ -> next)) in
+                   expect (List.sort_uniq compare (take ()), String.length (text_content root))
+                   |. to_equal ([ string_of_int before ], String.length (text_content root));
+                   step (remaining - 1) next
+             in
+             step 4 false))
+        [%mel.obj { numRuns = 40 }]));
+  describe "a component that reads a ref while rendering" (fun () ->
+    test_async "shows what the ref holds after any changes of state, props and the ref" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Latest /> in
+             let rec step remaining label held ticks =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ -> (
+                   match draw tape 2 with
+                   | 0 ->
+                       let next = [| "a"; "b"; "c" |].(draw tape 3) in
+                       let* () = act (fun () -> !latest_label next) in
+                       expect (text_content root) |. to_equal (next ^ string_of_int held ^ ":" ^ string_of_int ticks);
+                       step (remaining - 1) next held ticks
+                   | _ ->
+                       let added = 1 + draw tape 3 in
+                       let* () = act (fun () -> !latest_send added) in
+                       expect (text_content root)
+                       |. to_equal (label ^ string_of_int (held + added) ^ ":" ^ string_of_int (ticks + 1));
+                       step (remaining - 1) label (held + added) (ticks + 1))
+             in
+             step 8 "a" 0 0))
+        [%mel.obj { numRuns = 60 }]));
+  describe "keyed items of components that read the page" (fun () ->
+    test_async "render in the page's order whatever the list moves, drops and gives new props" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let start = Array.init 10 (fun index -> ("k" ^ string_of_int index, 0)) in
+             let pairing = match draw tape 2 with 0 -> Mapped | _ -> Initialized in
+             let* root, client = mount <Paired start pairing /> in
+             let rec step remaining pairs =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   finish ()
+               | _ ->
+                   let arranged = Array.copy pairs in
+                   let kept =
+                     match draw tape 4 with
+                     | 0 ->
+                         Array.iteri
+                           (fun index _ ->
+                             let other = draw tape (index + 1) in
+                             let swapped = arranged.(index) in
+                             arranged.(index) <- arranged.(other);
+                             arranged.(other) <- swapped)
+                           arranged;
+                         Array.length arranged
+                     | 1 -> Array.length arranged - draw tape (Int.min 3 (Array.length arranged))
+                     | _ -> Array.length arranged
+                   in
+                   let next = Array.map (fun (key, generation) -> (key, generation + draw tape 2)) (Array.sub arranged 0 kept) in
+                   let* () = act (fun () -> !paired_send next) in
+                   expect (take (), text_content root)
+                   |. to_equal
+                        ( List.concat_map
+                            (fun (key, generation) ->
+                              match List.assoc_opt key (Array.to_list pairs) with
+                              | Some before when before = generation -> []
+                              | Some _ | None -> [ key ^ "a"; key ^ "b" ])
+                            (Array.to_list next),
+                          String.concat ""
+                            (List.map
+                               (fun (key, generation) -> key ^ "a" ^ string_of_int generation ^ key ^ "b" ^ string_of_int generation)
+                               (Array.to_list next)) );
+                   step (remaining - 1) next
+             in
+             step 6 start))
+        [%mel.obj { numRuns = 80 }]));
   describe "rows reading outer state" (fun () ->
     test_async "show the chosen row and the suffix after any actions" (fun () ->
       check_async
