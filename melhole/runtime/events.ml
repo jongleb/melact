@@ -65,8 +65,8 @@ let track element = Dom_api.set_property element tracked (shown element)
 
 let delegate event =
   match Js.Undefined.toOption (delivery deliveries event) with
-  | Some _ -> ()
-  | None -> (
+  | Some _ -> key_of event
+  | None ->
       let key = key_of event in
       let pointing =
         match event with "click" | "dblclick" | "mousedown" | "mousemove" | "mouseup" -> `Mouse | _ -> `Other
@@ -115,16 +115,14 @@ let delegate event =
         | _ -> ()
       in
       deliver_with deliveries event deliver;
-      match event with
-      | "onchange" ->
-          Dom_api.add_document_listener Dom_api.document "input" deliver;
-          Dom_api.add_document_listener Dom_api.document "change" deliver
-      | _ -> Dom_api.add_document_listener Dom_api.document event deliver)
+      Dom_api.add_document_listener Dom_api.document (match event with "onchange" -> "input" | _ -> event) deliver;
+      (match event with "onchange" -> Dom_api.add_document_listener Dom_api.document "change" deliver | _ -> ());
+      key
 
 let register element event =
   match (Melhole_shared.Delegation.of_event event, Js.Undefined.toOption (delivery deliveries event)) with
   | Delegated, _ ->
-      delegate event;
+      ignore (delegate event);
       Delegated
   | (Crossing | Direct), Some _ -> Delegated
   | (Crossing | Direct), None ->
@@ -151,7 +149,7 @@ let removal_of event =
 
 let delegate_crossing event =
   match Js.Undefined.toOption (delivery deliveries event) with
-  | Some _ -> ()
+  | Some _ -> key_of event
   | None ->
       let key = key_of event in
       let entering = match event with "mouseenter" | "pointerenter" -> `Entering | _ -> `Leaving in
@@ -190,7 +188,8 @@ let delegate_crossing event =
         | "mouseleave" -> "mouseout"
         | "pointerenter" -> "pointerover"
         | _ -> "pointerout")
-        deliver
+        deliver;
+      key
 
 let listen element event =
   match register element event with

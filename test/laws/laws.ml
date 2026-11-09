@@ -107,33 +107,33 @@ let edited_input =
 let reconcile_laws (kind, input) =
   [
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "one step per new entry") ~print:print_keys input
-      (fun (old, next) -> Array.length (Reconcile.plan ~old ~next).steps = Array.length next);
+      (fun (old, next) -> Array.length (Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next)).steps = Array.length next);
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "reused and dropped entries partition the old ones")
       ~print:print_keys input (fun (old, next) ->
-        let plan = Reconcile.plan ~old ~next in
+        let plan = Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next) in
         List.sort compare (List.map snd (reused plan) @ Array.to_list plan.dropped)
         = List.init (Array.length old) Fun.id);
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "a reused entry has the same key") ~print:print_keys
       input (fun (old, next) ->
         List.for_all
           (fun (j, i) -> String.equal old.(i) next.(j))
-          (reused (Reconcile.plan ~old ~next)));
+          (reused (Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next))));
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "reuse is maximal, the sum over keys of min(old, new) counts")
       ~print:print_keys input (fun (old, next) ->
         let keys = List.sort_uniq compare (Array.to_list old @ Array.to_list next) in
-        List.length (reused (Reconcile.plan ~old ~next))
+        List.length (reused (Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next)))
         = List.fold_left (fun total key -> total + min (count key old) (count key next)) 0 keys);
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "kept entries appear in increasing old order") ~print:print_keys
       input (fun (old, next) ->
         let kept =
           List.concat_map
             (fun (step : Reconcile.step) -> match Reconcile.view step with Keep i -> [ i ] | Move _ | Create -> [])
-            (Array.to_list (Reconcile.plan ~old ~next).steps)
+            (Array.to_list (Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next)).steps)
         in
         kept = List.sort_uniq compare kept);
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "kept entries are a longest increasing subsequence (moves are minimal)")
       ~print:print_keys input (fun (old, next) ->
-        let plan = Reconcile.plan ~old ~next in
+        let plan = Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next) in
         let kept =
           Array.fold_left
             (fun total (step : Reconcile.step) ->
@@ -143,7 +143,7 @@ let reconcile_laws (kind, input) =
         kept = longest_increasing (List.map snd (reused plan)));
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "executing the plan right to left yields exactly the new sequence")
       ~print:print_keys input (fun (old, next) ->
-        let plan = Reconcile.plan ~old ~next in
+        let plan = Reconcile.plan ~old:(Reconcile.string_keys old) ~next:(Reconcile.string_keys next) in
         simulate old next plan
         = Array.to_list
             (Array.mapi
@@ -152,7 +152,7 @@ let reconcile_laws (kind, input) =
                plan.steps));
     Test.make ~count:2000 ~name:("Reconcile, " ^ kind ^ ": " ^ "an unchanged sequence keeps every entry in place")
       ~print:print_keys input (fun (keys, _) ->
-        let plan = Reconcile.plan ~old:keys ~next:keys in
+        let plan = Reconcile.plan ~old:(Reconcile.string_keys keys) ~next:(Reconcile.string_keys keys) in
         plan.dropped = [||]
         && Array.for_all2
              (fun (step : Reconcile.step) i -> Reconcile.view step = Keep i)

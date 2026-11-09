@@ -74,9 +74,9 @@ let rec description tape depth =
       View.rows items View.arrayed word_line
         (fun [@u] word -> word.root)
         (fun [@u] word item ->
-          View.put_text word.written word.text item;
+          View.put_text word.written word.text (Melhole.Dom_api.shown_string item);
           word.written <- View.Input item)
-        (fun [@u] item -> item)
+        (fun [@u] item -> Reconcile.string_key item)
         (fun [@u] _ _ _ _ -> ())
         0
         [||]

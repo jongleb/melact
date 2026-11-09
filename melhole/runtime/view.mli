@@ -91,7 +91,7 @@ val rows :
   'frame template ->
   ('frame -> Dom.element[@u]) ->
   ('frame -> 'item -> unit[@u]) ->
-  ('item -> string[@u]) ->
+  ('item -> Reconcile.key[@u]) ->
   ('item -> int -> input array -> int -> unit[@u]) ->
   int ->
   input array ->
@@ -251,10 +251,10 @@ val set_style : Hole.style -> (string * string) list -> unit
 val handler_hole : Dom.element -> string -> Hole.handler
 val set_handler : Hole.handler -> (Dom.event -> unit) -> unit
 val text_at : Template.position -> Dom.text
-val put_text : input -> Dom.text -> string -> unit
+val put_text : input -> Dom.text -> Dom_api.shown -> unit
 
-val write_sole_text : Dom.element -> string -> unit
-val put_sole_text : input -> Dom.element -> string -> unit
+val write_sole_text : Dom.element -> Dom_api.shown -> unit
+val put_sole_text : input -> Dom.element -> Dom_api.shown -> unit
 val write_attr : Dom.element -> string -> string option -> unit
 val put_attr : input -> Dom.element -> string -> string option -> unit
 

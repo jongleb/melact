@@ -91,7 +91,7 @@ let scenarios =
           Counters.bump Refreshed;
           View.set_attr marking (Some (marked outer item));
           View.set_text text (item.label ^ outer.suffix))
-        (fun [@u] item -> Counters.seen Keyed item.key)
+        (fun [@u] item -> Reconcile.string_key (Counters.seen Keyed item.key))
         (projection outer) 2 [| View.Input outer |] View.Unselecting
   in
   [| ("View.rows, keyed edits", fun () -> edited rows); ("View.each, keyed edits", fun () -> edited each) |]

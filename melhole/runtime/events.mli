@@ -19,14 +19,14 @@ val key_of : string -> string
     bubbles, on the element otherwise. *)
 val register : Dom.element -> string -> registration
 
-(** Listens at the document for a delegated event, once per event type; compiled templates call it
-    once, not per element. *)
-val delegate : string -> unit
+(** Listens at the document for a delegated event, once per event type, and gives the property an
+    element keeps its handler for it under; compiled templates call it once, not per element. *)
+val delegate : string -> string
 
 (** Listens once on [document] for an element being entered or left ([mouseenter], [mouseleave],
     [pointerenter], [pointerleave]); compiled templates call it, so an app without such handlers
-    carries none of it. *)
-val delegate_crossing : string -> unit
+    carries none of it; gives the property an element keeps its handler for it under. *)
+val delegate_crossing : string -> string
 
 (** Records what an input or textarea shows now, its value or checked state, as React's value
     tracker does: [onchange], React's [onChange] on those, delivers an [input] or [change] event only

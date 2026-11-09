@@ -215,7 +215,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
   let rendering = Graph.rendering ~hooks expression in
   let definition =
     lazy
-      (Hoist.hoist ~loc "component"
+      (Hoist.hoist ~loc ~unused:Hoist.Kept "component"
          (match rendering with
          | Graph.Pure -> [%expr Melact_runtime.Component.pure ~name:[%e estring ~loc name]]
          | Graph.Reads_the_page | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
@@ -453,7 +453,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
           [%expr
             let __melact_memo =
               Melact_runtime.Memo.cells
-                [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
+                [%e Hoist.hoist ~loc ~unused:Hoist.Kept "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
                 [%e eint ~loc count]
             in
             [%e walked]]
@@ -1053,11 +1053,11 @@ let mapper =
             | Element.Server ->
                 [%expr
                   Melact_server.Hook.unchecked
-                    [%e Hoist.hoist ~loc "hook" [%expr (Melact_server.Hook.key () : unit Melact_server.Hook.key)]]]
+                    [%e Hoist.hoist ~loc ~unused:Hoist.Kept "hook" [%expr (Melact_server.Hook.key () : unit Melact_server.Hook.key)]]]
             | Element.Client_only | Element.Hydratable ->
                 [%expr
                   Melact_runtime.Hook.unchecked
-                    [%e Hoist.hoist ~loc "hook" [%expr (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)]]] );
+                    [%e Hoist.hoist ~loc ~unused:Hoist.Kept "hook" [%expr (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)]]] );
         ]
 
     method private foreign_child child =

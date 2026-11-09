@@ -49,7 +49,7 @@ let () =
       test
         "once it listens, elements listened to before and after, nested either way, get it once, outermost first"
         (fun () ->
-          Events.delegate_crossing "pointerenter";
+          ignore (Events.delegate_crossing "pointerenter");
           check
             (property (tapes ~shortest:3 ~longest:20) (fun values ->
                  let tape = tape values in

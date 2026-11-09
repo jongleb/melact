@@ -18,24 +18,35 @@ let describe_steps (plan : Reconcile.t) =
 let () =
   describe "plan" (fun () ->
       test "keeps prefix and suffix" (fun () ->
-          let plan = Reconcile.plan ~old:[| "a"; "b"; "c" |] ~next:[| "a"; "x"; "c" |] in
+          let plan = Reconcile.plan ~old:(Reconcile.string_keys [| "a"; "b"; "c" |]) ~next:(Reconcile.string_keys [| "a"; "x"; "c" |]) in
           expect (describe_steps plan, Array.to_list plan.dropped)
           |. to_equal ([ "keep 0"; "create"; "keep 2" ], [ 1 ]));
       test "moves only the swapped entries" (fun () ->
           let plan =
-            Reconcile.plan ~old:[| "a"; "b"; "c"; "d"; "e"; "f" |]
-              ~next:[| "a"; "e"; "c"; "d"; "b"; "f" |]
+            Reconcile.plan ~old:(Reconcile.string_keys [| "a"; "b"; "c"; "d"; "e"; "f" |]) ~next:(Reconcile.string_keys [| "a"; "e"; "c"; "d"; "b"; "f" |])
           in
           expect (describe_steps plan)
           |. to_equal
                [ "keep 0"; "move 4"; "keep 2"; "keep 3"; "move 1"; "keep 5" ]);
       test "reverses with one fewer move than entries" (fun () ->
-          let plan = Reconcile.plan ~old:[| "a"; "b"; "c" |] ~next:[| "c"; "b"; "a" |] in
+          let plan = Reconcile.plan ~old:(Reconcile.string_keys [| "a"; "b"; "c" |]) ~next:(Reconcile.string_keys [| "c"; "b"; "a" |]) in
           expect (describe_steps plan) |. to_equal [ "move 2"; "keep 1"; "move 0" ]);
       test "never reuses an old entry twice for duplicate keys" (fun () ->
-          let plan = Reconcile.plan ~old:[| "a"; "b" |] ~next:[| "b"; "b"; "b" |] in
+          let plan = Reconcile.plan ~old:(Reconcile.string_keys [| "a"; "b" |]) ~next:(Reconcile.string_keys [| "b"; "b"; "b" |]) in
           expect (describe_steps plan, Array.to_list plan.dropped)
-          |. to_equal ([ "create"; "create"; "keep 1" ], [ 0 ])));
+          |. to_equal ([ "create"; "create"; "keep 1" ], [ 0 ]));
+      test "plans int keys as it plans the same keys written as strings" (fun () ->
+          check
+            (property (tapes ~shortest:0 ~longest:60) (fun values ->
+                 let tape = tape values in
+                 let ints count = Array.init count (fun _ -> draw tape 12 - 3) in
+                 let old = ints (draw tape 20) and next = ints (draw tape 20) in
+                 let planned keyed = Reconcile.plan ~old:(Array.map keyed old) ~next:(Array.map keyed next) in
+                 let as_ints = planned Reconcile.int_key
+                 and as_strings = planned (fun key -> Reconcile.string_key (string_of_int key)) in
+                 expect (describe_steps as_ints, Array.to_list as_ints.dropped)
+                 |. to_equal (describe_steps as_strings, Array.to_list as_strings.dropped)))
+            [%mel.obj { numRuns = 500 }]));
   describe "keyed rows" (fun () ->
       let mounted_rows labels =
         let root = create_element document "ul" in

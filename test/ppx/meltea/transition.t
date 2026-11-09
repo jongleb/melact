@@ -13,19 +13,6 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
     mutable __melhole_frame_1_slot_1: Melhole.View.input ;
     mutable __melhole_frame_1_slot_2: Melhole.View.input }[@@ocaml.warning
                                                             "-34-69"]
-  let __melhole_template_2 =
-    Melhole.View.template (Melhole.Template.html "<li></li>")
-      {
-        Js.Fn.I1 =
-          (fun __melhole_node ->
-             {
-               __melhole_frame_1_hole_0 =
-                 (Melhole.Template.element __melhole_node);
-               __melhole_frame_1_slot_0 = Melhole.View.unset;
-               __melhole_frame_1_slot_1 = Melhole.View.unset;
-               __melhole_frame_1_slot_2 = Melhole.View.unset
-             })
-      } { Melhole.View.placed = None; released = None; forgotten = None }
   let __melhole_selection_3 = Melhole.View.selection 1
   type 'melhole_0 __melhole_frame_4 =
     {
@@ -81,58 +68,6 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
         forgotten = None
       }
   let view (rows, chosen) =
-    let row id =
-      Html.node
-        (fun __melhole_dispatch ->
-           Melhole.View.with_key (string_of_int id : string)
-             (Html.render
-                (Html.node
-                   (fun __melhole_dispatch ->
-                      Melhole.View.compiled __melhole_template_2
-                        {
-                          Js.Fn.I1 =
-                            (fun __melhole_frame ->
-                               ((let __melhole_hole_0 =
-                                   __melhole_frame.__melhole_frame_1_hole_0 in
-                                 let __melhole_hole_1 = __melhole_hole_0 in
-                                 let __melhole_changed_0 =
-                                   Melhole.View.check
-                                     __melhole_frame.__melhole_frame_1_slot_0
-                                     chosen in
-                                 __melhole_frame.__melhole_frame_1_slot_0 <-
-                                   (Melhole.View.Input chosen);
-                                 (let __melhole_changed_1 =
-                                    Melhole.View.check
-                                      __melhole_frame.__melhole_frame_1_slot_1
-                                      id in
-                                  __melhole_frame.__melhole_frame_1_slot_1 <-
-                                    (Melhole.View.Input id);
-                                  (match (__melhole_changed_0,
-                                           __melhole_changed_1)
-                                   with
-                                   | (Melhole.View.Unchanged,
-                                      Melhole.View.Unchanged) -> ()
-                                   | _ ->
-                                       let __melhole_value =
-                                         Some
-                                           (if id = chosen then "on" else "" : 
-                                           string) in
-                                       (Melhole.View.put_attr
-                                          __melhole_frame.__melhole_frame_1_slot_2
-                                          __melhole_hole_0 "class"
-                                          __melhole_value;
-                                        __melhole_frame.__melhole_frame_1_slot_2
-                                          <-
-                                          (Melhole.View.Input __melhole_value)));
-                                  (match __melhole_changed_1 with
-                                   | Melhole.View.Unchanged -> ()
-                                   | _ ->
-                                       Melhole.View.write_sole_text
-                                         __melhole_hole_1
-                                         (string_of_int (id : int)));
-                                  ()))
-                               [@ocaml.warning "-26-27"]))
-                        })) __melhole_dispatch)) in
     Html.node
       (fun __melhole_dispatch ->
          Melhole.View.compiled __melhole_template_8
@@ -143,8 +78,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                       __melhole_frame.__melhole_frame_7_hole_0 in
                     Melhole.View.set_content __melhole_hole_0
                       (Melhole.Transition.group ~name:"row" ~duration:200
-                         (let _ = row in
-                          Melhole.View.rows rows Stdlib.Array.of_list
+                         (Melhole.View.rows rows Stdlib.Array.of_list
                             __melhole_template_5 __melhole_root_6
                             {
                               Js.Fn.I2 =
@@ -190,7 +124,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                          | _ ->
                                              Melhole.View.write_sole_text
                                                __melhole_hole_1
-                                               (string_of_int (id : int)));
+                                               (Melhole.Dom_api.shown_int id));
                                         ()))
                                        [@ocaml.warning "-26-27"]))
                                    [@ocaml.warning "-26-27"]))
@@ -199,7 +133,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                               Js.Fn.I1 =
                                 (fun __melhole_item ->
                                    ((let id = __melhole_item in
-                                     (string_of_int id : string))
+                                     Melhole.Reconcile.int_key id)
                                    [@ocaml.warning "-26-27"]))
                             }
                             {

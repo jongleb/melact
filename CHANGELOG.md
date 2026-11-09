@@ -8,6 +8,13 @@
   nodes (305,503). A component whose only read of the world is a ref it made reads the page
   (`Graph.Reads_the_page`) and keeps its update graph. A `createRoot` client no longer links
   hydration and resume: every Melact bundle is 0.3 to 1.3 kB gzip smaller.
+- Less per row and less code, from what the compiler knows: `key=(string_of_int e)` keys a compiled
+  row by the int (`Reconcile.int_key`) and `Html.int`/`React.int` texts go to the DOM as numbers
+  (`Dom_api.shown_int`), so no number strings are made and V8's 64 kB cache of them never fills;
+  definitions lifted for a row function that a loop compiled again are dropped; a delegated handler
+  is one lifted definition, as `Events.delegate` now gives the handler's key. Every bundle the size
+  ratchet measures is smaller, by up to 0.3 kB gzip. A release law checks with `WeakRef`s that a
+  cleared loop keeps nothing it made.
 - Dead messages and dead handlers: `meltea-ppx` alerts at a message nothing in the file sends
   (`dead_message`) and at a handler whose every message leaves the model as it is and runs no command
   (`dead_handler`). A message whose branch changes no field no longer queues a draw: ten of the

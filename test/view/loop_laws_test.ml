@@ -66,7 +66,7 @@ let lines items outer =
       incr renders;
       View.set_attr marking (Some (marked outer item));
       View.set_text text (item.label ^ outer.suffix))
-    (fun [@u] item -> item.key)
+    (fun [@u] item -> Reconcile.string_key item.key)
     (fun [@u] item _ out at ->
       Array.unsafe_set out at (View.Input (marked outer item));
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
@@ -88,16 +88,44 @@ let shouted items outer =
     [| View.Input outer |]
     View.Unselecting
 
+let int_keyed item = Reconcile.int_key (int_of_string (String.sub item.key 1 (String.length item.key - 1)))
+
+let numbered_lines items outer =
+  View.rows items View.arrayed line_template
+    (fun [@u] (root, _, _) -> root)
+    (fun [@u] (_, marking, text) item ->
+      incr renders;
+      View.set_attr marking (Some (marked outer item));
+      View.set_text text (item.label ^ outer.suffix))
+    (fun [@u] item -> int_keyed item)
+    (fun [@u] item _ out at ->
+      Array.unsafe_set out at (View.Input (marked outer item));
+      Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
+    2
+    [| View.Input outer |]
+    View.Unselecting
+
 (** Which compiled loop a law runs on. *)
-type loop = Each | Numbered_each | Rows
+type loop =
+  | Each
+  | Numbered_each
+  | Rows
+  | Rows_int_keys  (** Keyed by ints, as [key=(string_of_int id)] compiles. *)
 
 let looped kind items outer =
   match kind with
   | Each -> loop View.Items items outer
   | Numbered_each -> loop View.Numbered items outer
   | Rows -> lines items outer
+  | Rows_int_keys -> numbered_lines items outer
 
-let loops = [ ("View.each", Each); ("View.each, numbered rows", Numbered_each); ("View.rows", Rows) ]
+let loops =
+  [
+    ("View.each", Each);
+    ("View.each, numbered rows", Numbered_each);
+    ("View.rows", Rows);
+    ("View.rows, int keys", Rows_int_keys);
+  ]
 
 (** How a step changes the rows. *)
 type edit = Structural | Same_order
@@ -401,7 +429,7 @@ let hashed items =
   View.rows items View.arrayed hashed_template
     (fun [@u] (root, _) -> root)
     (fun [@u] (_, text) item -> View.set_text text ("#" ^ item.label))
-    (fun [@u] item -> item.key)
+    (fun [@u] item -> Reconcile.string_key item.key)
     (fun [@u] _ _ _ _ -> ())
     0 View.no_inputs View.Unselecting
 
@@ -460,7 +488,7 @@ let referring items =
       let callback = List.assoc item.key (Array.to_list attach) in
       View.set_text text item.label;
       View.set_reference reference callback callback)
-    (fun [@u] item -> item.key)
+    (fun [@u] item -> Reconcile.string_key item.key)
     (fun [@u] _ _ _ _ -> ())
     0 View.no_inputs View.Unselecting
 
@@ -534,7 +562,7 @@ let selected kind keying items picked =
   let inputs = [| View.Input picked.choice; View.Input picked.suffix |] in
   match kind with
   | Each | Numbered_each ->
-      let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows -> View.Items in
+      let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows | Rows_int_keys -> View.Items in
       View.each each_site numbering items View.arrayed
         (fun [@u] item index ->
           incr renders;
@@ -544,14 +572,17 @@ let selected kind keying items picked =
                [| HAttr (Some (class_of keying picked index item)); HText (place ^ item.label ^ picked.suffix) |]))
         (selected_project keying picked) 2 inputs
         (View.Selecting (each_selection, [| selector keying picked |]))
-  | Rows ->
+  | Rows | Rows_int_keys ->
       View.rows items View.arrayed line_template
         (fun [@u] (root, _, _) -> root)
         (fun [@u] (_, marking, text) item ->
           incr renders;
           View.set_attr marking (Some (class_of keying picked 0 item));
           View.set_text text (item.label ^ picked.suffix))
-        (fun [@u] item -> item.key)
+        (fun [@u] item ->
+          match kind with
+          | Rows_int_keys -> int_keyed item
+          | Each | Numbered_each | Rows -> Reconcile.string_key item.key)
         (selected_project keying picked) 2 inputs
         (View.Selecting (rows_selection, [| selector keying picked |]))
 
@@ -574,6 +605,7 @@ let selections =
     ("View.rows", Rows, Group);
     ("View.rows", Rows, Boxed_group);
     ("View.rows", Rows, Tag);
+    ("View.rows, int keys", Rows_int_keys, Group);
   ]
 
 let keyed = function

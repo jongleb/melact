@@ -62,6 +62,15 @@ external template_content : Dom.element -> Dom.documentFragment = "content"
 
 external set_data : Dom.text -> string -> unit = "data" [@@mel.set]
 
+(** What a template writes as text: a string, or an int that the DOM turns into text itself, so that
+    JavaScript makes no string for it and fills no cache of number strings. *)
+type shown
+
+external shown_string : string -> shown = "%identity"
+external shown_int : int -> shown = "%identity"
+external show : Dom.text -> shown -> unit = "data" [@@mel.set]
+external show_content : Dom.node -> shown -> unit = "textContent" [@@mel.set]
+
 external set_attribute : Dom.element -> string -> string -> unit
   = "setAttribute"
 [@@mel.send]

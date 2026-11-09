@@ -1201,6 +1201,7 @@ def row(p):
         ("holes: the bare nodes", "fields, typed", "green"),
         ("slots: the last values read", "only where needed", "green"),
         ("element.$$melhole:data1 = id", "no closure", "green"),
+        ("key and text: the int itself", "no strings", "green"),
         ("projection array", "", "plain"),
     ]
     body = column(0, "a row before", "View.each over generic children", before, "orange")
@@ -1210,9 +1211,7 @@ def row(p):
     body += text(498, 292, "the template, its record type and one refresh per list,", size=11.5, cls="muted")
     body += text(498, 309, "the key function, one handler per site (View.link)", size=11.5, cls="muted")
     body += arrow(p, 420, 160, 466, 160, "green", flow=True, width=1.8)
-    body += text(440, 350, "Creating 1,000 rows of the benchmark allocates about 290 kB instead of 939; 1,000 rows take 1.07 MB instead of 1.68.",
-                 size=12, cls="muted", anchor="middle", weight=600)
-    return svg(p, 880, 358, "What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: one record per row, a frame the compiler generates for the template, with the row's 4 hole nodes and 5 slots for the last values read, only where a value needs one; the handler data as a property of the element, and the projection array. The template, its record type, one refresh per list, the key function and one handler per site are shared. Creating 1,000 rows allocates about 290 kB instead of 939, and 1,000 rows take 1.07 MB instead of 1.68", body)
+    return svg(p, 880, 332, "What one row of a compiled list holds. Before: a child description with build and patch closures, a with_key wrapper, a refresh closure, a mounted child with three closures, a compiled state with a lend closure, a scope with its deps, a holes array with five hole records, two handler closures and a projection array. Now: one record per row, a frame the compiler generates for the template, with the row's 4 hole nodes and 5 slots for the last values read, only where a value needs one; the handler data as a property of the element, the key and the number text as the int itself, with no string made, and the projection array. The template, its record type, one refresh per list, the key function and one handler per site are shared", body)
 
 
 def served(p):

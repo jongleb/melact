@@ -120,7 +120,7 @@ type live =
       root : ('frame -> Dom.element[@u]);
       source : input;
       items : 'item array;
-      keys : string array;
+      keys : Reconcile.key array;
       outer : input array;
       projections : input array;
       frames : 'frame array;
@@ -477,7 +477,7 @@ let keyed entries =
       (fun [@u] position live ->
         match live with
         | Keyed_state (old_keys, items) ->
-            let plan = Reconcile.plan ~old:old_keys ~next:keys in
+            let plan = Reconcile.plan ~old:(Reconcile.string_keys old_keys) ~next:(Reconcile.string_keys keys) in
             (match spanned position live items plan.dropped with
             | Whole ->
                 Dom_api.set_text_content position.parent "";
@@ -872,7 +872,7 @@ let each site numbering source listed render project pieces outer selectors =
                 last_item_first (fun () -> refresh (count - 1));
                 Some (Each_state { site; source = Input source; items; keys; outer; projections; lives; selectors; indexes = Unindexed })
             | _, (`Same | `Moved) ->
-                let plan = Reconcile.plan ~old:old.keys ~next:keys in
+                let plan = Reconcile.plan ~old:(Reconcile.string_keys old.keys) ~next:(Reconcile.string_keys keys) in
                 (match spanned position live old.lives plan.dropped with
                 | Whole ->
                     Dom_api.set_text_content position.parent "";
@@ -1024,8 +1024,8 @@ let adopted template refresh (position : Template.position) =
       (root, frame)
 
 let rows (type frame source item) (source : source) (listed : source -> item array) (template : frame template)
-    (root : (frame -> Dom.element)[@u]) (refresh : (frame -> item -> unit)[@u]) (key : (item -> string)[@u]) project
-    pieces outer selectors =
+    (root : (frame -> Dom.element)[@u]) (refresh : (frame -> item -> unit)[@u]) (key : (item -> Reconcile.key)[@u])
+    project pieces outer selectors =
   let showing (items : item array) =
   let count = Array.length items in
   let mount (position : Template.position) item =
@@ -1054,7 +1054,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
     shape = Single;
     build =
       (fun [@u] position ->
-        let keys = (match count with 0 -> no_keys | _ -> Array.make count "") in
+        let keys = (match count with 0 -> Reconcile.string_keys no_keys | _ -> Array.make count (Reconcile.string_key "")) in
         let frames =
           !medium.built count position
             (fun [@u] index at ->
@@ -1110,7 +1110,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                   | true -> in_place (index + 1)
                   | false -> (
                       let named = key item [@u] in
-                      match String.equal named (Array.unsafe_get old.keys index) with
+                      match Dom_api.same named (Array.unsafe_get old.keys index) with
                       | true -> in_place (index + 1)
                       | false -> `Rearranged_at (index, named)))
             in
@@ -1125,7 +1125,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                     | true -> differing (index + 1) found size
                     | false -> (
                         let named = key item [@u] in
-                        match String.equal named (Array.unsafe_get old.keys index) with
+                        match Dom_api.same named (Array.unsafe_get old.keys index) with
                         | true -> differing (index + 1) found size
                         | false -> differing (index + 1) ((index, named) :: found) (size + 1)))
               in
@@ -1142,7 +1142,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                           | true -> None
                           | false -> (
                               match
-                                ( String.equal wanted (Array.unsafe_get old.keys (fst (Array.unsafe_get moved source))),
+                                ( Dom_api.same wanted (Array.unsafe_get old.keys (fst (Array.unsafe_get moved source))),
                                   Array.exists (fun claimed -> claimed = source) sources )
                               with
                               | true, false -> Some source
@@ -1302,7 +1302,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                 done;
                 Some (shown items old.keys projections frames !indexes)
             | `Rearranged ->
-            let next = Array.make count Origin.fresh and keys = (match count with 0 -> no_keys | _ -> Array.make count "") in
+            let next = Array.make count Origin.fresh and keys = (match count with 0 -> Reconcile.string_keys no_keys | _ -> Array.make count (Reconcile.string_key "")) in
             let projections = (match count * pieces with 0 -> no_inputs | size -> Array.make size unset) in
             let fits from item =
               from >= 0 && from < old_count
@@ -1342,7 +1342,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
               match index = count with
               | true -> `Same
               | false ->
-                  if String.equal (Array.unsafe_get keys index) (Array.unsafe_get old.keys index) then
+                  if Dom_api.same (Array.unsafe_get keys index) (Array.unsafe_get old.keys index) then
                     order (index + 1)
                   else `Moved
             in
@@ -1668,12 +1668,12 @@ let set_handler (hole : Hole.handler) next = Events.set hole.element hole.key ne
 
 let text_at position = !medium.text position None [@u]
 
-let put_text (Input last) node value = if not (Dom_api.same last value) then Dom_api.set_data node value
+let put_text (Input last) node value = if not (Dom_api.same last value) then Dom_api.show node value
 
 let write_sole_text element value =
   match Dom_api.first_child element with
-  | Some node when Dom_api.node_type node = 3 -> Dom_api.set_data (Dom_api.unsafe_text node) value
-  | Some _ | None -> Dom_api.set_text_content (Dom_api.to_node element) value
+  | Some node when Dom_api.node_type node = 3 -> Dom_api.show (Dom_api.unsafe_text node) value
+  | Some _ | None -> Dom_api.show_content (Dom_api.to_node element) value
 
 let put_sole_text (Input last) element value = if not (Dom_api.same last value) then write_sole_text element value
 
@@ -1692,7 +1692,7 @@ let served_put_text (Input last) node value = if not (Dom_api.same last value) t
 
 let served_write_sole_text element value =
   if not (Dom_api.same !medium.adoption Server_nodes && Dom_api.same (Dom_api.text_content element) value) then
-    write_sole_text element value
+    write_sole_text element (Dom_api.shown_string value)
 
 let served_put_sole_text (Input last) element value =
   if not (Dom_api.same last value) then served_write_sole_text element value

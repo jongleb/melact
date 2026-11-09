@@ -195,6 +195,25 @@ position but a hole on the element: the first write sets `textContent`, later wr
 HTML needs no markers around such a text, because the element already bounds it. Rows of another
 shape, or components such as Melact's `<Row>`, keep `View.each`.
 
+### Nothing per row that the compiler knows
+
+What the compiler knows about a row is not kept per row.
+
+- A key written `string_of_int e` is kept as the int (`Reconcile.int_key`), compared with `===` and
+  hashed as a number. Nothing makes a string of it, so the keys array holds small ints and no
+  strings.
+- A text written `Html.int e` or `React.int e` is given to the DOM as the number
+  (`Dom_api.shown_int`), which writes the same text. With int keys, a page that shows a few
+  thousand distinct ints makes no strings of them, and V8's cache of the strings it made from
+  small ints, which grows to 64 kB and stays for the life of the page, never fills.
+- A row function that a loop compiled leaves its first compilation behind: `let row item = <tr ...>`
+  is compiled where it is defined and again, as rows, where `List.map row items` uses it. The
+  definitions lifted to the top of the module for the unused one (its template, its handler keys,
+  its handler sites) are dropped, so the page neither parses a second template nor ships it.
+- A delegated handler is one lifted definition, `Events.delegate "click"`, which listens at the
+  document once and gives the property the element keeps its handler under; nothing that only
+  registers stays behind when the handler's template goes.
+
 ### Long lists in groups
 
 On a long page most of the work is the browser's: style, layout and paint of rows nobody sees.
@@ -1576,6 +1595,11 @@ Accepted only with these holding, by property-based tests:
 - **Volatility:** a hole that reads mutable state is evaluated on every render.
 - **Graph soundness:** a step of a component's update graph runs whenever a source in its mask changed,
   and a render that knows nothing of what changed runs every step.
+- **Release:** after any edits and a clear, nothing a compiled loop made is reachable once the
+  garbage is collected: no item, row, frame, node or handler, and nothing it was given but the last
+  outer values, which go with the unmount (`test/view/release_laws_test.ml`, with `WeakRef`s and
+  forced collections). Keeping the cleared frames or rows breaks it. The loop laws also run with
+  int keys, and a plan of int keys is the plan of the same keys written as strings.
 - **Ratchet:** a change may keep or lower the work done, never raise it. `test/ratchet` patches
   jsdom's prototypes to count DOM writes by kind, created nodes and layouts (a layout read after a
   write is a forced one), steps of DOM walks (TreeWalker, `compareDocumentPosition`, `contains`),
