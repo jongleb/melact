@@ -620,6 +620,15 @@ primitive. A native law checks the classifier and the component reading against 
 generated declarations; 33 mutants of them and of the sites are caught. Typing takes the compilation
 of the dual suite's 2170 lines from about 0.45 s to 0.6 s; a file without a site is not typed.
 
+The staged, typed stanza is the one `docs/migration.md` recommends and the one the repository's apps
+build with: bench/, the 48 apps and repros of bench/classics, the examples and the ratchet's
+programs. Over that corpus 26 files are typed (all Meltea's; no Melact file there has a site) and
+every compilation types them. The only failures are dune's dependency scans of native executables,
+which run the ppx with an empty load path (`Unbound module Program`, `Page`, `Melhole_server`), so
+nothing falls back because of Melange. No cross-module fact fires there, since no app calls another
+module's component in a row or another module's custom hook: the bundles and counters are those of
+`pps`, and a clean build of those trees takes 189 s against 178 s.
+
 ## The Rules of Hooks, checked by the type checker
 
 Every hook in `React` carries an alert, `[@@alert hook]`. `melact-ppx` turns the alert off for the

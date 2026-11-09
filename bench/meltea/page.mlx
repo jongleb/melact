@@ -3,7 +3,10 @@ type row = { id : int; label : string }
 (** The row whose label was clicked last. *)
 type selection = Unselected | Selected of int
 
+(** Rows are copied on every change, never written in place. *)
 type model = { rows : row array; next : int; seed : int; selection : selection }
+
+[@@@alert "-mutable_model"]
 
 type message = Run | Run_lots | Add | Update | Clear | Swap_rows | Select of int | Remove of int
 

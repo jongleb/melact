@@ -11,4 +11,4 @@
  (module_systems
   (es6 mjs))
  (preprocess
-  (pps melange.ppx melact-ppx -hydratable)))
+  (staged_pps melange.ppx melact-ppx -- -hydratable -typed)))

@@ -8,4 +8,4 @@
  (module_systems
   (es6 mjs))
  (preprocess
-  (pps melange.ppx melact-ppx)))
+  (staged_pps melange.ppx melact-ppx -- -typed)))

@@ -7,7 +7,7 @@
  (module_systems
   (es6 mjs))
  (preprocess
-  (pps melange.ppx meltea-ppx -hydratable)))
+  (staged_pps melange.ppx meltea-ppx -- -hydratable -typed)))
 
 (rule
  (target index.html)

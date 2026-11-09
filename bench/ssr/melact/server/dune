@@ -5,4 +5,4 @@
  (name server)
  (libraries melact.server.native unix)
  (preprocess
-  (pps melact-ppx -server)))
+  (staged_pps melact-ppx -- -server -typed)))

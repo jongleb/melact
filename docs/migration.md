@@ -23,8 +23,16 @@ In every `dune` file:
 - (libraries reason-react)
 + (libraries melact)
 - (preprocess (pps melange.ppx reason-react-ppx))
-+ (preprocess (pps melange.ppx melact-ppx))
++ (preprocess (staged_pps melange.ppx melact-ppx -- -typed))
 ```
+
+Under `staged_pps` the compiler runs `melact-ppx`, with the `.cmi` of the app's other modules on
+its load path: a hookless component of another file is spliced into its caller's rows as one of its
+own file is, and a component that calls another file's custom hook keeps its update graph. `-typed` lets it ask the
+type checker where the syntax does not tell; a file that does not type is compiled exactly as
+without it. Plain `(pps melange.ppx melact-ppx)` still works, with fewer optimizations: every
+component of another module stays a call and its custom hooks are unknown. The benchmark apps and
+the examples of this repository build with the staged stanza.
 
 Nothing else changes. Run the tests; `compat/run.sh` shows what real reason-react apps look like
 after this step.
@@ -71,7 +79,7 @@ The reducer is already a Meltea `update` in all but name. Keep the tests green a
 To find the components that are ready, add `-meltea-hints` to `melact-ppx` for one build:
 
 ```lisp
-(preprocess (pps melange.ppx melact-ppx -meltea-hints))
+(preprocess (staged_pps melange.ppx melact-ppx -- -typed -meltea-hints))
 ```
 
 Every `[@react.component]` whose only hooks are `useState` and `useReducer` gets an alert, `meltea`,
@@ -115,8 +123,8 @@ One library can hold modules of both kinds: dune's `per_module` gives each its o
  (modes melange)
  (preprocess
   (per_module
-   ((pps melange.ppx meltea-ppx) todos)
-   ((pps melange.ppx melact-ppx) app main))))
+   ((staged_pps melange.ppx meltea-ppx -- -typed) todos)
+   ((staged_pps melange.ppx melact-ppx -- -typed) app main))))
 ```
 
 ## Step 3: embed the screen as a Meltea program inside the Melact app

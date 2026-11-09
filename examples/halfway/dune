@@ -5,5 +5,5 @@
   (es6 mjs))
  (preprocess
   (per_module
-   ((pps melange.ppx meltea-ppx) todos)
-   ((pps melange.ppx melact-ppx) main app stars stars_html))))
+   ((staged_pps melange.ppx meltea-ppx -- -typed) todos)
+   ((staged_pps melange.ppx melact-ppx -- -typed) main app stars stars_html))))

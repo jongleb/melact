@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- The staged, typed stanza is the default: `docs/migration.md`, the README and Meltea's README
+  recommend `(staged_pps melange.ppx melact-ppx -- -typed)` (and the same for `meltea-ppx`), still
+  two lines of dune; plain `pps` keeps working with fewer optimizations. Every benchmark app, the 30
+  apps and 18 repros of bench/classics, the SSR, resume and prerendered pairs (server sides too),
+  the examples and the ratchet's programs build that way; the test suites stay on `pps`, and
+  `compat/run.sh` builds the reason-react apps with the new stanza plus one TodoMVC under `pps`.
+  Nothing in that corpus uses another module's component in a row or another module's custom hook,
+  so the bundles and the ratchet's counters are unchanged (bench/meltea is 11 bytes smaller); a
+  clean build of those trees took 189 s against 178 s (medians of four, on a loaded machine).
+  `bench/meltea` keeps its rows in an array copied on every change and turns the `mutable_model`
+  alert off.
 - Melact's scheduler keeps the page's order of the instances a round's writes put off, instead of
   finding it again with `compareDocumentPosition` and a `TreeWalker`: a keystroke over 2,000 rows
   that read their own `offsetTop` takes no DOM steps (6,001 before), and the event table walks 84,356

@@ -5,4 +5,4 @@
  (name render)
  (libraries melact.server.native)
  (preprocess
-  (pps melact-ppx -server)))
+  (staged_pps melact-ppx -- -server -typed)))

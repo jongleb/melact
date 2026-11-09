@@ -54,10 +54,13 @@ Take a reason-react + Melange app, change two lines in its `dune` files:
 - (libraries reason-react)
 + (libraries melact)
 - (preprocess (pps reason-react-ppx))
-+ (preprocess (pps melact-ppx))
++ (preprocess (staged_pps melact-ppx -- -typed))
 ```
 
-and get a build with no React in the bundle and no virtual DOM. Your components stay as they are:
+and get a build with no React in the bundle and no virtual DOM. Under `staged_pps` `melact-ppx`
+reads the `.cmi` of the app's other modules, so their hookless components are spliced into rows and
+their custom hooks keep a caller's update graph; plain `(pps melact-ppx)` works too, with fewer
+optimizations. Your components stay as they are:
 
 ```ocaml
 (* counter.mlx *)
@@ -407,7 +410,7 @@ let () = Option.iter (fun root -> ignore (Program.sandbox ~init:0 ~update ~view 
 sends a message, `onInput` and `onKeyDown` take a function of the value or key, `onCheck` of the
 checked state. `Program.sandbox` and `Program.element` run it, with `Cmd` and `Sub` as plain
 values; `Html.map` and `Html.memo` work as in Elm. Dependencies: `(libraries meltea)` and
-`(pps melange.ppx meltea-ppx)`. Examples: [`meltea/examples/counter`](meltea/examples/counter/main.mlx) and
+`(staged_pps melange.ppx meltea-ppx -- -typed)`. Examples: [`meltea/examples/counter`](meltea/examples/counter/main.mlx) and
 [`meltea/examples/todomvc`](meltea/examples/todomvc/todomvc.mlx), the full TodoMVC with routing, editing and
 `localStorage`.
 
@@ -552,7 +555,8 @@ $ opam pin add melact.0.1.0 git+https://github.com/jongleb/melact#0.1.0
 ```
 
 Then, in each `dune` file of the app, `(libraries reason-react)` becomes `(libraries melact)` and
-`(pps reason-react-ppx)` becomes `(pps melact-ppx)`. No library in the build may require reason-react
+`(pps reason-react-ppx)` becomes `(staged_pps melact-ppx -- -typed)` (plain `(pps melact-ppx)` also
+works, with fewer optimizations across modules). No library in the build may require reason-react
 itself (see Limits above).
 
 ## Try it
