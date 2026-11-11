@@ -1284,6 +1284,36 @@ that ignores it is not:
   Melhole.View.Items
   Melhole.View.Numbered
 
+An unqualified `Array` or `List` may be an opened one, like Belly's, made of Belt's that takes the
+collection first and whose `mapi` passes the item before the index, so the row of an unqualified
+`map` is the argument written as a function, inline or by a let. A collection-first `mapi`, and a
+`map` neither of whose arguments is seen to be a function, stay as written:
+
+  $ cat > opened.ml <<'EOF'
+  > let first items = ((ul ~children:[ items |. Array.map (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > let direct items = ((ul ~children:[ React.array (Array.map items (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]))) ] ()) [@JSX])
+  > let listed items = ((ul ~children:[ React.list (List.map items (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]))) ] ()) [@JSX])
+  > let bound items = let row x = ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]) in ((ul ~children:[ items |. Array.map row |. React.array ] ()) [@JSX])
+  > let stdlib items = ((ul ~children:[ React.array (Array.map (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) items) ] ()) [@JSX])
+  > let numbered items = ((ul ~children:[ items |. Array.mapi (fun x i -> ((Row.createElement ~key:x ~v:i ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
+  > let unseen items row = ((ul ~children:[ items |. Array.map row |. React.array ] ()) [@JSX])
+  > EOF
+  $ ./pp.exe -impl opened.ml | tr -s ' \n' ' ' | grep -o "let [a-z]* items\|Melhole.View.each __melhole_site_[0-9]* Melhole.View.[A-Za-z]* [a-z]*\|(items |. (Array.mapi\? [(a-z]*"
+  let first items
+  Melhole.View.each __melhole_site_1 Melhole.View.Items items
+  let direct items
+  Melhole.View.each __melhole_site_4 Melhole.View.Items items
+  let listed items
+  Melhole.View.each __melhole_site_7 Melhole.View.Items items
+  let bound items
+  Melhole.View.each __melhole_site_10 Melhole.View.Items items
+  let stdlib items
+  Melhole.View.each __melhole_site_13 Melhole.View.Items items
+  let numbered items
+  (items |. (Array.mapi (fun
+  let unseen items
+  (items |. (Array.map row
+
 A row function bound by a let in a component is kept while the sources it reads stay (the update
 graph's memory, below) and still compiles to a loop:
 
@@ -1297,6 +1327,23 @@ graph's memory, below) and still compiles to a loop:
   $ ./pp.exe -impl letrow.ml | grep -o "Memo.graph\|Memo.lookup2\|Melhole.View.rows\|melhole.cached"
   Memo.graph
   Melhole.View.rows
+
+A function that ignores its argument is polymorphic, and kept in a memo cell, an application, it
+would have one type; one passed to props of two components, which may type it apart, as
+reason-react allows, stays a plain let, made on every render. One passed to the same prop of DOM
+tags has one type and is kept:
+
+  $ cat > general.ml <<'EOF'
+  > let make ~busy ~onClose =
+  >   let close _ = if busy then () else onClose () in
+  >   let blur _ = onClose () in
+  >   React.useEffect1 (fun () -> None) [| busy |];
+  >   ((div ~children:[ ((Modal.createElement ~onClose:close ~children:[] ()) [@JSX]); ((Button.createElement ~onClick:close ~children:[] ()) [@JSX]); ((input ~onBlur:blur ()) [@JSX]); ((textarea ~onBlur:blur ()) [@JSX]) ] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl general.ml | tr -s ' \n' ' ' | grep -o "let \(close\|blur\) = [(A-Za-z_]*\( _\| __melact_found = Melact_runtime.Memo.lookup1\)"
+  let close = ((fun _
+  let blur = let __melact_found = Melact_runtime.Memo.lookup1
 
 A row whose prop picks it by key gets a selector, in a numbered loop too, where the key can be the
 index:

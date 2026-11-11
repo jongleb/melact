@@ -64,4 +64,31 @@ let () =
       let first = inner_html root in
       let* later = clicks 1 [] in
       expect (first :: later) |. to_equal (List.map (fun n -> "<div><p>" ^ shown n ^ "</p></div>") [ 0; 1; 2; 3 ]);
+      Js.Promise.resolve ());
+    test_async "lists mapped by an opened Array and List that take the collection first, as Belly's do" (fun () ->
+      let* root, _ = mount (CollectionFirst.make (CollectionFirst.makeProps ())) in
+      let row cells = "<tr>" ^ String.concat "" (List.map (fun cell -> "<td>" ^ cell ^ "</td>") cells) ^ "</tr>" in
+      expect (inner_html root)
+      |. to_equal
+           ("<table><tbody>"
+           ^ String.concat ""
+               [
+                 row [ "1"; "2" ]; row [ "1"; "2" ]; row [ "10"; "20" ]; row [ "1"; "2" ]; row [ "100"; "201" ]; row [ "7"; "8" ];
+                 row [ "1"; "2" ]; row [ "3"; "4" ]; row [ "5"; "6" ];
+               ]
+           ^ "</tbody></table>");
+      Js.Promise.resolve ());
+    test_async "a function that ignores its argument, used at two types in a component with hooks" (fun () ->
+      let* stated, _ = mount (PolyLet.Stated.make (PolyLet.Stated.makeProps ~busy:false ())) in
+      let* effected, _ = mount (PolyLet.Effected.make (PolyLet.Effected.makeProps ~busy:false ())) in
+      let closed = ref 0 in
+      let* passed, _ = mount (PolyLet.Passed.make (PolyLet.Passed.makeProps ~busy:false ~onClose:(fun () -> incr closed) ())) in
+      let* () =
+        React.act (fun () ->
+          click (select stated "button");
+          click (select effected "button");
+          click (select passed "button"))
+      in
+      expect (inner_html stated, inner_html effected, !closed)
+      |. to_equal ("<div><button>x</button>2</div>", "<div><button>x</button>2</div>", 2);
       Js.Promise.resolve ()))
