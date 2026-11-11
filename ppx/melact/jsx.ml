@@ -398,10 +398,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                     let kept =
                       Option.bind named (fun name ->
                           match value.pexp_desc with
-                          | Pexp_function _ -> (
-                              match Polymorphic.of_let binding.pvb_pat value rest with
-                              | Polymorphic.Monomorphic -> Some value
-                              | Polymorphic.Possibly_polymorphic -> None)
+                          | Pexp_function _ -> Some (Polymorphic.kept binding.pvb_pat value rest)
                           | Pexp_ident _ | Pexp_constant _ | Pexp_construct (_, None) | Pexp_variant (_, None) -> None
                           | _ -> (
                               match Frozen.uses name rest with
@@ -498,7 +495,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                 (fun step rest ->
                   match step with
                   | Graph.Statement value -> [%expr [%e walker#expression value]; [%e rest]]
-                  | Graph.Called (pattern, value) | Graph.Remade (pattern, value) -> [%expr let [%p pattern] = [%e value] in [%e rest]]
+                  | Graph.Called (pattern, value) -> [%expr let [%p pattern] = [%e value] in [%e rest]]
                   | Graph.Context { pattern; context; bit } ->
                       held pattern bit ~source:[%expr React.useContext [%e context]]
                         [%expr
@@ -641,6 +638,9 @@ let hook_modules = ref []
 (** Whether [open React] is in force, so that a bare [useState] is React's. *)
 type opened = Opened | Closed
 
+(** Whether a bare [Array] or [List] in the file can be other than Stdlib's. *)
+type collections = Unscanned | Stdlib_only | Possibly_shadowed
+
 let rec with_unit typ =
   match typ.ptyp_desc with
   | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) ->
@@ -655,6 +655,7 @@ let foreign_name name = name ^ "__foreign"
 let mapper =
   object (self)
     inherit Scope.mapper as super
+    val mutable collections : collections = Unscanned
 
     method private frontend =
       {
@@ -741,7 +742,12 @@ let mapper =
                   in
                   match (flattened (piped inner)).pexp_desc with
                   | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
-                      let path = match Longident.flatten_exn txt with path -> path | exception Invalid_argument _ -> [] in
+                      let path =
+                        match (Longident.flatten_exn txt, collections) with
+                        | ([ ("Array" | "List"); _ ] as path), Stdlib_only -> "Stdlib" :: path
+                        | path, (Stdlib_only | Possibly_shadowed | Unscanned) -> path
+                        | exception Invalid_argument _ -> []
+                      in
                       let unlabelled = List.filter_map (fun (label, value) -> match label with Nolabel -> Some value | Labelled _ | Optional _ -> None) arguments in
                       let given =
                         match (path, arguments, unlabelled) with
@@ -840,9 +846,40 @@ let mapper =
       | _ -> None
 
     method! structure items =
-      let saved = react and known = hooks and facts = custom in
+      let saved = react and known = hooks and facts = custom and scanned = collections in
+      collections <-
+        (match collections with
+        | Stdlib_only | Possibly_shadowed -> collections
+        | Unscanned ->
+            let finder =
+              object
+                inherit [collections] Ast_traverse.fold as super
+
+                method! open_declaration declaration found =
+                  match declaration.popen_expr.pmod_desc with
+                  | Pmod_ident { txt = Lident ("React" | "ReactDOM"); _ } -> found
+                  | _ -> Possibly_shadowed
+
+                method! include_declaration declaration found =
+                  match declaration.pincl_mod.pmod_desc with
+                  | Pmod_ident { txt = Lident ("React" | "ReactDOM"); _ } -> found
+                  | _ -> Possibly_shadowed
+
+                method! expression expression found =
+                  match expression.pexp_desc with
+                  | Pexp_letmodule ({ txt = Some ("Array" | "List"); _ }, _, _) -> Possibly_shadowed
+                  | _ -> super#expression expression found
+
+                method! module_binding binding found =
+                  match binding.pmb_name.txt with
+                  | Some ("Array" | "List") -> Possibly_shadowed
+                  | Some _ | None -> super#module_binding binding found
+              end
+            in
+            finder#structure items Stdlib_only);
       let mapped = Hoist.structure self#structure_item items in
       react <- saved;
+      collections <- scanned;
       hooks <- known;
       custom <- facts;
       mapped
@@ -1576,7 +1613,7 @@ let structure items =
     end
   in
   [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
-  :: mapper#structure (inliner#structure (annotated items))
+  :: Polymorphic.instantiated (mapper#structure (inliner#structure (annotated items)))
 let signature items = mapper#signature items
 let () =
   Driver.add_arg "-hook-modules"

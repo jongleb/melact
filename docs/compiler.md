@@ -122,6 +122,11 @@ over `List.map`. `Array.mapi`, `Belt.Array.mapWithIndex` and `Js.Array.mapi ~f` 
 loop: a row that reads its index is drawn again when its index changes, and a row whose index is
 ignored compiles as a plain one. A law runs every form against React after random edits.
 
+A bare `Array` or `List` is Stdlib's when the file has no `open` or `include` other than `React`'s
+and defines no module of that name. Otherwise it may be an opened one that takes the collection
+first, as Belt's does: the row of `map` is then the argument written as a function, inline or by a
+`let`, and a `mapi` or a `map` whose row is not seen stays as written.
+
 When an outer variable does change, the loop does not re-render every row. As in Vue Vapor's
 selectors, the compiler splits the row into its item and the smallest pieces without JSX that read
 outer variables (its leaves), for example

@@ -1,5 +1,2 @@
-type t =
-  | Possibly_polymorphic
-  | Monomorphic
-
-val of_let : Ppxlib.pattern -> Ppxlib.expression -> Ppxlib.expression -> t
+val kept : Ppxlib.pattern -> Ppxlib.expression -> Ppxlib.expression -> Ppxlib.expression
+val instantiated : Ppxlib.structure -> Ppxlib.structure

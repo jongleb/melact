@@ -331,9 +331,10 @@ reason-react code writes closures, style records, arrays and child elements stra
 derives data in `let`s; each render makes them again, so children see new props. `melact-ppx` keeps
 each such value, as React Compiler does, keyed by the variables it captures, compared with `===`. A
 `let` is kept only when the rest of the body just reads it, so a `ref` changed with `:=` is made
-again on every render. Lists written with `Array.map`, `Belt.Array.map`, `Js.Array.map` or their
-`mapi` forms, piped or not, compile to keyed loops whose rows render only when their item, index
-or what they read outside changed.
+again on every render. A kept function still has a type of its own at every use, as a let gives it,
+so one handler can serve props of two types. Lists written with `Array.map`, `Belt.Array.map`,
+`Js.Array.map` or their `mapi` forms, piped or not, compile to keyed loops whose rows render only
+when their item, index or what they read outside changed.
 
 ### Hooks are typed by their call site
 

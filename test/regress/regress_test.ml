@@ -91,4 +91,25 @@ let () =
       in
       expect (inner_html stated, inner_html effected, !closed)
       |. to_equal ("<div><button>x</button>2</div>", "<div><button>x</button>2</div>", 2);
+      Js.Promise.resolve ());
+    test_async "a function that reads its argument or annotates its result, used at two types in a component with hooks" (fun () ->
+      let closed = ref 0 in
+      let onClose () = incr closed in
+      let* read, _ = mount (PolyLet.Read.make (PolyLet.Read.makeProps ~busy:false ~onClose ())) in
+      let* stopped, _ = mount (PolyLet.Stopped.make (PolyLet.Stopped.makeProps ~busy:false ~onClose ())) in
+      let* returned, _ = mount (PolyReturn.make (PolyReturn.makeProps ~busy:false ~onClose ())) in
+      let* () =
+        React.act (fun () ->
+          click (select read "button");
+          click (select stopped "button");
+          click (select returned "button"))
+      in
+      expect !closed |. to_equal 5;
+      Js.Promise.resolve ());
+    test_async "a closed function and a row function, each used twice in a component with hooks" (fun () ->
+      let closed = ref 0 in
+      let* shut, _ = mount (PolyLet.Closed.make (PolyLet.Closed.makeProps ~busy:false ~onClose:(fun () -> incr closed) ())) in
+      let* rows, _ = mount (PolyLet.Rows.make (PolyLet.Rows.makeProps ~items:[| "a"; "b" |] ~busy:false ())) in
+      let* () = React.act (fun () -> click (select shut "button:last-child")) in
+      expect (!closed, inner_html rows) |. to_equal (1, "<ul><li>a</li><li>b</li><li>last</li></ul>");
       Js.Promise.resolve ()))

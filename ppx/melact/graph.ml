@@ -148,7 +148,6 @@ type step =
   | Memo of { pattern : pattern; hook : expression; mask : int }
   | Effect of { hook : expression; mask : int }
   | Derived of { pattern : pattern; value : expression; mask : int }
-  | Remade of pattern * expression
 
 type plan = { steps : step list; result : expression; reads : int }
 
@@ -170,7 +169,6 @@ type shape =
   | Effected of expression * dependencies
   | Computed of pattern * expression
   | Changing of pattern * expression  (** A value the rest of the body may change in place: made on every render. *)
-  | Generalized of pattern * expression
   | Custom of pattern option * expression * int  (** A custom hook whose fact gives its hook slots. *)
 
 exception Beyond
@@ -235,19 +233,17 @@ let plan ~hooks ~inputs ~props ~volatile body =
     | Some shape, _, _ -> shape
     | None, None, None -> Run (checked value)
     | None, None, Some pattern -> (
-        match Polymorphic.of_let pattern value rest with
-        | Polymorphic.Possibly_polymorphic -> Generalized (pattern, checked value)
-        | Polymorphic.Monomorphic -> (
-            match
-              List.fold_left
-                (fun found name ->
-                  match (found, Frozen.uses name rest) with
-                  | Frozen.Read_only, Frozen.Read_only -> Frozen.Read_only
-                  | (Frozen.Read_only | Frozen.Possibly_changed), _ -> Frozen.Possibly_changed)
-                Frozen.Read_only (Free.bound pattern)
-            with
-            | Frozen.Possibly_changed -> Changing (pattern, checked value)
-            | Frozen.Read_only -> Computed (pattern, checked value)))
+        let value = Polymorphic.kept pattern value rest in
+        match
+          List.fold_left
+            (fun found name ->
+              match (found, Frozen.uses name rest) with
+              | Frozen.Read_only, Frozen.Read_only -> Frozen.Read_only
+              | (Frozen.Read_only | Frozen.Possibly_changed), _ -> Frozen.Possibly_changed)
+            Frozen.Read_only (Free.bound pattern)
+        with
+        | Frozen.Possibly_changed -> Changing (pattern, checked value)
+        | Frozen.Read_only -> Computed (pattern, checked value))
     | None, Some (base, dependencies, arguments), _ -> (
         List.iter (fun argument -> ignore (checked argument)) arguments;
         match (base, pattern) with
@@ -281,7 +277,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
                (fun shape ->
                  match shape with
                  | Cell _ | Stable _ | Remembered _ | Effected _ -> true
-                 | Run _ | Read _ | Computed _ | Changing _ | Generalized _ | Custom _ -> false)
+                 | Run _ | Read _ | Computed _ | Changing _ | Custom _ -> false)
                shapes)
       in
       let contexts = List.length (List.filter (fun shape -> match shape with Read _ -> true | _ -> false) shapes) in
@@ -340,9 +336,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
                     given (bind env pattern bits) slot context rest (Derived { pattern; value; mask = bits } :: steps)
                 | Changing (pattern, value) ->
                     given (bind env pattern every_source) slot context rest
-                      (Derived { pattern; value; mask = every_source } :: steps)
-                | Generalized (pattern, value) ->
-                    given (bind env pattern (mask env value)) slot context rest (Remade (pattern, value) :: steps))
+                      (Derived { pattern; value; mask = every_source } :: steps))
           in
           match given props 1 0 shapes [] with
           | exception Beyond -> None

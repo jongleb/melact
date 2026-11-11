@@ -1284,12 +1284,13 @@ that ignores it is not:
   Melhole.View.Items
   Melhole.View.Numbered
 
-An unqualified `Array` or `List` may be an opened one, like Belly's, made of Belt's that takes the
-collection first and whose `mapi` passes the item before the index, so the row of an unqualified
-`map` is the argument written as a function, inline or by a let. A collection-first `mapi`, and a
-`map` neither of whose arguments is seen to be a function, stay as written:
+Under an `open` an unqualified `Array` or `List` may be an opened one, like Belly's, made of Belt's
+that takes the collection first and whose `mapi` passes the item before the index, so the row of an
+unqualified `map` is the argument written as a function, inline or by a let. A collection-first
+`mapi`, and a `map` neither of whose arguments is seen to be a function, stay as written:
 
   $ cat > opened.ml <<'EOF'
+  > open Belly
   > let first items = ((ul ~children:[ items |. Array.map (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX])) |. React.array ] ()) [@JSX])
   > let direct items = ((ul ~children:[ React.array (Array.map items (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]))) ] ()) [@JSX])
   > let listed items = ((ul ~children:[ React.list (List.map items (fun x -> ((Row.createElement ~key:x ~v:x ~children:[] ()) [@JSX]))) ] ()) [@JSX])
@@ -1314,6 +1315,17 @@ collection first and whose `mapi` passes the item before the index, so the row o
   let unseen items
   (items |. (Array.map row
 
+With no `open`, `include` or module named `Array` or `List` in the file, they are Stdlib's, and a
+row given by name compiles to a loop too:
+
+  $ cat > closed.ml <<'EOF'
+  > let unseen items row = ((ul ~children:[ React.array (Array.map row items) ] ()) [@JSX])
+  > let listed items row = ((ul ~children:[ React.list (List.map row items) ] ()) [@JSX])
+  > EOF
+  $ ./pp.exe -impl closed.ml | tr -s ' \n' ' ' | grep -o "Melhole.View.each __melhole_site_[0-9]* Melhole.View.[A-Za-z]* [()A-Za-z.]*"
+  Melhole.View.each __melhole_site_1 Melhole.View.Items items
+  Melhole.View.each __melhole_site_4 Melhole.View.Items items
+
 A row function bound by a let in a component is kept while the sources it reads stay (the update
 graph's memory, below) and still compiles to a loop:
 
@@ -1328,10 +1340,12 @@ graph's memory, below) and still compiles to a loop:
   Memo.graph
   Melhole.View.rows
 
-A function that ignores its argument is polymorphic, and kept in a memo cell, an application, it
-would have one type; one passed to props of two components, which may type it apart, as
-reason-react allows, stays a plain let, made on every render. One passed to the same prop of DOM
-tags has one type and is kept:
+A memo cell is an application, so the function it keeps has one type, where a let-bound function
+is polymorphic and reason-react lets it serve props of two types. A function passed to two
+different props, with an argument that has no closed type written on it, is still kept, and each
+use of it gets its own type from a copy that only types it: `if false then copy else Obj.magic f`,
+which Melange folds to `f` and whose copy it drops. One passed to the same prop of DOM tags has one
+type and is kept as it is:
 
   $ cat > general.ml <<'EOF'
   > let make ~busy ~onClose =
@@ -1341,9 +1355,34 @@ tags has one type and is kept:
   >   ((div ~children:[ ((Modal.createElement ~onClose:close ~children:[] ()) [@JSX]); ((Button.createElement ~onClick:close ~children:[] ()) [@JSX]); ((input ~onBlur:blur ()) [@JSX]); ((textarea ~onBlur:blur ()) [@JSX]) ] ()) [@JSX])
   > [@@react.component]
   > EOF
-  $ ./pp.exe -impl general.ml | tr -s ' \n' ' ' | grep -o "let \(close\|blur\) = [(A-Za-z_]*\( _\| __melact_found = Melact_runtime.Memo.lookup1\)"
-  let close = ((fun _
+  $ ./pp.exe -impl general.ml | tr -s ' \n' ' ' | grep -o "let __melact_typed_[a-z]* = \|let \(close\|blur\) = let __melact_found = Melact_runtime.Memo.[a-z0-9]*\|~on[A-Za-z]*:(if false[^)]*)"
+  let __melact_typed_close = 
+  let close = let __melact_found = Melact_runtime.Memo.lookup2
   let blur = let __melact_found = Melact_runtime.Memo.lookup1
+  ~onClose:(if false then __melact_typed_close else Obj.magic close)
+  ~onClick:(if false then __melact_typed_close else Obj.magic close)
+
+That holds even for an argument the function reads, or one whose result is annotated; one whose
+argument is given a closed type needs no copy:
+
+  $ cat > open.ml <<'EOF'
+  > let make ~busy ~onClose =
+  >   let read e = ignore e; if busy then () else onClose () in
+  >   let stop e = ReactEvent.Synthetic.stopPropagation e; if busy then () else onClose () in
+  >   let returned _ : unit = if busy then () else onClose () in
+  >   let typed (_ : ReactEvent.Mouse.t) = if busy then () else onClose () in
+  >   React.useEffect1 (fun () -> None) [| busy |];
+  >   ((div ~children:[ ((Modal.createElement ~onClose:read ~children:[] ()) [@JSX]); ((Button.createElement ~onClick:read ~children:[] ()) [@JSX]); ((Clicked.createElement ~onClick:stop ~children:[] ()) [@JSX]); ((Keyed.createElement ~onKeyDown:stop ~children:[] ()) [@JSX]); ((Modal.createElement ~onClose:returned ~children:[] ()) [@JSX]); ((Button.createElement ~onClick:returned ~children:[] ()) [@JSX]); ((Clicked.createElement ~onClick:typed ~children:[] ()) [@JSX]); ((Button.createElement ~onClick:typed ~children:[] ()) [@JSX]) ] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl open.ml | tr -s ' \n' ' ' | grep -o "let __melact_typed_[a-z]* = \|let \(read\|stop\|returned\|typed\) = let __melact_found = Melact_runtime.Memo.[a-z0-9]*"
+  let __melact_typed_read = 
+  let read = let __melact_found = Melact_runtime.Memo.lookup2
+  let __melact_typed_stop = 
+  let stop = let __melact_found = Melact_runtime.Memo.lookup2
+  let __melact_typed_returned = 
+  let returned = let __melact_found = Melact_runtime.Memo.lookup2
+  let typed = let __melact_found = Melact_runtime.Memo.lookup2
 
 A row whose prop picks it by key gets a selector, in a numbered loop too, where the key can be the
 index:
