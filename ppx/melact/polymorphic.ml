@@ -121,7 +121,7 @@ let instantiated items =
         method! expression expression =
           match expression.pexp_desc with
           | Pexp_ident { txt = Lident used; loc } when String.equal used name ->
-              [%expr if false then [%e evar ~loc (typed name)] else Obj.magic [%e expression]]
+              [%expr if false then [%e evar ~loc (typed name)] else Stdlib.Obj.magic [%e expression]]
           | Pexp_let (flag, bindings, rest) -> (
               match (flag, List.filter_map (fun binding -> shadowing binding.pvb_pat) bindings) with
               | _, [] -> super#expression expression

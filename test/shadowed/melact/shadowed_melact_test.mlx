@@ -20,6 +20,21 @@ module Every = struct
     </section>
 end
 
+module Modal = struct
+  let[@react.component] make ~(onClose : unit -> unit) ~children = <div onClick=(fun _ -> onClose ())>children</div>
+end
+
+module Button = struct
+  let[@react.component] make ~(onClick : React.Event.Mouse.t -> unit) = <button onClick>(React.string "x")</button>
+end
+
+module Twice = struct
+  let[@react.component] make ~busy ~onClose =
+    let close _ = if busy then () else onClose () in
+    React.useEffect1 (fun () -> None) [| busy |];
+    <Modal onClose=close><Button onClick=close /></Modal>
+end
+
 
 
 let () =
@@ -35,4 +50,12 @@ let () =
       let* () = React.act (fun () -> dispatch (select root "img") (event "load")) in
       expect (inner_html (select root "b"), inner_html (select root "u"), inner_html (select root "i"), inner_html (select root "ul"))
       |. to_equal ("A", "yes", "<s>h</s>", "<li>a</li><li>b</li>");
+      Js.Promise.resolve ());
+    test_async "a kept handler used at two types" (fun () ->
+      let root = attached () in
+      let client = ReactDOM.Client.createRoot root in
+      let closed = ref 0 in
+      let* () = React.act (fun () -> ReactDOM.Client.render client <Twice busy=false onClose=(fun () -> incr closed) />) in
+      let* () = React.act (fun () -> click (select root "button")) in
+      expect !closed |. to_equal 2;
       Js.Promise.resolve ()))

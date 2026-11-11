@@ -638,9 +638,6 @@ let hook_modules = ref []
 (** Whether [open React] is in force, so that a bare [useState] is React's. *)
 type opened = Opened | Closed
 
-(** Whether a bare [Array] or [List] in the file can be other than Stdlib's. *)
-type collections = Unscanned | Stdlib_only | Possibly_shadowed
-
 let rec with_unit typ =
   match typ.ptyp_desc with
   | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) ->
@@ -655,7 +652,6 @@ let foreign_name name = name ^ "__foreign"
 let mapper =
   object (self)
     inherit Scope.mapper as super
-    val mutable collections : collections = Unscanned
 
     method private frontend =
       {
@@ -742,12 +738,7 @@ let mapper =
                   in
                   match (flattened (piped inner)).pexp_desc with
                   | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
-                      let path =
-                        match (Longident.flatten_exn txt, collections) with
-                        | ([ ("Array" | "List"); _ ] as path), Stdlib_only -> "Stdlib" :: path
-                        | path, (Stdlib_only | Possibly_shadowed | Unscanned) -> path
-                        | exception Invalid_argument _ -> []
-                      in
+                      let path = match Longident.flatten_exn txt with path -> path | exception Invalid_argument _ -> [] in
                       let unlabelled = List.filter_map (fun (label, value) -> match label with Nolabel -> Some value | Labelled _ | Optional _ -> None) arguments in
                       let given =
                         match (path, arguments, unlabelled) with
@@ -846,40 +837,9 @@ let mapper =
       | _ -> None
 
     method! structure items =
-      let saved = react and known = hooks and facts = custom and scanned = collections in
-      collections <-
-        (match collections with
-        | Stdlib_only | Possibly_shadowed -> collections
-        | Unscanned ->
-            let finder =
-              object
-                inherit [collections] Ast_traverse.fold as super
-
-                method! open_declaration declaration found =
-                  match declaration.popen_expr.pmod_desc with
-                  | Pmod_ident { txt = Lident ("React" | "ReactDOM"); _ } -> found
-                  | _ -> Possibly_shadowed
-
-                method! include_declaration declaration found =
-                  match declaration.pincl_mod.pmod_desc with
-                  | Pmod_ident { txt = Lident ("React" | "ReactDOM"); _ } -> found
-                  | _ -> Possibly_shadowed
-
-                method! expression expression found =
-                  match expression.pexp_desc with
-                  | Pexp_letmodule ({ txt = Some ("Array" | "List"); _ }, _, _) -> Possibly_shadowed
-                  | _ -> super#expression expression found
-
-                method! module_binding binding found =
-                  match binding.pmb_name.txt with
-                  | Some ("Array" | "List") -> Possibly_shadowed
-                  | Some _ | None -> super#module_binding binding found
-              end
-            in
-            finder#structure items Stdlib_only);
+      let saved = react and known = hooks and facts = custom in
       let mapped = Hoist.structure self#structure_item items in
       react <- saved;
-      collections <- scanned;
       hooks <- known;
       custom <- facts;
       mapped

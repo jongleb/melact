@@ -9,3 +9,4 @@ module Printf = struct end
 module Fun = struct end
 module Int = struct end
 module Float = struct end
+module Obj = struct end
