@@ -7,6 +7,7 @@ module App = {
     <CtorAnnot isActive=true />
     <CtorAnnot isActive=false />
     <Notif message />
+    <PatternAnnot />
   </div>;
   };
 };

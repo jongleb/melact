@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix (regression of the last fix): an annotated pattern that is not a variable, as
+  `let {name, count}: Ctx.value = Ctx.current` in a component with hooks, lost its annotation, so its
+  fields were unbound; such a pattern keeps the annotation and the value gets it too.
 - Fix: in a component whose lets go through the update graph or a cache cell, `let color: Color.t =
   if (active) {Selected} else {Default}` lost its annotation, so `Selected` was unbound; the annotation
   of a let now travels with its value (`let color = (… : Color.t)`), as OCaml reads it.

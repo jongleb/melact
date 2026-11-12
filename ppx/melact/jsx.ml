@@ -139,17 +139,24 @@ let component ~loc ~name ~props_constructor ~hooks expression =
 
         method! value_binding binding =
           let binding = super#value_binding binding in
+          let pattern typ =
+            match binding.pvb_pat.ppat_desc with
+            | Ppat_var _ -> binding.pvb_pat
+            | _ -> { binding.pvb_pat with ppat_desc = Ppat_constraint (binding.pvb_pat, typ) }
+          in
           match binding.pvb_constraint with
           | Some (Pvc_constraint { locally_abstract_univars = []; typ = { ptyp_desc = Ptyp_poly _; _ } }) | None -> binding
           | Some (Pvc_constraint { locally_abstract_univars = []; typ }) ->
               {
                 binding with
+                pvb_pat = pattern typ;
                 pvb_expr = { binding.pvb_expr with pexp_desc = Pexp_constraint (binding.pvb_expr, typ) };
                 pvb_constraint = None;
               }
           | Some (Pvc_coercion { ground; coercion }) ->
               {
                 binding with
+                pvb_pat = pattern coercion;
                 pvb_expr = { binding.pvb_expr with pexp_desc = Pexp_coerce (binding.pvb_expr, ground, coercion) };
                 pvb_constraint = None;
               }
