@@ -148,12 +148,14 @@ export async function run(sides, app, actions, perform) {
   const [reference, tried] = sides;
   const relaxed = tried.relax ?? ((log) => log);
   const layered = tried.relaxLayer ?? ((shown) => shown);
+  const rooted = tried.relaxRoot ?? ((shown) => shown);
   const expected = await trace(reference, app, actions, perform);
   const actual = await trace(tried, app, actions, perform);
   expected.forEach((wanted, index) => {
     const label = index === 0 ? "mount" : `step ${index - 1} ${JSON.stringify(actions[index - 1])} of ${JSON.stringify(actions)}`;
     for (const part of ["root", "layer", "focus", "log"]) {
-      const shownPart = (seen) => (part === "log" ? relaxed(seen.log) : part === "layer" ? layered(seen.layer) : seen[part]);
+      const shownPart = (seen) =>
+        part === "log" ? relaxed(seen.log) : part === "layer" ? layered(seen.layer) : part === "root" ? rooted(seen.root) : seen[part];
       if (JSON.stringify(shownPart(actual[index])) !== JSON.stringify(shownPart(wanted)))
         throw new Error(
           `${tried.lib.name} differs from ${reference.lib.name} in ${part} after ${label}\n` +

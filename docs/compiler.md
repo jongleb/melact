@@ -1691,7 +1691,15 @@ click it draws the same SVG as reason-react on React 18. In a bound component's 
 melact-ppx follows `match` and `if` into their branches, turns `React.array` and `React.list` into
 lists of children and `React.null` into `null`, so bound components written there stay React
 elements; a bound component mounted elsewhere and passed in, keyed or not, becomes a React element
-of the island's tree too, with its key. `test/compat/economy.test.mjs` checks that a page of twenty islands renders
+of the island's tree too, with its key. `test/compat/dnd.test.mjs` runs react-dnd 16 on melact.compat as the team uses it through its
+bindings: `useDrag` and `useDrop` called from OCaml components inside a `DndProvider`, cards moved
+between bins, with react-dnd's test backend, each step of a drag a frame or more after the last as
+the events of a real drag are. It found a bug in Melact's effects: a component that rendered twice
+before the commit's effects ran, by its own state and then by its parent's new props, queued its
+effect twice, so it ran twice after one cleanup and the second subscription leaked; react-dnd then
+failed on the next drag. An effect now remembers that it is in the commit's queues and runs once,
+the version of its latest render, as under React. Without the fix the law fails.
+`test/compat/economy.test.mjs` checks that a page of twenty islands renders
 in React exactly the islands whose props changed, and nothing when only slot content changed. Each of
 these mutants breaks a law: no Melact segment in slots, no resume at the island's host, every island
 at the root, no tree order, captured effects dropped, a new props object on every patch.

@@ -137,7 +137,12 @@ and 'deps effect_hook = {
   mutable cleanup : (unit -> unit) option;
   mutable run : unit -> (unit -> unit) option;  (** The effect of the render that last changed [deps]. *)
   mutable queued_in : int;  (** The render of its host that last queued it. *)
+  mutable queueing : queueing;
 }
+
+(** Whether an effect is in the commit's queues: a host that renders twice before they run queues it once,
+    and its latest [run] runs, as React runs each effect once per commit. *)
+and queueing = Unqueued | In_queues
 
 (** What an instance lets go of when it unmounts. *)
 and ending =
@@ -500,6 +505,7 @@ let run_phases cleanups runs =
     List.iter
       (fun job ->
         let owner = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
+        (match (job, phase) with Effect hook, Run -> hook.queueing <- Unqueued | Effect _, Cleanup | Work _, (Cleanup | Run) -> ());
         match owner.status with
         | Unmounted -> ()
         | Clean | Dirty _ -> (
@@ -641,12 +647,17 @@ let enqueue instance nesting =
   List.iter
     (fun job ->
       match job with
-      | Effect { when_run = Layout; _ } ->
-          layout_cleanups := job :: !layout_cleanups;
-          layout_runs := job :: !layout_runs
-      | Effect { when_run = Passive; _ } ->
-          passive_cleanups := job :: !passive_cleanups;
-          passive_runs := job :: !passive_runs
+      | Effect hook -> (
+          match (hook.queueing, hook.when_run) with
+          | In_queues, (Layout | Passive) -> ()
+          | Unqueued, Layout ->
+              hook.queueing <- In_queues;
+              layout_cleanups := job :: !layout_cleanups;
+              layout_runs := job :: !layout_runs
+          | Unqueued, Passive ->
+              hook.queueing <- In_queues;
+              passive_cleanups := job :: !passive_cleanups;
+              passive_runs := job :: !passive_runs)
       | Work { timing = Layout; phase = Cleanup; _ } -> layout_cleanups := job :: !layout_cleanups
       | Work { timing = Layout; phase = Run; _ } -> layout_runs := job :: !layout_runs
       | Work { timing = Passive; phase = Cleanup; _ } -> passive_cleanups := job :: !passive_cleanups
@@ -1347,7 +1358,7 @@ let after_commit instance timing phase work =
   instance.pending <- Work { owner = instance; timing; phase; work } :: instance.pending
 
 let start_effect instance timing deps run =
-  let made = { host = instance; when_run = timing; deps; cleanup = None; run; queued_in = instance.renders } in
+  let made = { host = instance; when_run = timing; deps; cleanup = None; run; queued_in = instance.renders; queueing = Unqueued } in
   instance.teardown <- Finishes made :: instance.teardown;
   instance.pending <- Effect made :: instance.pending;
   made

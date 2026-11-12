@@ -38,7 +38,7 @@ const compatLibraries = {
     const react = importer?.includes("/test/compat/react/output/") || importer?.includes("/test/compat/island/output/");
     if (!melact && !react) return null;
     if (source === "compat-layers") return resolve(melact ? "test/compat/env/layers.mjs" : "test/compat/layers-react.mjs");
-    if (melact && /^(react-select|react-window|@radix-ui\/)/.test(source)) return this.resolve(source, compatEnv, { skipSelf: true });
+    if (melact && /^(react-select|react-window|@radix-ui\/|react-dnd|dnd-core)/.test(source)) return this.resolve(source, compatEnv, { skipSelf: true });
     return null;
   },
 };

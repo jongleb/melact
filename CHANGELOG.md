@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix: an effect whose component rendered twice before the commit's effects ran (by its own state,
+  then by its parent's new props) ran twice after one cleanup, leaking what it subscribed to. Each
+  effect now runs once per commit, its latest version, as under React (about 36 to 48 gzip bytes).
+  Found by a new law: react-dnd's `useDrag` and `useDrop` from OCaml components on melact.compat
+  against React 18 (`test/compat/dnd.test.mjs`).
 - recharts runs on islands, under a law against React 18 (`test/compat/charts.test.mjs`). In a bound
   component's children melact-ppx follows `match` and `if`, and turns `React.array`, `React.list` and
   `React.null` into React children, so chart series built in OCaml stay React elements; a keyed mount
