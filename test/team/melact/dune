@@ -1,0 +1,11 @@
+(copy_files
+ (files ../*.{re,rei}))
+
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (staged_pps melange.ppx melact-ppx -- -typed)))

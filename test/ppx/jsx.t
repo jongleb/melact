@@ -601,7 +601,7 @@ A component with optional, defaulted and children props, and its signature:
       ?size:int ->
         ?subtitle:string ->
           children:React.element -> ?key:string -> unit -> make_props
-  external make : make_props -> React.element = "%identity"
+  val make : make_props -> React.element
 
 React.forwardRef: the ref becomes an optional prop and reaches the body as reason-react passes it:
 

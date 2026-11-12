@@ -1,0 +1,3 @@
+; Repros the team reported, in Reason as their apps are written, built with Melact (staged, -typed) and with
+; reason-react; team.test.mjs renders both.
+(dirs melact react)

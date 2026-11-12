@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fix: in a component whose lets go through the update graph or a cache cell, `let color: Color.t =
+  if (active) {Selected} else {Default}` lost its annotation, so `Selected` was unbound; the annotation
+  of a let now travels with its value (`let color = (… : Color.t)`), as OCaml reads it.
+- Fix: a `.rei` declaring `[@react.component] let make` now gives `make` as a value, as reason-react
+  does, so the `.re` can rebind it (`let make = React.memo(make)`); signatures written inside an
+  implementation (recursive components) keep `make` a primitive. Law: `test/team`, both repros in
+  Reason built with Melact (staged, `-typed`) and reason-react.
 - `[@melact.engine compat]` or `[@melact.engine island]` on a component external picks its engine,
   for components bound apart from their package's hooks; a hook marked `island` is a compile error.
   The mixed bundle now also binds its `DndProvider` apart and reads `useDragLayer`, and

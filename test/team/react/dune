@@ -1,0 +1,11 @@
+(copy_files
+ (files ../*.{re,rei}))
+
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries reason-react melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (pps melange.ppx reason-react-ppx)))

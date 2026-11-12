@@ -14,6 +14,12 @@ let bridged engine name =
 
 let bridge ~loc engine name = pexp_ident ~loc { loc; txt = bridged engine name }
 
+(** Where a [[@react.component]] value is declared: an interface file, whose implementation may rebind
+    [make] (with [React.memo]), or a signature inside an implementation, whose [make] melact-ppx writes. *)
+type declaring = Interface_file | Inline_signature
+
+let declaring = ref Inline_signature
+
 let foreign_components : (string list * string * engine) list ref = ref []
 
 let foreign path name =
@@ -126,6 +132,32 @@ let react_text expression =
   | _ -> None
 
 let component ~loc ~name ~props_constructor ~hooks expression =
+  let expression =
+    let annotated =
+      object
+        inherit Ast_traverse.map as super
+
+        method! value_binding binding =
+          let binding = super#value_binding binding in
+          match binding.pvb_constraint with
+          | Some (Pvc_constraint { locally_abstract_univars = []; typ = { ptyp_desc = Ptyp_poly _; _ } }) | None -> binding
+          | Some (Pvc_constraint { locally_abstract_univars = []; typ }) ->
+              {
+                binding with
+                pvb_expr = { binding.pvb_expr with pexp_desc = Pexp_constraint (binding.pvb_expr, typ) };
+                pvb_constraint = None;
+              }
+          | Some (Pvc_coercion { ground; coercion }) ->
+              {
+                binding with
+                pvb_expr = { binding.pvb_expr with pexp_desc = Pexp_coerce (binding.pvb_expr, ground, coercion) };
+                pvb_constraint = None;
+              }
+          | Some (Pvc_constraint { locally_abstract_univars = _ :: _; _ }) -> binding
+      end
+    in
+    annotated#expression expression
+  in
   let rec gather forwarding expression =
     match expression.pexp_desc with
     | Pexp_apply
@@ -1184,7 +1216,7 @@ let mapper =
                          ~type_:(given (with_unit description.pval_type)) ~prim:[]);
                     psig_value ~loc
                       (value_description ~loc ~name:{ loc; txt = name } ~type_:[%type: [%t props] -> React.element]
-                         ~prim:[ "%identity" ]);
+                         ~prim:(match !declaring with Interface_file -> [] | Inline_signature -> [ "%identity" ]));
                   ])
                 (without_component description.pval_attributes)
           | _ -> [ super#signature_item item ])
@@ -1830,7 +1862,15 @@ let structure items =
   in
   [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
   :: Polymorphic.instantiated (mapper#structure (inliner#structure (annotated items)))
-let signature items = mapper#signature items
+let signature items =
+  declaring := Interface_file;
+  match mapper#signature items with
+  | mapped ->
+      declaring := Inline_signature;
+      mapped
+  | exception error ->
+      declaring := Inline_signature;
+      raise error
 let () =
   Driver.add_arg "-hook-modules"
     (Arg.String (fun names -> hook_modules := String.split_on_char ',' names @ !hook_modules))
