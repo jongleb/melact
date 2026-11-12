@@ -1632,6 +1632,69 @@ On this spike's measurements (esbuild, minified, gzip -9), a counter on the shim
 against 69.9, react-window 30.7 against 52.1. The sibling ordering fix and the hook for the portal order add
 1.1 kB (0.4 kB gzip) to every Melact app; Meltea is unchanged.
 
+
+## Components from npm: islands of npm's React
+
+`melact.island` renders a component of a JavaScript React library with npm's React 18 itself. A
+build picks it with `-foreign-engine island` (`(pps melange.ppx melact-ppx -- -foreign-engine
+island)` and `(libraries melact melact.island)`); melact-ppx then emits the same `makeProps` and
+`make` for a `[@react.component] external` as for melact.compat, through `Melact_island.Bridge`. The
+app ships `react` and `react-dom` (45.6 kB gzip for React 18 with `react-dom/client`); an app
+without such an external links none of it. Nothing parses the library's JavaScript: the binding is
+the boundary.
+
+- **An island** is a Melact host child: an element `melact-island` (`display: contents`) in
+  Melact's DOM, and a portal of one shared React root into it. The island's component renders from
+  a store of its own through `useSyncExternalStore`.
+- **Props** cross field by field. A field equal (`Object.is`) to what the island last showed keeps
+  its value, so a props object with every field equal is not given to React at all, and the island
+  does not render: as React Compiler keeps a child whose props are equal, Melact's own components
+  included. Melact content in a field becomes a slot: a `melact-slot` custom element
+  (`display: contents`) that React renders and that takes the content in when React connects it, in
+  React's mutation phase, so that the library's layout effects see it. Melact patches a slot's
+  content itself, so changing only that content does not wake React. A slot's content is built when
+  React first renders the slot and released when React unmounts it, as React mounts only what a
+  library renders: a closed popover's content is not mounted. A function in the props is wrapped
+  once; its Melact results become slots (react-window's `rowComponent`). A mount of another bound
+  component, from any file, becomes a React element of the island's own tree, so libraries that
+  read their children's DOM (react-window measures its rows) see the elements they rendered.
+- **Commit.** Islands change during Melact's writes and commit after them, all at once, in one
+  `flushSync` before Melact's layout effects (`Instance.before_layout`): a Melact parent's layout
+  effect sees its islands' DOM. Melact components mounted in slots while React renders keep their
+  effects apart (`Instance.captured`), which then join Melact's queues where the tree puts them
+  (`Instance.queue_captured`, ordered by `Instance.tree_order`, which islands install to order
+  through slots by the island's place).
+- **Events.** Every slot carries React handlers that run Melact's delegated walk from where the
+  last segment stopped up to the slot (`Events.segment`), so that Melact's handlers between islands
+  run inside React's propagation, and a Melact `stopPropagation` becomes React's. As React's
+  propagation leaves an island, the walk resumes at the island's host (`Events.resume_at`): content
+  a library portals elsewhere bubbles to its Melact parents, as under React.
+- **Context** crosses islands: an island nested in another's slot is a portal rendered under that
+  slot, so React context and synthetic bubbling follow the tree. An island built while React renders
+  a slot goes among that slot's islands at once.
+
+The laws run `mixed.mlx` a third time, built with islands (`test/compat/island`), against reason-react
+on React 18: the same DOM, focus and callback log after every step, for random trees of OCaml and
+JavaScript layers (clicks across layers with capture and `stopPropagation`, context, effects) and
+for react-select, a Radix popover with `asChild` and react-window with OCaml rows. Two relaxations
+are documented. Each engine's effects keep React's order among themselves, but how Melact's effects
+and the islands' interleave differs, since the islands commit as one React commit, whose passive
+effects React 18 runs at its end. And content that libraries portal into one container is compared
+as a set of top-level nodes: an island's Melact content is one slot node there, so the content of a
+portal from an island nested in that slot goes before or after the whole slot, where React
+interleaves it with the slot's items. The slot goes first when anything precedes the nested island in
+it, as a dialog's content precedes a select's menu inside it; the nested content goes first
+otherwise. `test/compat/economy.test.mjs` checks that a page of twenty islands renders
+in React exactly the islands whose props changed, and nothing when only slot content changed. Each of
+these mutants breaks a law: no Melact segment in slots, no resume at the island's host, every island
+at the root, no tree order, captured effects dropped, a new props object on every patch.
+
+Not yet: server rendering of islands; slots inside SVG (a custom element is HTML only, so
+Melact content inside a chart's `<svg>` needs a `<g>` slot); a native `change` event inside a slot
+(React has no synthetic event for it on a slot, so Melact's handlers there run from the document);
+the relative order of enter and leave handlers between engines. Islands cost every Melact app the
+two hooks above in its runtime, 44 to 71 and about 30 to 55 gzip bytes.
+
 ## Laws
 
 Accepted only with these holding, by property-based tests:

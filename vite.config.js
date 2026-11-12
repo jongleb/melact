@@ -27,14 +27,15 @@ const reactNineteen = {
   },
 };
 
-// The mixed compat laws bind JavaScript components from mlx; each build takes them on its own React.
+// The mixed compat laws bind JavaScript components from mlx; each build takes them on its own React:
+// melact.compat's for the Melact build, npm's for the reason-react build and the build with islands.
 const compatEnv = resolve("test/compat/env/libraries.mjs");
 const compatLibraries = {
   name: "compat-libraries",
   enforce: "pre",
   async resolveId(source, importer) {
     const melact = importer?.includes("/test/compat/melact/output/");
-    const react = importer?.includes("/test/compat/react/output/");
+    const react = importer?.includes("/test/compat/react/output/") || importer?.includes("/test/compat/island/output/");
     if (!melact && !react) return null;
     if (source === "compat-layers") return resolve(melact ? "test/compat/env/layers.mjs" : "test/compat/layers-react.mjs");
     if (melact && /^(react-select|react-window|@radix-ui\/)/.test(source)) return this.resolve(source, compatEnv, { skipSelf: true });

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Islands of npm's React, `melact.island`: with `-foreign-engine island`, a `[@react.component]
+  external` to a component of a JavaScript React library renders on npm's React 18, in an island of
+  one shared root, and renders again only when a prop changes. Melact content passed to it lives in
+  slots that Melact patches without waking React; events, context and effects cross islands as in
+  one React tree, under the laws of `test/compat` against React 18, with one documented difference:
+  how an island's effects interleave with Melact's. `Instance.before_layout`, `captured`,
+  `queue_captured`, `writer` and `owning` are new; the hook before the layout phase costs every Melact
+  app about 30 to 55 gzip bytes.
 - Melact's delegated walk can run in segments: `Events.segment` runs the handlers from where the last
   segment stopped up to a slot and makes the document's walk resume there, so that islands of real
   React can interleave Melact's handlers with React's propagation. It costs every app two property

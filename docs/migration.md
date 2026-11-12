@@ -37,6 +37,17 @@ the examples of this repository build with the staged stanza.
 Nothing else changes. Run the tests; `compat/run.sh` shows what real reason-react apps look like
 after this step.
 
+An app that binds components of JavaScript React libraries (`[@react.component] external make : …
+[@@mel.module "recharts"]`) renders them on npm's React in islands with one more flag and library,
+and `react` and `react-dom` 18 among its npm dependencies:
+
+```diff
+- (libraries melact)
++ (libraries melact melact.island)
+- (preprocess (staged_pps melange.ppx melact-ppx -- -typed))
++ (preprocess (staged_pps melange.ppx melact-ppx -- -typed -foreign-engine island))
+```
+
 ## Step 1: pull state out of hooks into a reducer
 
 Take one screen. Gather its `useState` calls into one record and every way it changes into one

@@ -2,6 +2,19 @@ open Ppxlib
 open Melhole_compiler
 open Ast_builder.Default
 
+(** The runtime that renders components of JavaScript React libraries. *)
+type engine =
+  | Compat  (** melact.compat: npm's React API on Melact's runtime. *)
+  | Island  (** melact.island: npm's React itself, in islands. *)
+
+let engine = ref Compat
+
+let bridged name =
+  Ldot (Ldot (Lident (match !engine with Compat -> "Melact_compat" | Island -> "Melact_island"), "Bridge"), name)
+
+let bridge ~loc name = pexp_ident ~loc { loc; txt = bridged name }
+let bridge_type ~loc name = ptyp_constr ~loc { loc; txt = bridged name } []
+
 let foreign_components : (string list * string) list ref = ref []
 
 let foreign path name =
@@ -1324,7 +1337,7 @@ let mapper =
                 match label with
                 | Labelled "children" | Nolabel -> None
                 | Labelled name | Optional name ->
-                    Some (pexp_tuple ~loc [ estring ~loc (dom_name name); [%expr Melact_compat.Bridge.value [%e self#expression value]] ]))
+                    Some (pexp_tuple ~loc [ estring ~loc (dom_name name); [%expr [%e bridge ~loc "value"] [%e self#expression value]] ]))
               arguments
           in
           let children =
@@ -1335,28 +1348,28 @@ let mapper =
                 | Labelled _ | Optional _ | Nolabel -> [])
               arguments
           in
-          [%expr Melact_compat.Bridge.host [%e estring ~loc tag] [%e pexp_array ~loc props] [%e pexp_array ~loc children]]
+          [%expr [%e bridge ~loc "host"] [%e estring ~loc tag] [%e pexp_array ~loc props] [%e pexp_array ~loc children]]
       | Some _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, arguments)
         when foreign path (match name with "createElement" -> "make" | other -> other) = `Foreign ->
           let name = match name with "createElement" -> "make" | other -> other in
           [%expr
-            Melact_compat.Bridge.element
+            [%e bridge ~loc "element"]
               [%e pexp_ident ~loc { loc; txt = Ldot (path, foreign_name name) }]
               [%e pexp_apply ~loc (pexp_ident ~loc { loc; txt = Ldot (path, props_name name) }) (self#foreign_props ~loc arguments @ [ (Nolabel, [%expr ()]) ])]]
       | Some _, Pexp_construct ({ txt = Lident ("[]" | "::"); _ }, _) ->
-          [%expr Melact_compat.Bridge.many [%e pexp_array ~loc (List.map self#foreign_child (Option.value ~default:[] (Element.list_items child)))]]
+          [%expr [%e bridge ~loc "many"] [%e pexp_array ~loc (List.map self#foreign_child (Option.value ~default:[] (Element.list_items child)))]]
       | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "string"); _ }; _ }, [ (Nolabel, text) ]) ->
-          [%expr Melact_compat.Bridge.value ([%e self#expression text] : string)]
-      | _ -> [%expr Melact_compat.Bridge.content [%e self#expression child]]
+          [%expr [%e bridge ~loc "value"] ([%e self#expression text] : string)]
+      | _ -> [%expr [%e bridge ~loc "content"] [%e self#expression child]]
 
     method private foreign_props ~loc arguments =
       List.concat_map
         (fun (label, value) ->
           match (label, Element.list_items value) with
           | Nolabel, _ | Labelled "children", Some [] -> []
-          | Labelled "children", Some [ only ] -> [ (label, [%expr Melact_compat.Bridge.as_element [%e self#foreign_child only]]) ]
+          | Labelled "children", Some [ only ] -> [ (label, [%expr [%e bridge ~loc "as_element"] [%e self#foreign_child only]]) ]
           | Labelled "children", Some items ->
-              [ (label, [%expr Melact_compat.Bridge.as_element (Melact_compat.Bridge.many [%e pexp_array ~loc (List.map self#foreign_child items)])]) ]
+              [ (label, [%expr [%e bridge ~loc "as_element"] ([%e bridge ~loc "many"] [%e pexp_array ~loc (List.map self#foreign_child items)])]) ]
           | (Labelled _ | Optional _), _ -> [ (label, self#expression value) ])
         arguments
 
@@ -1806,6 +1819,11 @@ let () =
     ~doc:" modules whose use… functions are React's hooks, like a module that includes React (comma separated)"
 
 let () =
+  Driver.add_arg "-foreign-engine"
+    (Arg.Symbol ([ "compat"; "island" ], fun chosen -> engine := match chosen with "island" -> Island | _ -> Compat))
+    ~doc:" what renders components of JavaScript React libraries: melact.compat (default) or islands of npm's React"
+
+let () =
   Driver.add_arg "-hydratable"
     (Arg.Unit (fun () -> Element.output := Element.Hydratable))
     ~doc:" compile templates that can take over server-rendered HTML"
@@ -1836,7 +1854,7 @@ let bound items =
     let rec given typ =
       match typ.ptyp_desc with
       | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) -> ptyp_arrow ~loc label argument (given result)
-      | _ -> [%type: ?key:string -> unit -> Melact_compat.Bridge.props]
+      | _ -> [%type: ?key:string -> unit -> [%t bridge_type ~loc "props"]]
     in
     [
       pstr_primitive ~loc
@@ -1848,13 +1866,13 @@ let bound items =
         {
           description with
           pval_name = { loc; txt = foreign_name name };
-          pval_type = [%type: Melact_compat.Bridge.foreign];
+          pval_type = bridge_type ~loc "foreign";
           pval_attributes = attributes;
         };
       pstr_value ~loc Nonrecursive
         [
           value_binding ~loc ~pat:(pvar ~loc name)
-            ~expr:[%expr fun props -> Melact_compat.Bridge.mount [%e evar ~loc (foreign_name name)] props];
+            ~expr:[%expr fun props -> [%e bridge ~loc "mount"] [%e evar ~loc (foreign_name name)] props];
         ];
     ]
   in

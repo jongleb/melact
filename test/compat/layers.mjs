@@ -69,5 +69,10 @@ export function layers(React, ReactDOM) {
     return h("div", { style: frame.style, ...frame.ariaAttributes, className: "frame" }, children);
   }
 
-  return { Box, Provide, Show, Portal, Tally, RowFrame };
+  function Counted({ name, value, log, children }) {
+    log("render " + name);
+    return h("div", { className: "counted", title: name }, String(value), children);
+  }
+
+  return { Box, Provide, Show, Portal, Tally, RowFrame, Counted };
 }

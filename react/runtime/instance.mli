@@ -61,6 +61,26 @@ val below : instance -> instance -> [ `Below | `Apart ]
 (** The deepest last node of what the instance shows, if it shows anything. *)
 val last_node : instance -> Dom.node option
 
+(** Effects that a piece of work queued, kept apart from the commit's. *)
+type captured
+
+(** [captured work]: runs [work], keeping the effects it queues; an island of npm's React builds Melact
+    content in its slots while React renders, then puts those effects where Melact would have run them. *)
+val captured : (unit -> unit) -> captured
+
+(** [before_layout work]: runs [work] once the commit under way has written everything, before its first
+    layout effect; islands of npm's React commit there, all of them at once. *)
+val before_layout : (unit -> unit) -> unit
+
+(** Puts captured effects in the queues of the commit under way, each where the tree orders it. *)
+val queue_captured : captured -> unit
+
+(** The instance that is rendering, or whose holes are being written, if any. *)
+val writer : unit -> instance option
+
+(** [owning instance work]: runs [work] as if [instance] wrote it, so that what it mounts is below it. *)
+val owning : instance option -> (unit -> 'a) -> 'a
+
 (** The component that is rendering, or whose holes are being written, if any. *)
 val writing_component : unit -> string option
 val slot : instance -> 'a Hook.key -> (unit -> 'a) -> 'a
@@ -89,6 +109,7 @@ val unchanged : Melhole.View.child
     instance again with [source] among its changed sources when the value changes. *)
 val consume_source : instance -> sources -> 'value Context.t -> 'value
 val after_commit : instance -> timing -> phase -> (unit -> unit) -> unit
+
 
 (** An effect hook: made once, its cleanup and run queued after each commit that changes its
     dependencies, and its cleanup run when its instance unmounts. *)

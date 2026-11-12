@@ -49,6 +49,7 @@ export function shown(side) {
   const walk = (node) => {
     if (node.nodeType === 3) return node.data === "" ? "" : JSON.stringify(rename(node.data));
     if (node.nodeType !== 1) return "";
+    if (node.tagName === "MELACT-ISLAND" || node.tagName === "MELACT-SLOT") return Array.from(node.childNodes).map(walk).filter(Boolean).join("");
     const attributes = Array.from(node.attributes)
       .map((attribute) => {
         let value = attribute.value;
@@ -62,9 +63,18 @@ export function shown(side) {
   return { root: Array.from(side.root.childNodes).map(walk).join(""), layer: Array.from(side.layer.childNodes).map(walk).join("") };
 }
 
+// Islands wrap what they render in melact-island and melact-slot elements, shown as their children.
+const wrapper = (node) => node.tagName === "MELACT-ISLAND" || node.tagName === "MELACT-SLOT";
+const unwrapped = (node) => Array.from(node.children).flatMap((child) => (wrapper(child) ? unwrapped(child) : [child]));
+
 const path = (scope, node) => {
   const steps = [];
-  for (let at = node; at && at !== scope; at = at.parentNode) steps.unshift(Array.prototype.indexOf.call(at.parentNode.children, at));
+  for (let at = node; at && at !== scope; at = at.parentNode) {
+    if (wrapper(at)) continue;
+    let parent = at.parentNode;
+    while (parent !== scope && wrapper(parent)) parent = parent.parentNode;
+    steps.unshift(unwrapped(parent).indexOf(at));
+  }
   return steps.join(".");
 };
 
@@ -94,14 +104,56 @@ export async function trace(side, app, actions, perform) {
   return seenAfter;
 }
 
+// What the islands engine documents: an island's components run their effects in its React commit,
+// which comes before the effects of the Melact component that writes the island, and Melact content in
+// its slots runs its effects with Melact. Each engine's effects keep React's order among themselves;
+// how the two interleave may differ.
+export const enginesKeepTheirOrder = (log) => {
+  const effect = (line) => /^(layout|effect|mount|update|unmount)/.test(line);
+  const melact = (line) => / mel:/.test(line);
+  return [
+    ...log.filter((line) => !effect(line)),
+    "| melact:",
+    ...log.filter((line) => effect(line) && melact(line)),
+    "| react:",
+    ...log.filter((line) => effect(line) && !melact(line)),
+  ];
+};
+
+// What the islands engine documents for content that libraries portal into one container: the Melact
+// content of an island is one slot node there, so the content of a portal from an island nested in it
+// goes before or after the whole slot, where React interleaves it with the slot's items.
+export const portalsInAnyOrder = (shown) => {
+  const chunks = [];
+  let depth = 0;
+  let start = 0;
+  for (let at = 0; at < shown.length; at++) {
+    if (shown.startsWith("</>", at)) {
+      depth--;
+      if (depth === 0) chunks.push(shown.slice(start, at + 3));
+      at += 2;
+    } else if (shown[at] === "<" && shown[at + 1] !== "/") {
+      if (depth === 0) start = at;
+      depth++;
+    } else if (shown[at] === '"') {
+      at = shown.indexOf('"', at + 1);
+      while (shown[at - 1] === "\\") at = shown.indexOf('"', at + 1);
+    }
+  }
+  return chunks.sort().join("");
+};
+
 export async function run(sides, app, actions, perform) {
   const [reference, tried] = sides;
+  const relaxed = tried.relax ?? ((log) => log);
+  const layered = tried.relaxLayer ?? ((shown) => shown);
   const expected = await trace(reference, app, actions, perform);
   const actual = await trace(tried, app, actions, perform);
   expected.forEach((wanted, index) => {
     const label = index === 0 ? "mount" : `step ${index - 1} ${JSON.stringify(actions[index - 1])} of ${JSON.stringify(actions)}`;
     for (const part of ["root", "layer", "focus", "log"]) {
-      if (JSON.stringify(actual[index][part]) !== JSON.stringify(wanted[part]))
+      const shownPart = (seen) => (part === "log" ? relaxed(seen.log) : part === "layer" ? layered(seen.layer) : seen[part]);
+      if (JSON.stringify(shownPart(actual[index])) !== JSON.stringify(shownPart(wanted)))
         throw new Error(
           `${tried.lib.name} differs from ${reference.lib.name} in ${part} after ${label}\n` +
             `expected ${JSON.stringify(wanted[part])}\n` +

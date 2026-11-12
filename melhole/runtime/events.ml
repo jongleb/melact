@@ -145,6 +145,8 @@ let segment native slot =
   set_event_property native until Js.undefined;
   set_event_property native resume (Js.Undefined.return slot)
 
+let resume_at native node = set_event_property native resume (Js.Undefined.return node)
+
 let register element event =
   match (Melhole_shared.Delegation.of_event event, Js.Undefined.toOption (delivery deliveries event)) with
   | Delegated, _ ->

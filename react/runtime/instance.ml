@@ -271,6 +271,7 @@ let suspension =
     }
 
 let owner = ref None
+let before_layout_job = ref None
 let dirty = ref []
 let layout_cleanups = ref []
 let layout_runs = ref []
@@ -516,6 +517,69 @@ let run_phases cleanups runs =
   run_jobs Cleanup pending_cleanups;
   run_jobs Run pending_runs
 
+type captured = { layout : job list * job list; passive : job list * job list }
+
+let captured work =
+  let outer = (!siblings, !layout_cleanups, !layout_runs, !passive_cleanups, !passive_runs) in
+  siblings := None;
+  layout_cleanups := [];
+  layout_runs := [];
+  passive_cleanups := [];
+  passive_runs := [];
+  let taken () =
+    finish_siblings ();
+    let ordered jobs =
+      Option.fold ~none:jobs
+        ~some:(fun order ->
+          let host job = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
+          List.rev (List.stable_sort (fun first second -> order (host first) (host second)) (List.rev jobs)))
+        !tree_order
+    in
+    let made =
+      {
+        layout = (ordered !layout_cleanups, ordered !layout_runs);
+        passive = (ordered !passive_cleanups, ordered !passive_runs);
+      }
+    in
+    let kept_siblings, kept_layout_cleanups, kept_layout_runs, kept_passive_cleanups, kept_passive_runs = outer in
+    siblings := kept_siblings;
+    layout_cleanups := kept_layout_cleanups;
+    layout_runs := kept_layout_runs;
+    passive_cleanups := kept_passive_cleanups;
+    passive_runs := kept_passive_runs;
+    made
+  in
+  match work () with
+  | () -> taken ()
+  | exception error ->
+      ignore (taken ());
+      raise error
+
+let before_layout work =
+  before_layout_job :=
+    Some
+      (Option.fold ~none:work
+         ~some:(fun earlier () ->
+           earlier ();
+           work ())
+         !before_layout_job)
+
+let queue_captured { layout = layout_cleanups_taken, layout_runs_taken; passive = passive_cleanups_taken, passive_runs_taken } =
+  let host job = match job with Effect hook -> hook.host | Work { owner; _ } -> owner in
+  let placed added queue =
+    let order first second = Option.fold ~none:0 ~some:(fun order -> order (host first) (host second)) !tree_order in
+    let rec inserted job oldest_first =
+      match oldest_first with
+      | other :: rest when order job other >= 0 -> other :: inserted job rest
+      | rest -> job :: rest
+    in
+    queue := List.rev (List.fold_left (fun oldest_first job -> inserted job oldest_first) (List.rev !queue) (List.rev added))
+  in
+  placed layout_cleanups_taken layout_cleanups;
+  placed layout_runs_taken layout_runs;
+  placed passive_cleanups_taken passive_cleanups;
+  placed passive_runs_taken passive_runs
+
 let render instance =
   instance.prepared <- Unprepared;
   let sources =
@@ -663,8 +727,10 @@ let rec settle () =
     | None, _ | _, None -> Js.Exn.raiseError "melact: a mounted component is not in the DOM"
   in
   let rec drain () =
-    match (!dirty, !layout_cleanups, !layout_runs, !recovery.outstanding () [@u], !suspension.outstanding () [@u]) with
-    | [], [], [], Quiet, Quiet -> ()
+    match
+      (!dirty, !layout_cleanups, !layout_runs, !before_layout_job, !recovery.outstanding () [@u], !suspension.outstanding () [@u])
+    with
+    | [], [], [], None, Quiet, Quiet -> ()
     | _ ->
         !recovery.before_rendering () [@u];
         !suspension.before_rendering () [@u];
@@ -949,6 +1015,11 @@ let rec settle () =
         View.attach_references ();
         !recovery.after_rendering () [@u];
         !suspension.after_rendering () [@u];
+        Option.iter
+          (fun job ->
+            before_layout_job := None;
+            job ())
+          !before_layout_job;
         run_phases layout_cleanups layout_runs;
         (match (!recovery.outstanding () [@u], !suspension.outstanding () [@u], !dirty) with
         | Quiet, Quiet, [] -> ()
@@ -1193,6 +1264,9 @@ let provide : type value. value Context.t -> value -> View.child -> View.child =
 let writing_component () =
   let named instance = match instance.kind with Renders { component; _ } -> Some component.name | Provides _ | Catches _ | Suspends _ -> None in
   match !rendering with Some instance -> named instance | None -> Option.bind !owner named
+
+let writer () = match !rendering with Some instance -> Some instance | None -> !owner
+let owning instance work = within owner instance work
 
 let current () =
   match !rendering with

@@ -43,6 +43,11 @@ val after_controlled : (unit -> unit) ref
     handlers between islands run inside React's propagation. *)
 val segment : Dom.event -> Dom.node -> unit
 
+(** [resume_at event node]: makes the document's walk start at [node]; an island of real React calls
+    it as React's propagation leaves the island, so that the walk goes on from the island's place in
+    Melact's tree, wherever the island's content was portaled. *)
+val resume_at : Dom.event -> Dom.node -> unit
+
 val listen : Dom.element -> string -> unit
 
 val unlisten : Dom.element -> string -> unit

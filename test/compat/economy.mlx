@@ -1,0 +1,33 @@
+(* Twenty JavaScript components on one page, each with Melact content in its children; built three ways
+   like mixed.mlx, and driven by test/compat/economy.test.mjs on islands. *)
+
+module Counted = struct
+  external make : name:string -> value:int -> log:(string -> unit) -> children:React.element -> React.element = "Counted"
+  [@@mel.module "compat-layers"] [@@react.component]
+end
+
+module Page = struct
+  let[@react.component] make ~log =
+    let values, setValues = React.useState (fun () -> Array.make 20 0) in
+    let tick, setTick = React.useState (fun () -> 0) in
+    let bump index = setValues (fun values -> Array.mapi (fun at value -> match at = index with true -> value + 1 | false -> value) values) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      (React.array
+         (Array.mapi
+            (fun index value ->
+              let name = "c" ^ string_of_int index in
+              <div key=name>
+                <button className=("bump-" ^ string_of_int index) onClick=(fun _ -> bump index)>(React.string name)</button>
+                <Counted name value log><span className="tick-shown">(React.int tick)</span></Counted>
+              </div>)
+            values))
+    </div>
+end
+
+let mount_page root log =
+  let client = ReactDOM.Client.createRoot root in
+  ReactDOM.Client.render client <Page log />;
+  client
+
+let unmount_page client = ReactDOM.Client.unmount client ()

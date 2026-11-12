@@ -5,7 +5,8 @@
 open Testing
 
 module Box = struct
-  external make : name:string -> log:(string -> unit) -> stop:string -> children:React.element -> React.element = "Box"
+  external make :
+    name:string -> log:(string -> unit) -> stop:string -> version:int -> children:React.element -> React.element = "Box"
   [@@mel.module "compat-layers"] [@@react.component]
 end
 
@@ -24,7 +25,8 @@ module Portal = struct
 end
 
 module Tally = struct
-  external make : name:string -> log:(string -> unit) -> children:React.element -> React.element = "Tally"
+  external make :
+    name:string -> log:(string -> unit) -> stop:string -> version:int -> children:React.element -> React.element = "Tally"
   [@@mel.module "compat-layers"] [@@react.component]
 end
 
@@ -151,11 +153,11 @@ let rec view ~log ~stop ~layer ~version tree =
   let many kids = React.array (Array.of_list (List.map (view ~log ~stop ~layer ~version) kids)) in
   match tree with
   | Melact_layer (name, kids) -> <Mel key=name name log stop version>(many kids)</Mel>
-  | Box_layer (name, kids) -> <Box key=name name log stop>(many kids)</Box>
+  | Box_layer (name, kids) -> <Box key=name name log stop version>(many kids)</Box>
   | Provide_layer (name, kids) -> <Provide key=name value=name>(many kids)</Provide>
   | Show_layer name -> <Show key=name name />
   | Portal_layer kids -> <Portal key="portal" container=layer>(many kids)</Portal>
-  | Tally_layer (name, kids) -> <Tally key=name name log>(many kids)</Tally>
+  | Tally_layer (name, kids) -> <Tally key=name name log stop version>(many kids)</Tally>
 
 module Layers = struct
   let[@react.component] make ~tree ~log ~layer =

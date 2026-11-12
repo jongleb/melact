@@ -7,7 +7,8 @@
 import fc from "fast-check";
 import * as Reason from "../../_build/default/test/compat/react/output/test/compat/react/mixed.mjs";
 import * as Melact from "../../_build/default/test/compat/melact/output/test/compat/melact/mixed.mjs";
-import { run, fire, nativeValue, tick } from "./harness.mjs";
+import * as Island from "../../_build/default/test/compat/island/output/test/compat/island/mixed.mjs";
+import { run, fire, nativeValue, tick, enginesKeepTheirOrder, portalsInAnyOrder } from "./harness.mjs";
 
 const side = (name, build) => {
   const root = document.body.appendChild(document.createElement("div"));
@@ -38,7 +39,10 @@ const side = (name, build) => {
   };
 };
 
-const sides = () => [side("reason-react", Reason), side("melact", Melact)];
+const engines = [
+  ["melact.compat", Melact, {}],
+  ["islands of npm's React", Island, { relax: enginesKeepTheirOrder, relaxLayer: portalsInAnyOrder }],
+];
 const everywhere = (at, selector) => [at.root, at.layer].flatMap((scope) => Array.from(scope.querySelectorAll(selector)));
 
 const layered = (tape) => (at) => () => at.build.mount_layers(at.root, at.layer, tape, (line) => at.log.push(line));
@@ -54,18 +58,21 @@ const performLayer = (at, [kind, argument]) => {
   if (targets.length) targets[argument % targets.length].click();
 };
 
-test("L1 L3 L4 L6: random layers of OCaml and JavaScript components agree with React 18", async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      fc.array(fc.nat(1000), { minLength: 1, maxLength: 30 }),
-      fc.array(layerAction, { minLength: 1, maxLength: 12 }),
-      async (tape, actions) => {
-        await run(sides(), layered(tape), actions, performLayer);
-      },
-    ),
-    { numRuns: 60 },
-  );
-}, 240000);
+for (const [engine, build, relaxations] of engines) {
+  const sides = () => [side("reason-react", Reason), { ...side(engine, build), ...relaxations }];
+  test(`L1 L3 L4 L6: random layers of OCaml and JavaScript components on ${engine} agree with React 18`, async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(fc.nat(1000), { minLength: 1, maxLength: 30 }),
+        fc.array(layerAction, { minLength: 1, maxLength: 12 }),
+        async (tape, actions) => {
+          await run(sides(), layered(tape), actions, performLayer);
+        },
+      ),
+      { numRuns: 60 },
+    );
+  }, 240000);
+}
 
 const widgets = (at) => () => at.build.mount_widgets(at.root, at.layer, (line) => at.log.push(line));
 
@@ -139,12 +146,15 @@ const scripted = [
   ["key", "Escape"],
 ];
 
-test("L1 L2 L5: react-select, a Radix popover with asChild and react-window with OCaml rows agree with React 18", async () => {
-  await run(sides(), widgets, scripted, performWidget);
-  await fc.assert(
-    fc.asyncProperty(fc.array(widgetAction, { minLength: 1, maxLength: 16 }), async (actions) => {
-      await run(sides(), widgets, actions, performWidget);
-    }),
-    { numRuns: 40 },
-  );
-}, 240000);
+for (const [engine, build, relaxations] of engines) {
+  const sides = () => [side("reason-react", Reason), { ...side(engine, build), ...relaxations }];
+  test(`L1 L2 L5: react-select, a Radix popover with asChild and react-window with OCaml rows on ${engine} agree with React 18`, async () => {
+    await run(sides(), widgets, scripted, performWidget);
+    await fc.assert(
+      fc.asyncProperty(fc.array(widgetAction, { minLength: 1, maxLength: 16 }), async (actions) => {
+        await run(sides(), widgets, actions, performWidget);
+      }),
+      { numRuns: 40 },
+    );
+  }, 240000);
+}
