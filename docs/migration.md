@@ -50,7 +50,8 @@ and `react` and `react-dom` 18 among its npm dependencies:
 
 Components run on npm's React, in islands; a package whose hooks the same binding file binds
 (`useDrag` from react-dnd) stays on `melact.compat` (add `melact.compat` to the libraries), with its
-providers. Bundle the app with melact.island's esbuild plugin, which gives each module the React it
+providers. A component bound in a file without its package's hooks, such as a `DndProvider` bound
+apart from `useDrag`, takes `[@@melact.engine compat]`; hooks bound anywhere need no mark. Bundle the app with melact.island's esbuild plugin, which gives each module the React it
 needs:
 
 ```js

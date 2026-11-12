@@ -1,0 +1,10 @@
+(* react-dnd's provider bound apart from its hooks, as some of the team's apps bind it: no use… external of
+   react-dnd is in this file, so [@melact.engine compat] keeps the provider with the hooks on melact.compat. *)
+
+(** react-dnd's manager of one board, whose backend the test drives. *)
+type manager
+
+module DndProvider = struct
+  external make : manager:manager -> children:React.element -> React.element = "DndProvider"
+  [@@mel.module "react-dnd"] [@@react.component] [@@melact.engine compat]
+end

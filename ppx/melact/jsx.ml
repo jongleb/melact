@@ -1878,9 +1878,23 @@ let bound items =
       packages
   in
   let engine_of (description : value_description) =
-    match !engine with
-    | Compat -> Compat
-    | Island -> (
+    let explicit =
+      List.find_map
+        (fun attribute ->
+          match (attribute.attr_name.txt, attribute.attr_payload) with
+          | "melact.engine", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "compat"; _ }; _ }, _); _ } ] ->
+              Some Compat
+          | "melact.engine", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "island"; _ }; _ }, _); _ } ] ->
+              Some Island
+          | "melact.engine", _ ->
+              Location.raise_errorf ~loc:attribute.attr_loc "melact: [@melact.engine] takes compat or island"
+          | _ -> None)
+        description.pval_attributes
+    in
+    match (explicit, !engine) with
+    | Some chosen, _ -> chosen
+    | None, Compat -> Compat
+    | None, Island -> (
         match
           List.exists
             (fun attribute ->
@@ -1910,6 +1924,7 @@ let bound items =
   in
   let bound_component ~loc (description : value_description) attributes =
     let engine = engine_of description in
+    let attributes = List.filter (fun attribute -> not (String.equal attribute.attr_name.txt "melact.engine")) attributes in
     let bridge_type name = ptyp_constr ~loc { loc; txt = bridged engine name } [] in
     let attributes =
       match engine with
@@ -1968,7 +1983,17 @@ let bound items =
       method! structure_item item =
         match item.pstr_desc with
         | Pstr_primitive description ->
-            Option.fold ~none:item
+            Option.fold
+              ~none:
+                (match List.partition (fun attribute -> String.equal attribute.attr_name.txt "melact.engine") description.pval_attributes with
+                | [], _ -> item
+                | marks, rest -> (
+                    match engine_of { description with pval_attributes = marks } with
+                    | Island ->
+                        Location.raise_errorf ~loc:item.pstr_loc
+                          "melact: %s is not a component: a hook runs in the component that calls it, on melact.compat, never on an island"
+                          description.pval_name.txt
+                    | Compat -> { item with pstr_desc = Pstr_primitive { description with pval_attributes = rest } }))
               ~some:(fun attributes ->
                 let loc = item.pstr_loc in
                 pstr_include ~loc (include_infos ~loc (pmod_structure ~loc (bound_component ~loc description attributes))))

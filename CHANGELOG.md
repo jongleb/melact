@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `[@melact.engine compat]` or `[@melact.engine island]` on a component external picks its engine,
+  for components bound apart from their package's hooks; a hook marked `island` is a compile error.
+  The mixed bundle now also binds its `DndProvider` apart and reads `useDragLayer`, and
+  `test/compat/bundle/browser.mjs` runs it in Chromium with react-dnd's HTML5 backend and real mouse
+  drags against React 18.
 - Islands and melact.compat in one app: under `-foreign-engine island`, the components of a package
   whose hooks the same file binds stay on melact.compat with them, and the others go to islands,
   imported as `melact-island:<package>`. melact.island's esbuild plugin (`plugin.mjs`) gives each

@@ -1710,14 +1710,22 @@ a provider must share their context, so it runs there too. Under `-foreign-engin
 therefore picks the engine per package: the components of a package from which the same file binds a
 `use…` external stay on melact.compat, and the others go to islands, their imports written as
 `melact-island:<package>`; melact.island imports npm's React the same way. A bound component of one
-engine written among the children of one of the other is Melact content there. melact.island ships an
+engine written among the children of one of the other is Melact content there. When the hooks of a
+package are bound in another file than its components, `[@melact.engine compat]` (or `island`) on a
+component external decides for it; a hook marked `island` is a compile error, since a hook runs in the
+component that calls it. melact.island ships an
 esbuild plugin (`plugin.mjs`, `esbuildColours`) that colours the module graph by importer: what a
 `melact-island:` import reaches resolves as npm resolves it, `react` included, and keeps that colour;
 everything else gets melact.compat's `react`, `react-dom` and `react/jsx-runtime`. A module reached
 in both colours is bundled twice and listed by `duplicates()`. `test/compat/bundle.test.mjs` bundles
 one app with esbuild both ways, with a recharts chart on an island and react-dnd's hooks and
 `DndProvider` on melact.compat, and runs the bundles side by side: the same board, chart and drops as
-reason-react on React 18 after random drags, and no module in both colours. Three mutants each break
+reason-react on React 18 after random drags, and no module in both colours. Its `DndProvider` is
+bound in a file of its own, marked `[@melact.engine compat]`, and a drag layer reads `useDragLayer`.
+`node test/compat/bundle/browser.mjs` runs the same two bundles in Chromium with react-dnd's HTML5
+backend: Playwright drags the cards with the mouse on both pages, and the board, drag layer, chart and
+log are compared midway through each drag, once the hover has settled, and after it; 16 random runs
+agree. Snapshotted 50 ms into a drag, the two pages can stand at different frames of the hover. Three mutants each break
 it: no melact.compat `react` in the app's colour, island imports resolved in the app's colour, a
 provider put on an island apart from its hooks.
 

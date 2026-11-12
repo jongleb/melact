@@ -1424,3 +1424,72 @@ update graph; the component numbers the hook's state cells after its own slots:
   melhole.hook (1, 2)
   Component.pure
   Instance.changed
+
+Under -foreign-engine island, a bound component goes to an island, imported as melact-island:<package>; one
+of a package whose hooks the same file binds stays on melact.compat with them; [@melact.engine] decides for
+one external:
+
+  $ cat > engines.ml <<'EOF'
+  > module Chart = struct
+  >   external make : data:int array -> React.element = "LineChart" [@@mel.module "recharts"] [@@react.component]
+  > end
+  > module Provider = struct
+  >   external make : children:React.element -> React.element = "DndProvider" [@@mel.module "react-dnd"] [@@react.component]
+  > end
+  > external useDrag : unit -> int = "useDrag" [@@mel.module "react-dnd"]
+  > module Marked = struct
+  >   external make : unit -> React.element = "Widget" [@@mel.module "widgets"] [@@react.component] [@@melact.engine compat]
+  > end
+  > EOF
+  $ ./pp.exe -foreign-engine island -impl engines.ml
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  module Chart =
+    struct
+      include
+        struct
+          external makeProps :
+            data:int array -> ?key:string -> unit -> Melact_island.Bridge.props
+              = ""[@@mel.obj ]
+          external make__foreign : Melact_island.Bridge.foreign = "LineChart"
+          [@@mel.module "melact-island:recharts"]
+          let make props = Melact_island.Bridge.mount make__foreign props
+        end
+    end
+  module Provider =
+    struct
+      include
+        struct
+          external makeProps :
+            children:React.element ->
+              ?key:string -> unit -> Melact_compat.Bridge.props = ""[@@mel.obj
+                                                                      ]
+          external make__foreign : Melact_compat.Bridge.foreign = "DndProvider"
+          [@@mel.module "react-dnd"]
+          let make props = Melact_compat.Bridge.mount make__foreign props
+        end
+    end
+  external useDrag : unit -> int = "useDrag"[@@mel.module "react-dnd"]
+  module Marked =
+    struct
+      include
+        struct
+          external makeProps :
+            ?key:string -> unit -> Melact_compat.Bridge.props = ""[@@mel.obj ]
+          external make__foreign : Melact_compat.Bridge.foreign = "Widget"
+          [@@mel.module "widgets"]
+          let make props = Melact_compat.Bridge.mount make__foreign props
+        end
+    end
+
+A hook runs in the component that calls it, so it cannot be marked for an island:
+
+  $ cat > hook_island.ml <<'EOF'
+  > external useThing : unit -> int = "useThing" [@@mel.module "things"] [@@melact.engine island]
+  > EOF
+  $ ./pp.exe -foreign-engine island -impl hook_island.ml
+  File "hook_island.ml", line 1, characters 0-93:
+  1 | external useThing : unit -> int = "useThing" [@@mel.module "things"] [@@melact.engine island]
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Error: melact: useThing is not a component: a hook runs in the component that calls it, on melact.compat, never on an island
+  [1]

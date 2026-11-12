@@ -1,6 +1,6 @@
 (* One app with both kinds of JavaScript React library, as the team's dashboards have: a recharts chart,
-   which Melact renders on npm's React in an island, and react-dnd's useDrag and useDrop called from OCaml
-   components with its DndProvider, which run on melact.compat. Bundled with esbuild: with reason-react,
+   which Melact renders on npm's React in an island, and react-dnd's useDrag, useDrop and useDragLayer called
+   from OCaml components with its DndProvider, bound in provider.mlx, which run on melact.compat. Bundled with esbuild: with reason-react,
    everything on npm's React; with Melact, coloured by melact.island's plugin. test/compat/bundle.test.mjs
    drives both bundles. *)
 
@@ -28,9 +28,6 @@ end
 (** What react-dnd makes a backend from. *)
 type backend_factory
 
-(** react-dnd's manager of one board, whose backend the test drives. *)
-type manager
-
 (** What react-dnd's collect functions read. *)
 type monitor = < getHandlerId : unit -> string [@mel.meth] ; isDragging : unit -> bool [@mel.meth] ; isOver : unit -> bool [@mel.meth] > Js.t
 
@@ -38,11 +35,26 @@ type monitor = < getHandlerId : unit -> string [@mel.meth] ; isDragging : unit -
 type item = < id : string > Js.t
 
 external test_backend : backend_factory = "TestBackend" [@@mel.module "react-dnd-test-backend"]
-external create_manager : backend_factory -> manager = "createDragDropManager" [@@mel.module "dnd-core"]
+external html5_backend : backend_factory = "HTML5Backend" [@@mel.module "react-dnd-html5-backend"]
+external create_manager : backend_factory -> Provider.manager = "createDragDropManager" [@@mel.module "dnd-core"]
 
-module DndProvider = struct
-  external make : manager:manager -> children:React.element -> React.element = "DndProvider"
-  [@@mel.module "react-dnd"] [@@react.component]
+(** What react-dnd's drag layer reads while a card is dragged. *)
+type layer_monitor = < isDragging : unit -> bool [@mel.meth] ; getItem : unit -> item Js.Nullable.t [@mel.meth] > Js.t
+
+(** What the drag layer shows. *)
+type layer = < dragging : bool ; item : item Js.Nullable.t > Js.t
+
+external use_drag_layer : (layer_monitor -> layer) -> layer = "useDragLayer" [@@mel.module "react-dnd"]
+
+module Drag_layer = struct
+  let[@react.component] make () =
+    let layer = use_drag_layer (fun monitor -> [%mel.obj { dragging = monitor##isDragging (); item = monitor##getItem () }]) in
+    <p className="drag-layer">
+      (React.string
+         (match (layer##dragging, Js.Nullable.toOption layer##item) with
+         | true, Some item -> "dragging " ^ item##id
+         | true, None | false, _ -> "idle"))
+    </p>
 end
 
 (** What a drag source shows: its handler id and whether it is dragged. *)
@@ -114,7 +126,8 @@ module Board = struct
     let data : bar array =
       [| [%mel.obj { name = "left"; cards = Array.length left }]; [%mel.obj { name = "right"; cards = Array.length right }] |]
     in
-    <DndProvider manager>
+    <Provider.DndProvider manager>
+      <Drag_layer />
       <div className="board">
         <Bin name="left" cards=left onDrop=(moved "left") />
         <Bin name="right" cards=right onDrop=(moved "right") />
@@ -124,13 +137,15 @@ module Board = struct
           <Bar dataKey="cards" fill="#36c" isAnimationActive=false />
         </BarChart>
       </div>
-    </DndProvider>
+    </Provider.DndProvider>
 end
 
-let mount_board root log =
-  let manager = create_manager test_backend in
+let mounted backend root log =
+  let manager = create_manager backend in
   let client = ReactDOM.Client.createRoot root in
   ReactDOM.Client.render client <Board manager log />;
   (client, manager)
 
+let mount_board root log = mounted test_backend root log
+let mount_board_html5 root log = mounted html5_backend root log
 let unmount_board (client, _) = ReactDOM.Client.unmount client ()

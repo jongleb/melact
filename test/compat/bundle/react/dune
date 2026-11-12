@@ -1,5 +1,5 @@
 (copy_files
- (files ../app.mlx))
+ (files ../*.mlx))
 
 (melange.emit
  (target output)
