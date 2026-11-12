@@ -481,7 +481,7 @@ val useTransition : unit -> bool * ((unit -> unit) -> unit)
 val startTransition : (unit -> unit) -> unit
 val forwardRef : ('props -> 'value ref option -> element) -> 'props component
 val memo : 'props component -> 'props component
-val memoCustomCompareProps : 'props component -> ('props -> 'props -> bool) -> 'props component
+val memoCustomCompareProps : 'props component -> ('compared -> 'compared -> bool) -> 'props component
 
 (** React's synthetic events, as reason-react declares them: typed on the server, never fired. *)
 module Event : module type of struct

@@ -97,6 +97,62 @@ let structure map items =
       method! longident longident found = super#longident longident (Names.add (Longident.last_exn longident) found)
     end
   in
+  let opened =
+    object
+      inherit [Names.t] Ast_traverse.fold as super
+
+      method! expression expression found =
+        match expression.pexp_desc with
+        | Pexp_open (_, inner) -> referenced#expression inner (super#expression expression found)
+        | _ -> super#expression expression found
+    end
+  in
+  let apart item before =
+    let own =
+      List.fold_left
+        (fun own (hoisted, _) ->
+          match hoisted.pstr_desc with
+          | Pstr_value (_, [ { pvb_pat = { ppat_desc = Ppat_var { txt = name; _ }; _ }; _ } ]) -> Names.add name own
+          | _ -> own)
+        Names.empty before
+    in
+    let hidden =
+      Names.inter own (List.fold_left (fun found (hoisted, _) -> opened#structure_item hoisted found) (opened#structure_item item Names.empty) before)
+    in
+    match Names.is_empty hidden with
+    | true -> (before, item)
+    | false ->
+        let unit =
+          String.capitalize_ascii
+            (String.map
+               (fun character -> match character with 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' -> character | _ -> '_')
+               (Filename.remove_extension (Filename.basename item.pstr_loc.loc_start.pos_fname)))
+        in
+        let renamed =
+          object
+            inherit Ast_traverse.map as super
+
+            method! expression expression =
+              match expression.pexp_desc with
+              | Pexp_ident ({ txt = Lident name; _ } as ident) when Names.mem name hidden ->
+                  { expression with pexp_desc = Pexp_ident { ident with txt = Lident (name ^ "_" ^ unit) } }
+              | _ -> super#expression expression
+          end
+        in
+        let bound hoisted =
+          match hoisted.pstr_desc with
+          | Pstr_value (flag, [ ({ pvb_pat = { ppat_desc = Ppat_var ({ txt = name; _ } as var); _ } as pattern; _ } as binding) ])
+            when Names.mem name hidden ->
+              {
+                hoisted with
+                pstr_desc =
+                  Pstr_value
+                    (flag, [ { binding with pvb_pat = { pattern with ppat_desc = Ppat_var { var with txt = name ^ "_" ^ unit } } } ]);
+              }
+          | _ -> hoisted
+        in
+        (List.map (fun (hoisted, unused) -> (renamed#structure_item (bound hoisted), unused)) before, renamed#structure_item item)
+  in
   let mapped =
     List.map
       (fun item ->
@@ -105,7 +161,7 @@ let structure map items =
         let item = pruned#structure_item (map item) in
         let before = List.rev !lifted in
         lifted := saved;
-        (before, item))
+        apart item before)
       items
   in
   fst

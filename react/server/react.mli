@@ -523,7 +523,7 @@ val act : (unit -> unit) -> unit Js.Promise.t
 val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t
 val forwardRef : ('props -> 'value ref Js.Nullable.t -> element) -> 'props component
 val memo : 'props component -> 'props component
-val memoCustomCompareProps : 'props component -> ('props -> 'props -> bool) -> 'props component
+val memoCustomCompareProps : 'props component -> ('compared -> 'compared -> bool) -> 'props component
 
 (** React's synthetic events, as reason-react declares them: typed on the server, never fired. *)
 module Event : module type of struct

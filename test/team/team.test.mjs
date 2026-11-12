@@ -1,6 +1,7 @@
 // Repros the team reported, in Reason: a constructor found by the type annotation of a let in a component with
 // hooks (under -typed), record fields found by the annotation of a let's pattern there, and a component whose
-// .rei declares [@react.component] make while the .re rebinds make with React.memo. Melact must build them and show what reason-react on React 18 shows, click after click.
+// .rei declares [@react.component] make while the .re rebinds make with React.memo, and top-level JSX inside a local
+// open of a module that has top-level JSX of its own (TosUsat opens TosT). Melact must build them and show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
 import { tick, shown } from "../compat/harness.mjs";
@@ -28,4 +29,5 @@ test("constructors found by annotations and memoized components declared in .rei
   }
   expect(traces[1]).toEqual(traces[0]);
   expect(traces[0][traces[0].length - 1]).toContain("hi!!!");
+  expect(traces[0][0]).toContain('href="/legal/usat"');
 });

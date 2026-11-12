@@ -231,6 +231,11 @@ What the compiler knows about a row is not kept per row.
   is compiled where it is defined and again, as rows, where `List.map row items` uses it. The
   definitions lifted to the top of the module for the unused one (its template, its handler keys,
   its handler sites) are dropped, so the page neither parses a second template nor ships it.
+- Lifted definitions are numbered per file, so a file that lifts `__melhole_template_2` and opens
+  another file's module locally (`TosT.(<a href=(f "x")>…</a>)`, `let open`) would read that module's
+  `__melhole_template_2` inside the open. A lifted value that code inside a local open refers to is
+  named after its file as well (`__melhole_template_2_TosUsat`); the others keep their short names,
+  which the entry module of a bundle exports as they are.
 - A delegated handler is one lifted definition, `Events.delegate "click"`, which listens at the
   document once and gives the property the element keeps its handler under; nothing that only
   registers stays behind when the handler's template goes.
@@ -1490,7 +1495,10 @@ and unboxed: `makeProps` builds the element itself (the component's instance or 
 key), and `make` is `%identity`. JSX `<Foo label />` compiles to `Foo.make (Foo.makeProps ~label ())`,
 which is one call with no props object at run time. A module written by hand in reason-react's style,
 with a `[@mel.obj] external makeProps` and `let make = props => …props##label…`, goes through the same
-call and gets its props object, as under React.
+call and gets its props object, as under React. Since `props` has no fields, `React.memoCustomCompareProps` takes a
+comparator over any type, as reason-react code writes it over the props object, and Melact does not
+call it: a component renders again only when one of its props changes by `===`, and rendering is
+pure, so a comparator could only skip a render that would show the same.
 
 ## DOM elements built at run time
 

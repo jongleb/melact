@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix: top-level JSX inside a local open of another file's module (`TosT.(<a href={f("x")}> … </a>)`)
+  used that module's lifted template of the same number: a type error (`Dom.element` against
+  `Hole.content`) or, when the shapes matched, the other file's DOM. A lifted value that code inside
+  a local open reads is named after its file as well. Law: `test/team` (`TosT.re`, `TosUsat.re`).
+- `React.memoCustomCompareProps` takes a comparator over reason-react's props object (`prev##id ==
+  next##id`); Melact does not call it, as each prop is compared with `===` already. Law: `test/team`
+  (`Compared.re`).
+
 - Islands: components bound in another file, listed among a bound component's children
   (`<Recharts.LineChart><Recharts.XAxis /><Recharts.Line /></Recharts.LineChart>`), are one React tree
   with it, not an island each, so libraries that read their children (recharts 2) see them; React no

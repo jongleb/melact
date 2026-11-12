@@ -8,6 +8,9 @@ module App = {
     <CtorAnnot isActive=false />
     <Notif message />
     <PatternAnnot />
+    <Compared data=[|message, "terms"|] id="c" />
+    TosUsat.content
+    TosUsat.block
   </div>;
   };
 };
