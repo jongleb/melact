@@ -23,6 +23,9 @@ val empty : child
 val list : child list -> child
 val keyed : (string * child) list -> child
 val with_key : string -> child -> child
+
+(** The key and the child [with_key] made a child of, if it did. *)
+val entry : child -> (string * child) option
 (** Whether a compiled loop's rows are drawn from the item alone, or from the item and its index. *)
 type numbering = Items | Numbered
 

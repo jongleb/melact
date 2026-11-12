@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- recharts runs on islands, under a law against React 18 (`test/compat/charts.test.mjs`). In a bound
+  component's children melact-ppx follows `match` and `if`, and turns `React.array`, `React.list` and
+  `React.null` into React children, so chart series built in OCaml stay React elements; a keyed mount
+  passed in keeps its key.
 - Islands of npm's React, `melact.island`: with `-foreign-engine island`, a `[@react.component]
   external` to a component of a JavaScript React library renders on npm's React 18, in an island of
   one shared root, and renders again only when a prop changes. Melact content passed to it lives in

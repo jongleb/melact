@@ -148,7 +148,10 @@ type mounting = { foreign : foreign; given : value }
 external mounting_field : View.child -> mounting Js.undefined = "$$melact_island:mounting" [@@mel.get]
 external set_mounting : View.child -> mounting -> unit = "$$melact_island:mounting" [@@mel.set]
 
-let mounting_of inner = Option.bind (Js.Undefined.toOption (content inner)) (fun child -> Js.Undefined.toOption (mounting_field child))
+let mounting_of inner =
+  Option.bind (Js.Undefined.toOption (content inner)) (fun child ->
+      let key, inner = Option.fold ~none:(None, child) ~some:(fun (key, inner) -> (Some key, inner)) (View.entry child) in
+      Option.map (fun mounting -> (key, mounting)) (Js.Undefined.toOption (mounting_field inner)))
 
 let slots : (string, slot) Hashtbl.t = Hashtbl.create 16
 let top = store []
@@ -435,7 +438,11 @@ let rec converted conversion given previous =
         Js.Undefined.toOption (listed inner),
         Js.Undefined.toOption (element_of inner) )
     with
-    | Some mounting, _, _ -> made_element (path ^ ".mount") (value mounting.foreign) mounting.given (fresh ()) before
+    | Some (key, mounting), _, _ ->
+        let made = fresh () in
+        set_field made "key" (value (Js.Null.fromOption key));
+        set_field made "ref" (value Js.null);
+        made_element (path ^ ".mount") (value mounting.foreign) mounting.given made before
     | None, Some entries, _ ->
         let earlier = Option.value ~default:[||] (Js.Undefined.toOption (listed before)) in
         let shown =
@@ -473,10 +480,10 @@ let rec converted conversion given previous =
           rendering render
             (value (fun result ->
                  match (mounting_of result, Js.Undefined.toOption (content result)) with
-                 | Some mounting, _ ->
+                 | Some (key, mounting), _ ->
                      value
                        (Npm.create_element (Npm.kind mounted_view)
-                          [%mel.obj { mounting; owner = conversion.owner; writer = conversion.writer }])
+                          [%mel.obj { key = Js.Null.fromOption key; mounting; owner = conversion.owner; writer = conversion.writer }])
                  | None, Some child ->
                      value
                        (Npm.create_element render_slot_view

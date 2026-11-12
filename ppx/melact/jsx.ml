@@ -1360,6 +1360,21 @@ let mapper =
           [%expr [%e bridge ~loc "many"] [%e pexp_array ~loc (List.map self#foreign_child (Option.value ~default:[] (Element.list_items child)))]]
       | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "string"); _ }; _ }, [ (Nolabel, text) ]) ->
           [%expr [%e bridge ~loc "value"] ([%e self#expression text] : string)]
+      | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "array"); _ }; _ }, [ (Nolabel, items) ]) ->
+          [%expr [%e bridge ~loc "many"] (Stdlib.Array.map [%e bridge ~loc "content"] [%e self#expression items])]
+      | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "list"); _ }; _ }, [ (Nolabel, items) ]) ->
+          [%expr [%e bridge ~loc "many"] (Stdlib.Array.of_list (Stdlib.List.map [%e bridge ~loc "content"] [%e self#expression items]))]
+      | _, Pexp_ident { txt = Ldot (Lident "React", "null"); _ } -> [%expr [%e bridge ~loc "value"] Js.null]
+      | _, Pexp_match (target, cases) ->
+          { child with pexp_desc = Pexp_match
+                  ( self#expression target,
+                    List.map
+                      (fun case ->
+                        { case with pc_guard = Option.map self#expression case.pc_guard; pc_rhs = self#foreign_child case.pc_rhs })
+                      cases );
+          }
+      | _, Pexp_ifthenelse (test, yes, Some no) ->
+          { child with pexp_desc = Pexp_ifthenelse (self#expression test, self#foreign_child yes, Some (self#foreign_child no)) }
       | _ -> [%expr [%e bridge ~loc "content"] [%e self#expression child]]
 
     method private foreign_props ~loc arguments =

@@ -1684,7 +1684,14 @@ as a set of top-level nodes: an island's Melact content is one slot node there, 
 portal from an island nested in that slot goes before or after the whole slot, where React
 interleaves it with the slot's items. The slot goes first when anything precedes the nested island in
 it, as a dialog's content precedes a select's menu inside it; the nested content goes first
-otherwise. `test/compat/economy.test.mjs` checks that a page of twenty islands renders
+otherwise. `test/compat/charts.test.mjs` runs a recharts 3 dashboard written as a team writes one: the chart
+components bound in one file, series built in a `match` and passed as `React.array`, data, series and
+chart kind in OCaml state, and legend labels that an OCaml `formatter` renders; after every random
+click it draws the same SVG as reason-react on React 18. In a bound component's children,
+melact-ppx follows `match` and `if` into their branches, turns `React.array` and `React.list` into
+lists of children and `React.null` into `null`, so bound components written there stay React
+elements; a bound component mounted elsewhere and passed in, keyed or not, becomes a React element
+of the island's tree too, with its key. `test/compat/economy.test.mjs` checks that a page of twenty islands renders
 in React exactly the islands whose props changed, and nothing when only slot content changed. Each of
 these mutants breaks a law: no Melact segment in slots, no resume at the island's host, every island
 at the root, no tree order, captured effects dropped, a new props object on every patch.

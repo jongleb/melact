@@ -35,15 +35,16 @@ export function stage(lib) {
   };
 }
 
-const ids = /:[rRm][0-9a-zA-Z]*:|react-select-\d+-/g;
+const ids = /:[rRm][0-9a-zA-Z]*:|react-select-\d+-|recharts\d+-/g;
 
 export function shown(side) {
   const names = new Map();
   const rename = (text) =>
     text.replace(ids, (id) => {
-      const kind = id.startsWith("react-select") ? "react-select-N-" : ":id";
+      const kind = id.startsWith("react-select") ? "react-select-N-" : id.startsWith("recharts") ? "rechartsN-" : ":id";
       const key = kind + id;
-      if (!names.has(key)) names.set(key, kind === ":id" ? `:id${names.size}:` : `react-select-${names.size}-`);
+      if (!names.has(key))
+        names.set(key, kind === ":id" ? `:id${names.size}:` : kind === "rechartsN-" ? `recharts${names.size}-` : `react-select-${names.size}-`);
       return names.get(key);
     });
   const walk = (node) => {

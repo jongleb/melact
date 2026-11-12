@@ -499,6 +499,8 @@ let keyed entries =
         | _ -> None);
   }
 
+let entry child = match child.shape with Entry (key, inner) -> Some (key, inner) | Single | Nothing | Many _ | Entries _ | Deferred _ -> None
+
 let with_key key child =
   let keep inner = One_keyed_state (key, inner) in
   {
