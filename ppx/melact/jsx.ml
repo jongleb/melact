@@ -9,28 +9,27 @@ type engine =
 
 let engine = ref Compat
 
-let bridged name =
-  Ldot (Ldot (Lident (match !engine with Compat -> "Melact_compat" | Island -> "Melact_island"), "Bridge"), name)
+let bridged engine name =
+  Ldot (Ldot (Lident (match engine with Compat -> "Melact_compat" | Island -> "Melact_island"), "Bridge"), name)
 
-let bridge ~loc name = pexp_ident ~loc { loc; txt = bridged name }
-let bridge_type ~loc name = ptyp_constr ~loc { loc; txt = bridged name } []
+let bridge ~loc engine name = pexp_ident ~loc { loc; txt = bridged engine name }
 
-let foreign_components : (string list * string) list ref = ref []
+let foreign_components : (string list * string * engine) list ref = ref []
 
 let foreign path name =
   match Longident.flatten_exn path with
   | written -> (
       match
-        List.exists
-          (fun (modules, bound) ->
+        List.find_opt
+          (fun (modules, bound, _) ->
             String.equal bound name
             &&
             let length = List.length written and full = List.length modules in
             length <= full && List.equal String.equal written (List.filteri (fun index _ -> index >= full - length) modules))
           !foreign_components
       with
-      | true -> `Foreign
-      | false -> `Melact)
+      | Some (_, _, engine) -> `Foreign engine
+      | None -> `Melact)
   | exception Invalid_argument _ -> `Melact
 
 let keyed_hooks =
@@ -525,7 +524,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                   { expression with pexp_desc = Pexp_let (Nonrecursive, List.map bound bindings, walker#expression rest) }
               | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, _)
                 when Option.is_some (Element.without_jsx expression.pexp_attributes)
-                     && foreign path (match name with "createElement" -> "make" | other -> other) = `Foreign ->
+                     && foreign path (match name with "createElement" -> "make" | other -> other) <> `Melact ->
                   expression
               | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot _; _ }; _ } as callee), arguments)
                 when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
@@ -1317,7 +1316,7 @@ let mapper =
                     [%e Hoist.hoist ~loc ~unused:Hoist.Kept "hook" [%expr (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)]]] );
         ]
 
-    method private foreign_child child =
+    method private foreign_child ~engine child =
       let dom_name name =
         let name =
           match String.length name > 1 && name.[String.length name - 1] = '_' with
@@ -1337,60 +1336,64 @@ let mapper =
                 match label with
                 | Labelled "children" | Nolabel -> None
                 | Labelled name | Optional name ->
-                    Some (pexp_tuple ~loc [ estring ~loc (dom_name name); [%expr [%e bridge ~loc "value"] [%e self#expression value]] ]))
+                    Some (pexp_tuple ~loc [ estring ~loc (dom_name name); [%expr [%e bridge ~loc engine "value"] [%e self#expression value]] ]))
               arguments
           in
           let children =
             List.concat_map
               (fun (label, value) ->
                 match label with
-                | Labelled "children" -> List.map self#foreign_child (Option.value ~default:[ value ] (Element.list_items value))
+                | Labelled "children" -> List.map (self#foreign_child ~engine) (Option.value ~default:[ value ] (Element.list_items value))
                 | Labelled _ | Optional _ | Nolabel -> [])
               arguments
           in
-          [%expr [%e bridge ~loc "host"] [%e estring ~loc tag] [%e pexp_array ~loc props] [%e pexp_array ~loc children]]
+          [%expr [%e bridge ~loc engine "host"] [%e estring ~loc tag] [%e pexp_array ~loc props] [%e pexp_array ~loc children]]
       | Some _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, name); _ }; _ }, arguments)
-        when foreign path (match name with "createElement" -> "make" | other -> other) = `Foreign ->
+        when foreign path (match name with "createElement" -> "make" | other -> other) <> `Melact ->
           let name = match name with "createElement" -> "make" | other -> other in
-          [%expr
-            [%e bridge ~loc "element"]
-              [%e pexp_ident ~loc { loc; txt = Ldot (path, foreign_name name) }]
-              [%e pexp_apply ~loc (pexp_ident ~loc { loc; txt = Ldot (path, props_name name) }) (self#foreign_props ~loc arguments @ [ (Nolabel, [%expr ()]) ])]]
+          (match foreign path name with
+          | `Foreign nested when nested = engine ->
+
+            [%expr
+              [%e bridge ~loc engine "element"]
+                [%e pexp_ident ~loc { loc; txt = Ldot (path, foreign_name name) }]
+                [%e pexp_apply ~loc (pexp_ident ~loc { loc; txt = Ldot (path, props_name name) }) (self#foreign_props ~loc ~engine arguments @ [ (Nolabel, [%expr ()]) ])]]
+          | `Foreign _ | `Melact -> [%expr [%e bridge ~loc engine "content"] [%e self#expression child]])
       | Some _, Pexp_construct ({ txt = Lident ("[]" | "::"); _ }, _) ->
-          [%expr [%e bridge ~loc "many"] [%e pexp_array ~loc (List.map self#foreign_child (Option.value ~default:[] (Element.list_items child)))]]
+          [%expr [%e bridge ~loc engine "many"] [%e pexp_array ~loc (List.map (self#foreign_child ~engine) (Option.value ~default:[] (Element.list_items child)))]]
       | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "string"); _ }; _ }, [ (Nolabel, text) ]) ->
-          [%expr [%e bridge ~loc "value"] ([%e self#expression text] : string)]
+          [%expr [%e bridge ~loc engine "value"] ([%e self#expression text] : string)]
       | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "array"); _ }; _ }, [ (Nolabel, items) ]) ->
-          [%expr [%e bridge ~loc "many"] (Stdlib.Array.map [%e bridge ~loc "content"] [%e self#expression items])]
+          [%expr [%e bridge ~loc engine "many"] (Stdlib.Array.map [%e bridge ~loc engine "content"] [%e self#expression items])]
       | _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "list"); _ }; _ }, [ (Nolabel, items) ]) ->
-          [%expr [%e bridge ~loc "many"] (Stdlib.Array.of_list (Stdlib.List.map [%e bridge ~loc "content"] [%e self#expression items]))]
-      | _, Pexp_ident { txt = Ldot (Lident "React", "null"); _ } -> [%expr [%e bridge ~loc "value"] Js.null]
+          [%expr [%e bridge ~loc engine "many"] (Stdlib.Array.of_list (Stdlib.List.map [%e bridge ~loc engine "content"] [%e self#expression items]))]
+      | _, Pexp_ident { txt = Ldot (Lident "React", "null"); _ } -> [%expr [%e bridge ~loc engine "value"] Js.null]
       | _, Pexp_match (target, cases) ->
           { child with pexp_desc = Pexp_match
                   ( self#expression target,
                     List.map
                       (fun case ->
-                        { case with pc_guard = Option.map self#expression case.pc_guard; pc_rhs = self#foreign_child case.pc_rhs })
+                        { case with pc_guard = Option.map self#expression case.pc_guard; pc_rhs = self#foreign_child ~engine case.pc_rhs })
                       cases );
           }
       | _, Pexp_ifthenelse (test, yes, Some no) ->
-          { child with pexp_desc = Pexp_ifthenelse (self#expression test, self#foreign_child yes, Some (self#foreign_child no)) }
-      | _ -> [%expr [%e bridge ~loc "content"] [%e self#expression child]]
+          { child with pexp_desc = Pexp_ifthenelse (self#expression test, self#foreign_child ~engine yes, Some (self#foreign_child ~engine no)) }
+      | _ -> [%expr [%e bridge ~loc engine "content"] [%e self#expression child]]
 
-    method private foreign_props ~loc arguments =
+    method private foreign_props ~loc ~engine arguments =
       List.concat_map
         (fun (label, value) ->
           match (label, Element.list_items value) with
           | Nolabel, _ | Labelled "children", Some [] -> []
-          | Labelled "children", Some [ only ] -> [ (label, [%expr [%e bridge ~loc "as_element"] [%e self#foreign_child only]]) ]
+          | Labelled "children", Some [ only ] -> [ (label, [%expr [%e bridge ~loc engine "as_element"] [%e self#foreign_child ~engine only]]) ]
           | Labelled "children", Some items ->
-              [ (label, [%expr [%e bridge ~loc "as_element"] ([%e bridge ~loc "many"] [%e pexp_array ~loc (List.map self#foreign_child items)])]) ]
+              [ (label, [%expr [%e bridge ~loc engine "as_element"] ([%e bridge ~loc engine "many"] [%e pexp_array ~loc (List.map (self#foreign_child ~engine) items)])]) ]
           | (Labelled _ | Optional _), _ -> [ (label, self#expression value) ])
         arguments
 
     method private uppercase ~loc path name arguments =
       match foreign path name with
-      | `Foreign ->
+      | `Foreign engine ->
           let key =
             List.find_map (fun (label, value) -> match label with Labelled "key" -> Some (self#expression value) | _ -> None) arguments
           in
@@ -1400,7 +1403,7 @@ let mapper =
               [
                 ( Nolabel,
                   pexp_apply ~loc (pexp_ident ~loc { loc; txt = Ldot (path, props_name name) })
-                    (self#foreign_props ~loc (List.filter (fun (label, _) -> match label with Labelled "key" -> false | _ -> true) arguments)
+                    (self#foreign_props ~loc ~engine (List.filter (fun (label, _) -> match label with Labelled "key" -> false | _ -> true) arguments)
                     @ [ (Nolabel, [%expr ()]) ]) );
               ]
           in
@@ -1849,6 +1852,47 @@ let () =
     ~doc:" compile components to code that writes their HTML, for melact.server, natively or under Melange"
 
 let bound items =
+  let packages =
+    let rec gather items =
+      List.concat_map
+        (fun item ->
+          match item.pstr_desc with
+          | Pstr_primitive description ->
+              List.filter_map
+                (fun attribute ->
+                  match (attribute.attr_name.txt, attribute.attr_payload) with
+                  | "mel.module", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (package, _, _)); _ }, _); _ } ]
+                    ->
+                      Some (description.pval_name.txt, package)
+                  | _ -> None)
+                description.pval_attributes
+          | Pstr_module { pmb_expr = { pmod_desc = Pmod_structure inner; _ }; _ } -> gather inner
+          | _ -> [])
+        items
+    in
+    gather items
+  in
+  let hooked =
+    List.filter_map
+      (fun (name, package) -> match String.length name > 3 && String.equal (String.sub name 0 3) "use" with true -> Some package | false -> None)
+      packages
+  in
+  let engine_of (description : value_description) =
+    match !engine with
+    | Compat -> Compat
+    | Island -> (
+        match
+          List.exists
+            (fun attribute ->
+              match (attribute.attr_name.txt, attribute.attr_payload) with
+              | "mel.module", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (package, _, _)); _ }, _); _ } ] ->
+                  List.mem package hooked
+              | _ -> false)
+            description.pval_attributes
+        with
+        | true -> Compat
+        | false -> Island)
+  in
   let foreign_of items =
     let rec gather path items =
       List.concat_map
@@ -1856,7 +1900,7 @@ let bound items =
           match item.pstr_desc with
           | Pstr_primitive description
             when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
-              [ (path, description.pval_name.txt) ]
+              [ (path, description.pval_name.txt, engine_of description) ]
           | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ }; _ } ->
               gather (path @ [ name ]) inner
           | _ -> [])
@@ -1865,11 +1909,36 @@ let bound items =
     gather [] items
   in
   let bound_component ~loc (description : value_description) attributes =
+    let engine = engine_of description in
+    let bridge_type name = ptyp_constr ~loc { loc; txt = bridged engine name } [] in
+    let attributes =
+      match engine with
+      | Compat -> attributes
+      | Island ->
+          List.map
+            (fun attribute ->
+              match (attribute.attr_name.txt, attribute.attr_payload) with
+              | "mel.module", PStr [ ({ pstr_desc = Pstr_eval (({ pexp_desc = Pexp_constant (Pconst_string (package, at, delimiter)); _ } as named), extra); _ } as payload) ] ->
+                  {
+                    attribute with
+                    attr_payload =
+                      PStr
+                        [
+                          {
+                            payload with
+                            pstr_desc =
+                              Pstr_eval ({ named with pexp_desc = Pexp_constant (Pconst_string ("melact-island:" ^ package, at, delimiter)) }, extra);
+                          };
+                        ];
+                  }
+              | _ -> attribute)
+            attributes
+    in
     let name = description.pval_name.txt in
     let rec given typ =
       match typ.ptyp_desc with
       | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) -> ptyp_arrow ~loc label argument (given result)
-      | _ -> [%type: ?key:string -> unit -> [%t bridge_type ~loc "props"]]
+      | _ -> [%type: ?key:string -> unit -> [%t bridge_type "props"]]
     in
     [
       pstr_primitive ~loc
@@ -1881,13 +1950,13 @@ let bound items =
         {
           description with
           pval_name = { loc; txt = foreign_name name };
-          pval_type = bridge_type ~loc "foreign";
+          pval_type = bridge_type "foreign";
           pval_attributes = attributes;
         };
       pstr_value ~loc Nonrecursive
         [
           value_binding ~loc ~pat:(pvar ~loc name)
-            ~expr:[%expr fun props -> [%e bridge ~loc "mount"] [%e evar ~loc (foreign_name name)] props];
+            ~expr:[%expr fun props -> [%e bridge ~loc engine "mount"] [%e evar ~loc (foreign_name name)] props];
         ];
     ]
   in

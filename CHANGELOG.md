@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Islands and melact.compat in one app: under `-foreign-engine island`, the components of a package
+  whose hooks the same file binds stay on melact.compat with them, and the others go to islands,
+  imported as `melact-island:<package>`. melact.island's esbuild plugin (`plugin.mjs`) gives each
+  module the React it needs and lists modules bundled twice. Law: recharts on an island and react-dnd
+  from OCaml components on melact.compat in one esbuild bundle against React 18
+  (`test/compat/bundle.test.mjs`).
 - Fix: an effect whose component rendered twice before the commit's effects ran (by its own state,
   then by its parent's new props) ran twice after one cleanup, leaking what it subscribed to. Each
   effect now runs once per commit, its latest version, as under React (about 36 to 48 gzip bytes).

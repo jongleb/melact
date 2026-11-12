@@ -1704,6 +1704,23 @@ in React exactly the islands whose props changed, and nothing when only slot con
 these mutants breaks a law: no Melact segment in slots, no resume at the island's host, every island
 at the root, no tree order, captured effects dropped, a new props object on every patch.
 
+**One app, two engines.** Hooks of a JavaScript library (react-dnd's `useDrag`, react-hook-form's
+`useForm`) need the component that renders, which is a Melact instance, so they run on melact.compat;
+a provider must share their context, so it runs there too. Under `-foreign-engine island`, melact-ppx
+therefore picks the engine per package: the components of a package from which the same file binds a
+`use…` external stay on melact.compat, and the others go to islands, their imports written as
+`melact-island:<package>`; melact.island imports npm's React the same way. A bound component of one
+engine written among the children of one of the other is Melact content there. melact.island ships an
+esbuild plugin (`plugin.mjs`, `esbuildColours`) that colours the module graph by importer: what a
+`melact-island:` import reaches resolves as npm resolves it, `react` included, and keeps that colour;
+everything else gets melact.compat's `react`, `react-dom` and `react/jsx-runtime`. A module reached
+in both colours is bundled twice and listed by `duplicates()`. `test/compat/bundle.test.mjs` bundles
+one app with esbuild both ways, with a recharts chart on an island and react-dnd's hooks and
+`DndProvider` on melact.compat, and runs the bundles side by side: the same board, chart and drops as
+reason-react on React 18 after random drags, and no module in both colours. Three mutants each break
+it: no melact.compat `react` in the app's colour, island imports resolved in the app's colour, a
+provider put on an island apart from its hooks.
+
 Not yet: server rendering of islands; slots inside SVG (a custom element is HTML only, so
 Melact content inside a chart's `<svg>` needs a `<g>` slot); a native `change` event inside a slot
 (React has no synthetic event for it on a slot, so Melact's handlers there run from the document);

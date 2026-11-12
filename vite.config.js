@@ -43,8 +43,19 @@ const compatLibraries = {
   },
 };
 
+// Under vitest every package resolves as npm resolves it, so an import of melact.island's colour is the
+// package itself; test/compat/bundle.test.mjs checks the colours with esbuild and melact.island's plugin.
+const islandColour = {
+  name: "melact-island-colour",
+  enforce: "pre",
+  resolveId(source, importer) {
+    if (!source.startsWith("melact-island:")) return null;
+    return this.resolve(source.slice("melact-island:".length), importer, { skipSelf: true });
+  },
+};
+
 export default defineConfig({
-  plugins: [reactNineteen, compatLibraries, melangeOutput],
+  plugins: [islandColour, reactNineteen, compatLibraries, melangeOutput],
   // The emitted libraries live under node_modules; pre-bundling would cache
   // them across dune rebuilds.
   optimizeDeps: { noDiscovery: true, include: [] },
@@ -62,6 +73,7 @@ export default defineConfig({
     environmentMatchGlobs: [["**/test/ratchet/sizes/sizes_test.mjs", "node"]],
     // The compat laws load the npm libraries twice: from the root on npm's React, and from
     // test/compat/env on melact.compat, through Vite so that they share Melact's runtime with the app.
-    server: { deps: { inline: [/test\/compat\/env\/node_modules\/(?!hoist-non-react-statics|react-is|prop-types)/] } },
+    // melact.island imports npm's React as `melact-island:react`, which only Vite resolves (islandColour above).
+    server: { deps: { inline: [/test\/compat\/env\/node_modules\/(?!hoist-non-react-statics|react-is|prop-types)/, /\/node_modules\/melact\.island\//] } },
   },
 });

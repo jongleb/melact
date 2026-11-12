@@ -1,0 +1,136 @@
+(* One app with both kinds of JavaScript React library, as the team's dashboards have: a recharts chart,
+   which Melact renders on npm's React in an island, and react-dnd's useDrag and useDrop called from OCaml
+   components with its DndProvider, which run on melact.compat. Bundled with esbuild: with reason-react,
+   everything on npm's React; with Melact, coloured by melact.island's plugin. test/compat/bundle.test.mjs
+   drives both bundles. *)
+
+(** A bar of the chart: how many cards a bin holds. *)
+type bar = < name : string ; cards : int > Js.t
+
+module BarChart = struct
+  external make : data:bar array -> width:int -> height:int -> children:React.element -> React.element = "BarChart"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module Bar = struct
+  external make : dataKey:string -> fill:string -> isAnimationActive:bool -> React.element = "Bar"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module XAxis = struct
+  external make : dataKey:string -> React.element = "XAxis" [@@mel.module "recharts"] [@@react.component]
+end
+
+module YAxis = struct
+  external make : allowDecimals:bool -> React.element = "YAxis" [@@mel.module "recharts"] [@@react.component]
+end
+
+(** What react-dnd makes a backend from. *)
+type backend_factory
+
+(** react-dnd's manager of one board, whose backend the test drives. *)
+type manager
+
+(** What react-dnd's collect functions read. *)
+type monitor = < getHandlerId : unit -> string [@mel.meth] ; isDragging : unit -> bool [@mel.meth] ; isOver : unit -> bool [@mel.meth] > Js.t
+
+(** What a card carries while it is dragged. *)
+type item = < id : string > Js.t
+
+external test_backend : backend_factory = "TestBackend" [@@mel.module "react-dnd-test-backend"]
+external create_manager : backend_factory -> manager = "createDragDropManager" [@@mel.module "dnd-core"]
+
+module DndProvider = struct
+  external make : manager:manager -> children:React.element -> React.element = "DndProvider"
+  [@@mel.module "react-dnd"] [@@react.component]
+end
+
+(** What a drag source shows: its handler id and whether it is dragged. *)
+type dragged = < handler : string ; dragging : bool > Js.t
+
+(** What a drop target shows: its handler id and whether a card is over it. *)
+type hovered = < handler : string ; over : bool > Js.t
+
+external use_drag :
+  (unit -> < _type : string ; item : item ; collect : monitor -> dragged > Js.t) ->
+  string array ->
+  dragged * (Dom.element Js.Nullable.t -> unit) * (Dom.element Js.Nullable.t -> unit) = "useDrag"
+[@@mel.module "react-dnd"]
+
+external use_drop :
+  (unit -> < accept : string ; drop : item -> unit ; collect : monitor -> hovered > Js.t) ->
+  string array ->
+  hovered * (Dom.element Js.Nullable.t -> unit) = "useDrop"
+[@@mel.module "react-dnd"]
+
+module Card = struct
+  let[@react.component] make ~id =
+    let collected, drag, _ =
+      use_drag
+        (fun () ->
+          [%mel.obj
+            {
+              _type = "card";
+              item = [%mel.obj { id }];
+              collect = (fun monitor -> [%mel.obj { handler = monitor##getHandlerId (); dragging = monitor##isDragging () }]);
+            }])
+        [| id |]
+    in
+    <div className="card" ref=(ReactDOM.Ref.callbackDomRef drag) title=id id=collected##handler>
+      (React.string (id ^ (match collected##dragging with true -> " (dragging)" | false -> "")))
+    </div>
+end
+
+module Bin = struct
+  let[@react.component] make ~name ~cards ~onDrop =
+    let collected, drop =
+      use_drop
+        (fun () ->
+          [%mel.obj
+            {
+              accept = "card";
+              drop = (fun item -> onDrop item##id);
+              collect = (fun monitor -> [%mel.obj { handler = monitor##getHandlerId (); over = monitor##isOver () }]);
+            }])
+        [| name |]
+    in
+    <section className="bin" ref=(ReactDOM.Ref.callbackDomRef drop) title=name id=collected##handler>
+      <h2>(React.string (name ^ (match collected##over with true -> " (over)" | false -> "")))</h2>
+      (React.array (Array.map (fun id -> <Card key=id id />) cards))
+    </section>
+end
+
+let without id cards = Array.of_list (List.filter (fun other -> not (String.equal other id)) (Array.to_list cards))
+
+module Board = struct
+  let[@react.component] make ~manager ~log =
+    let left, setLeft = React.useState (fun () -> [| "a"; "b"; "c" |]) in
+    let right, setRight = React.useState (fun () -> [||]) in
+    let moved into id =
+      log ("drop " ^ id ^ " into " ^ into);
+      setLeft (fun cards -> match into with "left" -> Array.append (without id cards) [| id |] | _ -> without id cards);
+      setRight (fun cards -> match into with "right" -> Array.append (without id cards) [| id |] | _ -> without id cards)
+    in
+    let data : bar array =
+      [| [%mel.obj { name = "left"; cards = Array.length left }]; [%mel.obj { name = "right"; cards = Array.length right }] |]
+    in
+    <DndProvider manager>
+      <div className="board">
+        <Bin name="left" cards=left onDrop=(moved "left") />
+        <Bin name="right" cards=right onDrop=(moved "right") />
+        <BarChart data width=300 height=150>
+          <XAxis dataKey="name" />
+          <YAxis allowDecimals=false />
+          <Bar dataKey="cards" fill="#36c" isAnimationActive=false />
+        </BarChart>
+      </div>
+    </DndProvider>
+end
+
+let mount_board root log =
+  let manager = create_manager test_backend in
+  let client = ReactDOM.Client.createRoot root in
+  ReactDOM.Client.render client <Board manager log />;
+  (client, manager)
+
+let unmount_board (client, _) = ReactDOM.Client.unmount client ()

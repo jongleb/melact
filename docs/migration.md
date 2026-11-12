@@ -48,6 +48,18 @@ and `react` and `react-dom` 18 among its npm dependencies:
 + (preprocess (staged_pps melange.ppx melact-ppx -- -typed -foreign-engine island))
 ```
 
+Components run on npm's React, in islands; a package whose hooks the same binding file binds
+(`useDrag` from react-dnd) stays on `melact.compat` (add `melact.compat` to the libraries), with its
+providers. Bundle the app with melact.island's esbuild plugin, which gives each module the React it
+needs:
+
+```js
+import { esbuildColours } from "./_build/default/app/output/node_modules/melact.island/plugin.mjs";
+const colours = esbuildColours({ compat: "./_build/default/app/output/node_modules/melact.compat" });
+await esbuild.build({ entryPoints: ["…/app.mjs"], bundle: true, plugins: [colours.plugin] });
+console.log(colours.duplicates()); // modules bundled twice, once per React: should be empty
+```
+
 ## Step 1: pull state out of hooks into a reducer
 
 Take one screen. Gather its `useState` calls into one record and every way it changes into one

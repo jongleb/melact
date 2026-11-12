@@ -3,5 +3,6 @@
  (public_name melact.island)
  (modes melange)
  (libraries melact melact_runtime melhole melange.dom)
+ (melange.runtime_deps plugin.mjs)
  (preprocess
   (pps melange.ppx)))
