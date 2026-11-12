@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Melact's delegated walk can run in segments: `Events.segment` runs the handlers from where the last
+  segment stopped up to a slot and makes the document's walk resume there, so that islands of real
+  React can interleave Melact's handlers with React's propagation. It costs every app two property
+  reads in the walk, 44 to 71 gzip bytes; apps that never call it carry no more of it.
 - With `-typed`, an unqualified `Array.map`, `Array.mapi` or `List.map` whose two arguments are names
   or fields, such as `Array.map(renderRow, items)` with `renderRow` from props, is a keyed loop: the
   type of the call tells which argument is the row, Stdlib's order or a project's `Array` that takes

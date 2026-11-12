@@ -37,6 +37,12 @@ val track : Dom.element -> unit
     is put back: Melact renders there at once, as React does with [flushSync] for controlled inputs. *)
 val after_controlled : (unit -> unit) ref
 
+(** [segment event slot]: runs the delegated handlers for [event] from where the last segment
+    stopped, or its target, up to [slot], which they do not reach, and makes the document's walk
+    start at [slot]; an island of real React calls it from a slot's React handler, so that Melact's
+    handlers between islands run inside React's propagation. *)
+val segment : Dom.event -> Dom.node -> unit
+
 val listen : Dom.element -> string -> unit
 
 val unlisten : Dom.element -> string -> unit
