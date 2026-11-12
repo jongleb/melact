@@ -328,6 +328,89 @@ let component ~loc ~name ~props_constructor ~hooks expression =
               match param.pparam_desc with Pparam_val (_, _, pattern) -> collector#pattern pattern found | Pparam_newtype _ -> found)
             (collector#expression body []) params
         in
+        let asked = ref 0 in
+        let primitive value cell =
+          let operation txt =
+            match List.filter (fun part -> not (String.equal part "Stdlib")) (Longident.flatten_exn txt) with
+            | [
+                ( "+" | "-" | "*" | "/" | "mod" | "+." | "-." | "*." | "/." | "~-" | "~-." | "==" | "!=" | "&&" | "||" | "not"
+                | "^" | "abs" | "abs_float" | "succ" | "pred" | "float_of_int" | "int_of_float" | "string_of_int" | "fst"
+                | "snd" );
+              ]
+            | [ ("Array" | "String"); ("length" | "get" | "unsafe_get") ]
+            | [ "Js"; ("Array" | "Array2" | "String" | "String2"); "length" ] ->
+                `Constant_time
+            | [ ("=" | "<>" | "<" | ">" | "<=" | ">=" | "compare" | "min" | "max") ] -> `Compared
+            | _ -> `Costly
+            | exception Invalid_argument _ -> `Costly
+          in
+          let rec cheap value =
+            let all values =
+              List.fold_left (fun found value -> match found with `Cheap -> cheap value | `Costly -> `Costly) `Cheap values
+            in
+            match value.pexp_desc with
+            | Pexp_ident _ | Pexp_constant _ | Pexp_construct (_, None) | Pexp_variant (_, None) -> `Cheap
+            | Pexp_field (inner, _) | Pexp_constraint (inner, _) -> cheap inner
+            | Pexp_ifthenelse (test, yes, Some no) -> all [ test; yes; no ]
+            | Pexp_match (target, cases) ->
+                all (target :: List.concat_map (fun case -> Option.to_list case.pc_guard @ [ case.pc_rhs ]) cases)
+            | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, arguments) -> (
+                match operation txt with
+                | `Constant_time | `Compared -> all (List.map snd arguments)
+                | `Costly -> `Costly)
+            | _ -> `Costly
+          in
+          match cheap value with
+          | `Costly -> cell value
+          | `Cheap ->
+              let compared = ref [] in
+              let marker =
+                object
+                  inherit Ast_traverse.map as super
+
+                  method! expression expression =
+                    let expression = super#expression expression in
+                    match expression.pexp_desc with
+                    | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
+                        match operation txt with
+                        | `Compared ->
+                            let arguments =
+                              List.map
+                                (fun (label, argument) ->
+                                  let question, argument = Melhole_typed.Question.expression argument in
+                                  compared := question :: !compared;
+                                  (label, argument))
+                                arguments
+                            in
+                            { expression with pexp_desc = Pexp_apply (callee, arguments) }
+                        | `Constant_time | `Costly -> expression)
+                    | _ -> expression
+                end
+              in
+              let question, value = Melhole_typed.Question.expression (marker#expression value) in
+              incr asked;
+              Melhole_typed.Site.expression (cell value) ~decide:(fun file cell ->
+                  let not_immediate =
+                    List.find_opt
+                      (fun question ->
+                        match Option.map Melhole_typed.Mutability.of_answer (Melhole_typed.File.answer file question) with
+                        | Some Melhole_typed.Mutability.Immediate -> false
+                        | Some (Melhole_typed.Mutability.Immutable_boxed | Mutable_inside | Unknown) | None -> true)
+                      (question :: !compared)
+                  in
+                  match (not_immediate, cell.pexp_desc) with
+                  | ( None,
+                      Pexp_let
+                        ( _,
+                          _,
+                          {
+                            pexp_desc =
+                              Pexp_match (_, [ _; { pc_rhs = { pexp_desc = Pexp_apply (_, [ _; _; _; (Nolabel, stored) ]); _ }; _ } ]);
+                            _;
+                          } ) ) ->
+                      stored
+                  | _ -> cell)
+        in
         let cache value =
           match (stateful value, Free.captured (untagged#expression value)) with
           | `Stateful, _ | `Pure, Volatile -> value
@@ -352,11 +435,12 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                       Melact_runtime.Memo.lookup __melact_memo [%e eint ~loc at]
                         [%e pexp_array ~loc (List.map (fun capture -> [%expr Melhole.View.Input [%e capture]]) more)]]
               in
-              [%expr
-                let __melact_found = [%e lookup] in
-                match Melact_runtime.Memo.kept __melact_found with
-                | Some __melact_kept -> __melact_kept
-                | None -> Melact_runtime.Memo.store __melact_memo [%e eint ~loc (at + count)] __melact_found [%e value]])
+              primitive value (fun value ->
+                  [%expr
+                    let __melact_found = [%e lookup] in
+                    match Melact_runtime.Memo.kept __melact_found with
+                    | Some __melact_kept -> __melact_kept
+                    | None -> Melact_runtime.Memo.store __melact_memo [%e eint ~loc (at + count)] __melact_found [%e value]]))
         in
         let rec worth value =
           match value.pexp_desc with
@@ -450,13 +534,82 @@ let component ~loc ~name ~props_constructor ~hooks expression =
           end
         in
         let remembered walked count =
-          [%expr
-            let __melact_memo =
-              Melact_runtime.Memo.cells
-                [%e Hoist.hoist ~loc ~unused:Hoist.Kept "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
-                [%e eint ~loc count]
-            in
-            [%e walked]]
+          let made =
+            [%expr
+              let __melact_memo =
+                Melact_runtime.Memo.cells
+                  [%e Hoist.hoist ~loc ~unused:Hoist.Kept "hook" [%expr (Melact_runtime.Hook.key () : Melact_runtime.Memo.t Melact_runtime.Hook.key)]]
+                  [%e eint ~loc count]
+              in
+              [%e walked]]
+          in
+          let placed expression =
+            match expression.pexp_desc with
+            | Pexp_apply
+                ( ({ pexp_desc = Pexp_ident { txt = Ldot (Ldot (Lident "Melact_runtime", "Memo"), name); _ }; _ } as callee),
+                  (Nolabel, ({ pexp_desc = Pexp_ident { txt = Lident "__melact_memo"; _ }; _ } as cells))
+                  :: (Nolabel, { pexp_desc = Pexp_constant (Pconst_integer (digits, None)); pexp_loc; _ })
+                  :: rest ) ->
+                Option.map
+                  (fun taken ->
+                    ( int_of_string digits,
+                      taken,
+                      fun at -> { expression with pexp_desc = Pexp_apply (callee, (Nolabel, cells) :: (Nolabel, eint ~loc:pexp_loc at) :: rest) } ))
+                  (match (name, rest) with
+                  | ("lookup0" | "lookup1" | "graph" | "store"), _ -> Some 1
+                  | "lookup2", _ -> Some 2
+                  | "lookup3", _ -> Some 3
+                  | "lookup4", _ -> Some 4
+                  | "lookup", (Nolabel, { pexp_desc = Pexp_array captured; _ }) :: _ -> Some (List.length captured)
+                  | _ -> None)
+            | _ -> None
+          in
+          match !asked with
+          | 0 -> made
+          | _ ->
+              Melhole_typed.Site.expression made ~decide:(fun _ made ->
+                  match made.pexp_desc with
+                  | Pexp_let (flag, [ ({ pvb_expr = { pexp_desc = Pexp_apply (cells, [ key; _ ]); _ } as counted; _ } as binding) ], walked) ->
+                      let used =
+                        let finder =
+                          object
+                            inherit [int list] Ast_traverse.fold as super
+
+                            method! expression expression found =
+                              super#expression expression
+                                (Option.fold ~none:found
+                                   ~some:(fun (at, taken, _) -> List.init taken (fun index -> at + index) @ found)
+                                   (placed expression))
+                          end
+                        in
+                        List.sort_uniq Int.compare (finder#expression walked [])
+                      in
+                      let renumbered =
+                        object
+                          inherit Ast_traverse.map as super
+
+                          method! expression expression =
+                            let expression = super#expression expression in
+                            Option.fold ~none:expression
+                              ~some:(fun (at, _, moved) -> Option.fold ~none:expression ~some:moved (List.find_index (Int.equal at) used))
+                              (placed expression)
+                        end
+                      in
+                      {
+                        made with
+                        pexp_desc =
+                          Pexp_let
+                            ( flag,
+                              [
+                                {
+                                  binding with
+                                  pvb_expr =
+                                    { counted with pexp_desc = Pexp_apply (cells, [ key; (Nolabel, eint ~loc (max 1 (List.length used))) ]) };
+                                };
+                              ],
+                              renumbered#expression walked );
+                      }
+                  | _ -> made)
         in
         match
           match rendering with
@@ -466,10 +619,10 @@ let component ~loc ~name ~props_constructor ~hooks expression =
           | Graph.Impure -> None
         with
         | Some plan ->
-            let held pattern mask ~source value kept rest =
+            let held pattern mask ~source ~step value kept rest =
               let at = !sites in
               sites := at + 1;
-              let found =
+              let cell value =
                 [%expr
                   let __melact_found =
                     Melact_runtime.Memo.graph __melact_memo [%e eint ~loc at] __melact_changed [%e eint ~loc mask]
@@ -478,6 +631,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                   | Some __melact_kept -> [%e kept]
                   | None -> Melact_runtime.Memo.store __melact_memo [%e eint ~loc at] __melact_found [%e value]]
               in
+              let found = match step with `Hook -> cell value | `Derived -> primitive value cell in
               [%expr
                 let [%p pattern] =
                   [%e
@@ -497,14 +651,14 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                   | Graph.Statement value -> [%expr [%e walker#expression value]; [%e rest]]
                   | Graph.Called (pattern, value) -> [%expr let [%p pattern] = [%e value] in [%e rest]]
                   | Graph.Context { pattern; context; bit } ->
-                      held pattern bit ~source:[%expr React.useContext [%e context]]
+                      held pattern bit ~source:[%expr React.useContext [%e context]] ~step:`Hook
                         [%expr
                           Melact_runtime.Instance.consume_source (Melact_runtime.Instance.current ())
                             (Melact_runtime.Instance.Bits [%e eint ~loc bit])
                             (match [%e context] with React.Context.Context __melact_context -> __melact_context)]
                         [%expr __melact_kept] rest
                   | Graph.Memo { pattern; hook; mask } ->
-                      held pattern mask ~source:hook [%expr ([%e hook] [@alert "-hook"])]
+                      held pattern mask ~source:hook ~step:`Hook [%expr ([%e hook] [@alert "-hook"])]
                         [%expr Melact_runtime.Instance.skip_hook (); __melact_kept] rest
                   | Graph.Effect { hook; mask } ->
                       [%expr
@@ -513,7 +667,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                         | Melact_runtime.Instance.Reached -> (([%e hook] [@alert "-hook"]) : unit));
                         [%e rest]]
                   | Graph.Derived { pattern; value; mask } ->
-                      held pattern mask ~source:value (walker#expression value) [%expr __melact_kept] rest)
+                      held pattern mask ~source:value ~step:`Derived (walker#expression value) [%expr __melact_kept] rest)
                 plan.steps
                 [%expr
                   match Melact_runtime.Instance.reaches __melact_changed [%e eint ~loc plan.reads] with

@@ -451,7 +451,7 @@ def graph(p):
         ("let theme = useContext ctx", [2], "kept"),
         ("let fold, setFold = useState …", [3], "called"),
         ("useEffect1 … [| bulk.generation |]", [1], "skipped"),
-        ("let label = item.title ^ theme", [0, 2], "kept"),
+        ("let label = cx [item.kind; theme]", [0, 2], "kept"),
         ("<li className=(label … fold) …>", [0, 2, 3], "runs"),
     ]
     for i, (code, bits, state) in enumerate(rows):
@@ -1466,7 +1466,9 @@ def cached(p):
     body += text(228, 340, "is changed in place afterwards, so it is made on every render;", size=11.5, cls="muted")
     body += text(0, 360, "set n, then set it back in the same batch", size=11.5, cls="mono")
     body += text(298, 360, "ends where it started, so the component does not render at all.", size=11.5, cls="muted")
-    return svg(p, 880, 370, "Values kept between renders in Melact: a badge update renders the parent of a list. As written, reason-react code makes a new filtered array, a new onPick closure and a new style on every render, so every Row's props differ and 1,000 rows render. melact-ppx keeps each let and each value written in props, keyed by what it captures with ===: query and items are the same, so the old array comes back; item.id and pick are the same, so the same closure; so the props are equal and the rows are not rendered. A let changed in place afterwards, like a ref followed by :=, is made on every render, and state set and set back in one batch does not render", body)
+    body += text(0, 380, "let id = \"row-\" ^ key", size=11.5, cls="mono")
+    body += text(170, 380, "is cheap and typed a string under -typed: no cell, made again, compared by value.", size=11.5, cls="muted")
+    return svg(p, 880, 390, "Values kept between renders in Melact: a badge update renders the parent of a list. As written, reason-react code makes a new filtered array, a new onPick closure and a new style on every render, so every Row's props differ and 1,000 rows render. melact-ppx keeps each let and each value written in props, keyed by what it captures with ===: query and items are the same, so the old array comes back; item.id and pick are the same, so the same closure; so the props are equal and the rows are not rendered. A let changed in place afterwards, like a ref followed by :=, is made on every render, and state set and set back in one batch does not render; under -typed a cheap let typed a primitive, like a string made with ^, has no cell and is made again on every render", body)
 
 
 def hot(p):

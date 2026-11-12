@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- With `-typed`, a cheap `let` of a component typed `Immediate` (`tick * 2`, `"field-" ^ name`,
+  `match selection with Selected id when id = event.id -> Highlighted | … -> Plain`) has no cache
+  cell, as React Compiler does not memoize primitives: it is computed on every render, which costs
+  less than looking the cell up. A structural comparison counts as cheap only between values typed
+  `Immediate`; folds, filters and other calls keep their cells. The cells left are numbered without
+  gaps. Over bench/classics 16 of 402 cells go, one of them in every row of the event table and the
+  file tree.
 - The staged, typed stanza is the default: `docs/migration.md`, the README and Meltea's README
   recommend `(staged_pps melange.ppx melact-ppx -- -typed)` (and the same for `meltea-ppx`), still
   two lines of dune; plain `pps` keeps working with fewer optimizations. Every benchmark app, the 30

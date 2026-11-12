@@ -1,0 +1,52 @@
+(** A [+] of the project's own that makes a record: cheap to read, but its result is a new value each time. *)
+module Vector = struct
+  type t = { x : int; y : int }
+
+  let ( + ) a b = { x = a.x + b.x; y = a.y + b.y }
+  let show vector = string_of_int vector.x ^ "," ^ string_of_int vector.y
+end
+
+let origins = [| { Vector.x = 0; y = 0 }; { Vector.x = 5; y = 0 } |]
+let renders = ref 0
+let outside = ref 0
+
+module Shown = struct
+  let[@react.component] make ~(at : Vector.t) =
+    incr renders;
+    <b>(React.string (Vector.show at))</b>
+end
+
+module Graphed = struct
+  open Vector
+
+  let[@react.component] make ~step =
+    let tick, setTick = React.useState (fun () -> 0) in
+    let shift, setShift = React.useState (fun () -> 0) in
+    let doubled = tick * 2 in
+    let third = tick = 3 in
+    let still = origins.(0) = step in
+    let at = origins.(shift mod 2) + step in
+    <p>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int doubled)(React.string (string_of_bool third ^ string_of_bool still))</button>
+      <button className="shift" onClick=(fun _ -> setShift succ)>(React.string "shift")</button>
+      <Shown at />
+    </p>
+end
+
+module Read = struct
+  open Vector
+
+  let[@react.component] make ~step =
+    let tick, setTick = React.useState (fun () -> 0) in
+    let shift, setShift = React.useState (fun () -> 0) in
+    ignore !outside;
+    let doubled = tick * 2 in
+    let third = tick = 3 in
+    let still = origins.(0) = step in
+    let at = origins.(shift mod 2) + step in
+    <p>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int doubled)(React.string (string_of_bool third ^ string_of_bool still))</button>
+      <button className="shift" onClick=(fun _ -> setShift succ)>(React.string "shift")</button>
+      <Shown at />
+    </p>
+end

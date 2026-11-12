@@ -4,24 +4,24 @@
     "bench/meltea": 11615,
     "bench/ssr/melact client": 19950,
     "bench/ssr/meltea client": 12607,
-    "examples/counter": 12664,
-    "examples/todomvc": 18915,
-    "bench/classics/admin": 30062,
+    "examples/counter": 12591,
+    "examples/todomvc": 18862,
+    "bench/classics/admin": 30046,
     "bench/classics/autocomplete": 27472,
-    "bench/classics/blocks": 29690,
-    "bench/classics/calendar": 44437,
+    "bench/classics/blocks": 29652,
+    "bench/classics/calendar": 44412,
     "bench/classics/chat": 29415,
     "bench/classics/chess": 29063,
-    "bench/classics/conduit": 31330,
+    "bench/classics/conduit": 31282,
     "bench/classics/dashboard": 32771,
-    "bench/classics/datagrid": 30641,
+    "bench/classics/datagrid": 30625,
     "bench/classics/diff": 34257,
     "bench/classics/email": 30813,
-    "bench/classics/eventtable": 29435,
+    "bench/classics/eventtable": 29421,
     "bench/classics/feed": 27496,
-    "bench/classics/filetree": 27266,
-    "bench/classics/gallery": 28533,
-    "bench/classics/gantt": 43653,
+    "bench/classics/filetree": 27220,
+    "bench/classics/gallery": 28519,
+    "bench/classics/gantt": 43612,
     "bench/classics/hackernews": 26444,
     "bench/classics/jsontree": 25203,
     "bench/classics/kanban": 31618,
@@ -29,13 +29,13 @@
     "bench/classics/markdown": 30716,
     "bench/classics/minesweeper": 21409,
     "bench/classics/playlist": 44951,
-    "bench/classics/settings": 31645,
-    "bench/classics/shop": 29432,
+    "bench/classics/settings": 31634,
+    "bench/classics/shop": 29439,
     "bench/classics/spreadsheet": 30069,
     "bench/classics/todomvc": 22476,
     "bench/classics/trace": 31575,
-    "bench/classics/virtuallist": 25305,
-    "bench/classics/wizard": 32626
+    "bench/classics/virtuallist": 25242,
+    "bench/classics/wizard": 32621
   },
   "growth": [
     {
@@ -525,6 +525,16 @@
         "bench/ssr/meltea client": [
           12918,
           12939
+        ]
+      }
+    },
+    {
+      "date": "2026-11-12",
+      "reason": "a cheap let typed Immediate loses its cache cell (tax = subtotal *. 0.08): shorter code, +7 gzip bytes on shop",
+      "grown": {
+        "bench/classics/shop": [
+          29432,
+          29439
         ]
       }
     }

@@ -1,0 +1,69 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+external read_file : string -> string -> string = "readFileSync" [@@mel.module "node:fs"]
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+let act run = adopt (React.act run)
+
+(** The parent whose path is under test: the update graph, or the cells looked up by what they capture. *)
+type parent = Graphed | Read
+
+let law parent =
+  check_async
+    (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+         let tape = tape values in
+         let root = attached () in
+         let client = ReactDOM.Client.createRoot root in
+         let step = { Primitive_cells.Vector.x = 1; y = 2 } in
+         Primitive_cells.renders := 0;
+         let* () =
+           act (fun () ->
+               ReactDOM.Client.render client
+                 (match parent with Graphed -> <Primitive_cells.Graphed step /> | Read -> <Primitive_cells.Read step />))
+         in
+         let rec press remaining (ticks, shifts) =
+           match remaining with
+           | 0 ->
+               let shown = text_content root in
+               let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+               expect (shown, !Primitive_cells.renders)
+               |. to_equal (string_of_int (2 * ticks) ^ string_of_bool (ticks = 3) ^ "false" ^ "shift" ^ string_of_int (match shifts mod 2 with 0 -> 1 | _ -> 6) ^ ",2", 1 + shifts);
+               Js.Promise.resolve ()
+           | _ -> (
+               match draw tape 2 with
+               | 0 ->
+                   let* () = act (fun () -> click (select root ".tick")) in
+                   press (remaining - 1) (ticks + 1, shifts)
+               | _ ->
+                   let* () = act (fun () -> click (select root ".shift")) in
+                   press (remaining - 1) (ticks, shifts + 1))
+         in
+         press 12 (0, 0)))
+    [%mel.obj { numRuns = 100 }]
+
+let () =
+  describe "cells of values typed Immediate" (fun () ->
+      test_async "a let made by a cheap operator of another type keeps its cell on the update graph, so the child is not rendered again"
+        (fun () -> law Graphed);
+      test_async "a let made by a cheap operator of another type keeps its cell when cells are looked up by their captures"
+        (fun () -> law Read);
+      test "a cheap let typed Immediate has no cell, and the cells left are numbered without gaps" (fun () ->
+          let source =
+            read_file "_build/default/test/typed/melact/output/test/typed/melact/primitive_cells.mjs" "utf8"
+          in
+          let numbers pattern =
+            let regex = Js.Re.fromStringWithFlags pattern ~flags:"g" in
+            let rec all found =
+              match Js.Re.exec ~str:source regex with
+              | Some result -> all (int_of_string (Option.get (Js.Nullable.toOption (Js.Re.captures result).(1))) :: found)
+              | None -> List.rev found
+            in
+            all []
+          in
+          expect
+            ( numbers {|Memo\.cells\([^,]+, (\d+)\)|},
+              List.sort_uniq compare (numbers {|Memo\.(?:lookup\d?|graph|store)\(__melact_memo, (\d+)|}),
+              List.length (numbers {|Memo\.store\(__melact_memo, (\d+)|}) )
+          |. to_equal ([ 2; 5 ], [ 0; 1; 2; 3; 4 ], 4)))

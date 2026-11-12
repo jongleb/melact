@@ -324,17 +324,19 @@ so a component calling another module's hook keeps its graph under `staged_pps`.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/cached-dark.svg">
-  <img src="assets/cached.svg" alt="Values kept between renders in Melact: a badge update renders the parent of a list. As written, reason-react code makes a new filtered array, a new onPick closure and a new style on every render, so every Row's props differ and 1,000 rows render. melact-ppx keeps each let and each value written in props, keyed by what it captures with ===: query and items are the same, so the old array comes back; item.id and pick are the same, so the same closure; so the props are equal and the rows are not rendered. A let changed in place afterwards, like a ref followed by :=, is made on every render, and state set and set back in one batch does not render" width="100%">
+  <img src="assets/cached.svg" alt="Values kept between renders in Melact: a badge update renders the parent of a list. As written, reason-react code makes a new filtered array, a new onPick closure and a new style on every render, so every Row's props differ and 1,000 rows render. melact-ppx keeps each let and each value written in props, keyed by what it captures with ===: query and items are the same, so the old array comes back; item.id and pick are the same, so the same closure; so the props are equal and the rows are not rendered. A let changed in place afterwards, like a ref followed by :=, is made on every render, and state set and set back in one batch does not render; under -typed a cheap let typed a primitive, like a string made with ^, has no cell and is made again on every render" width="100%">
 </picture>
 
 reason-react code writes closures, style records, arrays and child elements straight into props, and
 derives data in `let`s; each render makes them again, so children see new props. `melact-ppx` keeps
 each such value, as React Compiler does, keyed by the variables it captures, compared with `===`. A
 `let` is kept only when the rest of the body just reads it, so a `ref` changed with `:=` is made
-again on every render. A kept function still has a type of its own at every use, as a let gives it,
-so one handler can serve props of two types. Lists written with `Array.map`, `Belt.Array.map`,
-`Js.Array.map` or their `mapi` forms, piped or not, compile to keyed loops whose rows render only
-when their item, index or what they read outside changed.
+again on every render. Under `-typed` a cheap `let` whose type is a primitive (`"row-" ^ key`,
+`count * 2`) has no cell, as in React Compiler: making it again costs less than the lookup. A kept
+function still has a type of its own at every use, as a let gives it, so one handler can serve props
+of two types. Lists written with `Array.map`, `Belt.Array.map`, `Js.Array.map` or their `mapi`
+forms, piped or not, compile to keyed loops whose rows render only when their item, index or what
+they read outside changed.
 
 ### Hooks are typed by their call site
 

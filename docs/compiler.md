@@ -618,12 +618,30 @@ atomic field, a ref, a `Js.dict`, a `Js.t` with a setter, a `Hashtbl.t`, or a ty
 (`x_props -> React.element`, a `[@react.component]`) or `Of_props` (`props -> React.element`). The
 first site: a binding to npm's `Fragment` whose written type does not show a component, but expands
 to one of a `Js.t` with `children : React.element`, becomes `let fragment : t = Melact_npm.fragment`.
-The dual suite and the reported apps compile to the same JavaScript with and without `-typed`. The
-dual suite also runs with a test probe that asks the type of every variable passed to a function and
-checks that every question is answered and each variable typed `Immediate` is a JavaScript
-primitive. A native law checks the classifier and the component reading against their definitions on
+The reported apps compile to the same JavaScript with and without `-typed`. The dual suite also
+runs with a test probe that asks the type of every variable passed to a function and checks that
+every question is answered and each variable typed `Immediate` is a JavaScript primitive. A native law checks the classifier and the component reading against their definitions on
 generated declarations; 33 mutants of them and of the sites are caught. Typing takes the compilation
 of the dual suite's 2170 lines from about 0.45 s to 0.6 s; a file without a site is not typed.
+
+The second site is a cache cell. A cell keeps a value so that what reads it sees the same reference
+while its inputs stay; a value typed `Immediate` is compared by value, so the cell buys only the work
+of making it again. As React Compiler does not memoize primitives, a `let` of a component (or a step
+of its update graph) whose value is cheap and typed `Immediate` is computed on every render without a
+cell. Cheap means names, constants, constant constructors, fields, `if` and `match` over cheap parts,
+and calls of a fixed list of constant-time functions: arithmetic, `==`, `&&`, `^`, `succ`,
+`float_of_int`, `string_of_int`, `fst`, `Array.length`, `Array.get` and the like. A structural
+comparison (`=`, `<`, `compare`, `min`, `max`) is cheap only when each operand is typed `Immediate`
+too, so `id = event.id` loses its cell and `lines = previous` keeps it. A fold, a filter or a call of
+anything else keeps its cell whatever its type, since recomputing it on every render could be slower.
+Each such value asks its type, and the operands of its comparisons theirs; once the inner sites are
+decided, the component's cells are numbered again without the gaps and `Memo.cells` takes fewer. A
+project's own `+` that makes a record is cheap to the syntax but not `Immediate`, so its cell stays. A
+law in `test/typed/melact` clicks a parent through both cell paths (the update graph, and cells looked
+up by their captures) and counts the child's renders, and reads the compiled cells: five mutants
+(any type dropped, none dropped, comparisons not asked, no renumbering, every slot at 0) each break it.
+Over bench/classics 16 of 402 cells go, in 13 apps, among them one per row of the event table and the
+file tree (`Selected id when id = event.id -> Highlighted`).
 
 The staged, typed stanza is the one `docs/migration.md` recommends and the one the repository's apps
 build with: bench/, the 48 apps and repros of bench/classics, the examples and the ratchet's
