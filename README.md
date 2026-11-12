@@ -336,7 +336,8 @@ again on every render. Under `-typed` a cheap `let` whose type is a primitive (`
 function still has a type of its own at every use, as a let gives it, so one handler can serve props
 of two types. Lists written with `Array.map`, `Belt.Array.map`, `Js.Array.map` or their `mapi`
 forms, piped or not, compile to keyed loops whose rows render only when their item, index or what
-they read outside changed.
+they read outside changed. Under `-typed` a row passed by name, as in `Array.map(renderRow, items)`,
+is a loop too, whichever module's `map` it is: the type of the call tells which argument is the row.
 
 ### Hooks are typed by their call site
 

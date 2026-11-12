@@ -894,6 +894,15 @@ let mapper =
                   | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
                       let path = match Longident.flatten_exn txt with path -> path | exception Invalid_argument _ -> [] in
                       let unlabelled = List.filter_map (fun (label, value) -> match label with Nolabel -> Some value | Labelled _ | Optional _ -> None) arguments in
+                      let shape expression =
+                        match expression.pexp_desc with
+                        | Pexp_function _ -> `Function
+                        | Pexp_ident { txt = Lident name; _ } -> (
+                            match Option.map (fun definition -> definition.pexp_desc) (List.assoc_opt name self#definitions) with
+                            | Some (Pexp_function _) -> `Function
+                            | Some _ | None -> `Opaque)
+                        | _ -> `Opaque
+                      in
                       let given =
                         match (path, arguments, unlabelled) with
                         | (["Stdlib"; "Array"; ("map" | "mapi")] | ["Stdlib"; "List"; "map"]), [ _; _ ], [ row; items ]
@@ -903,15 +912,6 @@ let mapper =
                           ->
                             Some (path, row, items)
                         | (["Array"; ("map" | "mapi")] | ["List"; "map"]), [ _; _ ], [ first; second ] -> (
-                            let shape expression =
-                              match expression.pexp_desc with
-                              | Pexp_function _ -> `Function
-                              | Pexp_ident { txt = Lident name; _ } -> (
-                                  match Option.map (fun definition -> definition.pexp_desc) (List.assoc_opt name self#definitions) with
-                                  | Some (Pexp_function _) -> `Function
-                                  | Some _ | None -> `Opaque)
-                              | _ -> `Opaque
-                            in
                             match (path, shape first, shape second) with
                             | _, `Function, `Opaque -> Some (path, first, second)
                             | (["Array"; "map"] | ["List"; "map"]), `Opaque, `Function -> Some (path, second, first)
@@ -943,11 +943,28 @@ let mapper =
                             Some (Element.Items, row, [%expr Stdlib.Array.of_list [%e self#expression items]])
                         | _, (Some _ | None) -> None
                       in
-                      Option.map
-                        (fun mapped -> (mapped, match path with [ ("Array" | "List"); _ ] -> Some callee | _ -> None))
-                        mapped)
-                  | _ -> None)
-              | _ -> None
+                      let ordered =
+                        let rec plain expression =
+                          match expression.pexp_desc with
+                          | Pexp_ident _ -> `Plain
+                          | Pexp_field (inner, _) -> plain inner
+                          | _ -> `Computed
+                        in
+                        match (Melhole_typed.Mode.current (), shown, path, arguments, unlabelled) with
+                        | Melhole_typed.Mode.Typed, "array", [ "Array"; (("map" | "mapi") as name) ], [ _; _ ], [ first; second ]
+                        | Melhole_typed.Mode.Typed, "list", [ "List"; ("map" as name) ], [ _; _ ], [ first; second ] -> (
+                            match (shape first, shape second, plain first, plain second) with
+                            | `Opaque, `Opaque, `Plain, `Plain ->
+                                Some ((match name with "mapi" -> Element.Numbered | _ -> Element.Items), first, second)
+                            | (`Function | `Opaque), (`Function | `Opaque), (`Plain | `Computed), (`Plain | `Computed) -> None)
+                        | (Melhole_typed.Mode.Typed | Untyped), _, _, _, _ -> None
+                      in
+                      match (mapped, ordered) with
+                      | Some mapped, _ -> `Looped (mapped, match path with [ ("Array" | "List"); _ ] -> Some callee | _ -> None)
+                      | None, Some (numbering, first, second) -> `Ordered (callee, numbering, first, second, shown)
+                      | None, None -> `Written)
+                  | _ -> `Written)
+              | _ -> `Written
             in
             let unnumbered (numbering, row, items) =
               match (numbering, row.pexp_desc) with
@@ -960,20 +977,74 @@ let mapper =
                   | Reads _ | Volatile -> (numbering, row, items))
               | (Element.Items | Element.Numbered), _ -> (numbering, row, items)
             in
-            Option.bind mapping (fun (mapped, opened) ->
-                let numbering, row, items = unnumbered mapped in
-                Option.map
-                  (fun loop -> Option.fold ~none:loop ~some:(fun callee -> [%expr let _ = [%e callee] in [%e loop]]) opened)
-                  (Element.loop self#frontend ~loc ~definitions:self#definitions
-                     ~view:(fun expression ->
-                       match expression.pexp_desc with
-                       | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", _); _ }; _ }, _)
-                       | Pexp_construct ({ txt = Lident ("::" | "[]"); _ }, _) ->
-                           true
-                       | _ -> false)
-                     ~stable:[]
-                     ~render:(fun element -> [%expr React.to_child [%e element]])
-                     ~numbering row items)));
+            let looped (mapped, opened) =
+              let numbering, row, items = unnumbered mapped in
+              Option.map
+                (fun loop -> Option.fold ~none:loop ~some:(fun callee -> [%expr let _ = [%e callee] in [%e loop]]) opened)
+                (Element.loop self#frontend ~loc ~definitions:self#definitions
+                   ~view:(fun expression ->
+                     match expression.pexp_desc with
+                     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", _); _ }; _ }, _)
+                     | Pexp_construct ({ txt = Lident ("::" | "[]"); _ }, _) ->
+                         true
+                     | _ -> false)
+                   ~stable:[]
+                   ~render:(fun element -> [%expr React.to_child [%e element]])
+                   ~numbering row items)
+            in
+            match mapping with
+            | `Written -> None
+            | `Looped found -> looped found
+            | `Ordered (callee, numbering, first, second, shown) ->
+                let collected items =
+                  match shown with "list" -> [%expr Stdlib.Array.of_list [%e self#expression items]] | _ -> self#expression items
+                in
+                let by_first = looped ((numbering, first, collected second), Some callee) in
+                let by_second = looped ((numbering, second, collected first), Some callee) in
+                let order answer =
+                  let collection value =
+                    match Melhole_typed.Answer.view value with
+                    | Melhole_typed.Answer.Named { path; _ } when String.equal path shown -> `Collection
+                    | Named _ | Function _ | Js_object _ | Other -> `Other
+                  in
+                  let row value =
+                    match (numbering, Melhole_typed.Answer.view value) with
+                    | Element.Items, Melhole_typed.Answer.Function (Unlabelled, _, _) -> `Row
+                    | Element.Numbered, Melhole_typed.Answer.Function (Unlabelled, index, rest) -> (
+                        match (Melhole_typed.Answer.view index, Melhole_typed.Answer.view rest) with
+                        | Melhole_typed.Answer.Named { path = "int"; _ }, Melhole_typed.Answer.Function (Unlabelled, item, _) -> (
+                            match Melhole_typed.Answer.view item with
+                            | Melhole_typed.Answer.Named { path = "int"; _ } -> `Other
+                            | Named _ | Function _ | Js_object _ | Other -> `Row)
+                        | _ -> `Other)
+                    | (Element.Items | Element.Numbered), _ -> `Other
+                  in
+                  match Melhole_typed.Answer.view answer with
+                  | Melhole_typed.Answer.Function (Unlabelled, first, rest) -> (
+                      match Melhole_typed.Answer.view rest with
+                      | Melhole_typed.Answer.Function (Unlabelled, second, _) -> (
+                          match (row first, collection second, collection first, row second) with
+                          | `Row, `Collection, _, _ -> Some `First
+                          | _, _, `Collection, `Row -> Some `Second
+                          | (`Row | `Other), (`Collection | `Other), (`Collection | `Other), (`Row | `Other) -> None)
+                      | Named _ | Function _ | Js_object _ | Other -> None)
+                  | Named _ | Function _ | Js_object _ | Other -> None
+                in
+                let question, asked = Melhole_typed.Question.expression callee in
+                let marker =
+                  object
+                    inherit Ast_traverse.map as super
+
+                    method! expression expression =
+                      match expression == callee with true -> asked | false -> super#expression expression
+                  end
+                in
+                let frontend = self#frontend in
+                Some
+                  (Melhole_typed.Site.choice
+                     (frontend.unwrap loc (frontend.map (marker#expression item)))
+                     ~among:(List.filter_map (fun (key, loop) -> Option.map (fun loop -> (key, loop)) loop) [ (`First, by_first); (`Second, by_second) ])
+                     ~decide:(fun file -> Option.bind (Melhole_typed.File.answer file question) order)));
       }
 
     method! attribute attribute =

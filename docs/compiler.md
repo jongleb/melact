@@ -127,6 +127,22 @@ a `-open` flag, none of which a file shows, and Belt's takes the collection firs
 unqualified `map` is the argument written as a function, inline or by a `let`, and a `mapi`, or a
 `map` neither of whose arguments is seen to be a function, stays as written.
 
+With `-typed`, the type of the call decides what the syntax cannot. When both arguments of an
+unqualified `Array.map`, `Array.mapi` or `List.map` are names or fields, as in
+`Array.map(renderRow, items)` with `renderRow` from props, both loops are built and the type of `map`
+at the call picks the one whose function faces the collection: Stdlib's
+`('a -> element) -> 'a array -> element array` takes the row first, a project's
+`'a array -> ('a -> element) -> element array` takes it second, and the row of a `mapi` must take an
+`int` before the item. When the items are `int` too, index and item cannot be told apart and the
+call stays as written. The loop not taken leaves nothing behind: the alternatives travel in an
+attribute, so that what they lift to the top of the module survives until the site is decided, and
+then every lifted definition that only a discarded alternative used goes. A law in
+`test/typed/melact` runs each such form against its twin written with the full path
+(`Stdlib.Array.map`, `Belt.Array.map`, `Stdlib.List.map`, `Stdlib.Array.mapi`), which the untyped rule
+already compiles to a loop, and checks the same DOM and the same calls of the row after every step;
+four mutants (no decision, the order swapped, `int` items taken as decided, the leftovers kept) each
+break the law or the build. No file of the corpus has such a call, so its output is unchanged.
+
 When an outer variable does change, the loop does not re-render every row. As in Vue Vapor's
 selectors, the compiler splits the row into its item and the smallest pieces without JSX that read
 outer variables (its leaves), for example

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- With `-typed`, an unqualified `Array.map`, `Array.mapi` or `List.map` whose two arguments are names
+  or fields, such as `Array.map(renderRow, items)` with `renderRow` from props, is a keyed loop: the
+  type of the call tells which argument is the row, Stdlib's order or a project's `Array` that takes
+  the collection first. A `mapi` over `int` items, whose index and item types agree, stays as written.
+  The loop not taken leaves no definition in the output.
 - With `-typed`, a cheap `let` of a component typed `Immediate` (`tick * 2`, `"field-" ^ name`,
   `match selection with Selected id when id = event.id -> Highlighted | … -> Plain`) has no cache
   cell, as React Compiler does not memoize primitives: it is computed on every render, which costs

@@ -1,0 +1,139 @@
+let calls = ref 0
+
+let item_row item =
+  incr calls;
+  <li key=item>(React.string item)</li>
+
+let indexed_row index item =
+  incr calls;
+  <li key=item>(React.string (string_of_int index ^ item))</li>
+
+let int_row index value =
+  incr calls;
+  <li key=(string_of_int index)>(React.int (index + value))</li>
+
+module Stdlib_order = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Array.map render items))</ul>
+    </div>
+end
+
+(** A module of the project named [Array] that takes the collection first, as Belt's does. *)
+module Collection_first = struct
+  module Array = struct
+    let map items f = Stdlib.Array.map f items
+  end
+
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Array.map items render))</ul>
+    </div>
+end
+
+module Listed = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.list (List.map render items))</ul>
+    </div>
+end
+
+module Indexed = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Array.mapi render items))</ul>
+    </div>
+end
+
+(** Items typed [int]: the index and the item of a [mapi] row cannot be told apart by type. *)
+module Ints = struct
+  let[@react.component] make ~render ~(items : int array) =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Array.mapi render items))</ul>
+    </div>
+end
+
+module Stdlib_twin = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Stdlib.Array.map render items))</ul>
+    </div>
+end
+
+module Belt_twin = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Belt.Array.map items render))</ul>
+    </div>
+end
+
+module Listed_twin = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.list (Stdlib.List.map render items))</ul>
+    </div>
+end
+
+module Indexed_twin = struct
+  let[@react.component] make ~render ~items =
+    let tick, setTick = React.useState (fun () -> 0) in
+    <div>
+      <button className="tick" onClick=(fun _ -> setTick succ)>(React.int tick)</button>
+      <ul>(React.array (Stdlib.Array.mapi render items))</ul>
+    </div>
+end
+
+(** Which list the parent renders: a form whose order only types tell, or its twin written with the module's full path. *)
+type form =
+  | Stdlib_form
+  | Collection_first_form
+  | Listed_form
+  | Indexed_form
+  | Ints_form
+  | Stdlib_twin_form
+  | Belt_twin_form
+  | Listed_twin_form
+  | Indexed_twin_form
+
+module Parent = struct
+  let[@react.component] make ~form =
+    let items, setItems = React.useState (fun () -> [| "a"; "b"; "c"; "d" |]) in
+    let edit at =
+      setItems (fun items ->
+          let copy = Stdlib.Array.copy items in
+          copy.(at) <- copy.(at) ^ "!";
+          copy)
+    in
+    <section>
+      <button className="edit-0" onClick=(fun _ -> edit 0)>(React.string "0")</button>
+      <button className="edit-1" onClick=(fun _ -> edit 1)>(React.string "1")</button>
+      <button className="edit-2" onClick=(fun _ -> edit 2)>(React.string "2")</button>
+      <button className="edit-3" onClick=(fun _ -> edit 3)>(React.string "3")</button>
+      (match form with
+      | Stdlib_form -> <Stdlib_order render=item_row items />
+      | Collection_first_form -> <Collection_first render=item_row items />
+      | Listed_form -> <Listed render=item_row items=(Stdlib.Array.to_list items) />
+      | Indexed_form -> <Indexed render=indexed_row items />
+      | Ints_form -> <Ints render=int_row items=(Stdlib.Array.map String.length items) />
+      | Stdlib_twin_form -> <Stdlib_twin render=item_row items />
+      | Belt_twin_form -> <Belt_twin render=item_row items />
+      | Listed_twin_form -> <Listed_twin render=item_row items=(Stdlib.Array.to_list items) />
+      | Indexed_twin_form -> <Indexed_twin render=indexed_row items />)
+    </section>
+end

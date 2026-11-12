@@ -1,0 +1,74 @@
+open Testing
+
+external test_async : string -> (unit -> unit Js.Promise.t) -> unit = "test"
+external adopt : unit Js.Promise.t -> unit Js.Promise.t = "resolve" [@@mel.scope "Promise"]
+external read_file : string -> string -> string = "readFileSync" [@@mel.module "node:fs"]
+
+let ( let* ) promise next = Js.Promise.then_ next promise
+let act run = adopt (React.act run)
+
+let traced form steps =
+  let root = attached () in
+  let client = ReactDOM.Client.createRoot root in
+  let* () = act (fun () -> ReactDOM.Client.render client <Typed_rows.Parent form />) in
+  let rec press remaining trace =
+    match remaining with
+    | [] ->
+        let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+        Js.Promise.resolve (List.rev trace)
+    | step :: rest ->
+        let before = !Typed_rows.calls in
+        let* () =
+          act (fun () ->
+              click (select root (match step with 4 -> ".tick" | at -> ".edit-" ^ string_of_int at)))
+        in
+        press rest ((text_content (select root "ul"), !Typed_rows.calls - before) :: trace)
+  in
+  press steps []
+
+let steps values =
+  let tape = tape values in
+  List.init 12 (fun _ -> draw tape 5)
+
+let twin form twin =
+  check_async
+    (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+         let steps = steps values in
+         let* typed = traced form steps in
+         let* written = traced twin steps in
+         expect typed |. to_equal written;
+         Js.Promise.resolve ()))
+    [%mel.obj { numRuns = 50 }]
+
+let () =
+  describe "rows of a map whose order only types tell" (fun () ->
+      test_async "Array.map of a row given in props draws as Stdlib.Array.map does" (fun () ->
+          twin Typed_rows.Stdlib_form Stdlib_twin_form);
+      test_async "a project's Array.map that takes the collection first draws as Belt.Array.map does" (fun () ->
+          twin Typed_rows.Collection_first_form Belt_twin_form);
+      test_async "List.map of a row given in props draws as Stdlib.List.map does" (fun () ->
+          twin Typed_rows.Listed_form Listed_twin_form);
+      test_async "Array.mapi of a row given in props draws as Stdlib.Array.mapi does" (fun () ->
+          twin Typed_rows.Indexed_form Indexed_twin_form);
+      test_async "Array.mapi over ints, whose index and item types agree, stays as written and draws every row on an edit"
+        (fun () ->
+          check_async
+            (async_property (tapes ~shortest:2 ~longest:30) (fun values ->
+                 let steps = steps values in
+                 let* trace = traced Typed_rows.Ints_form steps in
+                 let items = [| "a"; "b"; "c"; "d" |] in
+                 expect trace
+                 |. to_equal
+                      (List.map
+                         (fun step ->
+                           (match step with 4 -> () | at -> items.(at) <- items.(at) ^ "!");
+                           ( String.concat "" (Array.to_list (Array.mapi (fun index item -> string_of_int (index + String.length item)) items)),
+                             match step with 4 -> 0 | _ -> 4 ))
+                         steps);
+                 Js.Promise.resolve ()))
+            [%mel.obj { numRuns = 50 }]);
+      test "every list but the ints compiles to a loop, and the loops not taken leave nothing behind" (fun () ->
+          let source = read_file "_build/default/test/typed/melact/output/test/typed/melact/typed_rows.mjs" "utf8" in
+          let count pattern = Array.length (Js.String.split ~sep:pattern source) - 1 in
+          expect (count "Melhole__View.each(", count "Melhole__View.loop_site()", count "Stdlib__Array.mapi(")
+          |. to_equal (8, 8, 1)))
