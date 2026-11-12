@@ -1,0 +1,60 @@
+(* The dashboard of test/compat/charts.mlx with its recharts components bound in another file
+   (test/compat/recharts.mlx), as the team writes it: each chart and its children are one React tree.
+   test/compat/charts_apart.test.mjs drives it on reason-react and on islands. *)
+
+(** Which chart shows the data. *)
+type kind = Lines | Bars
+
+(** Whether series [b] is drawn. *)
+type second = Shown | Hidden
+
+module Dashboard = struct
+  let[@react.component] make () =
+    let data, setData = React.useState (fun () -> [| Recharts.point "p0" 4 7; Recharts.point "p1" 9 3; Recharts.point "p2" 6 5 |]) in
+    let kind, setKind = React.useState (fun () -> Lines) in
+    let second, setSecond = React.useState (fun () -> Shown) in
+    let suffix, setSuffix = React.useState (fun () -> "") in
+    let label value _ index = <span className="label">(React.string (value ^ suffix ^ " " ^ string_of_int index))</span> in
+    let series =
+      match second with
+      | Shown -> [| <Recharts.Line key="b" dataKey="b" stroke="#33c" isAnimationActive=false /> |]
+      | Hidden -> [||]
+    in
+    <div className="dashboard">
+      <button className="add" onClick=(fun _ ->
+          setData (fun data ->
+              Array.append data [| Recharts.point ("p" ^ string_of_int (Array.length data)) (Array.length data * 3 mod 10) (Array.length data * 7 mod 10) |]))>
+        (React.string "add")
+      </button>
+      <button className="raise" onClick=(fun _ ->
+          setData (fun data -> Array.mapi (fun index (p : Recharts.point) -> match index with 0 -> Recharts.point p##name (p##a + 1) p##b | _ -> p) data))>
+        (React.string "raise")
+      </button>
+      <button className="kind" onClick=(fun _ -> setKind (fun kind -> match kind with Lines -> Bars | Bars -> Lines))>(React.string "kind")</button>
+      <button className="second" onClick=(fun _ -> setSecond (fun second -> match second with Shown -> Hidden | Hidden -> Shown))>(React.string "second")</button>
+      <button className="suffix" onClick=(fun _ -> setSuffix (fun suffix -> suffix ^ "!"))>(React.string "suffix")</button>
+      (match kind with
+      | Lines ->
+          <Recharts.LineChart data width=400 height=200>
+            <Recharts.CartesianGrid strokeDasharray="3 3" />
+            <Recharts.XAxis dataKey="name" />
+            <Recharts.YAxis />
+            <Recharts.Legend formatter=label />
+            <Recharts.Line dataKey="a" stroke="#c33" isAnimationActive=false />
+            (React.array series)
+          </Recharts.LineChart>
+      | Bars ->
+          <Recharts.BarChart data width=400 height=200>
+            <Recharts.XAxis dataKey="name" />
+            <Recharts.YAxis />
+            <Recharts.Bar dataKey="a" fill="#c33" isAnimationActive=false />
+          </Recharts.BarChart>)
+    </div>
+end
+
+let mount_dashboard root =
+  let client = ReactDOM.Client.createRoot root in
+  ReactDOM.Client.render client <Dashboard />;
+  client
+
+let unmount_dashboard client = ReactDOM.Client.unmount client ()

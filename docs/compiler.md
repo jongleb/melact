@@ -1657,13 +1657,18 @@ the boundary.
   library renders: a closed popover's content is not mounted. A function in the props is wrapped
   once; its Melact results become slots (react-window's `rowComponent`). A mount of another bound
   component, from any file, becomes a React element of the island's own tree, so libraries that
-  read their children's DOM (react-window measures its rows) see the elements they rendered.
+  read their children's DOM (react-window measures its rows) see the elements they rendered. So does
+  each such mount in a list of Melact children (`<Recharts.LineChart><Recharts.XAxis /><Recharts.Line
+  /></Recharts.LineChart>` with the components bound in another file): the list becomes an array of
+  React elements, its other items a slot each, and the elements are marked as React marks children
+  passed one by one, so React does not ask them for keys.
 - **Commit.** Islands change during Melact's writes and commit after them, all at once, in one
   `flushSync` before Melact's layout effects (`Instance.before_layout`): a Melact parent's layout
   effect sees its islands' DOM. Melact components mounted in slots while React renders keep their
   effects apart (`Instance.captured`), which then join Melact's queues where the tree puts them
   (`Instance.queue_captured`, ordered by `Instance.tree_order`, which islands install to order
-  through slots by the island's place).
+  through slots by the island's place). Two slots of one island go in the order of React's tree,
+  read from their fibers, since a library may portal one of them elsewhere in the document.
 - **Events.** Every slot carries React handlers that run Melact's delegated walk from where the
   last segment stopped up to the slot (`Events.segment`), so that Melact's handlers between islands
   run inside React's propagation, and a Melact `stopPropagation` becomes React's. As React's

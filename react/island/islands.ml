@@ -160,15 +160,38 @@ let in_tree one other =
   let rec levels node inner =
     let rec up at =
       match Js.Undefined.toOption (node_property at slot_key) with
-      | Some slot -> Some slot.island_host
+      | Some (slot : slot) -> Some (at, slot.island_host)
       | None -> Option.bind (Dom_api.parent_node at) up
     in
-    Option.fold ~none:(node :: inner) ~some:(fun host -> levels host (node :: inner)) (up node)
+    Option.fold ~none:(node :: inner) ~some:(fun (element, host) -> levels host (element :: node :: inner)) (up node)
+  in
+  let in_react : Dom.node -> Dom.node -> int =
+    [%mel.raw
+      {|function (one, other) {
+          const fiberOf = (node) => {
+            for (const key in node) if (key.startsWith("__reactFiber$")) return node[key];
+            return undefined;
+          };
+          const chain = (fiber) => {
+            const up = [];
+            for (; fiber; fiber = fiber.return) up.push(fiber);
+            return up.reverse();
+          };
+          const same = (a, b) => a === b || a.alternate === b;
+          const ones = chain(fiberOf(one)), others = chain(fiberOf(other));
+          let at = 0;
+          while (at < ones.length && at < others.length && same(ones[at], others[at])) at++;
+          return at === 0 || at === ones.length || at === others.length ? 0 : ones[at].index - others[at].index;
+        }|}]
   in
   let rec apart one other =
+    let in_document a b = match Dom_api.compare_document_position a b land 4 with 0 -> 1 | _ -> -1 in
     match (one, other) with
     | a :: rest, b :: others when Dom_api.same a b -> apart rest others
-    | a :: _, b :: _ -> ( match Dom_api.compare_document_position a b land 4 with 0 -> 1 | _ -> -1)
+    | a :: _, b :: _ -> (
+        match (Js.Undefined.toOption (node_property a slot_key), Js.Undefined.toOption (node_property b slot_key)) with
+        | Some (_ : slot), Some (_ : slot) -> ( match in_react a b with 0 -> in_document a b | order -> order)
+        | Some _, None | None, Some _ | None, None -> in_document a b)
     | [], _ | _, [] -> 0
   in
   apart (levels one []) (levels other [])
@@ -443,23 +466,39 @@ let rec converted conversion given previous =
         set_field made "key" (value (Js.Null.fromOption key));
         set_field made "ref" (value Js.null);
         made_element (path ^ ".mount") (value mounting.foreign) mounting.given made before
-    | None, Some entries, _ ->
-        let earlier = Option.value ~default:[||] (Js.Undefined.toOption (listed before)) in
-        let shown =
-          Array.mapi
-            (fun index entry ->
-              carry (path ^ "." ^ string_of_int index) entry
-                (match index < Array.length earlier with true -> earlier.(index) | false -> value Js.undefined))
-            entries
-        in
-        unchanged before (Array.length entries = Array.length earlier) shown (fun () -> value (Array.map fst shown))
+    | None, Some entries, _ -> listing path entries before
     | None, None, Some made -> made_element (path ^ ".props") (field made "type") (field made "props") made before
     | None, None, None -> (
-        match carried path inner with
-        | Some slot -> (slot, match same slot before with true -> `Same | false -> `Changed)
-        | None ->
-            let shown = Option.fold ~none:inner ~some:wrapper (Js.Undefined.toOption (called inner)) in
-            (shown, match same shown before with true -> `Same | false -> `Changed))
+        let bound =
+          Option.bind (Js.Undefined.toOption (content inner)) (fun child ->
+              let parts = List.map value (View.items child) in
+              match List.exists (fun part -> Option.is_some (mounting_of part)) parts with
+              | true -> Some (Array.of_list parts)
+              | false -> None)
+        in
+        match bound with
+        | Some parts -> listing path parts before
+        | None -> (
+            match carried path inner with
+            | Some slot -> (slot, match same slot before with true -> `Same | false -> `Changed)
+            | None ->
+                let shown = Option.fold ~none:inner ~some:wrapper (Js.Undefined.toOption (called inner)) in
+                (shown, match same shown before with true -> `Same | false -> `Changed)))
+  and listing path entries before =
+    let earlier = Option.value ~default:[||] (Js.Undefined.toOption (listed before)) in
+    let checked : value -> unit = [%mel.raw {|function (element) { if (element._store) element._store.validated = true; }|}] in
+    let shown =
+      Array.mapi
+        (fun index entry ->
+          let shown, change =
+            carry (path ^ "." ^ string_of_int index) entry
+              (match index < Array.length earlier with true -> earlier.(index) | false -> value Js.undefined)
+          in
+          Option.iter checked (Js.Undefined.toOption (element_of shown));
+          (shown, change))
+        entries
+    in
+    unchanged before (Array.length entries = Array.length earlier) shown (fun () -> value (Array.map fst shown))
   and made_element path kind props made before =
     let earlier = Js.Undefined.toOption (element_of before) in
     let shown, change =

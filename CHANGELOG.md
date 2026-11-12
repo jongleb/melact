@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Islands: components bound in another file, listed among a bound component's children
+  (`<Recharts.LineChart><Recharts.XAxis /><Recharts.Line /></Recharts.LineChart>`), are one React tree
+  with it, not an island each, so libraries that read their children (recharts 2) see them; React no
+  longer warns of children without keys on islands; Melact effects in two slots of one island run in
+  React's tree order when a library portals one of them. Law: `test/compat/charts_apart.test.mjs`
+  (recharts bound in `recharts.mlx`, one island per chart, no key warnings). The mixed law picks its
+  clicks in the portal layer by class and title, as the order there is relaxed.
+
 - Fix (regression of the last fix): an annotated pattern that is not a variable, as
   `let {name, count}: Ctx.value = Ctx.current` in a component with hooks, lost its annotation, so its
   fields were unbound; such a pattern keeps the annotation and the value gets it too.

@@ -43,7 +43,13 @@ const engines = [
   ["melact.compat", Melact, {}],
   ["islands of npm's React", Island, { relax: enginesKeepTheirOrder, relaxLayer: portalsInAnyOrder }],
 ];
-const everywhere = (at, selector) => [at.root, at.layer].flatMap((scope) => Array.from(scope.querySelectorAll(selector)));
+// The layer's targets go by class and title, not by place: the islands engine may order portals there differently
+// (portalsInAnyOrder), and both sides must still click the same element.
+const everywhere = (at, selector) => {
+  const named = (node) => `${node.className}|${node.title}`;
+  const layered = Array.from(at.layer.querySelectorAll(selector)).sort((a, b) => named(a).localeCompare(named(b)));
+  return [...at.root.querySelectorAll(selector), ...layered];
+};
 
 const layered = (tape) => (at) => () => at.build.mount_layers(at.root, at.layer, tape, (line) => at.log.push(line));
 

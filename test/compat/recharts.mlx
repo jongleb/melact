@@ -1,0 +1,43 @@
+(* The recharts components test/compat/charts_apart.mlx draws, bound in a file of their own as the team binds them. *)
+
+(** A point of the charts' data. *)
+type point = < name : string ; a : int ; b : int > Js.t
+
+module LineChart = struct
+  external make : data:point array -> width:int -> height:int -> children:React.element -> React.element = "LineChart"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module BarChart = struct
+  external make : data:point array -> width:int -> height:int -> children:React.element -> React.element = "BarChart"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module Line = struct
+  external make : dataKey:string -> stroke:string -> isAnimationActive:bool -> React.element = "Line"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module Bar = struct
+  external make : dataKey:string -> fill:string -> isAnimationActive:bool -> React.element = "Bar"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module XAxis = struct
+  external make : dataKey:string -> React.element = "XAxis" [@@mel.module "recharts"] [@@react.component]
+end
+
+module YAxis = struct
+  external make : unit -> React.element = "YAxis" [@@mel.module "recharts"] [@@react.component]
+end
+
+module CartesianGrid = struct
+  external make : strokeDasharray:string -> React.element = "CartesianGrid" [@@mel.module "recharts"] [@@react.component]
+end
+
+module Legend = struct
+  external make : formatter:(string -> Js.Json.t -> int -> React.element) -> React.element = "Legend"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+let point name a b : point = [%mel.obj { name; a; b }]
