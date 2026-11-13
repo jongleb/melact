@@ -358,6 +358,9 @@ module Style : sig
   val declarations : t -> (string * string) list
 end
 
+(** reason-react's name for {!Style.t}. *)
+type style = Style.t
+
 (** What a [ref] prop receives. *)
 type domRef =
   | Current of Dom.element Js.nullable React.ref  (** Set to the element once mounted. *)

@@ -126,22 +126,22 @@ Holes at every depth; markers only between neighbours that would merge:
                       (Melhole.View.Input name);
                     (match __melhole_changed_2 with
                      | Melhole.View.Unchanged -> ()
-                     | _ ->
+                     | Melhole.View.Changed ->
                          Melhole.Dom_api.show __melhole_hole_0
                            (Melhole.Dom_api.shown_string (name : string)));
                     (match __melhole_changed_1 with
                      | Melhole.View.Unchanged -> ()
-                     | _ ->
+                     | Melhole.View.Changed ->
                          Melhole.View.set_content __melhole_hole_1
                            (React.to_child extra));
                     (match __melhole_changed_1 with
                      | Melhole.View.Unchanged -> ()
-                     | _ ->
+                     | Melhole.View.Changed ->
                          Melhole.View.set_content __melhole_hole_2
                            (React.to_child extra));
                     (match __melhole_changed_0 with
                      | Melhole.View.Unchanged -> ()
-                     | _ ->
+                     | Melhole.View.Changed ->
                          Melhole.View.write_sole_text __melhole_hole_3
                            (Melhole.Dom_api.shown_int count));
                     ())))
@@ -345,12 +345,12 @@ Every kind of prop, static and dynamic, required and optional:
                             (Melhole.View.Input ());
                           (match __melhole_changed_5 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.write_attr __melhole_hole_0 "class"
                                  (Some (text : string)));
                           (match __melhole_changed_0 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                let __melhole_value =
                                  if (flag : bool) then Some "" else None in
                                (Melhole.View.put_attr
@@ -360,7 +360,7 @@ Every kind of prop, static and dynamic, required and optional:
                                   (Melhole.View.Input __melhole_value)));
                           (match __melhole_changed_0 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                let __melhole_value =
                                  Some
                                    (if (flag : bool) then "true" else "false") in
@@ -372,22 +372,22 @@ Every kind of prop, static and dynamic, required and optional:
                                   (Melhole.View.Input __melhole_value)));
                           (match __melhole_changed_4 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.write_attr __melhole_hole_3
                                  "tabIndex" (Some (string_of_int (tab : int))));
                           (match __melhole_changed_5 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.set_prop __melhole_hole_4
                                  (text : string));
                           (match __melhole_changed_0 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.set_prop __melhole_hole_5
                                  (flag : bool));
                           (match __melhole_changed_3 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.set_style __melhole_hole_6
                                  (ReactDOM.Style.declarations style));
                           Melhole.View.set_reference __melhole_hole_7
@@ -395,12 +395,12 @@ Every kind of prop, static and dynamic, required and optional:
                             (ReactDOM.Ref.attach ref);
                           (match __melhole_changed_1 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.write_attr __melhole_hole_8 "title"
                                  (maybe : string option));
                           (match __melhole_changed_2 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.put_handler __melhole_hole_9
                                  __melhole_key_9
                                  (fun __melhole_event ->
@@ -408,7 +408,7 @@ Every kind of prop, static and dynamic, required and optional:
                                       (React.Event.ofNative __melhole_event)));
                           (match __melhole_changed_6 with
                            | Melhole.View.Unchanged -> ()
-                           | _ ->
+                           | Melhole.View.Changed ->
                                Melhole.View.put_handler __melhole_hole_10
                                  __melhole_key_10
                                  (fun __melhole_event ->
@@ -434,7 +434,7 @@ Every kind of prop, static and dynamic, required and optional:
                        (Melhole.View.Input html);
                      (match __melhole_changed_0 with
                       | Melhole.View.Unchanged -> ()
-                      | _ ->
+                      | Melhole.View.Changed ->
                           Melhole.View.set_prop __melhole_hole_0
                             (Melhole.View.html_of html));
                      ())
@@ -550,13 +550,13 @@ A component with optional, defaulted and children props, and its signature:
                                       (Melhole.View.Input title);
                                     (match __melhole_changed_1 with
                                      | Melhole.View.Unchanged -> ()
-                                     | _ ->
+                                     | Melhole.View.Changed ->
                                          Melhole.Dom_api.show __melhole_hole_0
                                            (Melhole.Dom_api.shown_string
                                               (title : string)));
                                     (match __melhole_changed_0 with
                                      | Melhole.View.Unchanged -> ()
-                                     | _ ->
+                                     | Melhole.View.Changed ->
                                          Melhole.View.set_content
                                            __melhole_hole_1
                                            (React.to_child children));
@@ -692,7 +692,7 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                                      (Melhole.View.Input label);
                                    (match __melhole_changed_0 with
                                     | Melhole.View.Unchanged -> ()
-                                    | _ ->
+                                    | Melhole.View.Changed ->
                                         Melhole.View.write_attr
                                           __melhole_hole_0 "placeholder"
                                           (Some (label : string)));
@@ -791,7 +791,7 @@ Calls with children, keys and fragments:
                                      (Melhole.View.Input item);
                                    (match __melhole_changed_0 with
                                     | Melhole.View.Unchanged -> ()
-                                    | _ ->
+                                    | Melhole.View.Changed ->
                                         Melhole.View.write_sole_text
                                           __melhole_hole_0
                                           (Melhole.Dom_api.shown_string
@@ -920,7 +920,7 @@ Reason input:
                                      (Melhole.View.Input name);
                                    (match __melhole_changed_0 with
                                     | Melhole.View.Unchanged -> ()
-                                    | _ ->
+                                    | Melhole.View.Changed ->
                                         let __melhole_value =
                                           ("Hello, " ^ name : string) in
                                         (Melhole.View.put_sole_text
@@ -1027,7 +1027,7 @@ mlx input:
                                      (Melhole.View.Input name);
                                    (match __melhole_changed_0 with
                                     | Melhole.View.Unchanged -> ()
-                                    | _ ->
+                                    | Melhole.View.Changed ->
                                         let __melhole_value =
                                           ("Hello, " ^ name : string) in
                                         (Melhole.View.put_sole_text
@@ -1092,8 +1092,8 @@ callbacks of a component, so a hook called there is reported by the type checker
   75:                              else ((0)[@alert "+hook"])))
   76:                         [@alert "+hook"]) in
   82:                       [@alert "+hook"])
-  124:                                                       [@alert "+hook"]))
-  125:                                                   [@alert "+hook"])
+  125:                                                       [@alert "+hook"]))
+  126:                                                   [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare

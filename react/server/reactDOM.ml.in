@@ -1,5 +1,7 @@
 [@@@melact.style]
 
+type style = Style.t
+
 type domRef =
   | Current of Dom.element Js.nullable React.ref
   | Callback of (Dom.element Js.nullable -> unit)

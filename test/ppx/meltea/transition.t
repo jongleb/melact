@@ -105,7 +105,8 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                          with
                                          | (Melhole.View.Unchanged,
                                             Melhole.View.Unchanged) -> ()
-                                         | _ ->
+                                         | (Melhole.View.Changed, _)
+                                           | (_, Melhole.View.Changed) ->
                                              let __melhole_value =
                                                Some
                                                  (if id = chosen
@@ -121,7 +122,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                                    __melhole_value)));
                                         (match __melhole_changed_1 with
                                          | Melhole.View.Unchanged -> ()
-                                         | _ ->
+                                         | Melhole.View.Changed ->
                                              Melhole.View.write_sole_text
                                                __melhole_hole_1
                                                (Melhole.Dom_api.shown_int id));
@@ -234,7 +235,7 @@ With -hydratable, every template also gets the code that takes over a server's n
                       (Melhole.View.Input count);
                     (match __melhole_changed_0 with
                      | Melhole.View.Unchanged -> ()
-                     | _ ->
+                     | Melhole.View.Changed ->
                          Melhole.View.served_write_text __melhole_hole_0
                            (string_of_int (count : int)));
                     ())

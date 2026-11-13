@@ -43,6 +43,10 @@ stores the new one. On mount nothing is remembered yet, so every hole is evaluat
 variables are all physically unchanged is neither evaluated nor compared, and a nested JSX tree
 inside it is not built at all: `lazy` everywhere, without writing it.
 
+A hole that reads several variables matches the tuple of their changes with `Changed` written out at
+each position (`(Changed, _) | (_, Changed)`), never a bare `_`, so a project that turns warning 4
+(fragile match) into an error compiles every component.
+
 A local function is a fresh closure on every render, so a guard on it would always fire. A hole that
 calls one, such as `(button "run" "Create 1,000 rows" Run)` with `button` defined in the view, is
 guarded instead by what the function captures, looking through further local definitions. A

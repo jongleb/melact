@@ -29,6 +29,9 @@ type 'value ref = { mutable current : 'value }
 (** What renders ['props] into ['return]; reason-react's own shape, so plain functions are components. *)
 type ('props, 'return) componentLike = 'props -> 'return
 
+(** What a hook gives back as a function; reason-react's name for it. *)
+type ('input, 'output) callback = 'input -> 'output
+
 (** A component: a function of its props. [[@react.component]] gives every component its own
     abstract [props], built by [makeProps]. *)
 type 'props component = ('props, element) componentLike

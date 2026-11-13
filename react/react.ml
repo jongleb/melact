@@ -7,6 +7,8 @@ external of_child : View.child -> element = "%identity"
 external to_child : element -> View.child = "%identity"
 type 'value ref = { mutable current : 'value }
 type ('props, 'return) componentLike = 'props -> 'return
+type ('input, 'output) callback = 'input -> 'output
+type ('input, 'output) callbackAsync = 'input -> 'output Js.Promise.t
 type 'props component = ('props, element) componentLike
 
 external component : ('props, element) componentLike -> 'props component = "%identity"

@@ -11,6 +11,10 @@ module App = {
     <Compared data=[|message, "terms"|] id="c" />
     TosUsat.content
     TosUsat.block
+    <Fragile cls={"f-" ++ message} title=message />
+    <Styled.Link href="/a" activeStyle=Styled.highlighted label={Styled.twice(message)} />
+    <Styled.Link href="/b" label="plain" />
+    {Styled.bound(~href="/c", ~activeStyle=Styled.highlighted, ())}
   </div>;
   };
 };

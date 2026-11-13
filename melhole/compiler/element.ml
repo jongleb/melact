@@ -959,10 +959,20 @@ let lowercase frontend ~loc ~attributes tag arguments =
               ppat_tuple ~loc
                 (List.map (fun _ -> [%pat? Melhole.View.Unchanged]) flags)
             in
+            let changed at =
+              ppat_tuple ~loc
+                (List.mapi (fun other _ -> if Int.equal at other then [%pat? Melhole.View.Changed] else [%pat? _]) flags)
+            in
             pexp_match ~loc (pexp_tuple ~loc flags)
               [
                 case ~lhs:unchanged ~guard:None ~rhs:[%expr ()];
-                case ~lhs:[%pat? _] ~guard:None ~rhs:set;
+                case
+                  ~lhs:
+                    (List.fold_left
+                       (fun alternatives at -> ppat_or ~loc alternatives (changed at))
+                       (changed 0)
+                       (List.init (List.length flags - 1) succ))
+                  ~guard:None ~rhs:set;
               ])
       (List.combine guards holes)
   in

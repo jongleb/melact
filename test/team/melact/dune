@@ -3,6 +3,8 @@
 
 (melange.emit
  (target output)
+ (compile_flags
+  (:standard -w +4 -warn-error +4))
  (alias runtest-js)
  (libraries melact melange.dom)
  (module_systems

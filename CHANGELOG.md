@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix: with warning 4 (fragile match) as an error (`-w +4 -warn-error +4`), every component with a
+  dynamic attribute failed to compile, as the guard Melact writes ended in `| _ ->`; the guard now
+  names `Changed` at each position, and its JavaScript is the same. Law: `test/team` built with
+  warning 4 as an error (`Fragile.re`).
+- `ReactDOM.style`, `React.callback` and `React.callbackAsync`, reason-react's names for
+  `ReactDOM.Style.t` and a hook's function types, so bindings typed `~activeStyle: ReactDOM.style=?`
+  compile. Law: `test/team` (`Styled.re`).
+
 - Islands' esbuild plugin bundles once a module that reaches no React (`@popperjs/core`, `clsx`,
   lodash), even when the app and an island both import it, as npm bundles it: one copy, one module
   state, the same objects on both sides. `duplicates()` lists only modules that reach React. The

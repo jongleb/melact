@@ -365,6 +365,8 @@ module Style = struct
   let declarations style = Array.to_list (Array.map (fun name -> (name, get style name)) (names style))
 end
 
+type style = Style.t
+
 type domRef =
   | Current of Dom.element Js.nullable React.ref
   | Callback of (Dom.element Js.nullable -> unit)

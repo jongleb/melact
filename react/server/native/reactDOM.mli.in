@@ -3,6 +3,9 @@
 
 [@@@melact.style]
 
+(** reason-react's name for {!Style.t}. *)
+type style = Style.t
+
 (** An element of the page; a server has none. *)
 type element
 

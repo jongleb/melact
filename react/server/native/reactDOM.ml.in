@@ -1,5 +1,7 @@
 [@@@melact.style]
 
+type style = Style.t
+
 type element
 
 type domRef =

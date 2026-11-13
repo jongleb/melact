@@ -3,6 +3,8 @@
 
 (melange.emit
  (target output)
+ (compile_flags
+  (:standard -w +4 -warn-error +4))
  (alias runtest-js)
  (libraries reason-react melange.dom)
  (module_systems

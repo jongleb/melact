@@ -3,6 +3,9 @@
 
 [@@@melact.style]
 
+(** reason-react's name for {!Style.t}. *)
+type style = Style.t
+
 (** What a [ref] prop receives; never called on the server. *)
 type domRef =
   | Current of Dom.element Js.nullable React.ref
