@@ -2,7 +2,8 @@
    which Melact renders on npm's React in an island, and react-dnd's useDrag, useDrop and useDragLayer called
    from OCaml components with its DndProvider, bound in provider.mlx, which run on melact.compat. Bundled with esbuild: with reason-react,
    everything on npm's React; with Melact, coloured by melact.island's plugin. test/compat/bundle.test.mjs
-   drives both bundles. *)
+   drives both bundles. palette.js, which imports no React, is read by the app and by swatch.js on the island,
+   so the island must see the app's palette, as one npm bundle does. *)
 
 (** A bar of the chart: how many cards a bin holds. *)
 type bar = < name : string ; cards : int > Js.t
@@ -23,6 +24,15 @@ end
 
 module YAxis = struct
   external make : allowDecimals:bool -> React.element = "YAxis" [@@mel.module "recharts"] [@@react.component]
+end
+
+(** The colours palette.js holds. *)
+type palette = < bar : string > Js.t
+
+external palette : palette = "palette" [@@mel.module "./palette.js"]
+
+module Swatch = struct
+  external make : colours:palette -> React.element = "Swatch" [@@mel.module "./swatch.js"] [@@react.component]
 end
 
 (** What react-dnd makes a backend from. *)
@@ -134,8 +144,9 @@ module Board = struct
         <BarChart data width=300 height=150>
           <XAxis dataKey="name" />
           <YAxis allowDecimals=false />
-          <Bar dataKey="cards" fill="#36c" isAnimationActive=false />
+          <Bar dataKey="cards" fill=palette##bar isAnimationActive=false />
         </BarChart>
+        <Swatch colours=palette />
       </div>
     </Provider.DndProvider>
 end

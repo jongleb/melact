@@ -2,7 +2,7 @@
 // chart on an island and react-dnd from OCaml components on melact.compat. Bundled by esbuild as an app is:
 // with reason-react, everything on npm's React; with Melact, coloured by melact.island's plugin. Both bundles
 // get the same drags and must show the same board and chart and log the same drops, and the plugin must
-// bundle no module in both colours.
+// bundle no module in both colours: palette.js, which imports no React, is one object for the app and the island.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import fc from "fast-check";

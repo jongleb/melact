@@ -1,8 +1,12 @@
 (copy_files
  (files ../*.mlx))
 
+(copy_files
+ (files ../*.js))
+
 (melange.emit
  (target output)
+ (runtime_deps palette.js swatch.js swatch-body.js)
  (alias runtest-js)
  (libraries reason-react melange.dom)
  (module_systems

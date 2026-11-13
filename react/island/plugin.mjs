@@ -6,8 +6,11 @@
 // The plugins colour the module graph by importer: a module reached from a `melact-island:` import is in the
 // island colour, where every import, `react` included, resolves as npm resolves it, and its own imports stay in
 // that colour. Every other module is in the app's colour, where `react`, `react-dom` and `react/jsx-runtime`
-// are melact.compat's. A module that both colours reach is bundled twice, each copy bound to its own React;
-// `duplicates()` lists them, since a provider and the hooks that read it must be one copy.
+// are melact.compat's. The two colours differ only in those imports, so a module that reaches none of them,
+// directly or through its own imports, is the same in both and is bundled once, as npm bundles it: before each
+// build the plugin bundles once more without writing, to learn which modules reach React. A module that reaches
+// React and that both colours reach is bundled twice, each copy bound to its own React; `duplicates()` lists
+// them, since a provider and the hooks that read it must be one copy.
 //
 //   import { esbuildColours } from "<melange output>/node_modules/melact.island/plugin.mjs";
 //   const colours = esbuildColours({ compat: "<melange output>/node_modules/melact.compat" });
@@ -46,9 +49,31 @@ const colours = () => {
 export function esbuildColours({ compat }) {
   const shim = shimmed(compat);
   const graph = colours();
-  const plugin = {
+  const coloured = (seen, surveyed) => ({
     name: "melact-colours",
     setup(build) {
+      const reached = { apart: () => true };
+      if (surveyed === undefined)
+        build.onStart(async () => {
+          const importers = new Map();
+          const reacting = new Set();
+          const survey = (importer, path, source) => {
+            if (shim[source]) reacting.add(importer);
+            importers.set(path, [...(importers.get(path) ?? []), importer]);
+          };
+          const plugins = build.initialOptions.plugins.map((other) => (other.name === "melact-colours" ? coloured(colours(), survey) : other));
+          const outcome = await build.esbuild
+            .build({ ...build.initialOptions, plugins, write: false, metafile: false, logLevel: "silent" })
+            .then(() => "surveyed", () => "failed");
+          const queue = [...reacting];
+          for (const path of queue)
+            for (const importer of importers.get(path) ?? [])
+              if (!reacting.has(importer)) {
+                reacting.add(importer);
+                queue.push(importer);
+              }
+          reached.apart = outcome === "surveyed" ? (path) => reacting.has(path) : () => true;
+        });
       build.onResolve({ filter: /.*/ }, async (args) => {
         if (args.pluginData?.melactResolving) return undefined;
         const inIsland = args.namespace === "melact-island" || args.path.startsWith(prefix);
@@ -65,7 +90,9 @@ export function esbuildColours({ compat }) {
         });
         if (found.errors.length > 0) return { errors: found.errors };
         if (found.external || !/\.(m?js|cjs|jsx)$/.test(found.path)) return found;
-        graph.seen(found.path, true);
+        if (args.namespace === "melact-island") surveyed?.(args.importer, found.path, source);
+        if (!reached.apart(found.path)) return { path: found.path };
+        seen.seen(found.path, true);
         return { path: found.path, namespace: "melact-island" };
       });
       build.onLoad({ filter: /.*/, namespace: "melact-island" }, (args) => ({
@@ -74,10 +101,10 @@ export function esbuildColours({ compat }) {
         resolveDir: dirname(args.path),
       }));
       build.onLoad({ filter: /\.(m?js|cjs)$/ }, (args) => {
-        graph.seen(args.path, false);
+        seen.seen(args.path, false);
         return undefined;
       });
     },
-  };
-  return { plugin, duplicates: graph.duplicates };
+  });
+  return { plugin: coloured(graph, undefined), duplicates: graph.duplicates };
 }

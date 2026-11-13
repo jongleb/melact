@@ -1729,18 +1729,25 @@ component external decides for it; a hook marked `island` is a compile error, si
 component that calls it. melact.island ships an
 esbuild plugin (`plugin.mjs`, `esbuildColours`) that colours the module graph by importer: what a
 `melact-island:` import reaches resolves as npm resolves it, `react` included, and keeps that colour;
-everything else gets melact.compat's `react`, `react-dom` and `react/jsx-runtime`. A module reached
-in both colours is bundled twice and listed by `duplicates()`. `test/compat/bundle.test.mjs` bundles
+everything else gets melact.compat's `react`, `react-dom` and `react/jsx-runtime`. The colours differ
+only in those imports, so a module that reaches none of them, directly or through its own imports, is
+the same in both and is bundled once, as npm bundles it; the plugin learns which modules reach React
+from one more bundling, without writing, before each build (about as long again as the build). A
+module that reaches React and is reached in both colours is bundled twice and listed by `duplicates()`. `test/compat/bundle.test.mjs` bundles
 one app with esbuild both ways, with a recharts chart on an island and react-dnd's hooks and
 `DndProvider` on melact.compat, and runs the bundles side by side: the same board, chart and drops as
-reason-react on React 18 after random drags, and no module in both colours. Its `DndProvider` is
+reason-react on React 18 after random drags, and no module in both colours; `palette.js`, which imports
+no React, is read by the app and, through an index file, by a component on the island, which must
+see the app's object. Its `DndProvider` is
 bound in a file of its own, marked `[@melact.engine compat]`, and a drag layer reads `useDragLayer`.
 `node test/compat/bundle/browser.mjs` runs the same two bundles in Chromium with react-dnd's HTML5
 backend: Playwright drags the cards with the mouse on both pages, and the board, drag layer, chart and
 log are compared midway through each drag, once the hover has settled, and after it; 16 random runs
 agree. Snapshotted 50 ms into a drag, the two pages can stand at different frames of the hover. Three mutants each break
 it: no melact.compat `react` in the app's colour, island imports resolved in the app's colour, a
-provider put on an island apart from its hooks.
+provider put on an island apart from its hooks. Three more break the bundling law: every island import
+kept in the island colour (two palettes), only modules importing React directly kept there (52
+duplicates), none kept there (recharts on melact.compat).
 
 Not yet: server rendering of islands; slots inside SVG (a custom element is HTML only, so
 Melact content inside a chart's `<svg>` needs a `<g>` slot); a native `change` event inside a slot

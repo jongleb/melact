@@ -58,7 +58,7 @@ needs:
 import { esbuildColours } from "./_build/default/app/output/node_modules/melact.island/plugin.mjs";
 const colours = esbuildColours({ compat: "./_build/default/app/output/node_modules/melact.compat" });
 await esbuild.build({ entryPoints: ["…/app.mjs"], bundle: true, plugins: [colours.plugin] });
-console.log(colours.duplicates()); // modules bundled twice, once per React: should be empty
+console.log(colours.duplicates()); // modules that reach React bundled twice, once per React: should be empty
 ```
 
 ## Step 1: pull state out of hooks into a reducer

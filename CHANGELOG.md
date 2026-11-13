@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Islands' esbuild plugin bundles once a module that reaches no React (`@popperjs/core`, `clsx`,
+  lodash), even when the app and an island both import it, as npm bundles it: one copy, one module
+  state, the same objects on both sides. `duplicates()` lists only modules that reach React. The
+  plugin learns which modules reach React from one more bundling, without writing, before each
+  build. Law: `test/compat/bundle.test.mjs` (`palette.js`, read by the app and by an island through
+  an index file).
+
 - Fix: top-level JSX inside a local open of another file's module (`TosT.(<a href={f("x")}> … </a>)`)
   used that module's lifted template of the same number: a type error (`Dom.element` against
   `Hole.content`) or, when the shapes matched, the other file's DOM. A lifted value that code inside
