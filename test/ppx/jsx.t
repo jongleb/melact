@@ -1162,11 +1162,12 @@ stays as a definition other files can call, with no limit on the number of depen
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let __melhole_hook_2 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let use a =
-    (React.useEffect3 (Melact_runtime.Hook.unchecked __melhole_hook_1))
-      (fun () -> None) (a, "x", 1.0);
-    (React.useEffect1 (Melact_runtime.Hook.unchecked __melhole_hook_2))
-      (fun () -> None) [|a;1;2;3;4;5;6;7|]
+  let ((use)[@melhole.hook (1, 2)]) =
+    fun a ->
+      (React.useEffect3 (Melact_runtime.Hook.unchecked __melhole_hook_1))
+        (fun () -> None) (a, "x", 1.0);
+      (React.useEffect1 (Melact_runtime.Hook.unchecked __melhole_hook_2))
+        (fun () -> None) [|a;1;2;3;4;5;6;7|]
 
 A tuple longer than the numbered hooks take is passed as the array it is in JavaScript, and uses
 call the binding's definition:
@@ -1184,7 +1185,8 @@ call the binding's definition:
       React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
         _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
     [@@warning "-32"]
-  let use a = useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
+  let ((use)[@melhole.hook (1, 1)]) =
+    fun a -> useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
 
 Bindings to npm React's element functions that return a React.element become Melact's elements: a
 string tag builds a DOM element from the props object, a component is called with its props:

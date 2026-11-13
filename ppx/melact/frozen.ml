@@ -47,8 +47,9 @@ let uses name body =
   let called path =
     match (reading path, List.rev path) with
     | Read_only, _ -> `Reading
-    | Possibly_changed, last :: _ when String.length last > 3 && String.equal (String.sub last 0 3) "use" -> `Hook
-    | Possibly_changed, _ -> `Unknown
+    | Possibly_changed, last :: _ -> (
+        match Melhole_compiler.Hook_name.of_name last with Hook _ -> `Hook | Plain -> `Unknown)
+    | Possibly_changed, [] -> `Unknown
   in
   let rec piped expression =
     match expression.pexp_desc with

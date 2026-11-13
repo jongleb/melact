@@ -15,12 +15,6 @@ let () =
     ~doc:" alert at each component whose only hooks are useState and useReducer: it maps one to one to Meltea"
 
 let () =
-  let hook name =
-    match String.length name > 3 && String.starts_with ~prefix:"use" name with
-    | true -> (
-        match name.[3] with 'A' .. 'Z' -> Some name | _ -> None)
-    | false -> None
-  in
   let calls expression =
     let finder =
       object
@@ -29,13 +23,11 @@ let () =
         method! expression expression found =
           let found = super#expression expression found in
           match expression.pexp_desc with
-          | Pexp_ident { txt = Lident name | Ldot (_, name); _ } ->
-              Option.fold ~none:found
-                ~some:(fun hook ->
-                  match hook with
-                  | "useState" | "useReducer" -> { found with cells = found.cells + 1 }
-                  | other -> { found with others = other :: found.others })
-                (hook name)
+          | Pexp_ident { txt = Lident name | Ldot (_, name); _ } -> (
+              match (Melhole_compiler.Hook_name.of_name name, name) with
+              | Plain, _ -> found
+              | Hook _, ("useState" | "useReducer") -> { found with cells = found.cells + 1 }
+              | Hook _, other -> { found with others = other :: found.others })
           | _ -> found
       end
     in

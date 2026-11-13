@@ -15,16 +15,9 @@ let rendering ~hooks body =
   let hook callee =
     match callee.pexp_desc with
     | Pexp_ident { txt; _ } -> (
-        let name = Longident.last_exn txt in
-        match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
-        | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] ->
-            let rec trimmed length =
-              match length > 0 && name.[length - 1] >= '0' && name.[length - 1] <= '9' with
-              | true -> trimmed (length - 1)
-              | false -> length
-            in
-            Some (String.sub name 0 (trimmed (String.length name)))
-        | true | false -> None)
+        match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+        | Hook { base; _ } -> Some base
+        | Plain -> None)
     | _ -> None
   in
   let found = ref Pure in
@@ -181,23 +174,19 @@ type volatile =
 let plan ~hooks ~inputs ~props ~volatile body =
   let hook expression =
     match expression.pexp_desc with
-    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); _ }; _ }, arguments)
-      when String.length name >= 3 && String.equal (String.sub name 0 3) "use" ->
-        let rec trimmed length =
-          match length > 0 && name.[length - 1] >= '0' && name.[length - 1] <= '9' with
-          | true -> trimmed (length - 1)
-          | false -> length
-        in
-        let base = String.sub name 0 (trimmed (String.length name)) in
-        let values = List.map snd arguments in
-        let dependencies =
-          match (String.sub name (String.length base) (String.length name - String.length base), List.rev values) with
-          | "", _ -> Every_render
-          | "0", _ -> Once
-          | _, last :: _ -> Reading last
-          | _, [] -> raise Beyond
-        in
-        Some (base, dependencies, values)
+    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); _ }; _ }, arguments) -> (
+        match Melhole_compiler.Hook_name.of_name name with
+        | Plain -> None
+        | Hook { base; dependencies } ->
+            let values = List.map snd arguments in
+            let dependencies =
+              match (dependencies, List.rev values) with
+              | "", _ -> Every_render
+              | "0", _ -> Once
+              | _, last :: _ -> Reading last
+              | _, [] -> raise Beyond
+            in
+            Some (base, dependencies, values))
     | _ -> None
   in
   let checked expression =
@@ -208,10 +197,9 @@ let plan ~hooks ~inputs ~props ~volatile body =
         method! expression expression =
           match expression.pexp_desc with
           | Pexp_ident { txt; _ } -> (
-              let name = Longident.last_exn txt in
-              match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
-              | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> raise Beyond
-              | true | false -> ())
+              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+              | Hook _ -> raise Beyond
+              | Plain -> ())
           | _ -> super#expression expression
       end
     in
@@ -353,10 +341,9 @@ let slots ~hooks body =
        method! expression expression =
          match expression.pexp_desc with
          | Pexp_ident { txt; _ } -> (
-             let name = Longident.last_exn txt in
-             match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
-             | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> raise Beyond
-             | true | false -> ())
+             match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+             | Hook _ -> raise Beyond
+             | Plain -> ())
          | _ -> super#expression expression
     end)
       #expression expression

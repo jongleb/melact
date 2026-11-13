@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- One rule names hooks everywhere in melact-ppx (`Hook_name`): `use`, or `use` followed by anything
+  but a lowercase letter. Two places used a looser one: a call such as `user(v)` or
+  `userFromEmail(v)` was taken to only read its arguments, so a `let` built from it could be kept
+  from an earlier render although `user` may change `v`; and an npm package with an external named
+  `userAgent` went to melact.compat as if it bound a hook. A top-level `let use = …` that calls
+  hooks now gets its hook fact like any other custom hook. Laws: `Hook_name` in `test/laws`
+  (QCheck against the rule), `test/ppx/frozen.t` (`user v`, `useless v`, `use_custom v`).
+
 - Fix: with warning 4 (fragile match) as an error (`-w +4 -warn-error +4`), every component with a
   dynamic attribute failed to compile, as the guard Melact writes ended in `| _ ->`; the guard now
   names `Changed` at each position, and its JavaScript is the same. Law: `test/team` built with

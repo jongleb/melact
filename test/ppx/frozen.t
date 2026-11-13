@@ -19,6 +19,10 @@ earlier render. Every case asks about `v`:
   Js.Array.map ~f:(fun x -> x) v                                 read only
   React.useEffect1 (fun () -> None) [| v |]                      read only
   unknown v                                                      possibly changed
+  useCustom v                                                    read only
+  use_custom v                                                   read only
+  user v                                                         possibly changed
+  useless v                                                      possibly changed
   (v, 1)                                                         possibly changed
   { items = v }                                                  possibly changed
   let w = v in w                                                 possibly changed

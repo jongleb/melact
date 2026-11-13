@@ -331,10 +331,9 @@ let component ~loc ~name ~props_constructor ~hooks expression =
           match (found, expression.pexp_desc) with
           | `Stateful, _ -> `Stateful
           | `Pure, Pexp_ident { txt; _ } -> (
-              let name = Longident.last_exn txt in
-              match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
-              | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> `Stateful
-              | true | false -> `Pure)
+              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+              | Hook _ -> `Stateful
+              | Plain -> `Pure)
           | `Pure, _ -> super#expression expression found
       end
     in
@@ -1158,10 +1157,10 @@ let mapper =
             List.map
               (fun binding ->
                 match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
-                | Ppat_var { txt = name; loc }, Pexp_function _
-                  when String.length name > 3
-                       && String.equal (String.sub name 0 3) "use"
-                       && Char.uppercase_ascii name.[3] = name.[3] ->
+                | Ppat_var { txt = name; loc }, Pexp_function _ -> (
+                    match Melhole_compiler.Hook_name.of_name name with
+                    | Plain -> binding
+                    | Hook _ ->
                     Option.fold ~none:binding
                       ~some:(fun count ->
                         custom <- (name, count) :: custom;
@@ -1176,7 +1175,7 @@ let mapper =
                                 :: binding.pvb_pat.ppat_attributes;
                             };
                         })
-                      (Graph.slots ~hooks:self#custom binding.pvb_expr)
+                      (Graph.slots ~hooks:self#custom binding.pvb_expr))
                 | _ -> binding)
               bindings
           in
@@ -1508,10 +1507,9 @@ let structure items =
           match (found, expression.pexp_desc) with
           | `Hooked, _ -> `Hooked
           | `Pure, Pexp_ident { txt; _ } -> (
-              let name = Longident.last_exn txt in
-              match String.length name >= 3 && String.equal (String.sub name 0 3) "use" with
-              | true when String.length name = 3 || Char.uppercase_ascii name.[3] = name.[3] -> `Hooked
-              | true | false -> `Pure)
+              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+              | Hook _ -> `Hooked
+              | Plain -> `Pure)
           | `Pure, _ -> super#expression expression found
       end
     in
@@ -1921,7 +1919,8 @@ let bound items =
   in
   let hooked =
     List.filter_map
-      (fun (name, package) -> match String.length name > 3 && String.equal (String.sub name 0 3) "use" with true -> Some package | false -> None)
+      (fun (name, package) ->
+        match Melhole_compiler.Hook_name.of_name name with Hook _ -> Some package | Plain -> None)
       packages
   in
   let engine_of (description : value_description) =

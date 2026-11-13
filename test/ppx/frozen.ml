@@ -17,6 +17,10 @@ let cases =
     "Js.Array.map ~f:(fun x -> x) v";
     "React.useEffect1 (fun () -> None) [| v |]";
     "unknown v";
+    "useCustom v";
+    "use_custom v";
+    "user v";
+    "useless v";
     "(v, 1)";
     "{ items = v }";
     "let w = v in w";

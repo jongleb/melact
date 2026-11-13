@@ -488,6 +488,33 @@ let dom_props_laws =
           all);
   ]
 
+let hook_name_laws =
+  let name =
+    Gen.(
+      map2 ( ^ )
+        (oneof_list [ "use"; "use"; "us"; "user"; "Use"; "used"; "" ])
+        (string_size ~gen:(oneof_list [ 'a'; 'z'; 'A'; 'Z'; '_'; '\''; '0'; '7'; 'x' ]) (int_bound 5)))
+  in
+  [
+    Test.make ~count:3000 ~name:"Hook_name: a name is a hook exactly when it is use, or use then no lowercase letter"
+      ~print:Print.string name (fun name ->
+        let expected =
+          String.equal name "use"
+          || String.length name > 3
+             && String.equal (String.sub name 0 3) "use"
+             && not (name.[3] >= 'a' && name.[3] <= 'z')
+        in
+        match Melhole_compiler.Hook_name.of_name name with Hook _ -> expected | Plain -> not expected);
+    Test.make ~count:3000 ~name:"Hook_name: a hook's base and dependencies spell its name, the dependencies all digits"
+      ~print:Print.string name (fun name ->
+        match Melhole_compiler.Hook_name.of_name name with
+        | Plain -> true
+        | Hook { base; dependencies } ->
+            let digit character = character >= '0' && character <= '9' in
+            String.equal (base ^ dependencies) name
+            && String.for_all digit dependencies
+            && (String.equal base "" || not (digit base.[String.length base - 1])));
+  ]
 
 (** What one handler of a generated view does. *)
 type sends =
@@ -949,4 +976,4 @@ let dead_laws =
   ]
 
 let () =
-  exit (QCheck_base_runner.run_tests ~verbose:true (reconcile_laws ("random pairs", reconcile_input) @ reconcile_laws ("edits", edited_input) @ markup_laws @ dom_props_laws @ fanout_laws @ shell_laws @ lattice_laws @ dead_laws))
+  exit (QCheck_base_runner.run_tests ~verbose:true (reconcile_laws ("random pairs", reconcile_input) @ reconcile_laws ("edits", edited_input) @ markup_laws @ hook_name_laws @ dom_props_laws @ fanout_laws @ shell_laws @ lattice_laws @ dead_laws))

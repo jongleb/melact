@@ -948,7 +948,9 @@ gzip: bench/meltea +61 B, for `Program`'s slice and the masks; the server-render
 ## Components without hooks
 
 By the Rules of React every hook is named `use…`, so `melact-ppx` sees whether a component's body
-can call one. A component that calls none is a function of its props: it compiles to
+can call one. One rule (`Melhole_compiler.Hook_name`) decides it everywhere, as React's own lint
+does: `use`, or `use` followed by anything but a lowercase letter (`useState`, `useEffect1`,
+`use_thing`), is a hook; `user`, `useless` and `userAgent` are not. A component that calls none is a function of its props: it compiles to
 `View.pure`, a child that keeps the component's identity and props and nothing else. The same
 component with the same props is left as it is, new props re-render it, and another component in
 its place mounts afresh, as React does. Only components that call hooks get an instance with hook
