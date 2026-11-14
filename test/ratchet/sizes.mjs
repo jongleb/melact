@@ -1,12 +1,14 @@
 // The size ratchet: the gzip -9 size of every production bundle of Melact and Meltea code that the
 // repository builds (bench/melact, bench/meltea, the hydrating clients of bench/ssr, the apps of
-// bench/classics under Melact, the examples), bundled by esbuild the way bench/classics/run.mjs
+// bench/classics under Melact, the examples of Melact and Meltea), bundled by esbuild the way bench/classics/run.mjs
 // bundles. test/ratchet/sizes.json keeps the recorded sizes; the law test fails when one grows.
 //
 //   node test/ratchet/sizes.mjs                          compare with the baseline
 //   node test/ratchet/sizes.mjs --lower                  record the bundles that got smaller
 //   node test/ratchet/sizes.mjs --allow-growth=<reason>  record growth the user approved, with the reason
 //   node test/ratchet/sizes.mjs --admit=<bundle>         record a bundle new to the ratchet (--admit=* for all)
+//   node test/ratchet/sizes.mjs --by-module=<bundle>     where a bundle's bytes are: minified bytes per module,
+//                                                        and per top-level function of melhole and meltea
 //
 // Run `opam exec -- dune build` first: the bundles are made from the Melange output in _build.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,38 +29,83 @@ export const bundles = () => ({
   "bench/ssr/meltea client": `${output("bench/ssr/meltea/client")}/main.mjs`,
   "examples/counter": `${output("examples/counter")}/main.mjs`,
   "examples/todomvc": `${output("examples/todomvc")}/main.mjs`,
+  "meltea/examples/counter": `${output("meltea/examples/counter")}/main.mjs`,
+  "meltea/examples/todomvc": `${output("meltea/examples/todomvc")}/main.mjs`,
+  "meltea/examples/served client": `${output("meltea/examples/served/client")}/main.mjs`,
   ...Object.fromEntries(classics.map((app) => [`bench/classics/${app}`, `${output(`bench/classics/${app}/melact`)}/app.mjs`])),
 });
 
+const esbuild = () => import(pathToFileURL(join(process.cwd(), "node_modules/esbuild/lib/main.js")).href);
+
+const bundled = async (entry, minify) => {
+  if (!existsSync(entry)) throw new Error(`${entry} is not built; run opam exec -- dune build`);
+  return (await esbuild()).build({
+    entryPoints: [join(process.cwd(), entry)],
+    bundle: true,
+    format: "esm",
+    minify,
+    metafile: true,
+    write: false,
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [
+      {
+        name: "melange-output",
+        setup(build) {
+          build.onResolve({ filter: /^[^./]/ }, ({ path, importer }) => {
+            const found = importer.match(/^(.*\/_build\/default\/.*?\/output)\//);
+            if (!found) return null;
+            const candidate = join(found[1], "node_modules", path);
+            return existsSync(candidate) ? { path: candidate } : null;
+          });
+        },
+      },
+    ],
+    logLevel: "error",
+  });
+};
+
 export const measure = async () => {
-  const esbuild = await import(pathToFileURL(join(process.cwd(), "node_modules/esbuild/lib/main.js")).href);
-  const melangeOutput = {
-    name: "melange-output",
-    setup(build) {
-      build.onResolve({ filter: /^[^./]/ }, ({ path, importer }) => {
-        const found = importer.match(/^(.*\/_build\/default\/.*?\/output)\//);
-        if (!found) return null;
-        const candidate = join(found[1], "node_modules", path);
-        return existsSync(candidate) ? { path: candidate } : null;
-      });
-    },
-  };
   const sizes = {};
   for (const [name, entry] of Object.entries(bundles())) {
-    if (!existsSync(entry)) throw new Error(`${entry} is not built; run opam exec -- dune build`);
-    const built = await esbuild.build({
-      entryPoints: [join(process.cwd(), entry)],
-      bundle: true,
-      format: "esm",
-      minify: true,
-      write: false,
-      define: { "process.env.NODE_ENV": '"production"' },
-      plugins: [melangeOutput],
-      logLevel: "error",
-    });
-    sizes[name] = gzipSync(built.outputFiles[0].contents, { level: 9 }).length;
+    sizes[name] = gzipSync((await bundled(entry, true)).outputFiles[0].contents, { level: 9 }).length;
   }
   return sizes;
+};
+
+const located = async (name) => {
+  const entry = bundles()[name];
+  if (!entry) throw new Error(`no bundle ${name}; the bundles are: ${Object.keys(bundles()).join(", ")}`);
+  const minified = await bundled(entry, true);
+  const modules = Object.entries(Object.values(minified.metafile.outputs)[0].inputs)
+    .map(([path, input]) => [input.bytesInOutput, path.replace(/^.*\/output\/(node_modules\/)?/, "")])
+    .filter(([bytes]) => bytes > 0)
+    .sort(([a], [b]) => b - a);
+  const plain = (await bundled(entry, false)).outputFiles[0].text;
+  const { transform } = await esbuild();
+  const sections = plain.split(/^\/\/ (?=\S+\.m?js$)/m).slice(1);
+  const functions = [];
+  for (const section of sections.filter((section) => /^\S*\/node_modules\/(melhole|meltea)\//.test(section))) {
+    const path = section.slice(0, section.indexOf("\n")).replace(/^.*\/output\/(node_modules\/)?/, "");
+    const declarations = [...section.matchAll(/^(?:function|const|let|var) ([\w$]+)/gm)];
+    for (const [index, declaration] of declarations.entries()) {
+      const code = section.slice(declaration.index, declarations[index + 1]?.index ?? section.length);
+      const bytes = (await transform(code, { minify: true, loader: "js" })).code.length;
+      functions.push([bytes, `${path} ${declaration[1]}`]);
+    }
+  }
+  functions.sort(([a], [b]) => b - a);
+  const total = modules.reduce((sum, [bytes]) => sum + bytes, 0);
+  const gzip = gzipSync(minified.outputFiles[0].contents, { level: 9 }).length;
+  const column = ([bytes, what]) => `${String(bytes).padStart(7)}  ${what}`;
+  return [
+    `${name}: ${total} bytes minified, ${gzip} gzip`,
+    "",
+    "per module, minified:",
+    ...modules.map(column),
+    "",
+    "per top-level function of melhole and meltea, minified alone:",
+    ...functions.filter(([bytes]) => bytes >= 100).map(column),
+  ].join("\n");
 };
 
 export const recorded = () => (existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, "utf8")) : { sizes: {}, growth: [] });
@@ -89,6 +136,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const option = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
   const admitted = process.argv.filter((arg) => arg.startsWith("--admit=")).map((arg) => arg.slice("--admit=".length));
   const reason = option("allow-growth");
+  const where = option("by-module");
+  if (where) {
+    console.log(await located(where));
+    process.exit(0);
+  }
   const lowering = process.argv.includes("--lower");
   const measured = await measure();
   const baseline = recorded();
