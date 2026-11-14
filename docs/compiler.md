@@ -1786,6 +1786,15 @@ provider put on an island apart from its hooks. Three more break the bundling la
 kept in the island colour (two palettes), only modules importing React directly kept there (52
 duplicates), none kept there (recharts on melact.compat).
 
+`test/compat/tiptap.test.mjs` binds tiptap as the team's apps do: `EditorContent` in one file and
+`useEditor` in the file that calls it, with no hook beside the component, so the editor view goes to an
+island and `useEditor` runs on melact.compat. The editor object crosses the engines, and editing it
+with commands after random clicks shows the same DOM as reason-react on React 18; `@tiptap/react` is
+bundled in both colours, its one duplicate. That holds while an app uses only `useEditor` and
+`EditorContent`: React node views, `BubbleMenu` and `FloatingMenu` render through the editor's content
+component and need both on one engine, which `[@melact.engine compat]` on `EditorContent` gives. A mutant
+whose islands render nothing breaks it.
+
 Not yet: server rendering of islands; slots inside SVG (a custom element is HTML only, so
 Melact content inside a chart's `<svg>` needs a `<g>` slot); a native `change` event inside a slot
 (React has no synthetic event for it on a slot, so Melact's handlers there run from the document);

@@ -1,0 +1,60 @@
+(* A text widget as the team writes one (DaTextWidget.re): useEditor bound here, the editor view from
+   Tiptap. The editor that useEditor makes is shown by Tiptap.EditorContent. *)
+
+(** A tiptap extension. *)
+type extension
+
+(** What useEditor is given. *)
+type config
+
+(** What an editor's onUpdate is called with. *)
+type update = < editor : Tiptap.editor > Js.t
+
+(** An editor's commands. *)
+type commands
+
+external starter_kit : extension = "default" [@@mel.module "@tiptap/starter-kit"]
+
+external config : extensions:extension array -> content:string -> onUpdate:(update -> unit) -> unit -> config = ""
+[@@mel.obj]
+
+external use_editor : config -> Tiptap.editor Js.Nullable.t = "useEditor" [@@mel.module "@tiptap/react"]
+external commands : Tiptap.editor -> commands = "commands" [@@mel.get]
+external set_content : commands -> string -> bool = "setContent" [@@mel.send]
+external select_all : commands -> bool = "selectAll" [@@mel.send]
+external toggle_bold : commands -> bool = "toggleBold" [@@mel.send]
+external get_text : Tiptap.editor -> string = "getText" [@@mel.send]
+external get_html : Tiptap.editor -> string = "getHTML" [@@mel.send]
+external insert_content_at : commands -> int -> string -> bool = "insertContentAt" [@@mel.send]
+
+module Widget = struct
+  let[@react.component] make () =
+    let text, setText = React.useState (fun () -> "") in
+    let replaced, setReplaced = React.useState (fun () -> 0) in
+    let editor =
+      use_editor (config ~extensions:[| starter_kit |] ~content:"<p>hello</p>" ~onUpdate:(fun update -> setText (fun _ -> get_text update##editor)) ())
+    in
+    match Js.Nullable.toOption editor with
+    | None -> <p className="loading">(React.string "loading")</p>
+    | Some editor ->
+        <section>
+          <button
+            className="replace"
+            onClick=(fun _ ->
+              ignore (set_content (commands editor) ("<p>replaced " ^ string_of_int replaced ^ "</p>"));
+              setReplaced (fun count -> count + 1);
+              setText (fun _ -> get_text editor))>
+            (React.string "replace")
+          </button>
+          <button className="bold" onClick=(fun _ -> ignore (select_all (commands editor)); ignore (toggle_bold (commands editor)); setText (fun _ -> get_html editor))>
+            (React.string "bold")
+          </button>
+          <button className="insert" onClick=(fun _ -> ignore (insert_content_at (commands editor) 1 "<em>x</em>"); setText (fun _ -> get_html editor))>
+            (React.string "insert")
+          </button>
+          <p className="shown">(React.string text)</p>
+          <Tiptap.EditorContent editor />
+        </section>
+end
+
+let mount root = ReactDOM.Client.render (ReactDOM.Client.createRoot root) <Widget />

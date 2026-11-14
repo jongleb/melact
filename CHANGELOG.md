@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Law: tiptap as the team binds it (`EditorContent` in toolkit's `Tiptap.re`, `useEditor` in the
+  widget's file) works with islands: the view on an island, `useEditor` on melact.compat, the editor
+  shared, the same DOM as reason-react on React 18 after random commands; `@tiptap/react` is bundled
+  twice. React node views or `BubbleMenu` would need `[@melact.engine compat]` on `EditorContent`.
+  `test/compat/tiptap.test.mjs`, with `@tiptap/react` 2.1.13 (the team's version) as a dev dependency.
+
 - A read of the world in the argument of `useState` or `useRef`, or in a reducer's initial state, no
   longer makes a render impure: only the first render keeps that value, so skipping a later render
   loses nothing. `React.useRef(Fetch.AbortController.make())` in toolkit's

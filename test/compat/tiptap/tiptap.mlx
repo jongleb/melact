@@ -1,0 +1,9 @@
+(* tiptap's editor view bound with no hook of @tiptap/react beside it, as the team's toolkit binds it
+   (Tiptap.re); useEditor is bound in the file that calls it. *)
+
+(** A tiptap editor. *)
+type editor
+
+module EditorContent = struct
+  external make : editor:editor -> React.element = "EditorContent" [@@mel.module "@tiptap/react"] [@@react.component]
+end
