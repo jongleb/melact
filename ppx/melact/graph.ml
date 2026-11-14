@@ -11,6 +11,11 @@ type local = Own_cell of string | Own_ref of string
 
 exception Reads_the_world
 
+(** Which renders use what a render evaluates. *)
+type kept =
+  | Every_render
+  | First_render  (** The argument of [useState] or [useRef], a reducer's initial state: only the first render keeps it. *)
+
 let rendering ~hooks body =
   let hook callee =
     match callee.pexp_desc with
@@ -21,8 +26,8 @@ let rendering ~hooks body =
     | _ -> None
   in
   let found = ref Pure in
-  let rec now cells expression =
-    let each = List.iter (now cells) in
+  let rec now kept cells expression =
+    let each = List.iter (now kept cells) in
     let unbound cells pattern =
       List.filter
         (fun local -> match local with Own_cell name | Own_ref name -> not (List.mem name (Free.bound pattern)))
@@ -31,22 +36,25 @@ let rendering ~hooks body =
     let cases cells branches =
       List.iter
         (fun case ->
-          Option.iter (now (unbound cells case.pc_lhs)) case.pc_guard;
-          now (unbound cells case.pc_lhs) case.pc_rhs)
+          Option.iter (now kept (unbound cells case.pc_lhs)) case.pc_guard;
+          now kept (unbound cells case.pc_lhs) case.pc_rhs)
         branches
     in
-    let called_later value = match value.pexp_desc with Pexp_function _ -> () | _ -> now cells value in
+    let called_later value = match value.pexp_desc with Pexp_function _ -> () | _ -> now kept cells value in
     match expression.pexp_desc with
-    | Pexp_ident { txt = Ldot (Ldot (Lident "Js", ("Date" | "Math")), _) | Ldot (Lident ("Random" | "Sys" | "Unix"), _); _ } ->
-        raise Reads_the_world
+    | Pexp_ident { txt = Ldot (Ldot (Lident "Js", ("Date" | "Math")), _) | Ldot (Lident ("Random" | "Sys" | "Unix"), _); _ } -> (
+        match kept with Every_render -> raise Reads_the_world | First_render -> ())
     | Pexp_ident _ | Pexp_constant _ | Pexp_unreachable -> ()
     | Pexp_apply
         ( { pexp_desc = Pexp_ident { txt = Lident ("!" | ":=" | "incr" | "decr"); _ }; _ },
           (Nolabel, { pexp_desc = Pexp_ident { txt = Lident cell; _ }; _ }) :: rest )
       when List.mem (Own_cell cell) cells ->
-        List.iter (fun (_, value) -> now cells value) rest
-    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident ("!" | ":=" | "incr" | "decr"); _ }; _ }, _) ->
-        raise Reads_the_world
+        List.iter (fun (_, value) -> now kept cells value) rest
+    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident "!"; _ }; _ }, arguments) -> (
+        match kept with
+        | Every_render -> raise Reads_the_world
+        | First_render -> List.iter (fun (_, value) -> now kept cells value) arguments)
+    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident (":=" | "incr" | "decr"); _ }; _ }, _) -> raise Reads_the_world
     | Pexp_apply (_, arguments) when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
         List.iter
           (fun (label, value) ->
@@ -63,24 +71,26 @@ let rendering ~hooks body =
             match values with
             | reducer :: rest ->
                 called_later reducer;
-                each rest
+                List.iter (now First_render cells) rest
             | [] -> ())
-        | Some ("useState" | "useMemo" | "useContext" | "useRef" | "useId" | "useDebugValue"), _ -> each values
+        | Some ("useState" | "useRef"), _ -> List.iter (now First_render cells) values
+        | Some ("useMemo" | "useContext" | "useId" | "useDebugValue"), _ -> each values
         | Some _, _ -> (
             match hooks callee with Some _ -> each values | None -> raise Reads_the_world)
-        | None, [ (Nolabel, { pexp_desc = Pexp_construct ({ txt = Lident "()"; _ }, None); _ }) ] -> raise Reads_the_world
+        | None, [ (Nolabel, { pexp_desc = Pexp_construct ({ txt = Lident "()"; _ }, None); _ }) ] -> (
+            match kept with Every_render -> raise Reads_the_world | First_render -> now kept cells callee)
         | None, _ ->
-            now cells callee;
+            now kept cells callee;
             each values)
     | Pexp_field ({ pexp_desc = Pexp_ident { txt = Lident name; _ }; _ }, { txt = Lident "current" | Ldot (_, "current"); _ })
-      when List.mem (Own_ref name) cells ->
-        found := Reads_the_page
-    | Pexp_field (_, { txt = Lident ("contents" | "current") | Ldot (_, ("contents" | "current")); _ }) ->
-        raise Reads_the_world
-    | Pexp_field (target, _) -> now cells target
+      when List.mem (Own_ref name) cells -> (
+        match kept with Every_render -> found := Reads_the_page | First_render -> ())
+    | Pexp_field (target, { txt = Lident ("contents" | "current") | Ldot (_, ("contents" | "current")); _ }) -> (
+        match kept with Every_render -> raise Reads_the_world | First_render -> now kept cells target)
+    | Pexp_field (target, _) -> now kept cells target
     | Pexp_let (_, bindings, rest) ->
-        List.iter (fun binding -> now cells binding.pvb_expr) bindings;
-        now
+        List.iter (fun binding -> now kept cells binding.pvb_expr) bindings;
+        now kept
           (List.fold_left
              (fun cells binding ->
                match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
@@ -97,29 +107,29 @@ let rendering ~hooks body =
             (fun cells param ->
               match param.pparam_desc with
               | Pparam_val (_, default, pattern) ->
-                  Option.iter (now cells) default;
+                  Option.iter (now kept cells) default;
                   unbound cells pattern
               | Pparam_newtype _ -> cells)
             cells params
         in
         match function_body with
-        | Pfunction_body body -> now inner body
+        | Pfunction_body body -> now kept inner body
         | Pfunction_cases (branches, _, _) -> cases inner branches)
     | Pexp_match (target, branches) | Pexp_try (target, branches) ->
-        now cells target;
+        now kept cells target;
         cases cells branches
     | Pexp_tuple items | Pexp_array items -> each items
-    | Pexp_construct (_, argument) | Pexp_variant (_, argument) -> Option.iter (now cells) argument
+    | Pexp_construct (_, argument) | Pexp_variant (_, argument) -> Option.iter (now kept cells) argument
     | Pexp_record (fields, base) ->
-        List.iter (fun (_, value) -> now cells value) fields;
-        Option.iter (now cells) base
+        List.iter (fun (_, value) -> now kept cells value) fields;
+        Option.iter (now kept cells) base
     | Pexp_ifthenelse (test, yes, no) ->
-        now cells test;
-        now cells yes;
-        Option.iter (now cells) no
+        now kept cells test;
+        now kept cells yes;
+        Option.iter (now kept cells) no
     | Pexp_sequence (first, second) ->
-        now cells first;
-        now cells second
+        now kept cells first;
+        now kept cells second
     | Pexp_constraint (inner, _)
     | Pexp_coerce (inner, _, _)
     | Pexp_lazy inner
@@ -127,12 +137,12 @@ let rendering ~hooks body =
     | Pexp_newtype (_, inner)
     | Pexp_poly (inner, _)
     | Pexp_open (_, inner) ->
-        now cells inner
+        now kept cells inner
     | Pexp_setfield _ | Pexp_while _ | Pexp_for _ | Pexp_send _ | Pexp_new _ | Pexp_setinstvar _ | Pexp_override _
     | Pexp_letmodule _ | Pexp_letexception _ | Pexp_object _ | Pexp_pack _ | Pexp_letop _ | Pexp_extension _ ->
         raise Reads_the_world
   in
-  match now [] body with () -> !found | exception Reads_the_world -> Impure
+  match now Every_render [] body with () -> !found | exception Reads_the_world -> Impure
 
 type step =
   | Statement of expression

@@ -1120,6 +1120,12 @@ reducer: those run when the user or React calls them. Calls to other functions a
 the props cache above already takes them. The answer goes into the component's definition,
 `Component.pure` or `Component.make`.
 
+The argument of `useState` or `useRef`, its initialiser included, and a reducer's initial state are
+evaluated on every render, but only the first render keeps them: a later render that is skipped
+loses nothing. Reads there do not make the render impure: `React.useRef(Fetch.AbortController.make())`,
+`useState(() => Js.Date.now())`, a ref's `current`. Writes still do: an assignment to an outer ref, a
+field set, a method call or an unknown hook.
+
 Rounds exist for renders that read the page (see "Reading layout while rendering"): all of a round
 render before any of them writes. For a pure render that ordering cannot be seen, so the scheduler
 drops it where it costs work:
@@ -1277,8 +1283,11 @@ does not wait for the types: it renders whole, as without `-typed`.
   `current`, `!r` of an outer ref, `Js.Date`, a getter, an assignment, an unknown hook, a method
   call) placed while rendering or in a handler, effect, callback or reducer, with render-local refs
   and a known custom hook, and checks that a body is impure exactly when a read of the world runs
-  while it renders. Treating JSX props as run now, ignoring `.current`, taking `useMemo`'s function
-  as run later or allowing getters each break it.
+  while it renders, or a write runs while it renders at all, reads in the arguments of `useState`,
+  `useRef` and a reducer's initial state included. Treating JSX props as run now, ignoring
+  `.current`, taking `useMemo`'s function as run later or allowing getters each break it, as do
+  taking a read in `useState`'s argument as impure, allowing a write there, keeping `useMemo`'s
+  function only for the first render or taking a reducer's initial state as kept by every render.
 - Dual laws, under React 18 and Melact: a tree of pure components that read a context and pass a
   prop down, through random context changes, new props and keyed moves in one batch, shows every
   change and runs effects children first in the order of the page; a component with a state cell,

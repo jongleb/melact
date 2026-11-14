@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- A read of the world in the argument of `useState` or `useRef`, or in a reducer's initial state, no
+  longer makes a render impure: only the first render keeps that value, so skipping a later render
+  loses nothing. `React.useRef(Fetch.AbortController.make())` in toolkit's
+  `UseRemoteData.WithAbort.use` was the only thing keeping it from a fact; it gets
+  `(2, 6, "useMemo")` and `WithAbort.use0` to `use7` take 7 slots. Writes there (an outer ref, a
+  field, a method call, an unknown hook) still make it impure. Laws: `test/graph` (a third timing,
+  only the first render, with reads and writes apart; five mutants), `test/team` (`Remote.re` keeps a
+  ref made by a call on every render).
+
 - A local name for a hook counts as that hook in a custom hook's fact: an effect hook chosen by a flag
   (`let useEffect3 = useLayoutEffect ? React.useLayoutEffect3 : React.useEffect3`, the shape of
   toolkit's `UseRemoteData.use`), when every branch takes the same slots, or a new name for a hook
