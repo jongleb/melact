@@ -67,6 +67,9 @@ export default defineConfig({
     // byte for byte against each other by dune; test/typed/probed runs it.
     exclude: ["**/node_modules/**", "_build/default/test/typed/dual/**", "_build/default/test/typed/staged/**"],
     setupFiles: ["./test/setup.js"],
+    // A property law runs its body up to a hundred times; beside the ratchet and the prerendered laws, which
+    // take minutes on every core, one can exceed vitest's 5 s without being stuck.
+    testTimeout: 30000,
     // The ratchet's leak check collects garbage before it looks for nodes still reachable after an unmount.
     poolOptions: { forks: { execArgv: ["--expose-gc"] } },
     // The size ratchet bundles with esbuild, which needs Node's own typed arrays.
