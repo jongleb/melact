@@ -66,8 +66,9 @@ so a component in another file that calls the hook compiles to an update graph:
   $ cat > melact_runtime.mli <<'EOF'
   > module Hook : sig
   >   type 'a key
-  >   val key : unit -> 'a key
+  >   val key : unit -> unit key
   >   val unchecked : 'a key -> 'a key
+  >   val listed : 'a -> int array
   > end
   > EOF
   $ cat > react.mli <<'EOF'
@@ -161,3 +162,17 @@ makes the name unknown:
   let useUneven flag dependencies =
   let useShadowed ~useMemo dependencies =
   let ((useRenamed)[@melhole.hook (2, 0, "useMemo")]) =
+
+A binding to npm's useMemo is a custom hook with a fact of its own, so another file can pass it for a
+hook parameter, as UseRemoteData's use8 passes RR.useMemo8, and the slots add up across three files:
+
+  $ cat > rr.ml <<'EOF'
+  > external useMemo8 : (unit -> 'any) -> 'a * 'b * 'c * 'd * 'e * 'f * 'g * 'h -> 'any = "useMemo" [@@mel.module "react"]
+  > EOF
+  $ cat > far.ml <<'EOF'
+  > let use8 ?skip ?useLayoutEffect fetch dependencies = Remote.use ?skip ?useLayoutEffect ~useMemo:Rr.useMemo8 fetch dependencies
+  > EOF
+  $ ocamlc -c -ppx '../pp.exe --as-ppx -typed' rr.ml
+  $ ocamlc -c -ppx '../pp.exe --as-ppx -typed' remote.ml
+  $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' far.ml 2>&1 | grep -E '^let \(\('
+  let ((use8)[@melhole.hook (2, 3)]) =

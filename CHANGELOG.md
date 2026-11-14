@@ -27,7 +27,8 @@
   hooks the body calls, and a caller adds the slots of the hook it passes. A hook-named value the body
   only reads leaves the fact to `-typed`, which gives it when the value's type is not a function.
   Laws: `test/ppx/typed.t` (a hook parameter, React's hook passed for it, a `bool` flag, a function
-  flag, a component in another file, with and without `-typed`), `test/team` (`Remote.re`,
+  flag, a component in another file, with and without `-typed`, npm's `useMemo` bound in a third file
+  and passed as `~useMemo=Rr.useMemo8`), `test/team` (`Remote.re`,
   `RemoteView.re`, with a state cell after the hook so a wrong slot count shows).
 
 - One rule names hooks everywhere in melact-ppx (`Hook_name`): `use`, or `use` followed by anything
