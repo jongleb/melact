@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Custom hooks that take a hook as a parameter, or read a flag named like a hook, get their fact,
+  so components calling them keep their update graph instead of rendering whole: toolkit's
+  `UseRemoteData.use1` (`use(~useMemo=React.useMemo1, ~useLayoutEffect?, …)`) and every component
+  calling it. The fact (now version 2, `[@melhole.hook (2, slots, label…)]`) names the labels whose
+  hooks the body calls, and a caller adds the slots of the hook it passes. A hook-named value the body
+  only reads leaves the fact to `-typed`, which gives it when the value's type is not a function.
+  Laws: `test/ppx/typed.t` (a hook parameter, React's hook passed for it, a `bool` flag, a function
+  flag, a component in another file, with and without `-typed`), `test/team` (`Remote.re`,
+  `RemoteView.re`, with a state cell after the hook so a wrong slot count shows).
+
 - One rule names hooks everywhere in melact-ppx (`Hook_name`): `use`, or `use` followed by anything
   but a lowercase letter. Two places used a looser one: a call such as `user(v)` or
   `userFromEmail(v)` was taken to only read its arguments, so a `let` built from it could be kept

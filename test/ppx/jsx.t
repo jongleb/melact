@@ -818,7 +818,7 @@ Hooks get one key per call site, also inside custom hooks:
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useToggle)[@melhole.hook (1, 1)]) =
+  let ((useToggle)[@melhole.hook (2, 1)]) =
     fun () ->
       (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
         (fun () -> false)
@@ -1149,12 +1149,12 @@ stays as a definition other files can call, with no limit on the number of depen
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let ((useEffect3)[@melhole.hook (1, 1)]) =
+  let ((useEffect3)[@melhole.hook (2, 1)]) =
     fun _melact_argument_0 _melact_argument_1 ->
       React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
         _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let melact_key_useEffect8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let ((useEffect8)[@melhole.hook (1, 1)]) =
+  let ((useEffect8)[@melhole.hook (2, 1)]) =
     fun _melact_argument_0 _melact_argument_1 ->
       React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
         _melact_argument_0 _melact_argument_1[@@warning "-32"]
@@ -1162,7 +1162,7 @@ stays as a definition other files can call, with no limit on the number of depen
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let __melhole_hook_2 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((use)[@melhole.hook (1, 2)]) =
+  let ((use)[@melhole.hook (2, 2)]) =
     fun a ->
       (React.useEffect3 (Melact_runtime.Hook.unchecked __melhole_hook_1))
         (fun () -> None) (a, "x", 1.0);
@@ -1180,12 +1180,12 @@ call the binding's definition:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let ((useMemo8)[@melhole.hook (1, 1)]) =
+  let ((useMemo8)[@melhole.hook (2, 1)]) =
     fun _melact_argument_0 _melact_argument_1 ->
       React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
         _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
     [@@warning "-32"]
-  let ((use)[@melhole.hook (1, 1)]) =
+  let ((use)[@melhole.hook (2, 1)]) =
     fun a -> useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
 
 Bindings to npm React's element functions that return a React.element become Melact's elements: a
@@ -1423,7 +1423,7 @@ update graph; the component numbers the hook's state cells after its own slots:
   > [@@react.component]
   > EOF
   $ ./pp.exe -impl tally.ml | grep -o "melhole.hook ([0-9], [0-9])\|Component.pure\|Instance.changed\|Memo.graph __melact_memo [0-9]* __melact_changed [0-9]*"
-  melhole.hook (1, 2)
+  melhole.hook (2, 2)
   Component.pure
   Instance.changed
 

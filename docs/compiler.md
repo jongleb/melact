@@ -1241,13 +1241,29 @@ module, does the rest. That works under `pps`, through an `.mli` and across libr
 
 What a module boundary hides is a custom hook. A top-level `useX` whose body is pure and calls only
 React's hooks and known custom hooks at its top level gets a fact on its pattern, which reaches the
-`.cmi`: `[@melhole.hook (1, slots)]`, a format version and the hook slots it takes on every call. A
+`.cmi`: `[@melhole.hook (2, slots, label…)]`, a format version, the hook slots it takes on every call
+and the labels whose hooks it calls. A
 component that calls it, in the same file or, under `staged_pps`, from another module (read with
 `Env.lookup_value`, as `melhole.inline` is), keeps its purity and its graph: the call is a step that
 runs on every render, and the hook's state cells are numbered after the component's slots before
 it, as the runtime numbers them. Without the fact (under `pps`, behind an `.mli` that hides it, or an
 older version) the hook is unknown and the component renders whole, as before. melact-ppx's bindings
 to npm's React hooks are such custom hooks too.
+
+A hook can be given to a custom hook: `use(~useMemo, …)` calls `useMemo(…)`, and
+`use1 = (…) => use(~useMemo=React.useMemo1, …)` picks it. `use`'s fact names the label once per
+call of it, `(2, 2, "useMemo")`; a caller that passes React's hook, a custom hook with a fact or a
+hook given to it under its own label adds that hook's slots, so `use1` gets `(2, 3)`. The runtime
+numbers the slots as they are called, through the parameter as through a name.
+
+A name says a hook, not a type: a flag `~useLayoutEffect=false` read in a dependency tuple, or passed
+on as `~useLayoutEffect?`, is a hook-named value, and from the syntax alone it could be a hook called
+elsewhere. Such a value leaves the fact uncertain. Under `-typed` the uncertain hook and each value are
+marked; once the file is typed the fact is given when every value's type is a named type or a
+JavaScript object (`bool`, `bool option`), and not when one is a function or a type variable. The fact
+is then on the pattern before the file is compiled, so it reaches the `.cmi`. A hook that calls an
+uncertain hook of its own file inherits its values. A component in the same file as an uncertain hook
+does not wait for the types: it renders whole, as without `-typed`.
 
 ### Laws and measurements
 

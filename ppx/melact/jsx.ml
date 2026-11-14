@@ -55,7 +55,23 @@ let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionStat
 let inline_fact = "melhole.inline"
 let inline_version = 1
 let hook_fact = "melhole.hook"
-let hook_version = 1
+let hook_version = 2
+
+let with_hook_fact ~loc (fact : Graph.fact) pattern =
+  {
+    pattern with
+    ppat_attributes =
+      attribute ~loc ~name:{ loc; txt = hook_fact }
+        ~payload:
+          (PStr
+             [
+               pstr_eval ~loc
+                 (pexp_tuple ~loc (eint ~loc hook_version :: eint ~loc fact.slots :: List.map (estring ~loc) fact.through))
+                 [];
+             ])
+      :: pattern.ppat_attributes;
+  }
+
 let environment = lazy (match Ocaml_common.Compmisc.initial_env () with environment -> Some environment | exception _ -> None)
 
 let imported_hook path =
@@ -79,10 +95,9 @@ let imported_hook path =
                      ( {
                          pexp_desc =
                            Pexp_tuple
-                             [
-                               { pexp_desc = Pexp_constant (Pconst_integer (version, None)); _ };
-                               { pexp_desc = Pexp_constant (Pconst_integer (count, None)); _ };
-                             ];
+                             ({ pexp_desc = Pexp_constant (Pconst_integer (version, None)); _ }
+                             :: { pexp_desc = Pexp_constant (Pconst_integer (slots, None)); _ }
+                             :: labels);
                          _;
                        },
                        _ );
@@ -90,7 +105,17 @@ let imported_hook path =
                };
               ]
                 when int_of_string version = hook_version ->
-                  Some (int_of_string count)
+                  Some
+                    {
+                      Graph.slots = int_of_string slots;
+                      through =
+                        List.map
+                          (fun label ->
+                            match label.pexp_desc with
+                            | Pexp_constant (Pconst_string (label, _, _)) -> label
+                            | _ -> raise Exit)
+                          labels;
+                    }
               | _ -> None
               | exception _ -> None)
           | _ -> None)
@@ -1103,13 +1128,18 @@ let mapper =
     val mutable react : opened = Closed
     val mutable modules : string list = []
     val mutable hooks : string list = []
-    val mutable custom : (string * int) list = []
+    val mutable custom : (string * Melhole_typed.Question.t Graph.counted) list = []
 
-    method private custom callee =
+    method private known callee =
       match callee.pexp_desc with
       | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name custom
-      | Pexp_ident { txt = Ldot _ as path; _ } -> imported_hook path
+      | Pexp_ident { txt = Ldot _ as path; _ } ->
+          Option.map (fun fact -> { Graph.fact; values = []; conditions = [] }) (imported_hook path)
       | _ -> None
+
+    method private custom callee =
+      Option.bind (self#known callee) (fun (counted : _ Graph.counted) ->
+          match counted.conditions with [] -> Some counted.fact | _ :: _ -> None)
 
     method! structure items =
       let saved = react and known = hooks and facts = custom in
@@ -1153,45 +1183,110 @@ let mapper =
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
           Location.raise_errorf ~loc:item.pstr_loc "melact: a [@react.component] external is bound before the JSX rewrite"
       | Pstr_value (flag, bindings) -> (
-          let bindings =
-            List.map
-              (fun binding ->
-                match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
-                | Ppat_var { txt = name; loc }, Pexp_function _ -> (
-                    match Melhole_compiler.Hook_name.of_name name with
-                    | Plain -> binding
-                    | Hook _ ->
-                    Option.fold ~none:binding
-                      ~some:(fun count ->
-                        custom <- (name, count) :: custom;
-                        {
-                          binding with
-                          pvb_pat =
-                            {
-                              binding.pvb_pat with
-                              ppat_attributes =
-                                attribute ~loc ~name:{ loc; txt = hook_fact }
-                                  ~payload:(PStr [ pstr_eval ~loc (pexp_tuple ~loc [ eint ~loc hook_version; eint ~loc count ]) [] ])
-                                :: binding.pvb_pat.ppat_attributes;
-                            };
-                        })
-                      (Graph.slots ~hooks:self#custom binding.pvb_expr))
-                | _ -> binding)
-              bindings
+          let bindings, pending =
+            List.split
+              (List.map
+                 (fun binding ->
+                   match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
+                   | Ppat_var { txt = name; loc }, Pexp_function _ -> (
+                       match Melhole_compiler.Hook_name.of_name name with
+                       | Plain -> (binding, None)
+                       | Hook _ -> (
+                           match Graph.slots ~hooks:self#known binding.pvb_expr with
+                           | None -> (binding, None)
+                           | Some { fact; values = []; conditions = [] } ->
+                               custom <- (name, { fact; values = []; conditions = [] }) :: custom;
+                               ({ binding with pvb_pat = with_hook_fact ~loc fact binding.pvb_pat }, None)
+                           | Some { fact; values; conditions } ->
+                               let asked = ref conditions in
+                               let marker =
+                                 object
+                                   inherit Ast_traverse.map as super
+
+                                   method! expression expression =
+                                     match List.memq expression values with
+                                     | true ->
+                                         let question, expression = Melhole_typed.Question.expression expression in
+                                         asked := question :: !asked;
+                                         expression
+                                     | false -> super#expression expression
+                                 end
+                               in
+                               let expression = marker#expression binding.pvb_expr in
+                               custom <- (name, { fact; values = []; conditions = !asked }) :: custom;
+                               ({ binding with pvb_expr = expression }, Some (name, fact, !asked))))
+                   | _ -> (binding, None))
+                 bindings)
           in
+          let pending = List.filter_map Fun.id pending in
           let item = { item with pstr_desc = Pstr_value (flag, bindings) } in
           let expanded = List.map self#component bindings in
-          match List.concat_map (fun (types, _, _) -> types) expanded with
-          | [] -> super#structure_item item
-          | types ->
-              let loc = item.pstr_loc in
-              super#structure_item
-                (pstr_include ~loc
-                   (include_infos ~loc
-                      (pmod_structure ~loc
-                         (types
-                         @ [ { item with pstr_desc = Pstr_value (flag, List.map (fun (_, value, _) -> value) expanded) } ]
-                         @ List.concat_map (fun (_, _, makes) -> makes) expanded)))))
+          let mapped =
+            match List.concat_map (fun (types, _, _) -> types) expanded with
+            | [] -> super#structure_item item
+            | types ->
+                let loc = item.pstr_loc in
+                super#structure_item
+                  (pstr_include ~loc
+                     (include_infos ~loc
+                        (pmod_structure ~loc
+                           (types
+                           @ [ { item with pstr_desc = Pstr_value (flag, List.map (fun (_, value, _) -> value) expanded) } ]
+                           @ List.concat_map (fun (_, _, makes) -> makes) expanded))))
+          in
+          let decide file structure =
+            let fact name =
+              Option.bind
+                (List.find_opt (fun (pending, _, _) -> String.equal pending name) pending)
+                (fun (_, fact, conditions) ->
+                  match
+                    List.find_opt
+                      (fun question ->
+                        match Option.map Melhole_typed.Answer.view (Melhole_typed.File.answer file question) with
+                        | Some (Named _ | Js_object _) -> false
+                        | Some (Function _ | Other) | None -> true)
+                      conditions
+                  with
+                  | None -> Some fact
+                  | Some _ -> None)
+            in
+            let rec attached structure =
+              List.map
+                (fun item ->
+                  match item.pstr_desc with
+                  | Pstr_value (flag, bindings) ->
+                      {
+                        item with
+                        pstr_desc =
+                          Pstr_value
+                            ( flag,
+                              List.map
+                                (fun binding ->
+                                  match binding.pvb_pat.ppat_desc with
+                                  | Ppat_var { txt; loc } ->
+                                      Option.fold ~none:binding
+                                        ~some:(fun fact -> { binding with pvb_pat = with_hook_fact ~loc fact binding.pvb_pat })
+                                        (fact txt)
+                                  | _ -> binding)
+                                bindings );
+                      }
+                  | Pstr_include ({ pincl_mod = { pmod_desc = Pmod_structure inner; _ } as included; _ } as infos) ->
+                      {
+                        item with
+                        pstr_desc =
+                          Pstr_include { infos with pincl_mod = { included with pmod_desc = Pmod_structure (attached inner) } };
+                      }
+                  | _ -> item)
+                structure
+            in
+            attached structure
+          in
+          match pending with
+          | [] -> mapped
+          | _ :: _ -> (
+              match Melhole_typed.Site.items [ mapped ] ~decide with
+              | [ sited ] -> sited
+              | sited -> pstr_include ~loc:mapped.pstr_loc (include_infos ~loc:mapped.pstr_loc (pmod_structure ~loc:mapped.pstr_loc sited))))
       | _ -> super#structure_item item
 
     method! signature items =

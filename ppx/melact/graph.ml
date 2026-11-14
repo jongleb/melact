@@ -166,6 +166,55 @@ type shape =
 
 exception Beyond
 
+type fact = { slots : int; through : string list }
+
+type 'condition counted = { fact : fact; values : expression list; conditions : 'condition list }
+
+let react_slots name =
+  match Melhole_compiler.Hook_name.of_name name with
+  | Plain -> None
+  | Hook { base; _ } -> (
+      match base with
+      | "useState" | "useReducer" | "useReducerWithMapState" | "useRef" | "useId" | "useMemo" | "useCallback" | "useEffect"
+      | "useLayoutEffect" | "useInsertionEffect" | "useImperativeHandle" ->
+          Some 1
+      | "useContext" | "useDebugValue" -> Some 0
+      | _ -> None)
+
+let combined found more =
+  {
+    fact = { slots = found.fact.slots + more.fact.slots; through = found.fact.through @ more.fact.through };
+    values = found.values @ more.values;
+    conditions = found.conditions @ more.conditions;
+  }
+
+let passed ~hooks ~own counted arguments =
+  let hook label =
+    match
+      List.find_map
+        (fun (given, value) -> match given with Labelled name when String.equal name label -> Some value | _ -> None)
+        arguments
+    with
+    | None -> raise Beyond
+    | Some value -> (
+        match (value.pexp_desc, own value, hooks value) with
+        | Pexp_ident { txt = Ldot (Lident "React", name); _ }, _, _ -> (
+            match react_slots name with
+            | Some slots -> { fact = { slots; through = [] }; values = []; conditions = [] }
+            | None -> raise Beyond)
+        | _, Some own, _ -> { fact = { slots = 0; through = [ own ] }; values = []; conditions = [] }
+        | _, None, Some ({ fact = { through = []; _ }; _ } as known) -> known
+        | _, None, (Some _ | None) -> raise Beyond)
+  in
+  ( List.fold_left
+      (fun found label -> combined found (hook label))
+      { counted with fact = { counted.fact with through = [] } }
+      counted.fact.through,
+    List.filter
+      (fun (given, _) ->
+        match given with Labelled name -> not (List.mem name counted.fact.through) | Nolabel | Optional _ -> true)
+      arguments )
+
 (** What the update graph makes of a value that may read mutable state. *)
 type volatile =
   | Renders_whole  (** Nothing: the component renders whole. *)
@@ -211,9 +260,16 @@ let plan ~hooks ~inputs ~props ~volatile body =
       match value.pexp_desc with
       | Pexp_apply (callee, arguments) ->
           Option.map
-            (fun count ->
-              List.iter (fun (_, argument) -> ignore (checked argument)) arguments;
-              Custom (pattern, value, count))
+            (fun fact ->
+              let counted, rest =
+                passed
+                  ~hooks:(fun hook -> Option.map (fun fact -> { fact; values = []; conditions = [] }) (hooks hook))
+                  ~own:(fun _ -> None)
+                  { fact; values = []; conditions = [] }
+                  arguments
+              in
+              List.iter (fun (_, argument) -> ignore (checked argument)) rest;
+              Custom (pattern, value, counted.fact.slots))
             (hooks callee)
       | _ -> None
     in
@@ -334,60 +390,83 @@ let plan ~hooks ~inputs ~props ~volatile body =
               | reads -> Some { steps; result; reads })))
 
 let slots ~hooks body =
+  let rec peeled expression found =
+    match expression.pexp_desc with
+    | Pexp_function (given, _, Pfunction_body body) ->
+        peeled body
+          (List.fold_left
+             (fun found param ->
+               match param.pparam_desc with
+               | Pparam_val
+                   ( Labelled label,
+                     None,
+                     { ppat_desc = Ppat_var { txt; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt; _ }; _ }, _); _ } ) -> (
+                   match Melhole_compiler.Hook_name.of_name txt with Hook _ -> (txt, label) :: found | Plain -> found)
+               | Pparam_val _ | Pparam_newtype _ -> found)
+             found given)
+    | _ -> (expression, found)
+  in
+  let inner, params = peeled body [] in
+  let own hook = match hook.pexp_desc with Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name params | _ -> None in
+  let read = ref [] in
   let free_of_hooks expression =
     (object
        inherit Ast_traverse.iter as super
 
        method! expression expression =
          match expression.pexp_desc with
-         | Pexp_ident { txt; _ } -> (
+         | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, _) -> (
              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
              | Hook _ -> raise Beyond
+             | Plain -> super#expression expression)
+         | Pexp_ident { txt; _ } -> (
+             match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+             | Hook _ -> read := expression :: !read
              | Plain -> ())
          | _ -> super#expression expression
     end)
       #expression expression
   in
+  let none = { fact = { slots = 0; through = [] }; values = []; conditions = [] } in
   let taken value =
     match value.pexp_desc with
     | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
-        let count =
-          match (hooks callee, txt) with
-          | Some count, _ -> Some count
-          | None, Ldot (Lident "React", name) -> (
-              let rec trimmed length =
-                match length > 0 && name.[length - 1] >= '0' && name.[length - 1] <= '9' with
-                | true -> trimmed (length - 1)
-                | false -> length
-              in
-              match String.sub name 0 (trimmed (String.length name)) with
-              | "useState" | "useReducer" | "useReducerWithMapState" | "useRef" | "useId" | "useMemo" | "useCallback"
-              | "useEffect" | "useLayoutEffect" | "useInsertionEffect" | "useImperativeHandle" ->
-                  Some 1
-              | "useContext" | "useDebugValue" -> Some 0
-              | _ -> None)
-          | None, _ -> None
+        let called counted =
+          let counted, rest = passed ~hooks ~own counted arguments in
+          List.iter (fun (_, argument) -> free_of_hooks argument) rest;
+          counted
         in
-        match count with
-        | Some count ->
+        match (own callee, hooks callee, txt) with
+        | Some label, _, _ ->
             List.iter (fun (_, argument) -> free_of_hooks argument) arguments;
-            count
-        | None ->
+            { none with fact = { slots = 0; through = [ label ] } }
+        | None, Some counted, _ -> called counted
+        | None, None, Ldot (Lident "React", name) -> (
+            match react_slots name with
+            | Some slots -> called { none with fact = { slots; through = [] } }
+            | None ->
+                free_of_hooks value;
+                none)
+        | None, None, _ ->
             free_of_hooks value;
-            0)
+            none)
     | _ ->
         free_of_hooks value;
-        0
+        none
   in
   let rec counted expression =
     match expression.pexp_desc with
-    | Pexp_sequence (first, rest) -> taken first + counted rest
-    | Pexp_let (Nonrecursive, [ binding ], rest) -> taken binding.pvb_expr + counted rest
+    | Pexp_sequence (first, rest) -> combined (taken first) (counted rest)
+    | Pexp_let (Nonrecursive, [ binding ], rest) -> combined (taken binding.pvb_expr) (counted rest)
     | _ -> taken expression
   in
-  let rec inner expression =
-    match expression.pexp_desc with Pexp_function (_, _, Pfunction_body body) -> inner body | _ -> expression
-  in
-  match rendering ~hooks body with
+  match
+    rendering
+      ~hooks:(fun callee -> Option.fold ~none:(Option.map ignore (hooks callee)) ~some:(fun _ -> Some ()) (own callee))
+      body
+  with
   | Impure | Reads_the_page -> None
-  | Pure -> ( match counted (inner body) with count -> Some count | exception Beyond -> None)
+  | Pure -> (
+      match counted inner with
+      | found -> Some { found with values = found.values @ !read }
+      | exception Beyond -> None)

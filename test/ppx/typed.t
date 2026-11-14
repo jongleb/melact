@@ -55,3 +55,67 @@ typed pass:
   [1]
   $ grep -c not_defined_anywhere typed.ml
   1
+
+A custom hook that calls a hook given for a labelled parameter gets a fact naming that label, and one
+that passes React's hook for it adds the slots of that hook. A hook-named value the body only reads,
+like a flag named useLayoutEffect, keeps the fact from being certain: with -typed the fact is given
+when the type shows the value is not a function, and never without -typed. The fact reaches the .cmi,
+so a component in another file that calls the hook compiles to an update graph:
+
+  $ mkdir hooks && cd hooks
+  $ cat > melact_runtime.mli <<'EOF'
+  > module Hook : sig
+  >   type 'a key
+  >   val key : unit -> 'a key
+  >   val unchecked : 'a key -> 'a key
+  > end
+  > EOF
+  $ cat > react.mli <<'EOF'
+  > type element
+  > val reason_react_is_also_in_this_build_remove_it : unit -> unit
+  > val useState : 'k Melact_runtime.Hook.key -> (unit -> 'a) -> 'a * (('a -> 'a) -> unit)
+  > val useEffect2 : 'k Melact_runtime.Hook.key -> (unit -> (unit -> unit) option) -> 'a * 'b -> unit
+  > val useMemo1 : 'k Melact_runtime.Hook.key -> (unit -> 'a) -> 'b array -> 'a
+  > EOF
+  $ ocamlc -c melact_runtime.mli react.mli
+  $ cat > remote.ml <<'EOF'
+  > let use ?(skip = false) ?(useLayoutEffect = false) ~(useMemo : (unit -> 'deps) -> 'deps -> 'memo) fetch dependencies =
+  >   let memo = useMemo (fun () -> dependencies) dependencies in
+  >   let data, setData = React.useState (fun () -> None) in
+  >   React.useEffect2 (fun () -> if not skip then setData (fun _ -> Some (fetch memo)); None) (memo, useLayoutEffect);
+  >   data
+  > 
+  > let use1 ?skip ?useLayoutEffect fetch dependencies = use ?skip ?useLayoutEffect ~useMemo:React.useMemo1 fetch dependencies
+  > 
+  > let useBare ~(useMemo : (unit -> 'deps) -> 'deps -> 'memo) dependencies =
+  >   let memo = useMemo (fun () -> dependencies) dependencies in
+  >   let data, _ = React.useState (fun () -> memo) in
+  >   data
+  > 
+  > let useLayered ~(useLayoutEffect : unit -> unit) dependencies =
+  >   let data, _ = React.useState (fun () -> (dependencies, useLayoutEffect)) in
+  >   data
+  > EOF
+  $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' remote.ml 2>&1 | grep -E '^let (\(\()?use'
+  let ((use)[@melhole.hook (2, 2, "useMemo")]) =
+  let ((use1)[@melhole.hook (2, 3)]) =
+  let ((useBare)[@melhole.hook (2, 1, "useMemo")]) =
+  let useLayered ~useLayoutEffect:(useLayoutEffect : unit -> unit) dependencies
+  $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx' remote.ml 2>&1 | grep -E '^let (\(\()?use'
+  let use ?(skip= false) ?(useLayoutEffect= false)
+  let use1 ?skip ?useLayoutEffect fetch dependencies =
+  let ((useBare)[@melhole.hook (2, 1, "useMemo")]) =
+  let useLayered ~useLayoutEffect:(useLayoutEffect : unit -> unit) dependencies
+  $ cat > view.ml <<'EOF'
+  > let make ~id () =
+  >   let data = Remote.use1 ~useLayoutEffect:true (fun deps -> deps.(0)) [| id |] in
+  >   ((p ~children:[ React.string (Option.value ~default:"loading" data) ] ())[@JSX])
+  > [@@react.component]
+  > EOF
+  $ ocamlc -c -ppx '../pp.exe --as-ppx -typed' remote.ml
+  $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' view.ml 2>&1 | grep -E 'Component\.|reaches'
+  let __melhole_component_2 = Melact_runtime.Component.pure ~name:"View.make"
+                     match Melact_runtime.Instance.reaches __melact_changed 29
+  $ ocamlc -c -ppx '../pp.exe --as-ppx' remote.ml
+  $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' view.ml 2>&1 | grep -E 'Component\.|reaches'
+  let __melhole_component_1 = Melact_runtime.Component.make ~name:"View.make"

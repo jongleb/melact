@@ -15,6 +15,7 @@ module App = {
     <Styled.Link href="/a" activeStyle=Styled.highlighted label={Styled.twice(message)} />
     <Styled.Link href="/b" label="plain" />
     {Styled.bound(~href="/c", ~activeStyle=Styled.highlighted, ())}
+    <RemoteView id=message />
   </div>;
   };
 };

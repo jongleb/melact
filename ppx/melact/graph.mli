@@ -13,7 +13,7 @@ type rendering =
 (** [rendering body]: how the body of a [@react.component] reads while it renders. A function's body
     counts as run during the render unless the function is a JSX prop or the callback of an effect, a
     reducer or [useCallback]. [hooks] gives the hook slots of a custom hook known to be pure, from its fact. *)
-val rendering : hooks:(Ppxlib.expression -> int option) -> Ppxlib.expression -> rendering
+val rendering : hooks:(Ppxlib.expression -> 'fact option) -> Ppxlib.expression -> rendering
 
 (** One step of a body read as an update graph. A mask is the set of sources (bits of props, state
     cells and contexts) whose change makes the step run again; a render that knows nothing of what
@@ -32,6 +32,14 @@ type plan = { steps : step list; result : Ppxlib.expression; reads : int }
 (** Every source bit: the mask of a step that runs on every render. *)
 val every_source : int
 
+(** What a custom hook takes on every call: [slots] of its own, and those of the hook given for each label of
+    [through], once per call of it. *)
+type fact = { slots : int; through : string list }
+
+(** A custom hook's fact, holding when none of [values], hook-named identifiers read as values, is a function and
+    every condition holds. *)
+type 'condition counted = { fact : fact; values : Ppxlib.expression list; conditions : 'condition list }
+
 (** What the update graph makes of a value that may read mutable state. *)
 type volatile =
   | Renders_whole  (** Nothing: the component renders whole. A pure body. *)
@@ -42,13 +50,14 @@ type volatile =
     hook, a construct or the number of sources is beyond it, and the component renders whole. The
     first hook slot is the component's memory. *)
 val plan :
-  hooks:(Ppxlib.expression -> int option) ->
+  hooks:(Ppxlib.expression -> fact option) ->
   inputs:int ->
   props:(string * int) list ->
   volatile:volatile ->
   Ppxlib.expression ->
   plan option
 
-(** [slots ~hooks definition]: the hook slots a custom hook takes on every call, when its body is pure,
-    calls its hooks at its top level and calls only React's hooks and custom hooks known by [hooks]. *)
-val slots : hooks:(Ppxlib.expression -> int option) -> Ppxlib.expression -> int option
+(** [slots ~hooks definition]: what a custom hook takes on every call, when its body is pure, calls its hooks at
+    its top level and calls only React's hooks, custom hooks known by [hooks] and hooks given for its labelled
+    parameters. *)
+val slots : hooks:(Ppxlib.expression -> 'condition counted option) -> Ppxlib.expression -> 'condition counted option
