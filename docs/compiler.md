@@ -1256,6 +1256,12 @@ call of it, `(2, 2, "useMemo")`; a caller that passes React's hook, a custom hoo
 hook given to it under its own label adds that hook's slots, so `use1` gets `(2, 3)`. The runtime
 numbers the slots as they are called, through the parameter as through a name.
 
+A local name for a hook counts as that hook: `let useEffect3 = useLayoutEffect ? React.useLayoutEffect3
+: React.useEffect3` (an `if` or a `match`, Reason's ternary) whose branches are all hooks of the same
+slots, or `let useMemo2 = useMemo` for a hook parameter. Branches of different slots give no fact. A
+`let` that binds a hook's name to anything else hides the hook or parameter of that name, and a call
+of it is unknown.
+
 A name says a hook, not a type: a flag `~useLayoutEffect=false` read in a dependency tuple, or passed
 on as `~useLayoutEffect?`, is a hook-named value, and from the syntax alone it could be a hook called
 elsewhere. Such a value leaves the fact uncertain. Under `-typed` the uncertain hook and each value are

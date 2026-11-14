@@ -119,3 +119,45 @@ so a component in another file that calls the hook compiles to an update graph:
   $ ocamlc -c -ppx '../pp.exe --as-ppx' remote.ml
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' view.ml 2>&1 | grep -E 'Component\.|reaches'
   let __melhole_component_1 = Melact_runtime.Component.make ~name:"View.make"
+
+A local name for a hook counts as that hook: one chosen by a condition between hooks of the same slots,
+as UseRemoteData picks useLayoutEffect3 or useEffect3 (Reason's ternary is a match), or a new name for a hook parameter. Hooks of
+different slots give no fact, and a let that shadows a hook parameter with a function of its own
+makes the name unknown:
+
+  $ cat > chosen.ml <<'EOF'
+  > let useChosen flag dependencies =
+  >   let useEffect2 = if flag then React.useLayoutEffect2 else React.useEffect2 in
+  >   useEffect2 (fun () -> None) (dependencies, 0);
+  >   dependencies
+  > 
+  > let useMatched flag dependencies =
+  >   let useEffect2 = match flag with true -> React.useLayoutEffect2 | false -> React.useEffect2 in
+  >   useEffect2 (fun () -> None) (dependencies, 0);
+  >   dependencies
+  > 
+  > let useMismatched flag dependencies =
+  >   let useEffect2 = match flag with true -> React.useLayoutEffect2 | false -> React.useContext in
+  >   useEffect2 (fun () -> None) (dependencies, 0);
+  >   dependencies
+  > 
+  > let useUneven flag dependencies =
+  >   let useEffect2 = if flag then React.useEffect2 else React.useContext in
+  >   useEffect2 (fun () -> None) (dependencies, 0);
+  >   dependencies
+  > 
+  > let useShadowed ~useMemo dependencies =
+  >   let useMemo f _ = f in
+  >   useMemo (fun () -> dependencies) dependencies
+  > 
+  > let useRenamed ~useMemo dependencies =
+  >   let useMemo2 = useMemo in
+  >   useMemo2 (fun () -> dependencies) dependencies
+  > EOF
+  $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx' chosen.ml 2>&1 | grep -E '^let (\(\()?use'
+  let ((useChosen)[@melhole.hook (2, 1)]) =
+  let ((useMatched)[@melhole.hook (2, 1)]) =
+  let useMismatched flag dependencies =
+  let useUneven flag dependencies =
+  let useShadowed ~useMemo dependencies =
+  let ((useRenamed)[@melhole.hook (2, 0, "useMemo")]) =

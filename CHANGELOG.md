@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- A local name for a hook counts as that hook in a custom hook's fact: an effect hook chosen by a flag
+  (`let useEffect3 = useLayoutEffect ? React.useLayoutEffect3 : React.useEffect3`, the shape of
+  toolkit's `UseRemoteData.use`), when every branch takes the same slots, or a new name for a hook
+  parameter. With it `UseRemoteData.use` gets `(2, 4, "useMemo")` and `use0` to `use7` take 5 slots,
+  so components calling them keep their update graph. Fix: a `let` shadowing a hook parameter with a
+  function of its own was still counted as the parameter. Laws: `test/ppx/typed.t` (`chosen.ml`:
+  `if` and `match` choices, uneven branches, a shadowed and a renamed parameter), `test/team`
+  (`Remote.re` picks its effect by a flag).
+
 - Custom hooks that take a hook as a parameter, or read a flag named like a hook, get their fact,
   so components calling them keep their update graph instead of rendering whole: toolkit's
   `UseRemoteData.use1` (`use(~useMemo=React.useMemo1, ~useLayoutEffect?, …)`) and every component

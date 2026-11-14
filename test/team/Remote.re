@@ -1,17 +1,18 @@
-/* The team's data hook, in the shape of toolkit's UseRemoteData: flags named like hooks, and React's
-   useMemo passed in as a parameter. */
+/* The team's data hook, in the shape of toolkit's UseRemoteData: flags named like hooks, React's useMemo
+   passed in as a parameter, and the effect hook chosen by a flag. */
 
 let use = (~skip=false, ~useLayoutEffect=false, ~useMemo: (unit => 'deps, 'deps) => 'memoDeps, fetch, dependencies) => {
-  let memoDeps = useMemo(() => dependencies, dependencies);
   let (data, setData) = React.useState(() => None);
-  React.useEffect2(
+  let memoDeps = useMemo(() => dependencies, dependencies);
+  let useEffect2 = useLayoutEffect ? React.useLayoutEffect2 : React.useEffect2;
+  useEffect2(
     () => {
       if (!skip) {
         setData(_ => Some(fetch(memoDeps)));
       };
       None;
     },
-    (memoDeps, useLayoutEffect),
+    (memoDeps, skip),
   );
   data;
 };

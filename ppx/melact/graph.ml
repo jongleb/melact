@@ -188,7 +188,7 @@ let combined found more =
     conditions = found.conditions @ more.conditions;
   }
 
-let passed ~hooks ~own counted arguments =
+let passed ~hooks ~named counted arguments =
   let hook label =
     match
       List.find_map
@@ -197,14 +197,14 @@ let passed ~hooks ~own counted arguments =
     with
     | None -> raise Beyond
     | Some value -> (
-        match (value.pexp_desc, own value, hooks value) with
+        match (value.pexp_desc, named value, hooks value) with
         | Pexp_ident { txt = Ldot (Lident "React", name); _ }, _, _ -> (
             match react_slots name with
             | Some slots -> { fact = { slots; through = [] }; values = []; conditions = [] }
             | None -> raise Beyond)
-        | _, Some own, _ -> { fact = { slots = 0; through = [ own ] }; values = []; conditions = [] }
-        | _, None, Some ({ fact = { through = []; _ }; _ } as known) -> known
-        | _, None, (Some _ | None) -> raise Beyond)
+        | _, `Local local, _ -> local
+        | _, `Outer, Some ({ fact = { through = []; _ }; _ } as known) -> known
+        | _, (`Shadowed | `Outer), _ -> raise Beyond)
   in
   ( List.fold_left
       (fun found label -> combined found (hook label))
@@ -264,7 +264,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
               let counted, rest =
                 passed
                   ~hooks:(fun hook -> Option.map (fun fact -> { fact; values = []; conditions = [] }) (hooks hook))
-                  ~own:(fun _ -> None)
+                  ~named:(fun _ -> `Outer)
                   { fact; values = []; conditions = [] }
                   arguments
               in
@@ -428,37 +428,91 @@ let slots ~hooks body =
       #expression expression
   in
   let none = { fact = { slots = 0; through = [] }; values = []; conditions = [] } in
-  let taken value =
+  let named locals hook =
+    match hook.pexp_desc with
+    | Pexp_ident { txt = Lident name; _ } -> (
+        match (List.assoc_opt name locals, own hook) with
+        | Some (Some local), _ -> `Local local
+        | Some None, _ -> `Shadowed
+        | None, Some label -> `Local { none with fact = { slots = 0; through = [ label ] } }
+        | None, None -> `Outer)
+    | _ -> `Outer
+  in
+  let rec chosen locals value =
+    match value.pexp_desc with
+    | Pexp_ident { txt = Ldot (Lident "React", name); _ } ->
+        Option.map (fun slots -> { none with fact = { slots; through = [] } }) (react_slots name)
+    | Pexp_ident _ -> (
+        match (named locals value, hooks value) with
+        | `Local local, _ -> Some local
+        | `Outer, Some ({ fact = { through = []; _ }; _ } as known) -> Some known
+        | `Shadowed, _ | `Outer, (Some _ | None) -> None)
+    | Pexp_ifthenelse (test, yes, Some no) -> alike locals [ test ] [ yes; no ]
+    | Pexp_match (target, cases) ->
+        alike locals (target :: List.filter_map (fun case -> case.pc_guard) cases) (List.map (fun case -> case.pc_rhs) cases)
+    | _ -> None
+  and alike locals tests branches =
+    match List.map (chosen locals) branches with
+    | Some first :: rest ->
+        Option.map
+          (fun found ->
+            List.iter free_of_hooks tests;
+            found)
+          (List.fold_left
+             (fun found branch ->
+               match (found, branch) with
+               | Some found, Some branch
+                 when Int.equal found.fact.slots branch.fact.slots
+                      && List.equal String.equal found.fact.through branch.fact.through ->
+                   Some { found with values = found.values @ branch.values; conditions = found.conditions @ branch.conditions }
+               | (Some _ | None), _ -> None)
+             (Some first) rest)
+    | None :: _ | [] -> None
+  in
+  let taken locals value =
     match value.pexp_desc with
     | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments) -> (
         let called counted =
-          let counted, rest = passed ~hooks ~own counted arguments in
+          let counted, rest = passed ~hooks ~named:(named locals) counted arguments in
           List.iter (fun (_, argument) -> free_of_hooks argument) rest;
           counted
         in
-        match (own callee, hooks callee, txt) with
-        | Some label, _, _ ->
+        match (named locals callee, hooks callee, txt) with
+        | `Local local, _, _ ->
             List.iter (fun (_, argument) -> free_of_hooks argument) arguments;
-            { none with fact = { slots = 0; through = [ label ] } }
-        | None, Some counted, _ -> called counted
-        | None, None, Ldot (Lident "React", name) -> (
+            local
+        | `Outer, Some counted, _ -> called counted
+        | `Outer, None, Ldot (Lident "React", name) -> (
             match react_slots name with
             | Some slots -> called { none with fact = { slots; through = [] } }
             | None ->
                 free_of_hooks value;
                 none)
-        | None, None, _ ->
+        | `Shadowed, _, _ | `Outer, None, _ ->
             free_of_hooks value;
             none)
     | _ ->
         free_of_hooks value;
         none
   in
-  let rec counted expression =
+  let rec counted locals expression =
     match expression.pexp_desc with
-    | Pexp_sequence (first, rest) -> combined (taken first) (counted rest)
-    | Pexp_let (Nonrecursive, [ binding ], rest) -> combined (taken binding.pvb_expr) (counted rest)
-    | _ -> taken expression
+    | Pexp_sequence (first, rest) -> combined (taken locals first) (counted locals rest)
+    | Pexp_let (Nonrecursive, [ binding ], rest) -> (
+        let local =
+          match binding.pvb_pat.ppat_desc with
+          | Ppat_var { txt = name; _ } -> (
+              match Melhole_compiler.Hook_name.of_name name with
+              | Hook _ -> Option.map (fun hook -> (name, hook)) (chosen locals binding.pvb_expr)
+              | Plain -> None)
+          | _ -> None
+        in
+        match local with
+        | Some (name, hook) -> counted ((name, Some hook) :: locals) rest
+        | None ->
+            combined (taken locals binding.pvb_expr)
+              (counted (List.map (fun name -> (name, None)) (Free.bound binding.pvb_pat) @ locals) rest))
+    | _ -> taken locals expression
   in
   match
     rendering
@@ -467,6 +521,6 @@ let slots ~hooks body =
   with
   | Impure | Reads_the_page -> None
   | Pure -> (
-      match counted inner with
+      match counted [] inner with
       | found -> Some { found with values = found.values @ !read }
       | exception Beyond -> None)
