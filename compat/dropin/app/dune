@@ -1,0 +1,8 @@
+(melange.emit
+ (target app)
+ (alias melange-app)
+ (module_systems
+  (es6 mjs))
+ (libraries reason-react widgets melange.dom)
+ (preprocess
+  (pps melange.ppx reason-react-ppx)))

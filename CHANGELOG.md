@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `dropin/`: Melact under the names `reason-react` and `reason-react-ppx`, for builds whose opam
+  dependencies require reason-react (melange-recharts, melange-react-intl, …), which until now brought
+  reason-react's `React` next to Melact's and stopped the build. Pinned in place of reason-react
+  (`opam pin add --subpath dropin reason-react …`) or copied into a dune workspace, it switches the
+  whole build with no `dune` file changed: `(libraries reason-react)` gets Melact and melact.compat,
+  `(pps reason-react-ppx)` runs melact-ppx, and `-- -typed` under `staged_pps` reaches it too. Law:
+  `compat/run.sh` builds reason-react's demo and an app over an opam-style library in a workspace
+  where `dropin/` shadows the installed reason-react, checks that nothing imports npm's React and that
+  the typed copy reads the library's hook fact, and compares the DOM with React's (37 and 2 × 605
+  steps); without `dropin/` the import check fails.
+
 - Law: tiptap as the team binds it (`EditorContent` in toolkit's `Tiptap.re`, `useEditor` in the
   widget's file) works with islands: the view on an island, `useEditor` on melact.compat, the editor
   shared, the same DOM as reason-react on React 18 after random commands; `@tiptap/react` is bundled

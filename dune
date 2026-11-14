@@ -1,1 +1,1 @@
-(dirs :standard _compat)
+(dirs :standard _compat \ dropin)

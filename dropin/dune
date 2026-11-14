@@ -1,0 +1,17 @@
+(library
+ (name reason_react_melact)
+ (public_name reason-react)
+ (wrapped false)
+ (modes melange)
+ (modules)
+ (libraries
+  (re_export melact)
+  (re_export melact.compat)))
+
+(library
+ (name reason_react_ppx_melact)
+ (public_name reason-react-ppx)
+ (kind ppx_rewriter)
+ (modules)
+ (libraries
+  (re_export melact-ppx)))

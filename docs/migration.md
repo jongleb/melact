@@ -37,6 +37,27 @@ the examples of this repository build with the staged stanza.
 Nothing else changes. Run the tests; `compat/run.sh` shows what real reason-react apps look like
 after this step.
 
+A library from opam that lists `(libraries reason-react)` (bindings such as melange-recharts or
+melange-react-intl) would bring reason-react's `React` next to Melact's, and the build stops with
+`Unbound value React.reason_react_is_also_in_this_build_remove_it`. Then switch the whole build at
+once instead: [`dropin/`](../dropin) is Melact under the names `reason-react` and
+`reason-react-ppx`, so every library and app keeps its `dune` files and compiles with melact-ppx
+against Melact.
+
+```console
+$ opam pin add melact git+https://github.com/jongleb/melact.git
+$ opam pin add melact-ppx git+https://github.com/jongleb/melact.git
+$ opam pin add --subpath dropin reason-react git+https://github.com/jongleb/melact.git
+$ opam pin add --subpath dropin reason-react-ppx git+https://github.com/jongleb/melact.git
+```
+
+In a dune workspace, copying `dropin/` into the tree does the same without opam: a library of the
+workspace shadows the installed one of the same name. Files keep `(pps reason-react-ppx)`, which
+runs melact-ppx without `-typed`; change an app's stanza to `(staged_pps melange.ppx
+reason-react-ppx -- -typed)` for the typed passes. A component a library binds from npm
+(`[@react.component] external`) renders on melact.compat, the default engine; a library built
+without flags cannot choose islands.
+
 An app that binds components of JavaScript React libraries (`[@react.component] external make : …
 [@@mel.module "recharts"]`) renders them on npm's React in islands with one more flag and library,
 and `react` and `react-dom` 18 among its npm dependencies:

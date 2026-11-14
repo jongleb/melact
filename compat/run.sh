@@ -68,6 +68,9 @@ EOF
 EOF
 done
 
+mkdir -p "$work/apps/dropin-react"
+cp -R "$here/dropin/widgets" "$here/dropin/app" "$work/apps/dropin-react/"
+
 to_melact "$work/apps/template"
 to_melact "$work/apps/demo-melact"
 to_melact "$work/apps/todomvc-melact"
@@ -77,8 +80,37 @@ find "$work/apps" -name '*.bak' -delete
 cd "$root"
 dune build @_compat/apps/template/react @_compat/apps/demo-react/melange-app @_compat/apps/demo-melact/melange-app \
   @_compat/apps/todomvc-react/melange-app @_compat/apps/todomvc-melact/melange-app \
-  @_compat/apps/todomvc-melact-pps/melange-app
+  @_compat/apps/todomvc-melact-pps/melange-app @_compat/apps/dropin-react/app/melange-app
 echo "built melange-opam-template, reason-react's demo and reason-seoul's TodoMVC against Melact"
+
+# A second workspace where reason-react and reason-react-ppx are dropin/, which shadows the installed
+# ones: reason-react's demo and an app over an opam-style library build with their dune files as
+# they are, and nothing in their output imports npm's react.
+world="$work/world"
+rm -rf "$world"
+mkdir -p "$world"
+printf '(lang dune 3.16)\n' > "$world/dune-workspace"
+printf '(lang dune 3.16)\n(using melange 0.1)\n' > "$world/dune-project"
+rsync -a --exclude '/_*' --exclude '/.*' --exclude node_modules --exclude /test --exclude /bench \
+  --exclude /examples --exclude /compat --exclude /dropin --exclude /assets "$root/" "$world/melact/"
+cp -R "$root/dropin" "$world/dropin"
+cp -R "$here/dropin/widgets" "$here/dropin/app" "$world/"
+cp -R "$work/sources/reason-react/demo" "$world/demo"
+cp -R "$here/dropin/app" "$world/app-typed"
+sed -i.bak -e 's/(target app)/(target app-typed)/' \
+  -e 's/(pps melange.ppx reason-react-ppx)/(staged_pps melange.ppx reason-react-ppx -- -typed)/' "$world/app-typed/dune"
+rm "$world/app-typed/dune.bak"
+dune build --root "$world" @app/melange-app @app-typed/melange-app @demo/melange-app
+grep -q "Component.pure" "$world/_build/default/app-typed/app-typed/app-typed/Main.mjs" || {
+  echo "-typed through reason-react-ppx did not read the library's hook fact" >&2
+  exit 1
+}
+if grep -rlE "from \"react(-dom)?(/[a-z-]+)?\"" "$world/_build/default/app" "$world/_build/default/app-typed" \
+  "$world/_build/default/demo"; then
+  echo "the drop-in build imports npm's react" >&2
+  exit 1
+fi
+echo "built reason-react's demo and an app over an opam-style library, unchanged, on the drop-in"
 
 out="$root/_build/default/_compat/apps"
 node "$here/compare.mjs" \
@@ -90,3 +122,12 @@ node "$here/compare.mjs" --explore \
 node "$here/compare.mjs" --explore \
   "$out/todomvc-react/todomvc/_compat/apps/todomvc-react/Index.mjs" \
   "$out/todomvc-melact-pps/todomvc/_compat/apps/todomvc-melact-pps/Index.mjs"
+node "$here/compare.mjs" \
+  "$out/demo-react/demo/_compat/apps/demo-react/main.mjs" \
+  "$world/_build/default/demo/demo/demo/main.mjs"
+node "$here/compare.mjs" --explore \
+  "$out/dropin-react/app/app/_compat/apps/dropin-react/app/Main.mjs" \
+  "$world/_build/default/app/app/app/Main.mjs"
+node "$here/compare.mjs" --explore \
+  "$out/dropin-react/app/app/_compat/apps/dropin-react/app/Main.mjs" \
+  "$world/_build/default/app-typed/app-typed/app-typed/Main.mjs"

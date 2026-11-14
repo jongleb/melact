@@ -1,0 +1,40 @@
+(lang dune 3.16)
+
+(name reason-react)
+
+(using melange 0.1)
+
+(version 0.17.0+melact)
+
+(generate_opam_files true)
+
+(license MIT)
+
+(authors "Gleb <jongleber@gmail.com>")
+
+(maintainers "Gleb <jongleber@gmail.com>")
+
+(homepage "https://jongleb.github.io/melact-meltea-sites/melact/")
+
+(source
+ (github jongleb/melact))
+
+(package
+ (name reason-react)
+ (synopsis "Melact under reason-react's name, for apps and libraries that depend on reason-react")
+ (description
+  "Pinned in place of reason-react, this package gives every library that lists (libraries reason-react) Melact's React, ReactDOM, ReactDOMServer, ReactDOMTestUtils, ReasonReactRouter and ReasonReactErrorBoundary, so that a whole build, its opam dependencies included, runs on Melact.")
+ (depends
+  (dune
+   (>= 3.16))
+  melact))
+
+(package
+ (name reason-react-ppx)
+ (synopsis "melact-ppx under reason-react-ppx's name")
+ (description
+  "Pinned in place of reason-react-ppx, this package makes every (pps reason-react-ppx) run melact-ppx.")
+ (depends
+  (dune
+   (>= 3.16))
+  melact-ppx))
