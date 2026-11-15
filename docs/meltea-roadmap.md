@@ -37,6 +37,65 @@ protocol, where Svelte would have put them in the page's HTML.
 - `meltea/examples/counter` under 2 kB gzip; `bench/meltea` under 7 kB, below Svelte's 9.7.
 - No operation of `bench/ab.mjs` slower than the base, no ratchet counter up.
 - Every step keeps Meltea pure Elm: no hooks, no annotations the user must write.
+- Work per message proportional to what the message changed, not to the size of the model or the
+  view (see the deltas track below).
+
+## The deltas track: update says what it did
+
+A guard asks after the fact whether a value changed, and to answer it reads the old value and the
+new one. In Meltea the answer is known before: the model changes only through `update`, and
+`update` knows what it did. The compiler makes it say so, and the view does what the change implies
+instead of checking.
+
+### The guarantee
+
+For a program that passes the typed check (its model is immutable, its view reads only the model,
+its arguments and constants, its controlled elements are declared), the page after every draw is
+`view model`, and no hole is checked after the fact, except on the element a browser event just
+reached. What fails the check gets an alert and falls back to guards; nothing is ever silently
+wrong.
+
+The three ways the page could need a change that `update` did not report, and what closes each:
+
+- **The browser changes the DOM** (typing, a checkbox, `<details>`, autofill), and `update` keeps
+  the model as it was, as when it rejects a character. Neither a delta nor `===` sees it. Closed by
+  controlled holes (`value`, `checked`, `open`): after an event on such an element, its DOM is
+  compared with its hole once (`View.controlled_hole`, `restore_controlled` already do this). A
+  value written without a handler gets an alert.
+- **The view reads something besides the model**: `Js.Date.now`, `Js.Math.random`, a `ref`, an
+  external. Guards miss it too. Typed, every read of the view is known: such a hole is evaluated on
+  every draw, as today, with an alert that suggests moving the value into the model through a
+  subscription.
+- **The model is mutated in place**: `model.rows.(1) <- x; model`, a table or a JS object inside
+  the model. Guards miss it too, since the reference is the same. Typed, a write in `update` to a
+  value reachable from the model makes that field `Replaced` with an alert; a field of a type that
+  can change elsewhere (abstract, from JS) is taken as changed on every message.
+
+A delta is the compiler's reading of `update`, and a reading can be wrong where `===` looks at real
+values. So: whatever is not recognised is `Replaced`, the path of today; laws compare every draw
+with a fresh mount of the model, with mutants; and a development build audits every draw, running
+the guarded path beside the delta and raising on any difference, with the message and the hole.
+
+### Steps of the track
+
+- **D1. Work counters.** Per message: `===` checks, items of collections read, view functions
+  called, allocations of the draw. Deterministic, so they are the main measure (timing on this
+  machine is noisy), with a law that work is proportional to the change on random programs.
+- **D2. The typed graph.** Move `fields` and `slice` to the Typedtree: exact names (`Array.append`
+  is `Stdlib.Array.append`), paths of nested fields (`editor.draft`), view and update functions with
+  parameters inside the file, gates inside functions and rows. The untyped reading stays as the
+  fallback.
+- **D3. Changes derived from types.** From the type of the model: a record changes per field, an
+  array or a list by an edit script (`Appended`, `Removed_at`, `Swapped`, `Set_at`, `Thinned`), a
+  variant without payload by `Became (old, new)`, anything else by `Replaced`. `update` is rewritten
+  to return the change beside the model; each recognised construct gives its edit.
+- **D4. Loops and holes that read changes.** On bench/meltea: swap, remove, append and select
+  without a pass over the rows (swap reads 2,002 old items today).
+- **D5. Incremental `let`s.** `filter`, `map` and `length` of a collection follow its edits (they
+  are linear), so TodoMVC's counts and filtered list do not recompute.
+- **D6. A draw per message and tables of states.** For a message with a structured change, a draw
+  that writes what it implies with no bits and no checks; a field with finitely many constants gets
+  its DOM transitions computed at build time.
 
 ## Steps
 

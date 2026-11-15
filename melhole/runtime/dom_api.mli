@@ -88,6 +88,7 @@ external create_comment : Dom.document -> string -> Dom.node = "createComment" [
 external data : Dom.node -> string = "data" [@@mel.get]
 external unsafe_text : Dom.node -> Dom.text = "%identity"
 external node_name : Dom.node -> string = "nodeName" [@@mel.get]
+external lowercase : string -> string = "toLowerCase" [@@mel.send]
 external inner_html : Dom.element -> string = "innerHTML" [@@mel.get]
 external set_text_content : Dom.node -> string -> unit = "textContent" [@@mel.set]
 external text_content : Dom.element -> string = "textContent" [@@mel.get]

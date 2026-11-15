@@ -179,10 +179,15 @@ type medium = {
     'made array[@u]);
       (** Makes children in order; the last argument gives the node after one, from where it started. *)
   aside : ((unit -> live[@u]) -> live[@u]);  (** Children that live elsewhere, like a portal's. *)
+  adopt : 'frame. ('frame template -> ('frame -> unit[@u]) -> Template.position -> Dom.element * 'frame[@u]);
+      (** Takes the server's nodes of a template over, as its frame. *)
 }
 
 val browser : medium
 val medium : medium ref
+
+(** How the server's medium adopts a template: the server's root and a frame made over its nodes. *)
+val adopted : ('frame template -> ('frame -> unit[@u]) -> Template.position -> Dom.element * 'frame[@u])
 
 (** What hydration tells about the positions it adopts children at, item [index] of [count]: Melact
     counts them as React's [useId] does; by default nothing does. [join] leaves the last [fork]. *)

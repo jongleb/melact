@@ -245,7 +245,11 @@ type medium = {
     'made array[@u]);
       (** Makes children in order; the last argument gives the node after one, from where it started. *)
   aside : ((unit -> live[@u]) -> live[@u]);  (** Children that live elsewhere, like a portal's. *)
+  adopt : 'frame. ('frame template -> ('frame -> unit[@u]) -> Template.position -> Dom.element * 'frame[@u]);
+      (** Takes the server's nodes of a template over, as its frame. *)
 }
+
+let mismatch () = Js.Exn.raiseError "melhole: the HTML from the server does not match the view"
 
 let browser =
   {
@@ -269,6 +273,7 @@ let browser =
             done;
             made);
     aside = (fun [@u] build -> build () [@u]);
+    adopt = (fun [@u] _ _ _ -> mismatch ());
   }
 
 let medium = ref browser
@@ -992,14 +997,12 @@ let template markup make duties = { markup; make; duties; witness = Witness.make
 
 let hydratable markup make duties adopt = { markup; make; duties; witness = Witness.make (); adopt = Adopts adopt }
 
-let mismatch () = Js.Exn.raiseError "melhole: the HTML from the server does not match the view"
-
 let found node =
   match Js.Null.toOption node with
   | None -> "nothing"
   | Some node -> (
       match Dom_api.node_type node with
-      | 1 -> "<" ^ String.lowercase_ascii (Dom_api.node_name node) ^ ">"
+      | 1 -> "<" ^ Dom_api.lowercase (Dom_api.node_name node) ^ ">"
       | 3 -> "the text \"" ^ Dom_api.data node ^ "\""
       | _ -> "a comment")
 
@@ -1008,7 +1011,8 @@ let expected what node =
 
 let collecting = { browser with opened = (fun [@u] _ -> Collecting { given = empty }) }
 
-let adopted template refresh (position : Template.position) =
+let adopted =
+  fun [@u] (template : _ template) refresh (position : Template.position) ->
   match template.adopt with
   | Not_hydratable -> mismatch ()
   | Adopts adopt ->
@@ -1038,7 +1042,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
           let frame = template.make (Dom_api.to_node made) [@u] in
           refresh frame item [@u];
           (made, frame)
-      | Server_nodes -> adopted template (fun [@u] frame -> refresh frame item [@u]) position
+      | Server_nodes -> !medium.adopt template (fun [@u] frame -> refresh frame item [@u]) position [@u]
     in
     placed position made template frame;
     frame
@@ -1442,7 +1446,7 @@ let compiled (type frame) (template : frame template) (refresh : (frame -> unit)
               let frame = template.make (Dom_api.to_node root) [@u] in
               refresh frame [@u];
               (root, frame)
-          | Server_nodes -> adopted template refresh position
+          | Server_nodes -> !medium.adopt template refresh position [@u]
         in
         placed position root template frame;
         Compiled_state { template; frame; root });
@@ -1809,7 +1813,7 @@ let adopt_element cursor tag =
   match Js.Null.toOption cursor.at with
   | Some node
     when Dom_api.node_type node = 1
-         && String.equal (String.lowercase_ascii (Dom_api.node_name node)) (String.lowercase_ascii tag) ->
+         && String.equal (Dom_api.lowercase (Dom_api.node_name node)) (Dom_api.lowercase tag) ->
       cursor.at <- Dom_api.following_sibling node;
       node
   | Some _ | None -> expected ("<" ^ tag ^ ">") cursor.at
