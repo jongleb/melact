@@ -1398,6 +1398,11 @@ let mapper =
       | Pexp_ident { txt = Ldot (Lident "Experimental", name); _ }
         when List.exists (String.equal name) experimental_hooks && (match react with Opened -> true | Closed -> false) ->
           self#keyed expression
+      | Pexp_ident { txt = Ldot (Ldot (Lident "React", "Uncurried"), name); _ } when List.exists (String.equal name) keyed_hooks ->
+          self#keyed expression
+      | Pexp_ident { txt = Ldot (Lident "Uncurried", name); _ }
+        when List.exists (String.equal name) keyed_hooks && (match react with Opened -> true | Closed -> false) ->
+          self#keyed expression
       | Pexp_ident { txt = Ldot (Lident owner, name); _ }
         when List.exists (String.equal name) keyed_hooks
              && (List.mem owner hooks || List.mem owner !hook_modules) ->

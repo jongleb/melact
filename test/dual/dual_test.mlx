@@ -1308,6 +1308,46 @@ end
 (** What the parent of the probe holds: the context it provides and the probe's two props. *)
 type outer = { shade : int; p : int; q : int }
 
+let uncurried_set = ref (fun [@u] (_ : int -> int) -> ())
+let uncurried_add = ref (fun [@u] (_ : int) -> ())
+let uncurried_push = ref (fun [@u] (_ : int) -> ())
+let uncurried_step = ref (fun (_ : int -> int) -> ())
+
+module Uncurried_probe = struct
+  let[@react.component] make ~step =
+    let count, setCount = React.Uncurried.useState (fun () -> 0) in
+    let total, add = React.(Uncurried.useReducer (fun total by -> total + by) 0) in
+    let pushed, push = React.Uncurried.useReducerWithMapState (fun items item -> item :: items) step (fun first -> [ first ]) in
+    let scaled = React.Uncurried.useCallback1 (fun by -> by * step) [| step |] in
+    React.useEffect3
+      (fun () ->
+        uncurried_set := setCount;
+        uncurried_add := add;
+        uncurried_push := push;
+        log "setters";
+        None)
+      (setCount, add, push);
+    React.useEffect1
+      (fun () ->
+        log ("callback " ^ string_of_int (scaled 1 [@u]));
+        None)
+      [| scaled |];
+    <p>
+      (React.string
+         (String.concat ";"
+            [ string_of_int count; string_of_int total; String.concat "," (List.map string_of_int pushed); string_of_int (scaled 2 [@u]) ]))
+    </p>
+end
+
+module Uncurried_parent = struct
+  let[@react.component] make () =
+    let step, setStep = React.useState (fun () -> 1) in
+    React.useEffect0 (fun () ->
+        uncurried_step := setStep;
+        None);
+    <Uncurried_probe step />
+end
+
 let probe_a = ref (fun (_ : int -> int) -> ())
 let probe_b = ref (fun (_ : int) -> ())
 let outer_send = ref (fun (_ : outer -> outer) -> ())
@@ -2470,6 +2510,48 @@ let () =
              in
              step 8 (0, 0, { shade = 0; p = 1; q = 0 })))
         [%mel.obj { numRuns = 150 }]));
+  describe "reason-react's uncurried hooks" (fun () ->
+    test_async "show what React shows after any batch of updates, keep their setters for good and remake the callback only when its dependency changes" (fun () ->
+      check_async
+        (async_property (tapes ~shortest:4 ~longest:60) (fun values ->
+             let tape = tape values in
+             let* root, client = mount <Uncurried_parent /> in
+             let rec step remaining (count, total, pushed, by) =
+               match remaining with
+               | 0 ->
+                   let* () = act (fun () -> ReactDOM.Client.unmount client ()) in
+                   ignore (take ());
+                   finish ()
+               | _ ->
+                   let actions =
+                     List.init (1 + draw tape 3) (fun _ ->
+                         let k = draw tape 3 in
+                         match draw tape 4 with
+                         | 0 -> (`Set k, fun () -> let set = !uncurried_set in set (fun n -> n + k) [@u])
+                         | 1 -> (`Add k, fun () -> let add = !uncurried_add in add k [@u])
+                         | 2 -> (`Push k, fun () -> let push = !uncurried_push in push k [@u])
+                         | _ -> (`Step k, fun () -> !uncurried_step (fun step -> step + k)))
+                   in
+                   let count', total', pushed', by' =
+                     List.fold_left
+                       (fun (count, total, pushed, by) (action, _) ->
+                         match action with
+                         | `Set k -> (count + k, total, pushed, by)
+                         | `Add k -> (count, total + k, pushed, by)
+                         | `Push k -> (count, total, k :: pushed, by)
+                         | `Step k -> (count, total, pushed, by + k))
+                       (count, total, pushed, by) actions
+                   in
+                   let* () = act (fun () -> List.iter (fun (_, run) -> run ()) actions) in
+                   expect (text_content root, take ())
+                   |. to_equal
+                        ( String.concat ";"
+                            [ string_of_int count'; string_of_int total'; String.concat "," (List.map string_of_int pushed'); string_of_int (2 * by') ],
+                          match by = by' with true -> [] | false -> [ "callback " ^ string_of_int by' ] );
+                   step (remaining - 1) (count', total', pushed', by')
+             in
+             step 8 (0, 0, [ 1 ], 1)))
+        [%mel.obj { numRuns = 120 }]));
   describe "a root rendered inside a click" (fun () ->
     test_async "runs its passive effects at the next microtask, before any later event, as React 18 runs those of a commit in its sync lane" (fun () ->
       let root = attached () in

@@ -1,0 +1,62 @@
+(executable
+ (name upstream)
+ (modules upstream)
+ (libraries ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot)))
+
+(rule
+ (with-stdout-to
+  react_upstream.ml
+  (pipe-stdout
+   (run refmt --print ml --interface true %{lib:reason-react:melange/React.rei})
+   (run ./upstream.exe React %{dep:gaps/React}))))
+
+(rule
+ (with-stdout-to
+  reactDOM_upstream.ml
+  (pipe-stdout
+   (run refmt --print ml --interface true %{lib:reason-react:melange/ReactDOM.rei})
+   (run ./upstream.exe ReactDOM %{dep:gaps/ReactDOM}))))
+
+(rule
+ (with-stdout-to
+  reactDOMServer_upstream.ml
+  (pipe-stdout
+   (run refmt --print ml --interface true %{lib:reason-react:melange/ReactDOMServer.rei})
+   (run ./upstream.exe ReactDOMServer %{dep:gaps/ReactDOMServer}))))
+
+(rule
+ (with-stdout-to
+  reactDOMTestUtils_upstream.ml
+  (pipe-stdout
+   (run refmt --print ml --interface true %{lib:reason-react:melange/ReactDOMTestUtils.rei})
+   (run ./upstream.exe ReactDOMTestUtils %{dep:gaps/ReactDOMTestUtils}))))
+
+(rule
+ (with-stdout-to
+  reasonReactErrorBoundary_upstream.ml
+  (pipe-stdout
+   (run refmt --print ml --interface true %{lib:reason-react:melange/ReasonReactErrorBoundary.rei})
+   (run ./upstream.exe ReasonReactErrorBoundary %{dep:gaps/ReasonReactErrorBoundary}))))
+
+(rule
+ (with-stdout-to
+  reasonReactRouter_upstream.ml
+  (pipe-stdout
+   (run refmt --print ml --interface true %{lib:reason-react:melange/ReasonReactRouter.rei})
+   (run ./upstream.exe ReasonReactRouter %{dep:gaps/ReasonReactRouter}))))
+
+(library
+ (name api_upstream)
+ (modes melange)
+ (modules
+  react_upstream
+  reactDOM_upstream
+  reactDOMServer_upstream
+  reactDOMTestUtils_upstream
+  reasonReactErrorBoundary_upstream
+  reasonReactRouter_upstream)
+ (libraries melact melange.dom)
+ (preprocess
+  (pps melange.ppx melact-ppx)))

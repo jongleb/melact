@@ -38,6 +38,7 @@ type node =
   | Bounded of node
   | Memo of string
   | Picked of string
+  | Uncurried_hooks of int
 
 let effects = ref 0
 let effects_when_clicked = ref (-1)
@@ -62,7 +63,7 @@ let decode values =
       let second = node (depth - 1) in
       (first, second)
     in
-    let kind = match (depth, draw 5) with 0, _ | _, 0 -> draw 13 | _, _ -> 13 + draw 15 in
+    let kind = match (depth, draw 5) with 0, _ | _, 0 -> draw 13 | _, _ -> 13 + draw 16 in
     match kind with
     | 0 -> Word (word ())
     | 1 ->
@@ -129,7 +130,8 @@ let decode values =
     | 24 -> Listed_too (List.init (draw 4) (fun index -> let label = word () in label ^ string_of_int index))
     | 25 -> Memo (word ())
     | 26 -> Fails (node (depth - 1))
-    | _ -> Picked [| "a"; "b"; "c" |].(draw 3)
+    | 27 -> Picked [| "a"; "b"; "c" |].(draw 3)
+    | _ -> Uncurried_hooks (draw 50)
   in
   node 5
 
@@ -157,6 +159,15 @@ module Counter = struct
     <button className="counter" title=held.current onClick=clicked>
       (React.int count)(React.string "/")(React.int total)(React.string " ")(React.int doubled)
     </button>
+end
+
+module Uncurried_hooks = struct
+  let[@react.component] make ~start =
+    let count, _ = React.Uncurried.useState (fun () -> start) in
+    let total, _ = React.Uncurried.useReducer (fun total by -> total + by) (start + 1) in
+    let mapped, _ = React.Uncurried.useReducerWithMapState (fun total by -> total + by) start (fun start -> start * 3) in
+    let scaled = React.Uncurried.useCallback1 (fun by -> by * count) [| count |] in
+    <s>(React.int count)(React.string ":")(React.int total)(React.string ":")(React.int mapped)(React.string ":")(React.int (scaled 2 [@u]))</s>
 end
 
 module Id = struct
@@ -269,6 +280,7 @@ let rec page node =
   | Bounded inner -> <ReasonReactErrorBoundary fallback=(fun _ -> React.string "failed")>(page inner)</ReasonReactErrorBoundary>
   | Memo label -> <Memo label />
   | Picked picked -> <Picker picked />
+  | Uncurried_hooks start -> <Uncurried_hooks start />
 
 let shown values =
   <main>
@@ -288,5 +300,5 @@ let rec on_client node =
   | Maybe (Some inner) ->
       on_client inner
   | Word _ | Listed _ | Listed_too _ | Listed_ids _ | Maybe None | Counter _ | Id | Reader | Field _ | Attributes _ | Built _
-  | Html _ | Pre _ | Number _ | Memo _ | Picked _ ->
+  | Html _ | Pre _ | Number _ | Memo _ | Picked _ | Uncurried_hooks _ ->
       `Renders

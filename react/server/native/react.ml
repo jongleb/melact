@@ -137,6 +137,33 @@ let useCallback4 key fn deps = Melact_server.Component.memo key Melact_server.De
 let useCallback5 key fn deps = Melact_server.Component.memo key Melact_server.Deps.five deps (fun () -> fn)
 let useCallback6 key fn deps = Melact_server.Component.memo key Melact_server.Deps.six deps (fun () -> fn)
 let useCallback7 key fn deps = Melact_server.Component.memo key Melact_server.Deps.seven deps (fun () -> fn)
+module Uncurried = struct
+  type ('input, 'output) callback = ('input -> 'output[@u])
+
+  let made fn () = fun [@u] input -> fn input
+
+  let useState key init =
+    let state, set = useState key init in
+    (state, fun [@u] update -> set update)
+
+  let useReducer key reduce initial =
+    let state, send = useReducer key reduce initial in
+    (state, fun [@u] action -> send action)
+
+  let useReducerWithMapState key reduce initial map =
+    let state, send = useReducerWithMapState key reduce initial map in
+    (state, fun [@u] action -> send action)
+
+  let useCallback key fn = Melact_server.Component.memo key Melact_server.Deps.always () (made fn)
+  let useCallback0 key fn = Melact_server.Component.memo key Melact_server.Deps.never () (made fn)
+  let useCallback1 key fn deps = Melact_server.Component.memo key Melact_server.Deps.array deps (made fn)
+  let useCallback2 key fn deps = Melact_server.Component.memo key Melact_server.Deps.two deps (made fn)
+  let useCallback3 key fn deps = Melact_server.Component.memo key Melact_server.Deps.three deps (made fn)
+  let useCallback4 key fn deps = Melact_server.Component.memo key Melact_server.Deps.four deps (made fn)
+  let useCallback5 key fn deps = Melact_server.Component.memo key Melact_server.Deps.five deps (made fn)
+  let useCallback6 key fn deps = Melact_server.Component.memo key Melact_server.Deps.six deps (made fn)
+  let useCallback7 key fn deps = Melact_server.Component.memo key Melact_server.Deps.seven deps (made fn)
+end
 let useRef key initial = Melact_server.Component.take (Melact_server.Component.current ()) key (fun () -> { current = initial })
 
 let useSyncExternalStore _ ~subscribe:_ ~getSnapshot:_ =

@@ -85,6 +85,8 @@ module Children = struct
 end
 
 module Ref = struct
+  type 'value t = 'value ref [@@deprecated "Please use the type React.ref instead"]
+
   let current reference = reference.current
   let setCurrent reference value = reference.current <- value
 end
@@ -336,6 +338,36 @@ type ('state, 'update) optimistic = { mutable updates : 'update list; mutable ap
 
 (** What an action state hook keeps: the state and the action that makes the next one. *)
 type ('state, 'data) action_state = { current : 'state; mutable act : 'state -> 'data -> unit }
+
+module Uncurried = struct
+  type ('input, 'output) callback = ('input -> 'output[@u])
+
+  external uncurried : ('action -> unit) -> ('action -> unit[@u]) = "%identity"
+
+  let made fn () = fun [@u] input -> fn input
+
+  let useState key init =
+    let state, set = useState key init in
+    (state, uncurried set)
+
+  let useReducer key reduce initial =
+    let state, send = useReducer key reduce initial in
+    (state, uncurried send)
+
+  let useReducerWithMapState key reduce initial map =
+    let state, send = useReducerWithMapState key reduce initial map in
+    (state, uncurried send)
+
+  let useCallback key fn = memoize never key (made fn) ()
+  let useCallback0 key fn = memoize always key (made fn) ()
+  let useCallback1 key fn deps = memoize same_array key (made fn) deps
+  let useCallback2 key fn deps = memoize same2 key (made fn) deps
+  let useCallback3 key fn deps = memoize same3 key (made fn) deps
+  let useCallback4 key fn deps = memoize same4 key (made fn) deps
+  let useCallback5 key fn deps = memoize same5 key (made fn) deps
+  let useCallback6 key fn deps = memoize same6 key (made fn) deps
+  let useCallback7 key fn deps = memoize same7 key (made fn) deps
+end
 
 module Experimental = struct
   type formAction

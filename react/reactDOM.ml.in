@@ -353,6 +353,8 @@ module Style = struct
   [@@mel.obj]
 
   external combine : (_[@mel.as {json|{}|json}]) -> t -> t -> t = "assign" [@@mel.scope "Object"]
+  external _dictToStyle : string Js.Dict.t -> t = "%identity"
+  external unsafeAddStyle : (_[@mel.as {json|{}|json}]) -> t -> < .. > Js.t -> t = "assign" [@@mel.scope "Object"]
   external set : t -> string -> string -> unit = "" [@@mel.set_index]
   external get : t -> string -> string = "" [@@mel.get_index]
   external names : t -> string array = "keys" [@@mel.scope "Object"]

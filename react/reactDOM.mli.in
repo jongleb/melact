@@ -354,6 +354,8 @@ module Style : sig
   [@@mel.obj]
 
   external combine : (_[@mel.as {json|{}|json}]) -> t -> t -> t = "assign" [@@mel.scope "Object"]
+  external _dictToStyle : string Js.Dict.t -> t = "%identity"
+  external unsafeAddStyle : (_[@mel.as {json|{}|json}]) -> t -> < .. > Js.t -> t = "assign" [@@mel.scope "Object"]
   val unsafeAddProp : t -> string -> string -> t
   val declarations : t -> (string * string) list
 end

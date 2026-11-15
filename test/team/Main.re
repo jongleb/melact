@@ -16,6 +16,8 @@ module App = {
     <Styled.Link href="/b" label="plain" />
     {Styled.bound(~href="/c", ~activeStyle=Styled.highlighted, ())}
     <RemoteView id=message />
+    <Shared flag=true seed={Obj.magic("seed")} />
+    <Looping start={"label": "start", "next": Js.Nullable.null} />
   </div>;
   };
 };

@@ -23,6 +23,8 @@ type shape =
   | Self  (** The declaration itself, with its own parameter. *)
   | Tags of shape option list  (** A closed polymorphic variant. *)
   | Object of shape list  (** A closed [< … > Js.t]. *)
+  | Looped of shape  (** [(< back : 's Js.t; held : shape > as 's) Js.t]: an object type that holds itself. *)
+  | Looped_tags of shape  (** [([ `Back of 's | `Held of shape ] as 's)]: a polymorphic variant that holds itself, with no name. *)
   | Variable  (** A type variable of the probed value's own type. *)
 
 (** A record field or an inline record field. *)
@@ -42,38 +44,47 @@ type body =
 (** Whether a generated declaration takes ['a]. *)
 type parameter = With_parameter | Without_parameter
 
-(** Where a shape is generated: the parameter in scope, the earlier declarations, whether [Self] is allowed. *)
-type context = { parameter : parameter; earlier : parameter list; self : [ `Guarded | `Unguarded ] }
+(** Where a shape is generated: the parameter in scope, the earlier declarations, where [Self] is allowed. *)
+type context = {
+  parameter : parameter;
+  earlier : parameter list;
+  self : [ `Guarded | `Unguarded | `Under_row ];  (** [`Under_row]: only inside a polymorphic variant or an object, as an abbreviation allows. *)
+}
 
 let shape context =
   let open Gen in
   sized_size (int_bound 4)
-  @@ fix (fun shape size ->
-         let leaves =
-           [ pure Int; pure Char; pure Bool; pure Unit; pure String; pure Float; pure Int64; pure Bytes ]
-           @ (match context.parameter with With_parameter -> [ pure Param ] | Without_parameter -> [])
-           @ (match context.self with `Guarded -> [ pure Self ] | `Unguarded -> [])
-         in
-         match size with
-         | 0 -> oneof leaves
-         | _ ->
-             let smaller = shape (size - 1) in
-             oneof
-               (leaves
-               @ [
-                   map (fun inner -> Array inner) smaller; map (fun inner -> Ref inner) smaller;
-                   map (fun inner -> List inner) smaller; map (fun inner -> Option inner) smaller;
-                   map (fun inner -> Lazy inner) smaller; map (fun inner -> Hashtbl inner) smaller;
-                   map2 (fun left right -> Pair (left, right)) smaller smaller;
-                   map2 (fun left right -> Arrow (left, right)) smaller smaller;
-                   map (fun tags -> Tags tags) (list_size (int_range 1 3) (option smaller));
-                   map (fun fields -> Object fields) (list_size (int_bound 2) smaller);
-                 ]
+  @@ fun size ->
+  fix
+    (fun shape (self, size) ->
+      let leaves =
+        [ pure Int; pure Char; pure Bool; pure Unit; pure String; pure Float; pure Int64; pure Bytes ]
+        @ (match context.parameter with With_parameter -> [ pure Param ] | Without_parameter -> [])
+        @ match self with `Guarded -> [ pure Self ] | `Unguarded | `Under_row -> []
+      in
+      match size with
+      | 0 -> oneof leaves
+      | _ ->
+          let smaller = shape (self, size - 1) in
+          let in_row = shape ((match self with `Under_row -> `Guarded | (`Guarded | `Unguarded) as kept -> kept), size - 1) in
+          oneof
+            (leaves
+            @ [
+                map (fun inner -> Array inner) smaller; map (fun inner -> Ref inner) smaller;
+                map (fun inner -> List inner) smaller; map (fun inner -> Option inner) smaller;
+                map (fun inner -> Lazy inner) smaller; map (fun inner -> Hashtbl inner) smaller;
+                map2 (fun left right -> Pair (left, right)) smaller smaller;
+                map2 (fun left right -> Arrow (left, right)) smaller smaller;
+                map (fun tags -> Tags tags) (list_size (int_range 1 3) (option in_row));
+                map (fun fields -> Object fields) (list_size (int_bound 2) in_row);
+                map (fun inner -> Looped inner) in_row;
+                map (fun inner -> Looped_tags inner) in_row;
+              ]
                @
-               match context.earlier with
-               | [] -> []
-               | _ :: _ ->
-                   [ map2 (fun index argument -> Earlier (index, argument)) (int_bound (List.length context.earlier - 1)) smaller ]))
+            match context.earlier with
+            | [] -> []
+            | _ :: _ -> [ map2 (fun index argument -> Earlier (index, argument)) (int_bound (List.length context.earlier - 1)) smaller ]))
+    (context.self, size)
 
 let declarations =
   let open Gen in
@@ -88,7 +99,7 @@ let declarations =
         let* body =
           oneof
             [
-              map (fun inner -> Abbreviation inner) (shape { parameter; earlier; self = `Unguarded });
+              map (fun inner -> Abbreviation inner) (shape { parameter; earlier; self = `Under_row });
               map (fun fields -> Record fields) (list_size (int_range 1 3) field);
               map
                 (fun constructors -> Variant constructors)
@@ -122,6 +133,7 @@ let declarations =
   pure (declared, probe, marked)
 
 let source (declared, probe, marked) =
+  let loops = ref 0 in
   let rec print current shape =
     let inner = print current in
     match shape with
@@ -159,6 +171,14 @@ let source (declared, probe, marked) =
                tags)
         ^ " ]"
     | Object fields -> "< " ^ String.concat "; " (List.mapi (fun index held -> Printf.sprintf "f%d : %s" index (inner held)) fields) ^ " > Js.t"
+    | Looped held ->
+        incr loops;
+        let name = Printf.sprintf "'s%d" !loops in
+        Printf.sprintf "(< back : %s Js.t; held : %s > as %s) Js.t" name (inner held) name
+    | Looped_tags held ->
+        incr loops;
+        let name = Printf.sprintf "'s%d" !loops in
+        Printf.sprintf "([ `Back of %s | `Held of %s ] as %s)" name (inner held) name
   in
   let fields current fields =
     "{ "
@@ -223,6 +243,7 @@ let expected (declared, probe, _) =
     | Earlier (index, given) -> declaration index (inner given)
     | Tags tags -> constructed (List.filter_map (Option.map inner) tags)
     | Object fields -> boxed (List.map inner fields)
+    | Looped held | Looped_tags held -> boxed [ inner held ]
   and declaration index argument =
     let field field =
       match field with
@@ -258,8 +279,105 @@ let print_mutability found =
   | Some Melhole_typed.Mutability.Unknown -> "Unknown"
   | None -> "not typed"
 
+(** How a level of a chain holds the level below it twice. *)
+type level = Pair_level | Tags_level | Object_level | Applied_level
+
+(** An abbreviation a nested application goes through. *)
+type wrapper = Identity | Identity_of_identity | Twice
+
+let nested =
+  let open Gen in
+  let* leaf =
+    oneof_list
+      [
+        ("int", Melhole_typed.Mutability.Immediate);
+        ("int64", Melhole_typed.Mutability.Immutable_boxed);
+        ("bytes", Melhole_typed.Mutability.Mutable_inside);
+        ("int Lazy.t", Melhole_typed.Mutability.Unknown);
+      ]
+  in
+  let* wrappers = list_size (int_range 1 6) (oneof_list [ Identity; Identity_of_identity; Twice ]) in
+  pure (leaf, wrappers)
+
+let nested_source ((leaf, _), wrappers) =
+  String.concat "\n"
+    [
+      "type 'a id = 'a";
+      "type 'a same = 'a id";
+      "type 'a twice = 'a * 'a";
+      "let probe : "
+      ^ List.fold_left
+          (fun inner wrapper ->
+            "(" ^ inner ^ ") " ^ match wrapper with Identity -> "id" | Identity_of_identity -> "same" | Twice -> "twice")
+          leaf wrappers
+      ^ " = Obj.magic 0";
+      "let _ = (probe [@melhole.ask 1])";
+    ]
+
+let nested_expected ((_, leaf), wrappers) =
+  List.fold_left
+    (fun found wrapper ->
+      match (wrapper, found) with
+      | (Identity | Identity_of_identity), _ -> found
+      | Twice, (Melhole_typed.Mutability.Immediate | Melhole_typed.Mutability.Immutable_boxed) -> Melhole_typed.Mutability.Immutable_boxed
+      | Twice, ((Melhole_typed.Mutability.Mutable_inside | Melhole_typed.Mutability.Unknown) as kept) -> kept)
+    leaf wrappers
+
+(** Raised by the alarm when a classification runs past its time. *)
+exception Too_slow
+
+let chains =
+  let open Gen in
+  let* depth = int_range 40 60 in
+  let* leaf =
+    oneof_list
+      [
+        ("int", Melhole_typed.Mutability.Immutable_boxed);
+        ("int64", Melhole_typed.Mutability.Immutable_boxed);
+        ("bytes", Melhole_typed.Mutability.Mutable_inside);
+        ("int Lazy.t", Melhole_typed.Mutability.Unknown);
+      ]
+  in
+  let* levels = list_size (pure depth) (oneof_list [ Pair_level; Tags_level; Object_level; Applied_level ]) in
+  pure (leaf, levels)
+
+let chain_source ((leaf, _), levels) =
+  String.concat "\n"
+    ([ "module Js = struct type 'a t end"; "type 'a twice = 'a * 'a"; "type l0 = " ^ leaf ]
+    @ List.mapi
+        (fun index level ->
+          let below = Printf.sprintf "l%d" index in
+          Printf.sprintf "type l%d = %s" (index + 1)
+            (match level with
+            | Pair_level -> below ^ " * " ^ below
+            | Tags_level -> Printf.sprintf "[ `A of %s | `B of %s ]" below below
+            | Object_level -> Printf.sprintf "< f0 : %s; f1 : %s > Js.t" below below
+            | Applied_level -> below ^ " twice"))
+        levels
+    @ [ Printf.sprintf "let probe : l%d = Obj.magic 0" (List.length levels); "let _ = (probe [@melhole.ask 1])" ])
+
 let mutability_laws =
   [
+    Test.make ~count:300 ~name:"Mutability: an abbreviation nested in itself stays as transparent as it is alone"
+      ~print:(fun case ->
+        nested_source case ^ "\nexpected " ^ print_mutability (Some (nested_expected case)) ^ ", found "
+        ^ print_mutability (Option.map Melhole_typed.Mutability.of_answer (answer (nested_source case))))
+      nested
+      (fun case -> Option.map Melhole_typed.Mutability.of_answer (answer (nested_source case)) = Some (nested_expected case));
+    Test.make ~count:40 ~name:"Mutability: a chain of 40 to 60 levels, each holding the one below twice, is classified within 10 seconds as its leaf says"
+      ~print:(fun chain -> chain_source chain ^ "\nexpected " ^ print_mutability (Some (snd (fst chain))))
+      chains
+      (fun (((_, expected), _) as chain) ->
+        let previous = Sys.signal Sys.sigalrm (Sys.Signal_handle (fun _ -> raise Too_slow)) in
+        ignore (Unix.alarm 10);
+        let found =
+          match Option.map Melhole_typed.Mutability.of_answer (answer (chain_source chain)) with
+          | found -> found
+          | exception Too_slow -> None
+        in
+        ignore (Unix.alarm 0);
+        Sys.set_signal Sys.sigalrm previous;
+        found = Some expected);
     Test.make ~count:1500 ~name:"Mutability: the classifier agrees with the definition on generated declarations"
       ~print:(fun generated ->
         source generated ^ "\nexpected " ^ print_mutability (Some (expected generated)) ^ ", found "

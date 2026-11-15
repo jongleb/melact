@@ -1,0 +1,2 @@
+jsxFragment missing value: reason-react's own JSX runtime target, typed 'element; melact-ppx compiles fragments itself
+Experimental.useActionState differs value: Melact's takes a trailing unit; reason-react 0.17's own binding cannot give its action to a form

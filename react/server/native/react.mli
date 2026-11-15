@@ -127,6 +127,90 @@ val useReducerWithMapState :
   'state * ('action -> unit)
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
+(** reason-react's hooks that give their functions uncurried. *)
+module Uncurried : sig
+  (** A function a hook gives, called with [f x [@u]]. *)
+  type ('input, 'output) callback = ('input -> 'output[@u])
+
+  val useState :
+    ('state, 'state -> 'state) Melact_server.Component.state Melact_server.Hook.key ->
+    (unit -> 'state) ->
+    'state * (('state -> 'state) -> unit[@u])
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useReducer :
+    ('state, 'action) Melact_server.Component.state Melact_server.Hook.key ->
+    ('state -> 'action -> 'state) ->
+    'state ->
+    'state * ('action -> unit[@u])
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useReducerWithMapState :
+    ('state, 'action) Melact_server.Component.state Melact_server.Hook.key ->
+    ('state -> 'action -> 'state) ->
+    'initial ->
+    ('initial -> 'state) ->
+    'state * ('action -> unit[@u])
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback :
+    (unit, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key -> ('input -> 'output) -> ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback0 :
+    (unit, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key -> ('input -> 'output) -> ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback1 :
+    ('a array, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a array ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback2 :
+    ('a * 'b, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a * 'b ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback3 :
+    ('a * 'b * 'c, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a * 'b * 'c ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback4 :
+    ('a * 'b * 'c * 'd, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a * 'b * 'c * 'd ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback5 :
+    ('a * 'b * 'c * 'd * 'e, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a * 'b * 'c * 'd * 'e ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback6 :
+    ('a * 'b * 'c * 'd * 'e * 'f, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a * 'b * 'c * 'd * 'e * 'f ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+
+  val useCallback7 :
+    ('a * 'b * 'c * 'd * 'e * 'f * 'g, ('input, 'output) callback) Melact_server.Component.memo Melact_server.Hook.key ->
+    ('input -> 'output) ->
+    'a * 'b * 'c * 'd * 'e * 'f * 'g ->
+    ('input, 'output) callback
+  [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
+end
+
 val useEffect :
   unit Melact_server.Hook.key -> (unit -> (unit -> unit) option) -> unit
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]

@@ -3,7 +3,9 @@
 // .rei declares [@react.component] make while the .re rebinds make with React.memo, and top-level JSX inside a local
 // open of a module that has top-level JSX of its own (TosUsat opens TosT), and a component calling a data hook that
 // takes React.useMemo1 as a parameter and reads a bool named useLayoutEffect (UseRemoteData), whose fact makes the
-// component pure. Melact must build them and show what reason-react on React 18 shows, click after click.
+// component pure, and types -typed must classify without unfolding them: 32 levels that each hold the one below
+// twice (Shared), a polymorphic variant and a Js.t object that hold themselves (Looping). Melact must build them and
+// show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
 import { tick, shown } from "../compat/harness.mjs";
@@ -20,7 +22,7 @@ test("constructors found by annotations and memoized components declared in .rei
     build.mount(root);
     await settle();
     const trace = [shown({ root, layer }).root];
-    for (const selector of ["button", ".say", ".remote", "button", ".pattern", ".say", ".remote", ".pattern", ".remote", ".say"]) {
+    for (const selector of ["button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
       root.querySelectorAll(selector)[0].click();
       await settle();
       trace.push(shown({ root, layer }).root);

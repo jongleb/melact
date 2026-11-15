@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+- Fixed: under `-typed`, melact-ppx classified a type by unfolding it as a tree, so a type made of
+  levels that each hold the one below twice took time exponential in its depth (the team's
+  `E_shared_types.re`: 9.5 s at 24 levels, 36 s at 26, no end at 28), and a type that holds itself
+  only through abbreviations (a recursive polymorphic variant, a recursive `Js.t` object, an
+  `as 's` row) overflowed the stack. `Mutability.classify` now meets a named type before expanding
+  it, expands an abbreviation one step at a time, remembers what it found for each name and
+  arguments and for each type node, and takes a type it is already inside as a cycle. Laws in
+  `test/typed/laws`: chains of 40 to 60 shared levels through tuples, polymorphic variants, `Js.t`
+  objects and a parameterized abbreviation are classified within 10 seconds as their leaf says (they
+  take 0.1 s together; the old classifier timed out); generated declarations now include
+  abbreviations that hold themselves through a polymorphic variant or an object and unnamed `as 's`
+  objects and variants (the old classifier overflowed); an abbreviation nested in itself (`int id
+  id`) stays as transparent as alone (mutant: treating it as a nominal type found again). Team
+  repros in `test/team`: `Shared.re` (32 shared levels; the old build ran past 90 s) and `Looping.re`
+  (state, a switch on a recursive polymorphic variant returning a pair, lets that rebind it and a
+  recursive `Js.t` object, passed down as props; the old build overflowed the stack).
+
+- `React.Uncurried`: reason-react's `useState`, `useReducer`, `useReducerWithMapState` and
+  `useCallback` to `useCallback7` that give their functions uncurried (`setCount(. f)` in Reason,
+  `setCount f [@u]` in OCaml), on the client, Melact's server under Melange and natively. The setters
+  are the state slot's own dispatch, kept for the component's life; a callback is remade only when
+  its dependencies change. melact-ppx keys `React.Uncurried.x` and, under `open React`,
+  `Uncurried.x`. Laws: `test/api` types them against reason-react's `.rei`; `test/dual` runs one
+  component on reason-react and on Melact through random batches of updates, with the page, setters
+  that never re-run an effect, and a callback effect that runs exactly when its dependency changed
+  (mutants: a fresh setter per render, a callback remade on every render, a callback never remade);
+  `test/mserver` renders them in random pages on React 18 and both of Melact's servers. Components
+  that call them render whole for now: the update graph does not read them yet.
+
+- Law: Melact's `React`, `ReactDOM`, `ReactDOMServer`, `ReactDOMTestUtils`, `ReasonReactErrorBoundary`
+  and `ReasonReactRouter` match reason-react 0.17's interfaces. `test/api` turns each installed `.rei`
+  into a signature that Melact's module must satisfy and a call of every value with its upstream type
+  (externals become values, `[@react.component]` becomes `makeProps` and the component), so a missing
+  or retyped name stops the build. Known gaps are listed with a reason in `test/api/gaps`:
+  `jsxFragment`, `Experimental.useActionState` (Melact's takes a trailing unit), and `domProps` is
+  abstract (its constructor is checked; the `getSet` readers are missing). Closed by the law:
+  `React.Ref.t` (deprecated, as upstream), `ReactDOM.Style._dictToStyle` and `unsafeAddStyle`,
+  `ReactDOM.domProps ?method` as in reason-react (`?\#method` in OCaml, was `?method_`), and
+  `Simulate.changeWithValue` and `changeWithChecked` are no longer deprecated, as upstream.
+
 - `dropin/`: Melact under the names `reason-react` and `reason-react-ppx`, for builds whose opam
   dependencies require reason-react (melange-recharts, melange-react-intl, …), which until now brought
   reason-react's `React` next to Melact's and stopped the build. Pinned in place of reason-react

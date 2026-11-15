@@ -105,7 +105,12 @@ let native_prop name (kind : Melhole_compiler.Dom_props.kind) variable =
   | _, (Handler _ | Ref | Ignored) -> None
 
 let () =
-  let label name = match List.mem name keywords with true -> name ^ "_" | false -> name in
+  let label name =
+    match (name, List.mem name keywords) with
+    | "method", _ -> "\\#method"
+    | _, true -> name ^ "_"
+    | _, false -> name
+  in
   let server_applying (name, (kind : Melhole_compiler.Dom_props.kind)) =
     match (name, kind) with
     | "defaultValue", _ -> "Default_value_prop"

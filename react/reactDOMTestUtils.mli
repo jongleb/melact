@@ -23,8 +23,8 @@ module Simulate : sig
   val change : Dom.element -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
   val blur : Dom.element -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
   val changeWithEvent : Dom.element -> 'event -> unit
-  val changeWithValue : Dom.element -> string -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
-  val changeWithChecked : Dom.element -> bool -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
+  val changeWithValue : Dom.element -> string -> unit
+  val changeWithChecked : Dom.element -> bool -> unit
   val canPlay : Dom.element -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
   val timeUpdate : Dom.element -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
   val ended : Dom.element -> unit [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
