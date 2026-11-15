@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The update graph reads `React.Uncurried.useState`, `useReducer`, `useReducerWithMapState` and
+  `useCallback` to `useCallback7` as it reads their curried twins: their state is a cell whose
+  setter never changes, a callback is remembered by its dependencies, the steps and the view a change
+  does not reach are skipped, and a custom hook that calls them gets a hook fact. Under a local
+  `open React` they are keyed but not read, as the curried ones. Laws: the uncurried component of
+  `test/dual` now runs on the graph, with an effect that checks on every render that the setters are
+  the ones kept (mutant: a fresh setter per render, which the graph alone would hide); `test/ppx`
+  shows the fact of a custom hook (mutant: the graph without the uncurried names).
+
 - `ReactDOM.keyGet`, `classNameGet`, `type_Get`, `methodGet` and the other readers of `domProps`
   that reason-react derives with `getSet`: one per prop, each an external that reads the key the
   constructor wrote, so they cost nothing until called. On the client and Melact's server under
@@ -36,8 +45,7 @@
   component on reason-react and on Melact through random batches of updates, with the page, setters
   that never re-run an effect, and a callback effect that runs exactly when its dependency changed
   (mutants: a fresh setter per render, a callback remade on every render, a callback never remade);
-  `test/mserver` renders them in random pages on React 18 and both of Melact's servers. Components
-  that call them render whole for now: the update graph does not read them yet.
+  `test/mserver` renders them in random pages on React 18 and both of Melact's servers.
 
 - Law: Melact's `React`, `ReactDOM`, `ReactDOMServer`, `ReactDOMTestUtils`, `ReasonReactErrorBoundary`
   and `ReasonReactRouter` match reason-react 0.17's interfaces. `test/api` turns each installed `.rei`

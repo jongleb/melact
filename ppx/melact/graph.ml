@@ -208,7 +208,7 @@ let passed ~hooks ~named counted arguments =
     | None -> raise Beyond
     | Some value -> (
         match (value.pexp_desc, named value, hooks value) with
-        | Pexp_ident { txt = Ldot (Lident "React", name); _ }, _, _ -> (
+        | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ }, _, _ -> (
             match react_slots name with
             | Some slots -> { fact = { slots; through = [] }; values = []; conditions = [] }
             | None -> raise Beyond)
@@ -233,7 +233,7 @@ type volatile =
 let plan ~hooks ~inputs ~props ~volatile body =
   let hook expression =
     match expression.pexp_desc with
-    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); _ }; _ }, arguments) -> (
+    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ }; _ }, arguments) -> (
         match Melhole_compiler.Hook_name.of_name name with
         | Plain -> None
         | Hook { base; dependencies } ->
@@ -450,7 +450,7 @@ let slots ~hooks body =
   in
   let rec chosen locals value =
     match value.pexp_desc with
-    | Pexp_ident { txt = Ldot (Lident "React", name); _ } ->
+    | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ } ->
         Option.map (fun slots -> { none with fact = { slots; through = [] } }) (react_slots name)
     | Pexp_ident _ -> (
         match (named locals value, hooks value) with
@@ -492,7 +492,7 @@ let slots ~hooks body =
             List.iter (fun (_, argument) -> free_of_hooks argument) arguments;
             local
         | `Outer, Some counted, _ -> called counted
-        | `Outer, None, Ldot (Lident "React", name) -> (
+        | `Outer, None, (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)) -> (
             match react_slots name with
             | Some slots -> called { none with fact = { slots; through = [] } }
             | None ->

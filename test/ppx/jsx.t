@@ -849,6 +849,29 @@ Hooks get one key per call site, also inside custom hooks:
       external make : make_props -> React.element = "%identity"
     end
 
+reason-react's uncurried hooks get keys as the others do, also under a local open, and a hook fact when named in full:
+
+  $ cat > uncurried.ml <<'EOF'
+  > let useCount () = React.Uncurried.useState (fun () -> 0)
+  > let useTotal () = React.(Uncurried.useReducer (fun total by -> total + by) 0)
+  > EOF
+  $ ./pp.exe -impl uncurried.ml
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  let __melhole_hook_1 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let ((useCount)[@melhole.hook (2, 1)]) =
+    fun () ->
+      (React.Uncurried.useState
+         (Melact_runtime.Hook.unchecked __melhole_hook_1)) (fun () -> 0)
+  let __melhole_hook_2_Uncurried =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let useTotal () =
+    let open React in
+      (Uncurried.useReducer
+         (Melact_runtime.Hook.unchecked __melhole_hook_2_Uncurried))
+        (fun total by -> total + by) 0
+
 Reason input:
 
   $ cat > greeting.re <<'EOF'

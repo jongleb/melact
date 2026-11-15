@@ -164,7 +164,7 @@ end
 module Uncurried_hooks = struct
   let[@react.component] make ~start =
     let count, _ = React.Uncurried.useState (fun () -> start) in
-    let total, _ = React.Uncurried.useReducer (fun total by -> total + by) (start + 1) in
+    let total, _ = React.(Uncurried.useReducer (fun total by -> total + by) (start + 1)) in
     let mapped, _ = React.Uncurried.useReducerWithMapState (fun total by -> total + by) start (fun start -> start * 3) in
     let scaled = React.Uncurried.useCallback1 (fun by -> by * count) [| count |] in
     <s>(React.int count)(React.string ":")(React.int total)(React.string ":")(React.int mapped)(React.string ":")(React.int (scaled 2 [@u]))</s>
