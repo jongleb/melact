@@ -24,30 +24,42 @@ let () =
              (String.index_opt line ':'))
     |> String.concat "\n"
   in
-  let constructed declaration =
+  let constructed status declaration =
     let loc = declaration.ptype_loc in
-    let js_properties deriver = match deriver.pexp_desc with Pexp_ident { txt = Lident "jsProperties"; _ } -> true | _ -> false in
+    let own = Ast_builder.Default.ptyp_constr ~loc { loc; txt = Lident declaration.ptype_name.txt } [] in
+    let derivers =
+      List.concat_map
+        (fun attribute ->
+          match (attribute.attr_name.txt, attribute.attr_payload) with
+          | "deriving", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_tuple derivers; _ }, _); _ } ] ->
+              List.filter_map (fun deriver -> match deriver.pexp_desc with Pexp_ident { txt = Lident named; _ } -> Some named | _ -> None) derivers
+          | "deriving", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident named; _ }; _ }, _); _ } ] -> [ named ]
+          | _ -> [])
+        declaration.ptype_attributes
+    in
+    let value name type_ =
+      Ast_builder.Default.psig_value ~loc (Ast_builder.Default.value_description ~loc ~name:{ loc; txt = name } ~type_ ~prim:[])
+    in
     match declaration.ptype_kind with
-    | Ptype_record fields
-      when List.exists
-             (fun attribute ->
-               match (attribute.attr_name.txt, attribute.attr_payload) with
-               | "deriving", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_tuple derivers; _ }, _); _ } ] -> List.exists js_properties derivers
-               | "deriving", PStr [ { pstr_desc = Pstr_eval (deriver, _); _ } ] -> js_properties deriver
-               | _ -> false)
-             declaration.ptype_attributes ->
-        let built =
-          List.fold_right
-            (fun field result ->
-              match field.pld_type.ptyp_desc with
-              | Ptyp_constr ({ txt = Lident "option"; _ }, [ inner ])
-                when List.exists (fun attribute -> String.equal attribute.attr_name.txt "mel.optional") field.pld_attributes ->
-                  Ast_builder.Default.ptyp_arrow ~loc (Optional (escaped field.pld_name.txt)) inner result
-              | _ -> Ast_builder.Default.ptyp_arrow ~loc (Labelled (escaped field.pld_name.txt)) field.pld_type result)
-            fields
-            [%type: unit -> [%t Ast_builder.Default.ptyp_constr ~loc { loc; txt = Lident declaration.ptype_name.txt } []]]
-        in
-        [ Ast_builder.Default.psig_value ~loc (Ast_builder.Default.value_description ~loc ~name:declaration.ptype_name ~type_:built ~prim:[]) ]
+    | Ptype_record fields ->
+        List.concat_map
+          (fun deriver ->
+            match (deriver, status (declaration.ptype_name.txt ^ "[" ^ deriver ^ "]")) with
+            | "jsProperties", `Kept ->
+                [
+                  value declaration.ptype_name.txt
+                    (List.fold_right
+                       (fun field result ->
+                         match field.pld_type.ptyp_desc with
+                         | Ptyp_constr ({ txt = Lident "option"; _ }, [ inner ])
+                           when List.exists (fun attribute -> String.equal attribute.attr_name.txt "mel.optional") field.pld_attributes ->
+                             Ast_builder.Default.ptyp_arrow ~loc (Optional (escaped field.pld_name.txt)) inner result
+                         | _ -> Ast_builder.Default.ptyp_arrow ~loc (Labelled (escaped field.pld_name.txt)) field.pld_type result)
+                       fields [%type: unit -> [%t own]]);
+                ]
+            | "getSet", `Kept -> List.map (fun field -> value (field.pld_name.txt ^ "Get") [%type: [%t own] -> [%t field.pld_type]]) fields
+            | _ -> [])
+          derivers
     | _ -> []
   in
   let rec without path items =
@@ -77,7 +89,7 @@ let () =
             in
             let made =
               List.concat_map
-                (fun declaration -> match status declaration.ptype_name.txt with `Differs -> constructed declaration | `Kept | `Missing -> [])
+                (fun declaration -> match status declaration.ptype_name.txt with `Differs -> constructed status declaration | `Kept | `Missing -> [])
                 declarations
             in
             match

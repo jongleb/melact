@@ -1,2 +1,1 @@
-domProps differs type: abstract in Melact, a record in reason-react; ReactDOM.domProps, the constructor, is checked
-domProps[getSet] missing deriving: reading a domProps back field by field (keyGet, classNameGet, ...) is not in Melact yet
+domProps differs type: abstract in Melact, a record in reason-react; the constructor ReactDOM.domProps and its readers (keyGet, classNameGet, ...) are checked

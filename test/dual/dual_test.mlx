@@ -2510,6 +2510,34 @@ let () =
              in
              step 8 (0, 0, { shade = 0; p = 1; q = 0 })))
         [%mel.obj { numRuns = 150 }]));
+  describe "domProps read back" (fun () ->
+    test "every reader gives what the constructor was given, and None for what it was not" (fun () ->
+      check
+        (property (tapes ~shortest:16 ~longest:16) (fun values ->
+             let tape = tape values in
+             let maybe make = match draw tape 2 with 0 -> None | _ -> Some (make (draw tape 4)) in
+             let key = maybe (fun n -> "k" ^ string_of_int n) in
+             let className = maybe (fun n -> "c" ^ string_of_int n) in
+             let tabIndex = maybe (fun n -> n - 2) in
+             let hidden = maybe (fun n -> n mod 2 = 0) in
+             let kind = maybe (fun n -> [| "text"; "checkbox"; "number"; "" |].(n)) in
+             let ariaHidden = maybe (fun n -> n > 1) in
+             let opened = maybe (fun n -> n = 0) in
+             let props =
+               ReactDOM.domProps ?key ?className ?tabIndex ?hidden ?type_:kind ?ariaHidden ?open_:opened ()
+             in
+             expect
+               ( ReactDOM.keyGet props,
+                 ReactDOM.classNameGet props,
+                 ReactDOM.tabIndexGet props,
+                 ReactDOM.hiddenGet props,
+                 ReactDOM.methodGet props,
+                 ReactDOM.type_Get props,
+                 ReactDOM.ariaHiddenGet props,
+                 ReactDOM.open_Get props,
+                 ReactDOM.childrenGet props )
+             |. to_equal (key, className, tabIndex, hidden, None, kind, ariaHidden, opened, None)))
+        [%mel.obj { numRuns = 200 }]));
   describe "reason-react's uncurried hooks" (fun () ->
     test_async "show what React shows after any batch of updates, keep their setters for good and remake the callback only when its dependency changes" (fun () ->
       check_async

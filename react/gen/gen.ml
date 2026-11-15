@@ -136,7 +136,14 @@ let () =
   let external_props =
     [ "external domProps :"; "  ?key:(string[@mel.as \"key\"]) ->"; "  ?children:(React.element[@mel.as \"children\"]) ->" ]
     @ List.map (fun (name, kind) -> Printf.sprintf "  ?%s:((%s)[@mel.as %S]) ->" (label name) (label_type kind) name) props
-    @ [ "  unit ->"; "  domProps = \"\""; "[@@mel.obj]" ]
+    @ [ "  unit ->"; "  domProps = \"\""; "[@@mel.obj]"; "" ]
+    @ List.concat_map
+        (fun (name, held) ->
+          [
+            Printf.sprintf "external %sGet : domProps -> (%s) option = %S" (match name with "method" -> name | _ -> label name) held name;
+            "[@@mel.get] [@@mel.return undefined_to_opt]";
+          ])
+        ([ ("key", "string"); ("children", "React.element") ] @ List.map (fun (name, kind) -> (name, label_type kind)) props)
   in
   let generated =
     match part with
