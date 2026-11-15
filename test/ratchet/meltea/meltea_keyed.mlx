@@ -1,0 +1,104 @@
+open Testing
+
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+
+type row = { id : int; label : string }
+
+(** The row whose label was clicked last. *)
+type selection = Unselected | Selected of int
+
+(** Rows are copied on every change, never written in place; the runtime reads them through [Counters.watched]. *)
+type model = { rows : row array; next : int; selection : selection }
+
+[@@@alert "-mutable_model"]
+
+type message = Run | Add | Update | Clear | Swap_rows | Select of int | Remove of int
+
+let built from count = Array.init count (fun index -> { id = from + index; label = "row " ^ string_of_int (from + index) })
+
+let update message model =
+  Counters.unobserved (fun () ->
+      let next =
+        match message with
+        | Run -> { rows = built model.next 1000; next = model.next + 1000; selection = Unselected }
+        | Add -> { model with rows = Array.append model.rows (built model.next 1000); next = model.next + 1000 }
+        | Update ->
+            {
+              model with
+              rows =
+                Array.mapi
+                  (fun index row -> match index mod 10 with 0 -> { row with label = row.label ^ " !!!" } | _ -> row)
+                  model.rows;
+            }
+        | Clear -> { model with rows = [||]; selection = Unselected }
+        | Swap_rows -> (
+            match Array.length model.rows > 998 with
+            | true ->
+                let rows = Array.copy model.rows in
+                rows.(1) <- model.rows.(998);
+                rows.(998) <- model.rows.(1);
+                { model with rows }
+            | false -> model)
+        | Select id -> { model with selection = Selected id }
+        | Remove id ->
+            let count = Array.length model.rows in
+            let rec found index =
+              match index = count with true -> None | false -> if model.rows.(index).id = id then Some index else found (index + 1)
+            in
+            Option.fold ~none:model
+              ~some:(fun index ->
+                { model with rows = Array.append (Array.sub model.rows 0 index) (Array.sub model.rows (index + 1) (count - index - 1)) })
+              (found 0)
+      in
+      match next.rows == model.rows with true -> next | false -> { next with rows = Counters.watched next.rows })
+
+let view { rows; selection; _ } =
+  let () = Counters.bump Viewed in
+  let row { id; label } =
+    <tr
+      key=(Counters.seen Keyed (string_of_int id))
+      className=(match selection with Selected chosen when chosen = id -> "danger" | _ -> "")>
+      <td className="col-md-1">(Html.int id)</td>
+      <td className="col-md-4"><a onClick=(Select id)>(Html.text (Counters.seen Refreshed label))</a></td>
+      <td className="col-md-1"><a onClick=(Remove id)><span className="remove" /></a></td>
+    </tr>
+  in
+  <table><tbody>(Html.array (Array.map row rows))</tbody></table>
+
+(** What a run starts from, the messages drawn before it as the benchmark's warmups, and the one operation it measures. *)
+type scenario = { rows : int; warmups : message list; message : message }
+
+let run scenario =
+  let root = Counters.unobserved attached in
+  let initial = { rows = Counters.watched (built 1 scenario.rows); next = scenario.rows + 1; selection = Unselected } in
+  let running = Counters.unobserved (fun () -> Program.sandbox ~init:initial ~update ~view root) in
+  Counters.unobserved (fun () ->
+      Program.flush running;
+      List.iter
+        (fun message ->
+          Program.dispatch running message;
+          Program.flush running)
+        scenario.warmups);
+  ignore (Counters.take ());
+  Program.dispatch running scenario.message;
+  Program.flush running;
+  let counts = Counters.take () in
+  Counters.unobserved (fun () ->
+      Program.stop running;
+      remove_root root);
+  counts
+
+let scenarios =
+  [|
+    ("keyed benchmark, create rows", { rows = 0; warmups = []; message = Run });
+    ("keyed benchmark, replace all rows", { rows = 1000; warmups = []; message = Run });
+    ("keyed benchmark, partial update", { rows = 1000; warmups = []; message = Update });
+    ("keyed benchmark, select row", { rows = 1000; warmups = [ Select 5 ]; message = Select 500 });
+    ("keyed benchmark, swap rows", { rows = 1000; warmups = []; message = Swap_rows });
+    ("keyed benchmark, remove row", { rows = 1000; warmups = []; message = Remove 500 });
+    ("keyed benchmark, append rows", { rows = 1000; warmups = []; message = Add });
+    ("keyed benchmark, clear rows", { rows = 1000; warmups = []; message = Clear });
+  |]
+
+let names = Array.map fst scenarios
+let named index = run (snd scenarios.(index))

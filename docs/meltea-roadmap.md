@@ -81,6 +81,22 @@ the guarded path beside the delta and raising on any difference, with the messag
 - **D1. Work counters.** Per message: `===` checks, items of collections read, view functions
   called, allocations of the draw. Deterministic, so they are the main measure (timing on this
   machine is noisy), with a law that work is proportional to the change on random programs.
+
+  Done for items read: `Counters.watched` wraps a model's array in a proxy that counts every item
+  the runtime reads (a law checks the count, and a mutant that stops counting fails it), and
+  `test/ratchet/meltea/meltea_keyed.mlx` runs each operation of the keyed benchmark on 1,000 rows
+  as its own ratchet run. The baseline, against what the change needs:
+
+  | operation | DOM work | items read | needed |
+  |---|---|---|---|
+  | select row | 2 classes | 2 | 2 |
+  | swap rows | 2 moves | 4,004 | 0 |
+  | remove row | 1 removal | 2,000 | 0 |
+  | partial update | 100 texts | 4,000 | 100 |
+  | append rows | 1,000 insertions | 5,000 | 1,000 |
+  | create rows | 1,000 insertions | 3,000 | 1,000 |
+  | replace all rows | 1,000 + 1,000 | 5,126 | 1,000 |
+  | clear rows | 1,000 removals | 0 | 0 |
 - **D2. The typed graph.** Move `fields` and `slice` to the Typedtree: exact names (`Array.append`
   is `Stdlib.Array.append`), paths of nested fields (`editor.draft`), view and update functions with
   parameters inside the file, gates inside functions and rows. The untyped reading stays as the

@@ -38,6 +38,7 @@ type kind =
   | Sent  (** A byte of the HTML a server renderer wrote. *)
   | Jobs_moved  (** A cell of an effect queue copied to put effects back in the order of the tree. *)
   | Expando  (** A property script set on a node of the page, counted when the page holds more of them than at the end of the last step. *)
+  | Read  (** An item of a model's array read by the runtime, through [watched]. *)
 
 val kinds : kind list
 val name : kind -> string
@@ -50,3 +51,6 @@ val count : t -> kind -> int
 val bump : kind -> unit
 val seen : kind -> 'a -> 'a
 val unobserved : (unit -> 'a) -> 'a
+
+(** The array itself, counting every item read through it as [Read]. *)
+val watched : 'item array -> 'item array

@@ -35,12 +35,13 @@ type kind =
   | Sent
   | Jobs_moved
   | Expando
+  | Read
 
 let kinds =
   [
     Moved; Inserted; Removed; Attribute; Class; Text; Style; Property; Created; Forced_layout; Frame_layout; Layout_read; Rendered;
     Effect_ran; Evaluated; Viewed; Listed; Keyed; Projected; Refreshed; Walked; Timer; Frame; Task; Microtask; Reaction; Listened;
-    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global; Sent; Jobs_moved; Expando;
+    Unlistened; Recorded; Kept_node; Kept_listener; Kept_timer; Kept_global; Sent; Jobs_moved; Expando; Read;
   ]
 
 let name kind =
@@ -81,6 +82,7 @@ let name kind =
   | Sent -> "bytes served"
   | Jobs_moved -> "queued jobs moved"
   | Expando -> "node expandos"
+  | Read -> "items read"
 
 type t = int Js.Dict.t
 
@@ -379,3 +381,14 @@ let unobserved run =
   let quiet : int -> unit = [%mel.raw {|function (by) { globalThis.__ratchet.quiet += by; }|}] in
   quiet 1;
   Fun.protect ~finally:(fun () -> quiet (-1)) run
+
+let watched : 'item array -> 'item array =
+  [%mel.raw
+    {|function (items) {
+  return new Proxy(items, {
+    get: function (target, key, receiver) {
+      if (typeof key === "string" && key.length > 0 && key.charCodeAt(0) >= 48 && key.charCodeAt(0) <= 57) globalThis.__ratchet.bump("items read", 1);
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}|}]

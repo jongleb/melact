@@ -77,7 +77,7 @@ let comparison kind =
          properties on every node it made"
   | Jobs_moved -> Excluded "React keeps effects in the order of its fibers and moves no queue"
   | Created -> Excluded "templates keep a comment anchor for every child slot, where React keeps positions in fibers"
-  | Viewed | Listed | Projected -> Excluded "only the Meltea and melhole runs count it"
+  | Viewed | Listed | Projected | Read -> Excluded "only the Meltea and melhole runs count it"
 
 let loaded : string -> 'build Js.Promise.t =
   [%mel.raw

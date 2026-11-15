@@ -1009,6 +1009,84 @@
     "mutation records": 9,
     "node expandos": 1
   },
+  "meltea: keyed benchmark, create rows": {
+    "insertions": 1000,
+    "created nodes": 7001,
+    "frame layouts": 1,
+    "view calls": 1,
+    "keys": 1000,
+    "row refreshes": 1000,
+    "microtasks": 1,
+    "mutation records": 1000,
+    "node expandos": 4000,
+    "items read": 3000
+  },
+  "meltea: keyed benchmark, replace all rows": {
+    "insertions": 1000,
+    "removals": 1000,
+    "created nodes": 7000,
+    "frame layouts": 1,
+    "view calls": 1,
+    "keys": 1064,
+    "row refreshes": 1000,
+    "microtasks": 1,
+    "mutation records": 1001,
+    "items read": 5126
+  },
+  "meltea: keyed benchmark, partial update": {
+    "texts": 100,
+    "frame layouts": 1,
+    "view calls": 1,
+    "keys": 100,
+    "row refreshes": 100,
+    "microtasks": 1,
+    "mutation records": 100,
+    "items read": 4000
+  },
+  "meltea: keyed benchmark, select row": {
+    "attributes": 2,
+    "frame layouts": 1,
+    "view calls": 1,
+    "microtasks": 1,
+    "mutation records": 2,
+    "items read": 2
+  },
+  "meltea: keyed benchmark, swap rows": {
+    "moves": 2,
+    "frame layouts": 1,
+    "view calls": 1,
+    "keys": 2,
+    "microtasks": 1,
+    "mutation records": 4,
+    "items read": 4004
+  },
+  "meltea: keyed benchmark, remove row": {
+    "removals": 1,
+    "frame layouts": 1,
+    "view calls": 1,
+    "microtasks": 1,
+    "mutation records": 1,
+    "items read": 2000
+  },
+  "meltea: keyed benchmark, append rows": {
+    "insertions": 1000,
+    "created nodes": 7000,
+    "frame layouts": 1,
+    "view calls": 1,
+    "keys": 1000,
+    "row refreshes": 1000,
+    "microtasks": 1,
+    "mutation records": 1000,
+    "node expandos": 4000,
+    "items read": 5000
+  },
+  "meltea: keyed benchmark, clear rows": {
+    "removals": 1000,
+    "frame layouts": 1,
+    "view calls": 1,
+    "microtasks": 1,
+    "mutation records": 1
+  },
   "meltea: random program, seed 1": {
     "moves": 1,
     "insertions": 11,
