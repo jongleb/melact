@@ -961,11 +961,21 @@ replacing one hookless component by another with the same output resets the stat
 The rule needs the converse too: a function that calls a hook is a hook, and runs on every render.
 A plain function's call is a value the compiler may cache by its arguments, so a `whenChanged(value)`
 that calls `useRef` and `useEffect1` would skip its hooks on a render with the same value and the
-runtime would find them out of order. melact-ppx makes it an error at the first hook call of a
-top-level or module-level function named otherwise, with the name to rename it to
-(`useWhenChanged`). A component (`[@react.component]`, or a function named `make`), the props
-builders the component rewrite makes, the wrappers it makes for npm's React hooks, and a value whose
-name starts with `_`, which nothing calls, are exempt.
+runtime would find them out of order.
+
+Under `staged_pps … -typed`, where a call of another module's function reaches its `.cmi`, the name
+does not decide it: every top-level or module-level function that calls a hook (by its name, or by a
+fact) gets a hook fact whatever its name, and every decision that read the spelling reads the fact
+instead: whether a call may be cached, whether a component calls hooks, the steps of the update
+graph and the slots of a hook's own fact. A chain `leaf → middle → outer` gets its facts in one
+pass, in the order of the file, also through its modules (`Inner.deep`) and through `.cmi`s
+(`Leaf.value → Middle.value → Chained.make`). A function whose hooks cannot be counted (a hook in a
+branch, inside an expression) is marked `[@melhole.hook_uncounted]`: it is still a hook, and a
+component that calls it renders whole. Without `-typed` melact-ppx makes it an error at the first
+hook call of a function named otherwise, with the name to rename it to (`useWhenChanged`). A
+component (`[@react.component]`, or a function named `make`), the props builders the component
+rewrite makes, the wrappers it makes for npm's React hooks, and a value whose name starts with `_`,
+which nothing calls, are exempt.
 
 ### Spliced into the caller
 
@@ -1255,11 +1265,14 @@ The graphs of a parent and a child are linked at run time, not through types: th
 gives the child the bits of the inputs that changed, and the child's own graph, compiled in its own
 module, does the rest. That works under `pps`, through an `.mli` and across libraries.
 
-What a module boundary hides is a custom hook. A top-level `useX` whose body is pure and calls only
-React's hooks and known custom hooks at its top level gets a fact on its pattern, which reaches the
-`.cmi`: `[@melhole.hook (3, slots, [label…], [argument…])]`, a format version, the hook slots it takes
-on every call, the labels whose hooks it calls, and the arguments it calls only after the render
-(`` `Position 0 ``, `` `Label "onDone" ``). A
+What a module boundary hides is a custom hook. A top-level `useX` whose body writes nothing of the
+world and calls only React's hooks and known custom hooks at its top level gets a fact on its pattern,
+which reaches the `.cmi`: `[@melhole.hook (4, slots, [label…], [argument…], page)]`, a format version,
+the hook slots it takes on every call, the labels whose hooks it calls, the arguments it calls only
+after the render (`` `Position 0 ``, `` `Label "onDone" ``), and whether it reads the page while it
+renders (`` `Read ``: the `current` of a ref it made, as a `usePrevious` returns). A component that
+calls a hook that reads the page reads it too, and what the hook returns is made again on every
+render. A
 component that calls it, in the same file or, under `staged_pps`, from another module (read with
 `Env.lookup_value`, as `melhole.inline` is), keeps its purity and its graph: the call is a step that
 runs on every render, and the hook's state cells are numbered after the component's slots before
@@ -1269,8 +1282,8 @@ to npm's React hooks are such custom hooks too.
 
 A hook can be given to a custom hook: `use(~useMemo, …)` calls `useMemo(…)`, and
 `use1 = (…) => use(~useMemo=React.useMemo1, …)` picks it. `use`'s fact names the label once per
-call of it, `(3, 2, ["useMemo"], …)`; a caller that passes React's hook, a custom hook with a fact or
-a hook given to it under its own label adds that hook's slots, so `use1` gets `(3, 3, [], …)`. The
+call of it, `(4, 2, ["useMemo"], …)`; a caller that passes React's hook, a custom hook with a fact or
+a hook given to it under its own label adds that hook's slots, so `use1` gets `(4, 3, [], …)`. The
 runtime numbers the slots as they are called, through the parameter as through a name.
 
 A data hook takes the code that fetches: `use(…, fetch, deps)` calls `fetch` only in its effect. A

@@ -55,7 +55,8 @@ let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionStat
 let inline_fact = "melhole.inline"
 let inline_version = 1
 let hook_fact = "melhole.hook"
-let hook_version = 3
+let hook_version = 4
+let uncounted_hook = "melhole.hook_uncounted"
 
 (** Whether melact-ppx tells, for each component and custom hook, what it compiled it to and why. *)
 type explaining = Quiet | Explaining
@@ -88,6 +89,7 @@ let with_hook_fact ~loc (fact : Graph.fact) pattern =
                              | Graph.Position position -> pexp_variant ~loc "Position" (Some (eint ~loc position))
                              | Graph.Label label -> pexp_variant ~loc "Label" (Some (estring ~loc label)))
                            fact.later);
+                      pexp_variant ~loc (match fact.page with Graph.Unread -> "Unread" | Graph.Read -> "Read") None;
                     ])
                  [];
              ])
@@ -128,6 +130,7 @@ let imported_hook path =
                                { pexp_desc = Pexp_constant (Pconst_integer (slots, None)); _ };
                                through;
                                later;
+                               { pexp_desc = Pexp_variant ((("Unread" | "Read") as page), None); _ };
                              ];
                          _;
                        },
@@ -137,8 +140,10 @@ let imported_hook path =
               ]
                 when int_of_string version = hook_version ->
                   Some
+                    (Graph.Counted
                     {
                       Graph.slots = int_of_string slots;
+                      page = (match page with "Read" -> Graph.Read | _ -> Graph.Unread);
                       through =
                         List.map
                           (fun label ->
@@ -156,9 +161,10 @@ let imported_hook path =
                                 Graph.Label label
                             | _ -> raise Exit)
                           (items later);
-                    }
+                    })
               | _ -> None
               | exception _ -> None)
+          | name, _ when String.equal name uncounted_hook -> Some Graph.Uncounted
           | _ -> None)
         description.val_attributes
 let own_module = "Melhole_own_module__"
@@ -197,7 +203,7 @@ let react_text expression =
       Option.map (fun kind -> Element.Text (kind, value)) (text name)
   | _ -> None
 
-let component ~loc ~name ~props_constructor ~hooks expression =
+let component ~loc ~name ~props_constructor ~hooks ~summary expression =
   let expression =
     let annotated =
       object
@@ -329,7 +335,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
     | `Missing ->
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
-  let rendering = Graph.rendering ~hooks:(fun callee -> Option.map (fun (fact : Graph.fact) -> fact.later) (hooks callee)) expression in
+  let rendering = Graph.rendering ~hooks:summary expression in
   (match rendering with
   | Graph.Pure -> explained ~loc ~name "is Component.pure: its render reads only props, state, context and hooks"
   | Graph.Reads_the_page { loc; reason } ->
@@ -405,6 +411,8 @@ let component ~loc ~name ~props_constructor ~hooks expression =
               match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
               | Hook _ -> `Stateful
               | Plain -> `Pure)
+          | `Pure, Pexp_apply (callee, _) -> (
+              match summary callee with Some _ -> `Stateful | None -> super#expression expression found)
           | `Pure, _ -> super#expression expression found
       end
     in
@@ -1182,21 +1190,52 @@ let mapper =
     val mutable react : opened = Closed
     val mutable modules : string list = []
     val mutable hooks : string list = []
-    val mutable custom : (string * Melhole_typed.Question.t Graph.counted) list = []
+    val mutable custom : (string * Melhole_typed.Question.t Graph.counted Graph.summary) list = []
 
     (** The props builders the component rewrite made, which call the component's hooks inside. *)
     val mutable made : string list = []
 
-    method private known callee =
+    method private summary callee =
       match callee.pexp_desc with
       | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name custom
-      | Pexp_ident { txt = Ldot _ as path; _ } ->
-          Option.map (fun fact -> { Graph.fact; values = []; conditions = [] }) (imported_hook path)
+      | Pexp_ident { txt = Ldot _ as path; _ } -> (
+          match List.assoc_opt (String.concat "." (Longident.flatten_exn path)) custom with
+          | Some known -> Some known
+          | None ->
+              Option.map
+                (fun imported ->
+                  match imported with
+                  | Graph.Counted fact -> Graph.Counted { Graph.fact; values = []; conditions = [] }
+                  | Graph.Uncounted -> Graph.Uncounted)
+                (imported_hook path))
       | _ -> None
+
+    method private known callee =
+      Option.bind (self#summary callee) (fun summary ->
+          match summary with Graph.Counted counted -> Some counted | Graph.Uncounted -> None)
+
+    method private remember name summary =
+      custom <-
+        List.map (fun path -> (String.concat "." (path @ [ name ]), summary))
+          (List.init (List.length modules + 1) (fun taken -> List.rev (List.filteri (fun index _ -> index < taken) modules)))
+        @ custom
+
+    method! hook_call callee =
+      match (super#hook_call callee, self#summary callee) with
+      | `Hook, _ | `Plain, Some _ -> `Hook
+      | `Plain, None -> `Plain
 
     method private custom callee =
       Option.bind (self#known callee) (fun (counted : _ Graph.counted) ->
           match counted.conditions with [] -> Some counted.fact | _ :: _ -> None)
+
+    method private counted callee =
+      Option.map
+        (fun summary ->
+          match summary with
+          | Graph.Counted { Graph.fact; conditions = []; _ } -> Graph.Counted fact
+          | Graph.Counted { conditions = _ :: _; _ } | Graph.Uncounted -> Graph.Uncounted)
+        (self#summary callee)
 
     method private qualified expression =
       let expression = React_open.qualified expression in
@@ -1227,7 +1266,10 @@ let mapper =
       let mapped = Hoist.structure self#structure_item items in
       react <- saved;
       hooks <- known;
-      custom <- facts;
+      custom <-
+        List.filter (fun (key, _) -> String.contains key '.')
+          (List.filteri (fun index _ -> index < List.length custom - List.length facts) custom)
+        @ facts;
       mapped
 
     method! module_binding binding =
@@ -1264,44 +1306,50 @@ let mapper =
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
           Location.raise_errorf ~loc:item.pstr_loc "melact: a [@react.component] external is bound before the JSX rewrite"
       | Pstr_value (flag, bindings) -> (
+          let first_hook expression =
+            (object
+               inherit [(string * location) option] Ast_traverse.fold as super
+
+               method! expression expression found =
+                 match (found, expression.pexp_desc) with
+                 | Some _, _ -> found
+                 | None, _
+                   when List.exists
+                          (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed")
+                          expression.pexp_attributes ->
+                     found
+                 | None, Pexp_apply (callee, _) -> (
+                     match self#hook_call callee with
+                     | `Hook -> Some (Pprintast.string_of_expression callee, expression.pexp_loc)
+                     | `Plain -> super#expression expression found)
+                 | None, _ -> super#expression expression found
+             end)
+              #expression
+              expression None
+          in
+          let plain binding =
+            match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc, without_component binding.pvb_attributes) with
+            | ( (Ppat_var { txt = name; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt = name; _ }; _ }, _)),
+                Pexp_function _,
+                None )
+              when (match Melhole_compiler.Hook_name.of_name name with
+                   | Plain -> not (String.equal name "make" || List.mem name made || String.starts_with ~prefix:"_" name)
+                   | Hook _ -> false) ->
+                Option.map (fun (hook, at) -> (name, hook, at)) (first_hook binding.pvb_expr)
+            | _ -> None
+          in
           List.iter
             (fun binding ->
-              match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc, without_component binding.pvb_attributes) with
-              | ( (Ppat_var { txt = name; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt = name; _ }; _ }, _)),
-                  Pexp_function _,
-                  None )
-                when (match Melhole_compiler.Hook_name.of_name name with
-                     | Plain -> not (String.equal name "make" || List.mem name made || String.starts_with ~prefix:"_" name)
-                     | Hook _ -> false) ->
-                  Option.iter
-                    (fun (hook, loc) ->
-                      Location.raise_errorf ~loc
-                        "melact: %s calls the hook %s, so it is a hook itself and must run on every render; React's \
-                         rules and melact both need its name to start with use (rename it %s), or a call of it is \
-                         cached like a plain function's and its hooks get out of order"
-                        name hook
-                        ("use" ^ String.capitalize_ascii name))
-                    ((object
-                        inherit [(string * location) option] Ast_traverse.fold as super
-
-                        method! expression expression found =
-                          match (found, expression.pexp_desc) with
-                          | Some _, _ -> found
-                          | None, _
-                            when List.exists
-                                   (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed")
-                                   expression.pexp_attributes ->
-                              found
-                          | None, Pexp_apply ({ pexp_desc = Pexp_ident { txt; loc }; _ }, _)
-                            when match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
-                                 | Hook _ -> true
-                                 | Plain -> false ->
-                              Some (String.concat "." (Longident.flatten_exn txt), loc)
-                          | None, _ -> super#expression expression found
-                      end)
-                       #expression
-                       binding.pvb_expr None)
-              | _ -> ())
+              match (plain binding, Melhole_typed.Mode.current ()) with
+              | Some (name, hook, at), Melhole_typed.Mode.Untyped ->
+                  Location.raise_errorf ~loc:at
+                    "melact: %s calls the hook %s, so it is a hook itself and must run on every render; React's rules \
+                     and melact both need its name to start with use (rename it %s), or a call of it is cached like a \
+                     plain function's and its hooks get out of order; under staged_pps with -typed, melact-ppx gives it a \
+                     hook fact whatever its name"
+                    name hook
+                    ("use" ^ String.capitalize_ascii name)
+              | Some _, Melhole_typed.Mode.Typed | None, _ -> ())
             bindings;
           let bindings, pending =
             List.split
@@ -1309,15 +1357,32 @@ let mapper =
                  (fun binding ->
                    match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc) with
                    | Ppat_var { txt = name; loc }, Pexp_function _ -> (
-                       match Melhole_compiler.Hook_name.of_name name with
-                       | Plain -> (binding, None)
-                       | Hook _ -> (
+                       match
+                         (Melhole_compiler.Hook_name.of_name name, Melhole_typed.Mode.current (), plain binding)
+                       with
+                       | Plain, Melhole_typed.Mode.Untyped, _ | Plain, Melhole_typed.Mode.Typed, None -> (binding, None)
+                       | Hook _, _, _ | Plain, Melhole_typed.Mode.Typed, Some _ -> (
+                           let inferred = plain binding in
                            let binding = { binding with pvb_expr = self#qualified binding.pvb_expr } in
-                           match Graph.slots ~hooks:self#known binding.pvb_expr with
-                           | Error { loc = at; reason } ->
+                           match Graph.slots ~hooks:self#summary binding.pvb_expr with
+                           | Error { loc = at; reason } -> (
                                explained ~loc:at ~name
                                  ("has no hook fact, so a component that calls it is Component.make: " ^ reason);
-                               (binding, None)
+                               match inferred with
+                               | Some _ ->
+                                   self#remember name Graph.Uncounted;
+                                   ( {
+                                       binding with
+                                       pvb_pat =
+                                         {
+                                           binding.pvb_pat with
+                                           ppat_attributes =
+                                             attribute ~loc ~name:{ loc; txt = uncounted_hook } ~payload:(PStr [])
+                                             :: binding.pvb_pat.ppat_attributes;
+                                         };
+                                     },
+                                     None )
+                               | None -> (binding, None))
                            | Ok { fact; values = []; conditions = [] } ->
                                explained ~loc ~name
                                  (Printf.sprintf "has a hook fact: %d hook slot%s%s" fact.slots
@@ -1325,7 +1390,7 @@ let mapper =
                                     (match fact.later with
                                     | [] -> ""
                                     | _ :: _ -> ", and calls some arguments only after the render"));
-                               custom <- (name, { fact; values = []; conditions = [] }) :: custom;
+                               self#remember name (Graph.Counted { fact; values = []; conditions = [] });
                                ({ binding with pvb_pat = with_hook_fact ~loc fact binding.pvb_pat }, None)
                            | Ok { fact; values; conditions } ->
                                let asked = ref conditions in
@@ -1343,7 +1408,7 @@ let mapper =
                                  end
                                in
                                let expression = marker#expression binding.pvb_expr in
-                               custom <- (name, { fact; values = []; conditions = !asked }) :: custom;
+                               self#remember name (Graph.Counted { fact; values = []; conditions = !asked });
                                ({ binding with pvb_expr = expression }, Some (name, fact, !asked))))
                    | _ -> (binding, None))
                  bindings)
@@ -1474,7 +1539,7 @@ let mapper =
           let type_name = props_type name in
           let props_constructor = String.capitalize_ascii type_name in
           let builder =
-            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor ~hooks:self#custom
+            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor ~hooks:self#custom ~summary:self#counted
               (self#qualified binding.pvb_expr)
           in
           ( [
@@ -1729,7 +1794,7 @@ let mapper =
 
 let structure items =
   let loc = Location.none in
-  let hooked expression =
+  let calls_hook bearing expression =
     let finder =
       object
         inherit [[ `Hooked | `Pure ]] Ast_traverse.fold as super
@@ -1738,14 +1803,43 @@ let structure items =
           match (found, expression.pexp_desc) with
           | `Hooked, _ -> `Hooked
           | `Pure, Pexp_ident { txt; _ } -> (
-              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
-              | Hook _ -> `Hooked
-              | Plain -> `Pure)
+              match
+                ( Melhole_compiler.Hook_name.of_name (Longident.last_exn txt),
+                  List.mem (String.concat "." (Longident.flatten_exn txt)) bearing,
+                  txt )
+              with
+              | Hook _, _, _ | Plain, true, _ -> `Hooked
+              | Plain, false, Ldot _ -> Option.fold ~none:`Pure ~some:(fun _ -> `Hooked) (imported_hook txt)
+              | Plain, false, (Lident _ | Lapply _) -> `Pure
+              | exception Invalid_argument _ -> `Pure)
           | `Pure, _ -> super#expression expression found
       end
     in
     finder#expression expression `Pure
   in
+  let bearing =
+    let rec gather prefix items found =
+      List.fold_left
+        (fun found item ->
+          match item.pstr_desc with
+          | Pstr_value (_, bindings) ->
+              List.fold_left
+                (fun found binding ->
+                  match (binding.pvb_pat.ppat_desc, calls_hook found binding.pvb_expr) with
+                  | (Ppat_var { txt; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt; _ }; _ }, _)), `Hooked ->
+                      List.init (List.length prefix + 1) (fun dropped ->
+                          String.concat "." (List.filteri (fun index _ -> index >= dropped) prefix @ [ txt ]))
+                      @ found
+                  | _, (`Hooked | `Pure) -> found)
+                found bindings
+          | Pstr_module { pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ }; _ } ->
+              gather (prefix @ [ name ]) inner found
+          | _ -> found)
+        found items
+    in
+    gather [] items []
+  in
+  let hooked expression = calls_hook bearing expression in
   let jsx expression = Option.is_some (Element.without_jsx expression.pexp_attributes) in
   let inlinable item =
     match item.pstr_desc with

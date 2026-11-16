@@ -16,11 +16,23 @@ type rendering =
 (** An argument of a call: by its place among the unlabelled ones, or by its label. *)
 type argument = Position of int | Label of string
 
+(** Whether a custom hook reads the page while it renders: the [current] of a ref it made. A component that calls
+    one reads the page, and what the hook returns is made again on every render. *)
+type page = Unread | Read
+
+(** What a custom hook takes on every call: [slots] of its own, and those of the hook given for each label of
+    [through], once per call of it; [later] are the arguments it calls only after the render (in an effect, a
+    reducer, a callback or a handler), or hands only to such a place. *)
+type fact = { slots : int; through : string list; later : argument list; page : page }
+
+(** What melact-ppx knows of a callee that is a hook: its fact, or that it is a hook it could not count. *)
+type 'known summary = Counted of 'known | Uncounted
+
 (** [rendering body]: how the body of a [@react.component] reads while it renders. A function's body
     counts as run during the render unless the function is a JSX prop, the callback of an effect, a
     reducer or [useCallback], or an argument a custom hook only calls later. [hooks] gives, for a custom
     hook known to be pure, the arguments its fact says it calls only after the render. *)
-val rendering : hooks:(Ppxlib.expression -> argument list option) -> Ppxlib.expression -> rendering
+val rendering : hooks:(Ppxlib.expression -> fact summary option) -> Ppxlib.expression -> rendering
 
 (** One step of a body read as an update graph. A mask is the set of sources (bits of props, state
     cells and contexts) whose change makes the step run again; a render that knows nothing of what
@@ -39,10 +51,6 @@ type plan = { steps : step list; result : Ppxlib.expression; reads : int }
 (** Every source bit: the mask of a step that runs on every render. *)
 val every_source : int
 
-(** What a custom hook takes on every call: [slots] of its own, and those of the hook given for each label of
-    [through], once per call of it; [later] are the arguments it calls only after the render (in an effect, a
-    reducer, a callback or a handler), or hands only to such a place. *)
-type fact = { slots : int; through : string list; later : argument list }
 
 (** A custom hook's fact, holding when none of [values], hook-named identifiers read as values, is a function and
     every condition holds. *)
@@ -68,4 +76,5 @@ val plan :
 (** [slots ~hooks definition]: what a custom hook takes on every call, when its body is pure, calls its hooks at
     its top level and calls only React's hooks, custom hooks known by [hooks] and hooks given for its labelled
     parameters. *)
-val slots : hooks:(Ppxlib.expression -> 'condition counted option) -> Ppxlib.expression -> ('condition counted, why) result
+val slots :
+  hooks:(Ppxlib.expression -> 'condition counted summary option) -> Ppxlib.expression -> ('condition counted, why) result

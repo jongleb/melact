@@ -69,6 +69,21 @@ let rec body depth timing =
           two (Printf.sprintf "(useLater ~onDone:(fun () -> ignore %s) (fun () -> 0) (fun () -> %s))") later now;
           two (Printf.sprintf "(useLater ~onDone:(fun () -> ()) (fun () -> %s) (fun () -> %s))") later now;
           two (Printf.sprintf "(useTracked (fun () -> %s) + String.length %s)") now now;
+          two (Printf.sprintf "(plainLater (fun () -> %s) %s)") later now;
+          map
+            (fun a ->
+              {
+                source = Printf.sprintf "(pageHook x ^ %s)" a.source;
+                rendering = joined a.rendering (match timing with Rendering -> Reads_the_page | First | Later -> Pure);
+              })
+            now;
+          map
+            (fun a ->
+              {
+                source = Printf.sprintf "(ignore (opaque x); %s)" a.source;
+                rendering = joined a.rendering (match timing with Rendering | First -> Impure | Later -> Pure);
+              })
+            now;
           two (Printf.sprintf "(fst (React.useState (fun () -> %s)) + String.length %s)") first now;
           two (Printf.sprintf "(fst (React.useState %s) + String.length %s)") first now;
           two (Printf.sprintf "(let kept = React.useRef %s in ignore kept; %s)") first now;
@@ -98,6 +113,18 @@ let rec body depth timing =
             now now;
         ]
 
+let summaries callee =
+  let counted ?(page = Melact_ppx.Graph.Unread) later =
+    Some (Melact_ppx.Graph.Counted { Melact_ppx.Graph.slots = 1; through = []; later; page })
+  in
+  match callee.Ppxlib.pexp_desc with
+  | Pexp_ident { txt = Lident "useTracked"; _ } -> counted []
+  | Pexp_ident { txt = Lident "useLater"; _ } -> counted [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
+  | Pexp_ident { txt = Lident "plainLater"; _ } -> counted [ Melact_ppx.Graph.Position 0 ]
+  | Pexp_ident { txt = Lident "pageHook"; _ } -> counted ~page:Melact_ppx.Graph.Read []
+  | Pexp_ident { txt = Lident "opaque"; _ } -> Some Melact_ppx.Graph.Uncounted
+  | _ -> None
+
 let law =
   Test.make
     ~name:
@@ -107,12 +134,7 @@ let law =
     ~print:(fun { source; _ } -> source)
     (Gen.sized_size (Gen.int_bound 5) (fun depth -> body depth Rendering))
     (fun { source; rendering } ->
-      let hooks callee =
-        match callee.Ppxlib.pexp_desc with
-        | Pexp_ident { txt = Lident "useTracked"; _ } -> Some []
-        | Pexp_ident { txt = Lident "useLater"; _ } -> Some [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
-        | _ -> None
-      in
+      let hooks = summaries in
       (match Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) with
       | Melact_ppx.Graph.Pure -> Pure
       | Melact_ppx.Graph.Reads_the_page _ -> Reads_the_page
@@ -128,12 +150,7 @@ let explained =
     ~print:(fun { source; _ } -> source)
     (Gen.sized_size (Gen.int_bound 5) (fun depth -> body depth Rendering))
     (fun { source; _ } ->
-      let hooks callee =
-        match callee.Ppxlib.pexp_desc with
-        | Pexp_ident { txt = Lident "useTracked"; _ } -> Some []
-        | Pexp_ident { txt = Lident "useLater"; _ } -> Some [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
-        | _ -> None
-      in
+      let hooks = summaries in
       match Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) with
       | Melact_ppx.Graph.Pure -> true
       | Melact_ppx.Graph.Reads_the_page { loc; _ } | Melact_ppx.Graph.Impure { loc; _ } ->
@@ -152,7 +169,7 @@ let explained =
             in
             from 0
           in
-          List.exists (fun atom -> contains atom pointed) (reads @ writes @ [ "mine.current" ])
+          List.exists (fun atom -> contains atom pointed) (reads @ writes @ [ "mine.current"; "pageHook x"; "opaque x" ])
           || String.starts_with ~prefix:"mine.current <- " pointed
           || Test.fail_reportf "points at %S" pointed)
 
@@ -194,7 +211,11 @@ let later_law =
           (String.concat "" (List.mapi (fun index ((name, _), (_, use)) -> Printf.sprintf "let _use%d = %s in " index (use name)) picked))
       in
       let hooks callee =
-        let known later = Some { Melact_ppx.Graph.fact = { slots = 1; through = []; later }; values = []; conditions = [] } in
+        let known later =
+          Some
+            (Melact_ppx.Graph.Counted
+               { Melact_ppx.Graph.fact = { slots = 1; through = []; later; page = Melact_ppx.Graph.Unread }; values = []; conditions = [] })
+        in
         match callee.Ppxlib.pexp_desc with
         | Pexp_ident { txt = Lident "useTracked"; _ } -> known []
         | Pexp_ident { txt = Lident "useLater"; _ } -> known [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
@@ -212,4 +233,55 @@ let later_law =
       | Ok { fact = { later; _ }; _ } -> later = expected || Test.fail_reportf "%s: later is wrong" source
       | Error { reason; _ } -> Test.fail_reportf "%s: no fact, as it %s" source reason)
 
-let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law; explained; later_law ])
+(** Where a step of a generated body calls a hook: as the value of its let, or inside an expression. *)
+type place = Top | Nested
+
+let hooked_law =
+  Test.make
+    ~name:
+      "Graph: a hook known by its fact counts whatever its name: the update graph and a hook's fact take it only as the \
+       value of a let, a hook that could not be counted stops both, and one that reads the page makes what reads it \
+       run on every render"
+    ~count:2000
+    ~print:(fun steps -> String.concat "; " (List.map (fun (callee, place) -> callee ^ (match place with Top -> "" | Nested -> " nested")) steps))
+    Gen.(list_size (int_range 1 5) (pair (oneof_list [ "plainLater"; "pageHook"; "opaque" ]) (oneof_list [ Top; Nested ])))
+    (fun steps ->
+      let lets =
+        String.concat ""
+          (List.mapi
+             (fun index (callee, place) ->
+               match place with
+               | Top -> Printf.sprintf "let a%d = %s x in " index callee
+               | Nested -> Printf.sprintf "let a%d = String.length (%s x) in " index callee)
+             steps)
+      in
+      let result = String.concat " ^ " (List.mapi (fun index _ -> Printf.sprintf "a%d" index) steps) in
+      let counted callee = Option.map (fun summary -> match summary with Melact_ppx.Graph.Counted fact -> Melact_ppx.Graph.Counted { Melact_ppx.Graph.fact; values = []; conditions = [] } | Melact_ppx.Graph.Uncounted -> Melact_ppx.Graph.Uncounted) (summaries callee) in
+      let facts callee = Option.bind (summaries callee) (fun summary -> match summary with Melact_ppx.Graph.Counted fact -> Some fact | Melact_ppx.Graph.Uncounted -> None) in
+      let parse text = Ppxlib.Parse.expression (Lexing.from_string text) in
+      let countable = List.for_all (fun (callee, place) -> place = Top && not (String.equal callee "opaque")) steps in
+      let reads_page = List.exists (fun (callee, _) -> String.equal callee "pageHook") steps in
+      let plannable = not (List.exists (fun (callee, place) -> place = Nested && not (String.equal callee "opaque")) steps) in
+      let planned =
+        match
+          ( Melact_ppx.Graph.plan ~hooks:facts ~inputs:0 ~props:[ ("x", 1) ] ~volatile:Melact_ppx.Graph.Runs_every_render
+              (parse (lets ^ result)),
+            plannable )
+        with
+        | Ok { reads; _ }, true -> (
+            match List.exists (fun (callee, _) -> String.equal callee "opaque") steps with
+            | true -> true
+            | false -> (reads = Melact_ppx.Graph.every_source) = reads_page || Test.fail_reportf "reads %d" reads)
+        | Error _, false -> true
+        | Ok _, false -> Test.fail_report "a plan around a hook called inside an expression"
+        | Error { reason; _ }, true -> Test.fail_reportf "no plan, as it %s" reason
+      in
+      planned
+      &&
+      match (Melact_ppx.Graph.slots ~hooks:counted (parse ("fun x -> " ^ lets ^ result)), countable) with
+      | Ok { fact = { page; _ }; _ }, true -> (page = Melact_ppx.Graph.Read) = reads_page || Test.fail_report "page is wrong"
+      | Error _, false -> true
+      | Ok _, false -> Test.fail_report "a fact for a hook that cannot be counted"
+      | Error { reason; _ }, true -> Test.fail_reportf "no fact, as it %s" reason)
+
+let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law; explained; later_law; hooked_law ])

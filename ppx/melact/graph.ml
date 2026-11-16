@@ -15,6 +15,13 @@ exception Reads_the_world of why
 
 type argument = Position of int | Label of string
 
+(** Whether a custom hook reads the page while it renders: the [current] of a ref it made. *)
+type page = Unread | Read
+
+type fact = { slots : int; through : string list; later : argument list; page : page }
+
+type 'known summary = Counted of 'known | Uncounted
+
 let numbered arguments =
   List.rev
     (snd
@@ -84,6 +91,32 @@ let rendering ~hooks body =
           arguments
     | Pexp_apply (callee, arguments) -> (
         let values = List.map snd arguments in
+        let custom (fact : fact) =
+          (match (fact.page, kept, !found) with
+          | Read, Every_render, Pure ->
+              found :=
+                Reads_the_page
+                  {
+                    loc = expression.pexp_loc;
+                    reason =
+                      Printf.sprintf "calls %s, a hook that reads the page or what an effect left there"
+                        (Pprintast.string_of_expression callee);
+                  }
+          | Read, Every_render, (Reads_the_page _ | Impure _) | Read, First_render, _ | Unread, _, _ -> ());
+          List.iter
+            (fun (argument, value) ->
+              match List.find_opt (( = ) argument) fact.later with
+              | Some _ -> called_later value
+              | None -> now kept cells value)
+            (numbered arguments)
+        in
+        let uncounted () =
+          world expression
+            (Printf.sprintf
+               "calls %s, a hook without a fact: a custom hook gets one when its body calls its hooks at its top level \
+                and writes nothing of the world, and another module's only under -typed"
+               (Pprintast.string_of_expression callee))
+        in
         match (hook callee, arguments) with
         | Some ("useEffect" | "useLayoutEffect" | "useInsertionEffect" | "useCallback" | "useImperativeHandle"), _ ->
             List.iter called_later values
@@ -95,21 +128,9 @@ let rendering ~hooks body =
             | [] -> ())
         | Some ("useState" | "useRef"), _ -> List.iter (now First_render cells) values
         | Some ("useMemo" | "useContext" | "useId" | "useDebugValue"), _ -> each values
-        | Some _, _ -> (
-            match hooks callee with
-            | Some later ->
-                List.iter
-                  (fun (argument, value) ->
-                    match List.find_opt (( = ) argument) later with
-                    | Some _ -> called_later value
-                    | None -> now kept cells value)
-                  (numbered arguments)
-            | None ->
-                world expression
-                  (Printf.sprintf
-                     "calls %s, a hook without a fact: a custom hook gets one when its body is pure and calls its hooks at \
-                      its top level, and another module's only under -typed"
-                     (Pprintast.string_of_expression callee)))
+        | None, _ when Option.is_some (hooks callee) -> (
+            match hooks callee with Some (Counted fact) -> custom fact | Some Uncounted | None -> uncounted ())
+        | Some _, _ -> ( match hooks callee with Some (Counted fact) -> custom fact | Some Uncounted | None -> uncounted ())
         | None, [ (Nolabel, { pexp_desc = Pexp_construct ({ txt = Lident "()"; _ }, None); _ }) ] -> (
             match kept with
             | Every_render ->
@@ -232,11 +253,10 @@ type shape =
   | Effected of expression * dependencies
   | Computed of pattern * expression
   | Changing of pattern * expression  (** A value the rest of the body may change in place: made on every render. *)
-  | Custom of pattern option * expression * int  (** A custom hook whose fact gives its hook slots. *)
+  | Custom of pattern option * expression * int * page  (** A custom hook whose fact gives its hook slots. *)
 
 exception Beyond of why
 
-type fact = { slots : int; through : string list; later : argument list }
 
 type 'condition counted = { fact : fact; values : expression list; conditions : 'condition list }
 
@@ -253,7 +273,13 @@ let react_slots name =
 
 let combined found more =
   {
-    fact = { slots = found.fact.slots + more.fact.slots; through = found.fact.through @ more.fact.through; later = [] };
+    fact =
+      {
+        slots = found.fact.slots + more.fact.slots;
+        through = found.fact.through @ more.fact.through;
+        later = [];
+        page = (match (found.fact.page, more.fact.page) with Unread, Unread -> Unread | Read, _ | _, Read -> Read);
+      };
     values = found.values @ more.values;
     conditions = found.conditions @ more.conditions;
   }
@@ -286,7 +312,7 @@ let passed ~hooks ~named counted arguments =
         match (value.pexp_desc, named value, hooks value) with
         | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ }, _, _ -> (
             match react_slots name with
-            | Some slots -> { fact = { slots; through = []; later = [] }; values = []; conditions = [] }
+            | Some slots -> { fact = { slots; through = []; later = []; page = Unread }; values = []; conditions = [] }
             | None -> unknown ())
         | _, `Local local, _ -> local
         | _, `Outer, Some ({ fact = { through = []; _ }; _ } as known) -> known
@@ -332,6 +358,17 @@ let plan ~hooks ~inputs ~props ~volatile body =
 
         method! expression expression =
           match expression.pexp_desc with
+          | Pexp_apply (callee, _) when Option.is_some (hooks callee) ->
+              raise
+                (Beyond
+                   {
+                     loc = expression.pexp_loc;
+                     reason =
+                       Printf.sprintf
+                         "calls %s, a hook by its fact, inside an expression; the update graph reads hooks only as the \
+                          value of a let or a statement at the top of the body"
+                         (Pprintast.string_of_expression callee);
+                   })
           | Pexp_ident { txt; _ } -> (
               match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
               | Hook _ ->
@@ -366,7 +403,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
                   arguments
               in
               List.iter (fun (_, argument) -> ignore (checked argument)) rest;
-              Custom (pattern, value, counted.fact.slots))
+              Custom (pattern, value, counted.fact.slots, counted.fact.page))
             (hooks callee)
       | _ -> None
     in
@@ -423,7 +460,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
   | shapes, result -> (
       let slots =
         1
-        + List.fold_left (fun found shape -> match shape with Custom (_, _, count) -> found + count | _ -> found) 0 shapes
+        + List.fold_left (fun found shape -> match shape with Custom (_, _, count, _) -> found + count | _ -> found) 0 shapes
         + List.length
             (List.filter
                (fun shape ->
@@ -472,8 +509,12 @@ let plan ~hooks ~inputs ~props ~volatile body =
             | shape :: rest -> (
                 match shape with
                 | Run value -> given env slot context rest (Statement value :: steps)
-                | Custom (pattern, value, count) ->
-                    let bits = ((1 lsl count) - 1) lsl (inputs + slot) lor mask env value in
+                | Custom (pattern, value, count, page) ->
+                    let bits =
+                      match page with
+                      | Unread -> ((1 lsl count) - 1) lsl (inputs + slot) lor mask env value
+                      | Read -> every_source
+                    in
                     given
                       (Option.fold ~none:env ~some:(fun pattern -> bind env pattern bits) pattern)
                       (slot + count) context rest
@@ -509,7 +550,20 @@ let plan ~hooks ~inputs ~props ~volatile body =
           | env, steps -> (
               match mask env result with exception Beyond why -> Error why | reads -> Ok { steps; result; reads })))
 
-let slots ~hooks body =
+let slots ~hooks:summary body =
+  let hooks callee =
+    match summary callee with
+    | Some (Counted known) -> Some known
+    | Some Uncounted ->
+        raise
+          (Beyond
+             {
+               loc = callee.pexp_loc;
+               reason =
+                 Printf.sprintf "calls %s, a hook melact-ppx could not count" (Pprintast.string_of_expression callee);
+             })
+    | None -> None
+  in
   let rec peeled expression found =
     match expression.pexp_desc with
     | Pexp_function (given, _, Pfunction_body body) ->
@@ -535,6 +589,17 @@ let slots ~hooks body =
 
        method! expression expression =
          match expression.pexp_desc with
+         | Pexp_apply (callee, _) when Option.is_some (hooks callee) ->
+             raise
+               (Beyond
+                  {
+                    loc = expression.pexp_loc;
+                    reason =
+                      Printf.sprintf
+                        "calls %s, a hook by its fact, inside an expression; a custom hook gets a fact when it calls its \
+                         hooks as the value of a let or a statement at the top of its body"
+                        (Pprintast.string_of_expression callee);
+                  })
          | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, _) -> (
              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
              | Hook _ ->
@@ -558,21 +623,21 @@ let slots ~hooks body =
     end)
       #expression expression
   in
-  let none = { fact = { slots = 0; through = []; later = [] }; values = []; conditions = [] } in
+  let none = { fact = { slots = 0; through = []; later = []; page = Unread }; values = []; conditions = [] } in
   let named locals hook =
     match hook.pexp_desc with
     | Pexp_ident { txt = Lident name; _ } -> (
         match (List.assoc_opt name locals, own hook) with
         | Some (Some local), _ -> `Local local
         | Some None, _ -> `Shadowed
-        | None, Some label -> `Local { none with fact = { slots = 0; through = [ label ]; later = [] } }
+        | None, Some label -> `Local { none with fact = { slots = 0; through = [ label ]; later = []; page = Unread } }
         | None, None -> `Outer)
     | _ -> `Outer
   in
   let rec chosen locals value =
     match value.pexp_desc with
     | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ } ->
-        Option.map (fun slots -> { none with fact = { slots; through = []; later = [] } }) (react_slots name)
+        Option.map (fun slots -> { none with fact = { slots; through = []; later = []; page = Unread } }) (react_slots name)
     | Pexp_ident _ -> (
         match (named locals value, hooks value) with
         | `Local local, _ -> Some local
@@ -615,7 +680,7 @@ let slots ~hooks body =
         | `Outer, Some counted, _ -> called counted
         | `Outer, None, (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)) -> (
             match react_slots name with
-            | Some slots -> called { none with fact = { slots; through = []; later = [] } }
+            | Some slots -> called { none with fact = { slots; through = []; later = []; page = Unread } }
             | None ->
                 free_of_hooks value;
                 none)
@@ -694,7 +759,9 @@ let slots ~hooks body =
                   self#handed reducer;
                   List.iter (fun (_, value) -> self#expression value) rest
               | Some _, _ ->
-                  let handed = Option.fold ~none:[] ~some:(fun counted -> counted.fact.later) (hooks callee) in
+                  let handed =
+                    match summary callee with Some (Counted counted) -> counted.fact.later | Some Uncounted | None -> []
+                  in
                   List.iter
                     (fun (argument, value) ->
                       match List.find_opt (( = ) argument) handed with
@@ -711,14 +778,23 @@ let slots ~hooks body =
          (fun (name, argument) -> Option.fold ~none:(Some argument) ~some:(fun _ -> None) (List.find_opt (String.equal name) !used))
          (parameters body 0 []))
   in
-  match
+  let page =
     rendering
       ~hooks:(fun callee ->
-        Option.fold ~none:(Option.map (fun counted -> counted.fact.later) (hooks callee)) ~some:(fun _ -> Some []) (own callee))
+        match own callee with
+        | Some _ -> Some (Counted { slots = 0; through = []; later = []; page = Unread })
+        | None -> Option.map (fun known -> match known with Counted counted -> Counted counted.fact | Uncounted -> Uncounted) (summary callee))
       body
-  with
-  | Impure why | Reads_the_page why -> Error why
-  | Pure -> (
+  in
+  match page with
+  | Impure why -> Error why
+  | Pure | Reads_the_page _ -> (
       match counted [] inner with
-      | found -> Ok { found with fact = { found.fact with later }; values = found.values @ !read }
+      | found ->
+          Ok
+            {
+              found with
+              fact = { found.fact with later; page = (match page with Pure -> found.fact.page | Reads_the_page _ | Impure _ -> Read) };
+              values = found.values @ !read;
+            }
       | exception Beyond why -> Error why)

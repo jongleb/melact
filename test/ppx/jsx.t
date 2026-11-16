@@ -802,7 +802,7 @@ Hooks get one key per call site, also inside custom hooks:
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useToggle)[@melhole.hook (3, 1, [], [])]) =
+  let ((useToggle)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun () ->
       (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
         (fun () -> false)
@@ -847,20 +847,20 @@ pushed down to where React's names are read; it stays where it is when a binding
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useCount)[@melhole.hook (3, 1, [], [])]) =
+  let ((useCount)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun () ->
       (React.Uncurried.useState
          (Melact_runtime.Hook.unchecked __melhole_hook_1)) (fun () -> 0)
   let __melhole_hook_2 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useTotal)[@melhole.hook (3, 1, [], [])]) =
+  let ((useTotal)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun () ->
       (React.Uncurried.useReducer
          (Melact_runtime.Hook.unchecked __melhole_hook_2))
         (fun total by -> total + by) 0
   let __melhole_hook_3 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useLabel)[@melhole.hook (3, 1, [], [])]) =
+  let ((useLabel)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun () ->
       let (label, _) =
         (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_3))
@@ -888,7 +888,7 @@ Under a file-wide open React a bare hook is React's, unless a local binding of t
   open React
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useCount)[@melhole.hook (3, 1, [], [])]) =
+  let ((useCount)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun () ->
       (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
         (fun () -> 0)
@@ -925,7 +925,7 @@ that decides it:
   File "explain.ml", line 8, characters 32-48:
   melact: Explain.clock is Component.make and renders whole on every update: calls Js.Date.now with (), read as a getter of the world
   File "explain.ml", line 9, characters 62-76:
-  melact: Explain.hidden is Component.make and renders whole on every update: calls useHidden, a hook without a fact: a custom hook gets one when its body is pure and calls its hooks at its top level, and another module's only under -typed
+  melact: Explain.hidden is Component.make and renders whole on every update: calls useHidden, a hook without a fact: a custom hook gets one when its body calls its hooks at its top level and writes nothing of the world, and another module's only under -typed
   File "explain.ml", line 10, characters 65-86:
   melact: Explain.getter is Component.make and renders whole on every update: calls Settings.current with (), read as a getter of the world
   File "explain.ml", line 13, characters 71-82:
@@ -945,30 +945,30 @@ value named with a leading underscore, which nothing calls, compile:
   > let whenChanged value = let previous = React.useRef value in ignore previous
   > EOF
   $ ./pp.exe -impl whenchanged.ml
-  File "whenchanged.ml", line 1, characters 39-51:
+  File "whenchanged.ml", line 1, characters 39-57:
   1 | let whenChanged value = let previous = React.useRef value in ignore previous
-                                             ^^^^^^^^^^^^
-  Error: melact: whenChanged calls the hook React.useRef, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it useWhenChanged), or a call of it is cached like a plain function's and its hooks get out of order
+                                             ^^^^^^^^^^^^^^^^^^
+  Error: melact: whenChanged calls the hook React.useRef, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it useWhenChanged), or a call of it is cached like a plain function's and its hooks get out of order; under staged_pps with -typed, melact-ppx gives it a hook fact whatever its name
   [1]
 
   $ cat > nested.ml <<'EOF'
   > module Inner = struct let pick ~useMemo value = useMemo (fun () -> value) [| value |] end
   > EOF
   $ ./pp.exe -impl nested.ml
-  File "nested.ml", line 1, characters 48-55:
+  File "nested.ml", line 1, characters 48-85:
   1 | module Inner = struct let pick ~useMemo value = useMemo (fun () -> value) [| value |] end
-                                                      ^^^^^^^
-  Error: melact: pick calls the hook useMemo, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it usePick), or a call of it is cached like a plain function's and its hooks get out of order
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Error: melact: pick calls the hook useMemo, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it usePick), or a call of it is cached like a plain function's and its hooks get out of order; under staged_pps with -typed, melact-ppx gives it a hook fact whatever its name
   [1]
 
   $ cat > userName.ml <<'EOF'
   > let userName context = React.useContext context
   > EOF
   $ ./pp.exe -impl userName.ml
-  File "userName.ml", line 1, characters 23-39:
+  File "userName.ml", line 1, characters 23-47:
   1 | let userName context = React.useContext context
-                             ^^^^^^^^^^^^^^^^
-  Error: melact: userName calls the hook React.useContext, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it useUserName), or a call of it is cached like a plain function's and its hooks get out of order
+                             ^^^^^^^^^^^^^^^^^^^^^^^^
+  Error: melact: userName calls the hook React.useContext, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it useUserName), or a call of it is cached like a plain function's and its hooks get out of order; under staged_pps with -typed, melact-ppx gives it a hook fact whatever its name
   [1]
 
   $ cat > allowed.ml <<'EOF'
@@ -982,7 +982,7 @@ value named with a leading underscore, which nothing calls, compile:
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let __melhole_hook_1 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((useWhenChanged)[@melhole.hook (3, 1, [], [])]) =
+  let ((useWhenChanged)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun value ->
       let previous =
         (React.useRef (Melact_runtime.Hook.unchecked __melhole_hook_1)) value in
@@ -998,6 +998,48 @@ value named with a leading underscore, which nothing calls, compile:
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let _unused value =
     (React.useRef (Melact_runtime.Hook.unchecked __melhole_hook_3)) value
+
+Under -typed, a function that calls a hook gets a hook fact whatever its name, so a chain of them needs no
+rename, also through a module of the same file; the component that calls the last one is pure and has an update
+graph. One whose hooks cannot be counted is marked so in its .cmi, and a component that calls it renders whole:
+
+  $ cat > chain.ml <<'EOF'
+  > let leaf value = let shown, _ = React.useState (fun () -> value) in shown
+  > let middle value = leaf value
+  > let outer value = middle value
+  > module Inner = struct let deep value = outer value end
+  > let[@react.component] make ~value = let shown = Inner.deep value in (p ~children:[ React.string shown ] () [@JSX])
+  > EOF
+  $ ./pp.exe -typed -melact-explain -impl chain.ml > /dev/null
+  File "chain.ml", line 1, characters 4-8:
+  melact: leaf has a hook fact: 1 hook slot
+  File "chain.ml", line 2, characters 4-10:
+  melact: middle has a hook fact: 1 hook slot
+  File "chain.ml", line 3, characters 4-9:
+  melact: outer has a hook fact: 1 hook slot
+  File "chain.ml", line 4, characters 26-30:
+  melact: deep has a hook fact: 1 hook slot
+  File "chain.ml", line 5, characters 0-114:
+  melact: Chain.make is Component.pure: its render reads only props, state, context and hooks
+  File "chain.ml", line 5, characters 0-114:
+  melact: Chain.make has an update graph of 1 step: a change runs only the steps it reaches
+
+  $ cat > branch.ml <<'EOF'
+  > let pick flag value = if flag then fst (React.useState (fun () -> value)) else value
+  > EOF
+  $ ./pp.exe -typed -impl branch.ml
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  let __melhole_hook_1 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let ((pick)[@melhole.hook_uncounted ]) =
+    fun flag value ->
+      if flag
+      then
+        fst
+          ((React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
+             (fun () -> value))
+      else value
 
 Reason input:
 
@@ -1299,12 +1341,16 @@ stays as a definition other files can call, with no limit on the number of depen
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useEffect3 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let ((useEffect3)[@melhole.hook (3, 1, [], [`Position 0; `Position 1])]) =
+  let ((useEffect3)[@melhole.hook
+                     (4, 1, [], [`Position 0; `Position 1], `Unread)])
+    =
     fun _melact_argument_0 _melact_argument_1 ->
       React.useEffect3 (Melact_runtime.Hook.unchecked melact_key_useEffect3)
         _melact_argument_0 _melact_argument_1[@@warning "-32"]
   let melact_key_useEffect8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let ((useEffect8)[@melhole.hook (3, 1, [], [`Position 0; `Position 1])]) =
+  let ((useEffect8)[@melhole.hook
+                     (4, 1, [], [`Position 0; `Position 1], `Unread)])
+    =
     fun _melact_argument_0 _melact_argument_1 ->
       React.useEffect1 (Melact_runtime.Hook.unchecked melact_key_useEffect8)
         _melact_argument_0 _melact_argument_1[@@warning "-32"]
@@ -1312,7 +1358,7 @@ stays as a definition other files can call, with no limit on the number of depen
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
   let __melhole_hook_2 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let ((use)[@melhole.hook (3, 2, [], [])]) =
+  let ((use)[@melhole.hook (4, 2, [], [], `Unread)]) =
     fun a ->
       (React.useEffect3 (Melact_runtime.Hook.unchecked __melhole_hook_1))
         (fun () -> None) (a, "x", 1.0);
@@ -1330,12 +1376,12 @@ call the binding's definition:
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   let melact_key_useMemo8 = Melact_runtime.Hook.key ()[@@warning "-32"]
-  let ((useMemo8)[@melhole.hook (3, 1, [], [])]) =
+  let ((useMemo8)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun _melact_argument_0 _melact_argument_1 ->
       React.useMemo1 (Melact_runtime.Hook.unchecked melact_key_useMemo8)
         _melact_argument_0 (Melact_runtime.Hook.listed _melact_argument_1)
     [@@warning "-32"]
-  let ((use)[@melhole.hook (3, 1, [], [])]) =
+  let ((use)[@melhole.hook (4, 1, [], [], `Unread)]) =
     fun a -> useMemo8 (fun () -> a) (a, 1, 2, 3, 4, 5, 6, "x")
 
 Bindings to npm React's element functions that return a React.element become Melact's elements: a

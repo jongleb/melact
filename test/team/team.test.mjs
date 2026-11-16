@@ -45,3 +45,11 @@ test("a closure a data hook calls only in its effect leaves the component pure, 
   const kind = (name) => compiled.match(new RegExp(`Component\\.(pure|make)\\("RemoteRequest\\.${name}\\.make"`))?.[1];
   expect([kind("ViaUse1"), kind("ViaUse"), kind("CalledNow")]).toEqual(["pure", "pure", "make"]);
 });
+
+test("hooks named as plain functions get facts across files under -typed: Chained is pure, Modal reads the page through Previous.whenChanged's ref", () => {
+  const kind = (file, name) =>
+    readFileSync(`_build/default/test/team/melact/output/test/team/melact/${file}.mjs`, "utf8").match(
+      new RegExp(`Component\\.(pure|make)\\("${name}"`),
+    )?.[1];
+  expect([kind("Modal", "Modal.make"), kind("Chained", "Chained.make")]).toEqual(["make", "pure"]);
+});

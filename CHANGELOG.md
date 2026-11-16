@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Under `staged_pps … -typed`, a function that calls a hook is a hook whatever its name: it gets a
+  hook fact from its body, in the order of the file, through its modules and through `.cmi`s, so a
+  chain `columns → defaultShape → fetchData` needs no rename (the team had renamed 115 functions in 47
+  files). Every decision that read the `use…` spelling now reads the fact: whether a call may be
+  cached by its arguments, whether a component calls hooks, the update graph's steps, a hook's own
+  slots, and which local `let`s are definitions (`Scope.hook_call`, which a frontend overrides). A
+  function whose hooks cannot be counted is marked `[@melhole.hook_uncounted]` and a component that
+  calls it renders whole. A hook that reads the `current` of its own ref while it renders, as
+  `Previous.whenChanged` does, now gets a fact too (format version 4, with `` `Read ``): a component
+  that calls it reads the page and keeps an update graph in which the hook's result is made again on
+  every render. Without `-typed` the `use…` rule and its error stay. Laws in `test/graph`: a hook
+  known only by its fact counts in the render, the update graph and a hook's fact, only as the value
+  of a let; an uncounted one stops both; one that reads the page makes the component read it and what
+  reads its result run on every render (mutants, each caught: the fact ignored for a plain name, an
+  uncounted hook taken as a function, the page ignored in the render, the graph or the fact, a call
+  inside an expression let through by the graph or the fact). `test/ppx`: the chain and an uncounted
+  hook under `-typed`. `test/team`: `Previous.whenChanged` in `Modal`, and `Leaf.value →
+  Middle.value → Chained` across two `.cmi`s, against reason-react (mutant: `Scope` without facts,
+  where the runtime fails with "hooks can only be called while a component renders").
+
 - `-melact-explain`: melact-ppx tells, for every component and custom hook, what it compiled it to
   and why, at the place that decided it, in the compiler's format: `Component.pure` or
   `Component.make` with the first read of the world, write, hook without a fact or construct it does
