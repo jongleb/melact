@@ -134,6 +134,20 @@ the guarded path beside the delta and raising on any difference, with the messag
   that writes what it implies with no bits and no checks; a field with finitely many constants gets
   its DOM transitions computed at build time.
 
+  Measured first on the keyed benchmark (2026-11-16), against vanilla, Svelte 5 and Vue Vapor:
+  Meltea's mean slowdown against vanilla is 1.06 (Svelte 1.15, Vapor 1.09), and its script time is
+  within 0.1–0.6 ms of vanilla's on every operation, the rest being style, layout and paint. The
+  checks and bits a per-message draw would remove are not where the time goes: three hand-edited
+  bundles (a text node in the template for each text hole; no slot or check for a value fixed by
+  the row's key; the row's data on its `<tr>` once) measured within noise. The heap was the gap:
+  1,000 rows took 279 KB more than vanilla's, 112 KB of it Blink's attribute storage for a
+  `class=""` written on every row that is not selected. So the first piece of tables of states:
+  where every value a `className` can take is a literal, `meltea-ppx` turns the empty one into no
+  attribute at build time (`None`), so an unselected row carries no attribute at all, the runtime
+  is unchanged and the bundles shrink by a few bytes. What remains of the gap is V8's: the code the
+  runtime compiles (79 KB), the row frames (48 KB), and the expandos of the two linked handlers of
+  each row (20 KB, which only a change to the core's delegation would remove).
+
 ## Steps
 
 ### 1. A size ledger for Meltea
