@@ -52,5 +52,5 @@ val bump : kind -> unit
 val seen : kind -> 'a -> 'a
 val unobserved : (unit -> 'a) -> 'a
 
-(** The array itself, counting every item read through it as [Read]. *)
+(** The array itself, the same value, counting every item read from it as [Read]. *)
 val watched : 'item array -> 'item array

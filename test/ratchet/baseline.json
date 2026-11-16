@@ -1019,7 +1019,7 @@
     "microtasks": 1,
     "mutation records": 1000,
     "node expandos": 4000,
-    "items read": 3000
+    "items read": 1000
   },
   "meltea: keyed benchmark, replace all rows": {
     "insertions": 1000,
@@ -1041,7 +1041,7 @@
     "row refreshes": 100,
     "microtasks": 1,
     "mutation records": 100,
-    "items read": 4000
+    "items read": 200
   },
   "meltea: keyed benchmark, select row": {
     "attributes": 2,
@@ -1055,18 +1055,16 @@
     "moves": 2,
     "frame layouts": 1,
     "view calls": 1,
-    "keys": 2,
     "microtasks": 1,
     "mutation records": 4,
-    "items read": 4004
+    "items read": 4
   },
   "meltea: keyed benchmark, remove row": {
     "removals": 1,
     "frame layouts": 1,
     "view calls": 1,
     "microtasks": 1,
-    "mutation records": 1,
-    "items read": 2000
+    "mutation records": 1
   },
   "meltea: keyed benchmark, append rows": {
     "insertions": 1000,
@@ -1078,7 +1076,7 @@
     "microtasks": 1,
     "mutation records": 1000,
     "node expandos": 4000,
-    "items read": 5000
+    "items read": 1000
   },
   "meltea: keyed benchmark, clear rows": {
     "removals": 1000,

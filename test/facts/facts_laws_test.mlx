@@ -1,0 +1,289 @@
+open Testing
+
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+
+type row = { id : int; label : string }
+type model = { rows : row array; next : int; selection : int option }
+
+[@@@alert "-mutable_model"]
+
+let watched : row array -> row array =
+  [%mel.raw
+    {|function (items) {
+  items.forEach(function (item, index) {
+    var held = item;
+    Object.defineProperty(items, index, {
+      get: function () { if (!globalThis.__facts_quiet) globalThis.__facts_reads = (globalThis.__facts_reads || 0) + 1; return held; },
+      set: function (value) { held = value; },
+      enumerable: true,
+      configurable: true,
+    });
+  });
+  return items;
+}|}]
+
+let quiet : (unit -> model) -> model =
+  [%mel.raw
+    {|function (run) {
+  var was = globalThis.__facts_quiet;
+  globalThis.__facts_quiet = true;
+  try { return run(); } finally { globalThis.__facts_quiet = was; }
+}|}]
+
+let reads : unit -> int = [%mel.raw {|function () { var made = globalThis.__facts_reads || 0; globalThis.__facts_reads = 0; return made; }|}]
+
+
+type message =
+  | Append of int
+  | Prepend of int
+  | Cut of int
+  | Excerpt of int * int  (** The rows before the first place, then at most two from the second: a cut only when they reach the end. *)
+  | Swap of int * int
+  | Twist of int * int  (** A swap, then the first row renamed in the same copy. *)
+  | Retitle of int  (** A copy with one row renamed. *)
+  | Rewrite of int  (** A copy with one row replaced by a new one. *)
+  | Shift of int * int  (** A copy whose first place takes the second's row, which stays: two writes, no exchange. *)
+  | Leak of int * int  (** A swap whose copy is written again after it is handed on. *)
+  | Rejoin of int  (** The rows after the first, then the rows from a place: not a cut, since the first slice does not start at 0. *)
+  | Reverse
+  | Mix of int * int  (** Two rows exchanged and the first and last renamed, in one [mapi] that makes no fact. *)
+  | Relabel of int
+  | Tenth
+  | Stripe  (** Every third row from the second gets a new key. *)
+  | Select of int
+  | Renew
+  | Clear
+  | Same
+
+let made next count = Array.init count (fun index -> { id = next + index; label = "row " ^ string_of_int (next + index) })
+
+let smudged rows = rows.(0) <- { id = -1; label = "smudged" }
+
+let update message model =
+  let size = Array.length model.rows in
+  match message with
+  | Append count -> { model with rows = Array.append model.rows (made model.next count); next = model.next + count }
+  | Prepend count -> { model with rows = Array.append (made model.next count) model.rows; next = model.next + count }
+  | Cut id ->
+      let rec found index =
+        match index = size with true -> None | false -> if model.rows.(index).id = id then Some index else found (index + 1)
+      in
+      Option.fold ~none:model
+        ~some:(fun index ->
+          { model with rows = Array.append (Array.sub model.rows 0 index) (Array.sub model.rows (index + 1) (size - index - 1)) })
+        (found 0)
+  | Excerpt (kept, from) when kept <= size && from <= size ->
+      { model with rows = Array.append (Array.sub model.rows 0 kept) (Array.sub model.rows from (min 2 (size - from))) }
+  | Swap (first, second) when first < size && second < size ->
+      let rows = Array.copy model.rows in
+      rows.(first) <- model.rows.(second);
+      rows.(second) <- model.rows.(first);
+      { model with rows }
+  | Twist (first, second) when first < size && second < size ->
+      let rows = Array.copy model.rows in
+      rows.(first) <- model.rows.(second);
+      rows.(second) <- model.rows.(first);
+      rows.(0) <- { (model.rows.(second)) with label = "twisted" };
+      { model with rows }
+  | Retitle at when at < size ->
+      let rows = Array.copy model.rows in
+      rows.(at) <- { (model.rows.(at)) with label = model.rows.(at).label ^ "?" };
+      { model with rows }
+  | Rewrite at when at < size ->
+      let rows = Array.copy model.rows in
+      rows.(at) <- { id = model.next; label = "new " ^ string_of_int model.next };
+      { model with rows; next = model.next + 1 }
+  | Shift (first, second) when first < size && second < size ->
+      let rows = Array.copy model.rows in
+      rows.(first) <- model.rows.(second);
+      rows.(second) <- model.rows.(second);
+      { model with rows }
+  | Leak (first, second) when first < size && second < size && size > 0 ->
+      let rows = Array.copy model.rows in
+      rows.(first) <- model.rows.(second);
+      rows.(second) <- model.rows.(first);
+      smudged rows;
+      { model with rows }
+  | Rejoin from when from <= size && size > 0 ->
+      { model with rows = Array.append (Array.sub model.rows 1 (size - 1)) (Array.sub model.rows from (size - from)) }
+  | Reverse -> { model with rows = Array.of_list (List.rev (Array.to_list model.rows)) }
+  | Mix (first, second) when first < size && second < size ->
+      {
+        model with
+        rows =
+          Array.mapi
+            (fun index row ->
+              if index = first then model.rows.(second)
+              else if index = second then model.rows.(first)
+              else if index = 0 || index = size - 1 then { row with label = row.label ^ "#" }
+              else row)
+            model.rows;
+      }
+  | Relabel at -> { model with rows = Array.mapi (fun index row -> if index = at then { row with label = row.label ^ "!" } else row) model.rows }
+  | Tenth -> { model with rows = Array.mapi (fun index row -> match index mod 10 with 0 -> { row with label = row.label ^ " !!!" } | _ -> row) model.rows }
+  | Stripe ->
+      {
+        model with
+        rows = Array.mapi (fun index row -> if index mod 3 = 1 then { row with id = row.id + 100000 } else row) model.rows;
+      }
+  | Select id -> { model with selection = Some id }
+  | Renew -> { model with rows = Array.map (fun row -> { row with label = row.label }) model.rows }
+  | Clear -> { model with rows = [||] }
+  | Excerpt _ | Swap _ | Twist _ | Retitle _ | Rewrite _ | Shift _ | Leak _ | Rejoin _ | Mix _ | Same -> model
+
+let view { rows; selection; _ } =
+  let row { id; label } =
+    <tr key=(string_of_int id) className=(match selection with Some chosen when chosen = id -> "danger" | _ -> "")>
+      <td>(Html.int id)</td>
+      <td><a onClick=(Select id)>(Html.text label)</a></td>
+    </tr>
+  in
+  <table><tbody>(Html.array (Array.map row rows))</tbody></table>
+
+(** One step of a generated run: a message, or a draw. *)
+type step = Send of message | Draw
+
+(** Whether a model's rows have distinct keys: only then does a kept row have one node to keep. *)
+type keys = Distinct | Repeated
+
+let distinct rows =
+  let ids = Array.to_list (Array.map (fun row -> row.id) rows) in
+  match List.length (List.sort_uniq compare ids) = List.length ids with true -> Distinct | false -> Repeated
+
+let steps tape init =
+  let rec go model remaining collected =
+    match remaining with
+    | 0 -> List.rev (Draw :: collected)
+    | _ ->
+        let size = Array.length model.rows in
+        let place () = draw tape (size + 1) in
+        let pick () = match size with 0 -> 0 | _ -> model.rows.(draw tape size).id in
+        let step =
+          match draw tape 28 with
+          | 0 | 1 -> Send (Append (1 + draw tape 4))
+          | 2 -> Send (Prepend (1 + draw tape 3))
+          | 3 | 4 -> Send (Cut (pick ()))
+          | 5 -> Send (Excerpt (place (), place ()))
+          | 6 | 7 -> Send (Swap (place (), place ()))
+          | 8 -> Send (Twist (place (), place ()))
+          | 9 -> Send (Retitle (place ()))
+          | 10 -> Send (Rewrite (place ()))
+          | 11 -> Send (Shift (place (), place ()))
+          | 12 -> Send (Leak (place (), place ()))
+          | 13 -> Send (Relabel (place ()))
+          | 14 -> Send Tenth
+          | 15 -> Send Stripe
+          | 16 -> Send (Select (pick ()))
+          | 17 -> Send Renew
+          | 18 -> Send Clear
+          | 19 -> Send Same
+          | 20 | 21 -> Send Reverse
+          | 22 -> Send (Rejoin (place ()))
+          | 23 -> Send (Mix (place (), place ()))
+          | _ -> Draw
+        in
+        let model = match step with Send message -> update message model | Draw -> model in
+        go model (remaining - 1) (step :: collected)
+  in
+  go init (4 + draw tape 40) []
+
+let rows_of root = Array.map element_of (nodes (select_all root "tr"))
+
+let drawn_through init steps =
+    let root = attached () in
+    let program = Program.sandbox ~init ~update ~view root in
+    let model = ref init and drawn = ref init in
+    let nodes_of () = Array.map (fun row -> (text_content row, row)) (rows_of root) in
+    let before = ref (nodes_of ()) in
+    List.iter
+      (fun step ->
+        match step with
+        | Send message ->
+            model := update message !model;
+            Program.dispatch program message
+        | Draw ->
+            Program.flush program;
+            let fresh = attached () in
+            let other = Program.sandbox ~init:!model ~update ~view fresh in
+            let now = nodes_of () in
+            let once found label =
+              List.length (List.filter (fun (other, _) -> String.equal label other) (Array.to_list found)) = 1
+            in
+            let renewed =
+              List.filter_map
+                (fun (label, node) ->
+                  List.find_map
+                    (fun (other, earlier) ->
+                      match (String.equal label other && once now label && once !before label, same node earlier) with
+                      | true, false -> Some label
+                      | true, true | false, _ -> None)
+                    (Array.to_list !before))
+                (Array.to_list now)
+            in
+            expect (shapes (as_node root)) |. to_equal (shapes (as_node fresh));
+            expect (match (distinct !drawn.rows, distinct !model.rows) with Distinct, Distinct -> renewed | _ -> [])
+            |. to_equal [];
+            drawn := !model;
+            Program.stop other;
+            remove_root fresh;
+            before := now)
+      steps;
+    Program.stop program;
+    remove_root root
+
+let () =
+  describe "Facts recorded by update" (fun () ->
+      test
+        "after every draw of random messages, the page is a fresh mount of the model, and every row whose key stays keeps its node"
+        (fun () ->
+          check
+            (property (tapes ~shortest:0 ~longest:90) (fun values ->
+                 let tape = tape values in
+                 let init = { rows = made 1 (draw tape 12); next = 100; selection = None } in
+                 drawn_through init (steps tape init)))
+            [%mel.obj { numRuns = 400 }]);
+      test "after each recognised edit, a draw that matches rows by key keeps every node whose key stays" (fun () ->
+          List.iter
+            (fun edit -> drawn_through { rows = made 1 8; next = 100; selection = None } (List.map (fun message -> Send message) edit |> List.concat_map (fun step -> [ step; Draw ])))
+            [
+              [ Swap (1, 5); Reverse ];
+              [ Mix (2, 5); Mix (1, 6) ];
+              [ Shift (1, 3); Cut 4; Reverse ];
+              [ Shift (5, 2); Cut 3; Reverse; Swap (0, 7); Reverse ];
+              [ Twist (2, 6); Reverse ];
+              [ Cut 3; Reverse ];
+              [ Excerpt (2, 6); Reverse ];
+              [ Excerpt (1, 3); Reverse ];
+              [ Rejoin 4; Reverse ];
+              [ Rejoin 8; Reverse ];
+              [ Append 3; Reverse ];
+              [ Tenth; Reverse ];
+              [ Stripe; Reverse ];
+              [ Relabel 2; Reverse ];
+              [ Retitle 3; Rewrite 4; Reverse ];
+              [ Leak (1, 6); Reverse ];
+            ]);
+      test "a recognised edit of 50 rows reads only the rows it changes" (fun () ->
+          let cost message =
+            let root = attached () in
+            let init = { rows = watched (made 1 50); next = 100; selection = None } in
+            let counted message model =
+              quiet (fun () ->
+                  let next = update message model in
+                  match next.rows == model.rows with true -> next | false -> { next with rows = watched next.rows })
+            in
+            let program = Program.sandbox ~init ~update:counted ~view root in
+            Program.flush program;
+            Program.dispatch program message;
+            ignore (reads ());
+            Program.flush program;
+            let read = reads () in
+            Program.stop program;
+            remove_root root;
+            read
+          in
+          expect
+            (List.map cost [ Swap (3, 40); Cut 20; Append 5; Tenth; Relabel 7; Retitle 9 ])
+          |. to_equal [ 4; 0; 5; 10; 2; 2 ]))

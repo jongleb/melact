@@ -97,6 +97,9 @@ the guarded path beside the delta and raising on any difference, with the messag
   | create rows | 1,000 insertions | 3,000 | 1,000 |
   | replace all rows | 1,000 + 1,000 | 5,126 | 1,000 |
   | clear rows | 1,000 removals | 0 | 0 |
+
+  The facts of D3–D4 for arrays brought these to: swap 4, remove 0, partial update 200, append
+  1,000, create 1,000 (see D4).
 - **D2. The typed graph.** Move `fields` and `slice` to the Typedtree: exact names (`Array.append`
   is `Stdlib.Array.append`), paths of nested fields (`editor.draft`), view and update functions with
   parameters inside the file, gates inside functions and rows. The untyped reading stays as the
@@ -106,7 +109,25 @@ the guarded path beside the delta and raising on any difference, with the messag
   variant without payload by `Became (old, new)`, anything else by `Replaced`. `update` is rewritten
   to return the change beside the model; each recognised construct gives its edit.
 - **D4. Loops and holes that read changes.** On bench/meltea: swap, remove, append and select
-  without a pass over the rows (swap reads 2,002 old items today).
+  without a pass over the rows.
+
+  Done for arrays. The typed pass of `meltea-ppx` (`ppx/meltea/facts.ml`) reads the Typedtree and,
+  by exact paths (`Stdlib.Array.append`, not any `append`) and pure arguments (names, constants,
+  immutable fields, arithmetic), wraps what it recognises in `Melhole.Delta.record`: an append, a
+  cut of one block by two `Array.sub`, a `mapi` that writes one place or every n-th, and writes to
+  a copied array that what follows only stores (an exchange of two items, or a rewrite of some).
+  A fact lives in a `WeakMap` keyed by the new array and holds the old one weakly. `View.rows`
+  asks `View.hinting` before it scans; linking `Delta` is what installs it, so a bundle whose code
+  records nothing carries none of it. A fact turns into one of the loop's own arrangements:
+  inserted, removed, two rows exchanged, or only these places renewed, their keys checked. What is
+  not recognised, or does not check, takes the scans, which now make one pass that also collects
+  the rows renewed in place. Laws (`test/facts`): random messages, after every draw the page is a
+  fresh mount and every row whose key stays keeps its node; fixed scenarios of each fact followed
+  by a draw that matches rows by key; the rows a recognised edit reads. 13 mutants, all caught.
+
+  Next: a typed alert when the file cannot be typed (facts then silently stay off for the whole
+  file), lists (`@`, `::`, `List.filter`), and the key check of renewed rows proved at build time
+  (`{ row with label }` keeps the field the key reads), which brings partial update to 100.
 - **D5. Incremental `let`s.** `filter`, `map` and `length` of a collection follow its edits (they
   are linear), so TodoMVC's counts and filtered list do not recompute.
 - **D6. A draw per message and tables of states.** For a message with a structured change, a draw

@@ -385,10 +385,19 @@ let unobserved run =
 let watched : 'item array -> 'item array =
   [%mel.raw
     {|function (items) {
-  return new Proxy(items, {
-    get: function (target, key, receiver) {
-      if (typeof key === "string" && key.length > 0 && key.charCodeAt(0) >= 48 && key.charCodeAt(0) <= 57) globalThis.__ratchet.bump("items read", 1);
-      return Reflect.get(target, key, receiver);
-    },
+  items.forEach(function (item, index) {
+    var held = item;
+    Object.defineProperty(items, index, {
+      get: function () {
+        globalThis.__ratchet.bump("items read", 1);
+        return held;
+      },
+      set: function (value) {
+        held = value;
+      },
+      enumerable: true,
+      configurable: true,
+    });
   });
+  return items;
 }|}]
