@@ -113,7 +113,7 @@ the guarded path beside the delta and raising on any difference, with the messag
 
   Done for arrays. The typed pass of `meltea-ppx` (`ppx/meltea/facts.ml`) reads the Typedtree and,
   by exact paths (`Stdlib.Array.append`, not any `append`) and pure arguments (names, constants,
-  immutable fields, arithmetic), wraps what it recognises in `Melhole.Delta.record`: an append, a
+  immutable fields, arithmetic), wraps what it recognises in `Melhole_meltea.Delta.record`: an append, a
   cut of one block by two `Array.sub`, a `mapi` that writes one place or every n-th, and writes to
   a copied array that what follows only stores (an exchange of two items, or a rewrite of some).
   A fact lives in a `WeakMap` keyed by the new array and holds the old one weakly. `View.rows`
