@@ -1,15 +1,17 @@
 open Ppxlib
 open Melhole_compiler
 
+type why = { loc : Location.t; reason : string }
+
 type rendering =
   | Pure
-  | Reads_the_page  (** Reads the [current] of a ref it made with [useRef], and nothing else of the world. *)
-  | Impure
+  | Reads_the_page of why  (** Reads the [current] of a ref it made with [useRef], and nothing else of the world. *)
+  | Impure of why
 
 (** A name a body binds that its render may use: a [ref] it made, or a ref [useRef] made. *)
 type local = Own_cell of string | Own_ref of string
 
-exception Reads_the_world
+exception Reads_the_world of why
 
 type argument = Position of int | Label of string
 
@@ -38,6 +40,7 @@ let hook callee =
 
 let rendering ~hooks body =
   let found = ref Pure in
+  let world expression reason = raise (Reads_the_world { loc = expression.pexp_loc; reason }) in
   let rec now kept cells expression =
     let each = List.iter (now kept cells) in
     let unbound cells pattern =
@@ -54,8 +57,12 @@ let rendering ~hooks body =
     in
     let called_later value = match value.pexp_desc with Pexp_function _ -> () | _ -> now kept cells value in
     match expression.pexp_desc with
-    | Pexp_ident { txt = Ldot (Ldot (Lident "Js", ("Date" | "Math")), _) | Ldot (Lident ("Random" | "Sys" | "Unix"), _); _ } -> (
-        match kept with Every_render -> raise Reads_the_world | First_render -> ())
+    | Pexp_ident { txt = (Ldot (Ldot (Lident "Js", ("Date" | "Math")), _) | Ldot (Lident ("Random" | "Sys" | "Unix"), _)) as txt; _ } -> (
+        match kept with
+        | Every_render ->
+            world expression
+              (Printf.sprintf "reads %s, which changes from render to render" (String.concat "." (Longident.flatten_exn txt)))
+        | First_render -> ())
     | Pexp_ident _ | Pexp_constant _ | Pexp_unreachable -> ()
     | Pexp_apply
         ( { pexp_desc = Pexp_ident { txt = Lident ("!" | ":=" | "incr" | "decr"); _ }; _ },
@@ -64,9 +71,10 @@ let rendering ~hooks body =
         List.iter (fun (_, value) -> now kept cells value) rest
     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident "!"; _ }; _ }, arguments) -> (
         match kept with
-        | Every_render -> raise Reads_the_world
+        | Every_render -> world expression "reads a reference cell the body did not make with ref"
         | First_render -> List.iter (fun (_, value) -> now kept cells value) arguments)
-    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident (":=" | "incr" | "decr"); _ }; _ }, _) -> raise Reads_the_world
+    | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident (":=" | "incr" | "decr"); _ }; _ }, _) ->
+        world expression "writes a reference cell the body did not make with ref"
     | Pexp_apply (_, arguments) when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
         List.iter
           (fun (label, value) ->
@@ -96,17 +104,36 @@ let rendering ~hooks body =
                     | Some _ -> called_later value
                     | None -> now kept cells value)
                   (numbered arguments)
-            | None -> raise Reads_the_world)
+            | None ->
+                world expression
+                  (Printf.sprintf
+                     "calls %s, a hook without a fact: a custom hook gets one when its body is pure and calls its hooks at \
+                      its top level, and another module's only under -typed"
+                     (Pprintast.string_of_expression callee)))
         | None, [ (Nolabel, { pexp_desc = Pexp_construct ({ txt = Lident "()"; _ }, None); _ }) ] -> (
-            match kept with Every_render -> raise Reads_the_world | First_render -> now kept cells callee)
+            match kept with
+            | Every_render ->
+                world expression
+                  (Printf.sprintf "calls %s with (), read as a getter of the world"
+                     (Pprintast.string_of_expression callee))
+            | First_render -> now kept cells callee)
         | None, _ ->
             now kept cells callee;
             each values)
     | Pexp_field ({ pexp_desc = Pexp_ident { txt = Lident name; _ }; _ }, { txt = Lident "current" | Ldot (_, "current"); _ })
       when List.mem (Own_ref name) cells -> (
-        match kept with Every_render -> found := Reads_the_page | First_render -> ())
-    | Pexp_field (target, { txt = Lident ("contents" | "current") | Ldot (_, ("contents" | "current")); _ }) -> (
-        match kept with Every_render -> raise Reads_the_world | First_render -> now kept cells target)
+        match (kept, !found) with
+        | Every_render, Pure ->
+            found :=
+              Reads_the_page
+                { loc = expression.pexp_loc; reason = Printf.sprintf "reads %s.current, the page or what an effect left there" name }
+        | Every_render, (Reads_the_page _ | Impure _) | First_render, _ -> ())
+    | Pexp_field (target, { txt = (Lident ("contents" | "current") | Ldot (_, ("contents" | "current"))) as txt; _ }) -> (
+        match kept with
+        | Every_render ->
+            world expression
+              (Printf.sprintf "reads the %s of a value the body did not make with useRef or ref" (Longident.last_exn txt))
+        | First_render -> now kept cells target)
     | Pexp_field (target, _) -> now kept cells target
     | Pexp_let (_, bindings, rest) ->
         List.iter (fun binding -> now kept cells binding.pvb_expr) bindings;
@@ -160,9 +187,22 @@ let rendering ~hooks body =
         now kept cells inner
     | Pexp_setfield _ | Pexp_while _ | Pexp_for _ | Pexp_send _ | Pexp_new _ | Pexp_setinstvar _ | Pexp_override _
     | Pexp_letmodule _ | Pexp_letexception _ | Pexp_object _ | Pexp_pack _ | Pexp_letop _ | Pexp_extension _ ->
-        raise Reads_the_world
+        world expression
+          (Printf.sprintf "%s, which melact-ppx does not read"
+             (match expression.pexp_desc with
+             | Pexp_setfield _ -> "sets a mutable field"
+             | Pexp_while _ -> "runs a while loop"
+             | Pexp_for _ -> "runs a for loop"
+             | Pexp_send _ -> "calls a method"
+             | Pexp_new _ -> "makes an object of a class"
+             | Pexp_setinstvar _ | Pexp_override _ | Pexp_object _ -> "uses an object"
+             | Pexp_letmodule _ -> "defines a local module"
+             | Pexp_letexception _ -> "defines a local exception"
+             | Pexp_pack _ -> "packs a first-class module"
+             | Pexp_letop _ -> "uses a let operator"
+             | _ -> "has an extension node"))
   in
-  match now Every_render [] body with () -> !found | exception Reads_the_world -> Impure
+  match now Every_render [] body with () -> !found | exception Reads_the_world why -> Impure why
 
 type step =
   | Statement of expression
@@ -194,7 +234,7 @@ type shape =
   | Changing of pattern * expression  (** A value the rest of the body may change in place: made on every render. *)
   | Custom of pattern option * expression * int  (** A custom hook whose fact gives its hook slots. *)
 
-exception Beyond
+exception Beyond of why
 
 type fact = { slots : int; through : string list; later : argument list }
 
@@ -225,16 +265,32 @@ let passed ~hooks ~named counted arguments =
         (fun (given, value) -> match given with Labelled name when String.equal name label -> Some value | _ -> None)
         arguments
     with
-    | None -> raise Beyond
+    | None ->
+        raise
+          (Beyond
+             {
+               loc = Option.fold ~none:Location.none ~some:(fun (_, value) -> value.pexp_loc) (List.nth_opt arguments 0);
+               reason = Printf.sprintf "does not give ~%s, the hook the custom hook calls" label;
+             })
     | Some value -> (
+        let unknown () =
+          raise
+            (Beyond
+               {
+                 loc = value.pexp_loc;
+                 reason =
+                   Printf.sprintf "gives ~%s %s, which is not React's hook, a custom hook with a fact or a hook parameter"
+                     label (Pprintast.string_of_expression value);
+               })
+        in
         match (value.pexp_desc, named value, hooks value) with
         | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ }, _, _ -> (
             match react_slots name with
             | Some slots -> { fact = { slots; through = []; later = [] }; values = []; conditions = [] }
-            | None -> raise Beyond)
+            | None -> unknown ())
         | _, `Local local, _ -> local
         | _, `Outer, Some ({ fact = { through = []; _ }; _ } as known) -> known
-        | _, (`Shadowed | `Outer), _ -> raise Beyond)
+        | _, (`Shadowed | `Outer), _ -> unknown ())
   in
   ( List.fold_left
       (fun found label -> combined found (hook label))
@@ -263,7 +319,8 @@ let plan ~hooks ~inputs ~props ~volatile body =
               | "", _ -> Every_render
               | "0", _ -> Once
               | _, last :: _ -> Reading last
-              | _, [] -> raise Beyond
+              | _, [] ->
+                  raise (Beyond { loc = expression.pexp_loc; reason = Printf.sprintf "calls %s without its dependencies" name })
             in
             Some (base, dependencies, values))
     | _ -> None
@@ -277,7 +334,17 @@ let plan ~hooks ~inputs ~props ~volatile body =
           match expression.pexp_desc with
           | Pexp_ident { txt; _ } -> (
               match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
-              | Hook _ -> raise Beyond
+              | Hook _ ->
+                  raise
+                    (Beyond
+                       {
+                         loc = expression.pexp_loc;
+                         reason =
+                           Printf.sprintf
+                             "uses %s inside an expression; the update graph reads hooks only as the value of a let or a \
+                              statement at the top of the body"
+                             (String.concat "." (Longident.flatten_exn txt));
+                       })
               | Plain -> ())
           | _ -> super#expression expression
       end
@@ -324,12 +391,23 @@ let plan ~hooks ~inputs ~props ~volatile body =
         | ("useState" | "useReducer" | "useReducerWithMapState"), Some pattern -> Cell (pattern, value)
         | ("useRef" | "useId"), Some pattern -> Stable (pattern, value)
         | "useContext", Some pattern -> (
-            match arguments with [ context ] -> Read (pattern, context) | _ -> raise Beyond)
+            match arguments with
+            | [ context ] -> Read (pattern, context)
+            | _ -> raise (Beyond { loc = value.pexp_loc; reason = "gives useContext other than one context" }))
         | ("useMemo" | "useCallback"), Some pattern -> Remembered (pattern, value, dependencies)
         | ("useEffect" | "useLayoutEffect" | "useInsertionEffect" | "useImperativeHandle"), None ->
             Effected (value, dependencies)
         | "useDebugValue", None -> Run value
-        | _ -> raise Beyond)
+        | _ ->
+            raise
+              (Beyond
+                 {
+                   loc = value.pexp_loc;
+                   reason =
+                     Printf.sprintf "%s the result of %s, which the update graph does not read"
+                       (match pattern with Some _ -> "binds" | None -> "drops")
+                       base;
+                 }))
   in
   let rec read expression shapes =
     match expression.pexp_desc with
@@ -341,7 +419,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
     | _ -> (List.rev shapes, checked expression)
   in
   match read body [] with
-  | exception Beyond -> None
+  | exception Beyond why -> Error why
   | shapes, result -> (
       let slots =
         1
@@ -356,11 +434,25 @@ let plan ~hooks ~inputs ~props ~volatile body =
       in
       let contexts = List.length (List.filter (fun shape -> match shape with Read _ -> true | _ -> false) shapes) in
       match inputs + slots + contexts <= 30 with
-      | false -> None
+      | false ->
+          Error
+            {
+              loc = body.pexp_loc;
+              reason =
+                Printf.sprintf
+                  "has %d sources, past the 30 bits of a mask: %d compared inputs of props, %d hook slots and %d contexts"
+                  (inputs + slots + contexts) inputs slots contexts;
+            }
       | true -> (
           let mask env expression =
             match (Free.of_expression expression, volatile) with
-            | Free.Volatile, Renders_whole -> raise Beyond
+            | Free.Volatile, Renders_whole ->
+                raise
+                  (Beyond
+                     {
+                       loc = expression.pexp_loc;
+                       reason = "reads a value that may change in place, whose changes the update graph cannot see";
+                     })
             | Free.Volatile, Runs_every_render -> every_source
             | Free.Reads names, (Renders_whole | Runs_every_render) ->
                 List.fold_left
@@ -413,11 +505,9 @@ let plan ~hooks ~inputs ~props ~volatile body =
                       (Derived { pattern; value; mask = every_source } :: steps))
           in
           match given props 1 0 shapes [] with
-          | exception Beyond -> None
+          | exception Beyond why -> Error why
           | env, steps -> (
-              match mask env result with
-              | exception Beyond -> None
-              | reads -> Some { steps; result; reads })))
+              match mask env result with exception Beyond why -> Error why | reads -> Ok { steps; result; reads })))
 
 let slots ~hooks body =
   let rec peeled expression found =
@@ -447,7 +537,18 @@ let slots ~hooks body =
          match expression.pexp_desc with
          | Pexp_apply ({ pexp_desc = Pexp_ident { txt; _ }; _ }, _) -> (
              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
-             | Hook _ -> raise Beyond
+             | Hook _ ->
+                 raise
+                   (Beyond
+                      {
+                        loc = expression.pexp_loc;
+                        reason =
+                          Printf.sprintf
+                            "calls %s inside an expression, or a hook the fact cannot count; a custom hook gets a fact \
+                             when it calls React's hooks, custom hooks with facts and its hook parameters as the value \
+                             of a let or a statement at the top of its body"
+                            (String.concat "." (Longident.flatten_exn txt));
+                      })
              | Plain -> super#expression expression)
          | Pexp_ident { txt; _ } -> (
              match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
@@ -616,8 +717,8 @@ let slots ~hooks body =
         Option.fold ~none:(Option.map (fun counted -> counted.fact.later) (hooks callee)) ~some:(fun _ -> Some []) (own callee))
       body
   with
-  | Impure | Reads_the_page -> None
+  | Impure why | Reads_the_page why -> Error why
   | Pure -> (
       match counted [] inner with
-      | found -> Some { found with fact = { found.fact with later }; values = found.values @ !read }
-      | exception Beyond -> None)
+      | found -> Ok { found with fact = { found.fact with later }; values = found.values @ !read }
+      | exception Beyond why -> Error why)

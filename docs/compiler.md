@@ -1296,6 +1296,25 @@ is then on the pattern before the file is compiled, so it reaches the `.cmi`. A 
 uncertain hook of its own file inherits its values. A component in the same file as an uncertain hook
 does not wait for the types: it renders whole, as without `-typed`.
 
+### Why a component renders whole
+
+`-melact-explain` (in the `pps` or `staged_pps` of a `melange.emit` or library) makes melact-ppx
+tell, on stderr in the compiler's format, what it made of every component and custom hook, at the
+place that decided it:
+
+```
+File "Feed.re", line 12, characters 18-38:
+melact: Feed.make is Component.make and renders whole on every update: calls Api.request with (), read as a getter of the world
+File "Feed.re", line 3, characters 2-40:
+melact: useFeed has no hook fact, so a component that calls it is Component.make: calls React.useState inside an expression, …
+```
+
+A component is `Component.pure` or `Component.make` (with the first read of the world, write, hook
+without a fact or construct melact-ppx does not read), and then has an update graph of so many steps
+or none (with the hook, the value or the count of sources past 30 that stopped it). A custom hook
+has a fact with its slots, or none and why. A component that calls a hook of another module without
+a fact names the hook; that module's own explanation says why it has none.
+
 ### Laws and measurements
 
 - A QCheck law (`test/graph`) builds random bodies from pure pieces and reads of the world (a ref's

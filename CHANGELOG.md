@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `-melact-explain`: melact-ppx tells, for every component and custom hook, what it compiled it to
+  and why, at the place that decided it, in the compiler's format: `Component.pure` or
+  `Component.make` with the first read of the world, write, hook without a fact or construct it does
+  not read; an update graph of so many steps, or none with the hook, value or count of sources that
+  stopped it; a hook fact with its slots, or none and why. Laws: `test/graph` checks that the reason a
+  render reads the world points at a read or write of the world, an unknown hook or an unread
+  construct, never at what is around it (mutant: the whole body's place); `test/ppx` shows each kind
+  of message.
+
 - A function that calls a hook but is not named `use…` is a compile error at its first hook call,
   with the name to rename it to: its call was cached by its arguments like a plain function's, so its
   hooks were skipped on some renders and the runtime failed with "hooks were called in a different

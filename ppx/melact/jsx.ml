@@ -57,6 +57,16 @@ let inline_version = 1
 let hook_fact = "melhole.hook"
 let hook_version = 3
 
+(** Whether melact-ppx tells, for each component and custom hook, what it compiled it to and why. *)
+type explaining = Quiet | Explaining
+
+let explaining = ref Quiet
+
+let explained ~loc ~name text =
+  match !explaining with
+  | Quiet -> ()
+  | Explaining -> Format.eprintf "%a@\nmelact: %s %s@." Location.print loc name text
+
 let with_hook_fact ~loc (fact : Graph.fact) pattern =
   {
     pattern with
@@ -320,12 +330,17 @@ let component ~loc ~name ~props_constructor ~hooks expression =
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
   let rendering = Graph.rendering ~hooks:(fun callee -> Option.map (fun (fact : Graph.fact) -> fact.later) (hooks callee)) expression in
+  (match rendering with
+  | Graph.Pure -> explained ~loc ~name "is Component.pure: its render reads only props, state, context and hooks"
+  | Graph.Reads_the_page { loc; reason } ->
+      explained ~loc ~name ("is Component.make, scheduled with the components that read the page: " ^ reason)
+  | Graph.Impure { loc; reason } -> explained ~loc ~name ("is Component.make and renders whole on every update: " ^ reason));
   let definition =
     lazy
       (Hoist.hoist ~loc ~unused:Hoist.Kept "component"
          (match rendering with
          | Graph.Pure -> [%expr Melact_runtime.Component.pure ~name:[%e estring ~loc name]]
-         | Graph.Reads_the_page | Graph.Impure -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
+         | Graph.Reads_the_page _ | Graph.Impure _ -> [%expr Melact_runtime.Component.make ~name:[%e estring ~loc name]]))
   in
   let read_fields =
     List.concat_map
@@ -720,11 +735,15 @@ let component ~loc ~name ~props_constructor ~hooks expression =
         match
           match rendering with
           | Graph.Pure -> Graph.plan ~hooks ~inputs:(List.length (List.concat field_inputs)) ~props ~volatile:Graph.Renders_whole body
-          | Graph.Reads_the_page ->
+          | Graph.Reads_the_page _ ->
               Graph.plan ~hooks ~inputs:(List.length (List.concat field_inputs)) ~props ~volatile:Graph.Runs_every_render body
-          | Graph.Impure -> None
+          | Graph.Impure why -> Error why
         with
-        | Some plan ->
+        | Ok plan ->
+            explained ~loc ~name
+              (Printf.sprintf "has an update graph of %d step%s: a change runs only the steps it reaches"
+                 (List.length plan.steps)
+                 (match plan.steps with [ _ ] -> "" | [] | _ :: _ :: _ -> "s"));
             let held pattern mask ~source ~step value kept rest =
               let at = !sites in
               sites := at + 1;
@@ -781,7 +800,11 @@ let component ~loc ~name ~props_constructor ~hooks expression =
                   | Melact_runtime.Instance.Reached -> [%e walker#expression plan.result]]
             in
             remembered [%expr let __melact_changed = Melact_runtime.Instance.changed () in [%e graphed]] (max 1 !sites)
-        | None -> (
+        | Error { loc = at; reason } -> (
+            (match rendering with
+            | Graph.Impure _ -> ()
+            | Graph.Pure | Graph.Reads_the_page _ ->
+                explained ~loc:at ~name ("has no update graph, so every step of its render runs on every update: " ^ reason));
             let walked = walker#expression body in
             match !sites with 0 -> body | count -> remembered walked count))
   in
@@ -1291,11 +1314,20 @@ let mapper =
                        | Hook _ -> (
                            let binding = { binding with pvb_expr = self#qualified binding.pvb_expr } in
                            match Graph.slots ~hooks:self#known binding.pvb_expr with
-                           | None -> (binding, None)
-                           | Some { fact; values = []; conditions = [] } ->
+                           | Error { loc = at; reason } ->
+                               explained ~loc:at ~name
+                                 ("has no hook fact, so a component that calls it is Component.make: " ^ reason);
+                               (binding, None)
+                           | Ok { fact; values = []; conditions = [] } ->
+                               explained ~loc ~name
+                                 (Printf.sprintf "has a hook fact: %d hook slot%s%s" fact.slots
+                                    (match fact.slots with 1 -> "" | _ -> "s")
+                                    (match fact.later with
+                                    | [] -> ""
+                                    | _ :: _ -> ", and calls some arguments only after the render"));
                                custom <- (name, { fact; values = []; conditions = [] }) :: custom;
                                ({ binding with pvb_pat = with_hook_fact ~loc fact binding.pvb_pat }, None)
-                           | Some { fact; values; conditions } ->
+                           | Ok { fact; values; conditions } ->
                                let asked = ref conditions in
                                let marker =
                                  object
@@ -2084,6 +2116,12 @@ let () =
   Driver.add_arg "-foreign-engine"
     (Arg.Symbol ([ "compat"; "island" ], fun chosen -> engine := match chosen with "island" -> Island | _ -> Compat))
     ~doc:" what renders components of JavaScript React libraries: melact.compat (default) or islands of npm's React"
+
+let () =
+  Driver.add_arg "-melact-explain"
+    (Arg.Unit (fun () -> explaining := Explaining))
+    ~doc:" tell, for each component and custom hook, what it compiles to and why: pure or whole, with an update graph \
+          or not, with a hook fact or not, at the place that decides it"
 
 let () =
   Driver.add_arg "-hydratable"

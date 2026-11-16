@@ -4,8 +4,11 @@ open QCheck2
     render keeps (the argument of [useState] or [useRef]), or when something calls it later. *)
 type timing = Rendering | First | Later
 
+(** Whether a render reads only what React lets it read, as the generator built it. *)
+type seen = Pure | Reads_the_page | Impure
+
 (** A component body as source, and whether its render reads the world, as the generator built it. *)
-type body = { source : string; rendering : Melact_ppx.Graph.rendering }
+type body = { source : string; rendering : seen }
 
 let reads = [ "row.current"; "!counter"; "Js.Date.now ()"; "measure ()" ]
 let writes = [ "(counter := 1; 0)"; "useThing x"; "(object_ # size)"; "(let cell = counter in cell := 1; 0)" ]
@@ -15,9 +18,9 @@ let pure_atoms =
 
 let joined first second =
   match (first, second) with
-  | Melact_ppx.Graph.Impure, _ | _, Melact_ppx.Graph.Impure -> Melact_ppx.Graph.Impure
-  | Melact_ppx.Graph.Reads_the_page, _ | _, Melact_ppx.Graph.Reads_the_page -> Melact_ppx.Graph.Reads_the_page
-  | Melact_ppx.Graph.Pure, Melact_ppx.Graph.Pure -> Melact_ppx.Graph.Pure
+  | Impure, _ | _, Impure -> Impure
+  | Reads_the_page, _ | _, Reads_the_page -> Reads_the_page
+  | Pure, Pure -> Pure
 
 let both first second = joined first.rendering second.rendering
 
@@ -26,14 +29,14 @@ let rec body depth timing =
   let atom =
     oneof
       [
-        map (fun source -> { source; rendering = Melact_ppx.Graph.Pure }) (oneof_list pure_atoms);
+        map (fun source -> { source; rendering = Pure }) (oneof_list pure_atoms);
         map
           (fun source ->
-            { source; rendering = (match timing with Rendering -> Melact_ppx.Graph.Impure | First | Later -> Melact_ppx.Graph.Pure) })
+            { source; rendering = (match timing with Rendering -> Impure | First | Later -> Pure) })
           (oneof_list reads);
         map
           (fun source ->
-            { source; rendering = (match timing with Rendering | First -> Melact_ppx.Graph.Impure | Later -> Melact_ppx.Graph.Pure) })
+            { source; rendering = (match timing with Rendering | First -> Impure | Later -> Pure) })
           (oneof_list writes);
       ]
   in
@@ -76,21 +79,21 @@ let rec body depth timing =
               {
                 source = Printf.sprintf "(let mine = React.useRef 0 in ignore (%s); mine.current + String.length (%s))" a.source b.source;
                 rendering =
-                  joined (both a b) (match timing with Rendering -> Melact_ppx.Graph.Reads_the_page | First | Later -> Melact_ppx.Graph.Pure);
+                  joined (both a b) (match timing with Rendering -> Reads_the_page | First | Later -> Pure);
               })
             now now;
           map2
             (fun a b ->
               {
                 source = Printf.sprintf "(let mine = React.useRef 0 in mine.current <- String.length (%s); %s)" a.source b.source;
-                rendering = joined (both a b) (match timing with Rendering | First -> Melact_ppx.Graph.Impure | Later -> Melact_ppx.Graph.Pure);
+                rendering = joined (both a b) (match timing with Rendering | First -> Impure | Later -> Pure);
               })
             now now;
           map2
             (fun a b ->
               {
                 source = Printf.sprintf "(let mine = React.useRef 0 in let mine = row in ignore (%s); mine.current + String.length (%s))" a.source b.source;
-                rendering = joined (both a b) (match timing with Rendering -> Melact_ppx.Graph.Impure | First | Later -> Melact_ppx.Graph.Pure);
+                rendering = joined (both a b) (match timing with Rendering -> Impure | First | Later -> Pure);
               })
             now now;
         ]
@@ -110,7 +113,48 @@ let law =
         | Pexp_ident { txt = Lident "useLater"; _ } -> Some [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
         | _ -> None
       in
-      Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) = rendering)
+      (match Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) with
+      | Melact_ppx.Graph.Pure -> Pure
+      | Melact_ppx.Graph.Reads_the_page _ -> Reads_the_page
+      | Melact_ppx.Graph.Impure _ -> Impure)
+      = rendering)
+
+let explained =
+  Test.make
+    ~name:
+      "Graph: why a render reads the world points at a read or a write of the world, an unknown hook or a construct \
+       melact-ppx does not read, and at nothing around it"
+    ~count:2000
+    ~print:(fun { source; _ } -> source)
+    (Gen.sized_size (Gen.int_bound 5) (fun depth -> body depth Rendering))
+    (fun { source; _ } ->
+      let hooks callee =
+        match callee.Ppxlib.pexp_desc with
+        | Pexp_ident { txt = Lident "useTracked"; _ } -> Some []
+        | Pexp_ident { txt = Lident "useLater"; _ } -> Some [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
+        | _ -> None
+      in
+      match Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) with
+      | Melact_ppx.Graph.Pure -> true
+      | Melact_ppx.Graph.Reads_the_page { loc; _ } | Melact_ppx.Graph.Impure { loc; _ } ->
+          let start = loc.loc_start.pos_cnum and stop = loc.loc_end.pos_cnum in
+          let rec bare text =
+            let length = String.length text in
+            match length >= 2 && text.[0] = '(' && text.[length - 1] = ')' with
+            | true -> bare (String.trim (String.sub text 1 (length - 2)))
+            | false -> text
+          in
+          let pointed = bare (String.sub source start (stop - start)) in
+          let contains whole part =
+            let rec from index =
+              index + String.length part <= String.length whole
+              && (String.equal (String.sub whole index (String.length part)) part || from (index + 1))
+            in
+            from 0
+          in
+          List.exists (fun atom -> contains atom pointed) (reads @ writes @ [ "mine.current" ])
+          || String.starts_with ~prefix:"mine.current <- " pointed
+          || Test.fail_reportf "points at %S" pointed)
 
 (** When a use of a custom hook's parameter in the hook's body calls it: during the render, or only after it. *)
 type moment = During | After
@@ -165,7 +209,7 @@ let later_law =
           parameters
       in
       match Melact_ppx.Graph.slots ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) with
-      | Some { fact = { later; _ }; _ } -> later = expected || Test.fail_reportf "%s: later is wrong" source
-      | None -> Test.fail_reportf "%s: no fact" source)
+      | Ok { fact = { later; _ }; _ } -> later = expected || Test.fail_reportf "%s: later is wrong" source
+      | Error { reason; _ } -> Test.fail_reportf "%s: no fact, as it %s" source reason)
 
-let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law; later_law ])
+let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law; explained; later_law ])

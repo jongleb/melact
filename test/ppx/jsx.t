@@ -894,6 +894,49 @@ Under a file-wide open React a bare hook is React's, unless a local binding of t
         (fun () -> 0)
   let useHidden useState = useState (fun () -> 0)
 
+With -melact-explain, melact-ppx tells what each component and custom hook compiles to, and why, at the place
+that decides it:
+
+  $ cat > explain.ml <<'EOF'
+  > let useCount () = React.useState (fun () -> 0)
+  > let useHidden () = ignore (React.useState (fun () -> 0)); 0
+  > let[@react.component] counter () =
+  >   let count, setCount = useCount () in
+  >   (button ~onClick:(fun _ -> setCount (fun n -> n + 1)) ~children:[ React.int count ] () [@JSX])
+  > let[@react.component] clock () =
+  >   let count, _ = React.useState (fun () -> 0) in
+  >   (span ~children:[ React.float (Js.Date.now ()) ; React.int count ] () [@JSX])
+  > let[@react.component] hidden () = (span ~children:[ React.int (useHidden ()) ] () [@JSX])
+  > let[@react.component] getter () = (span ~children:[ React.string (Settings.current ()) ] () [@JSX])
+  > let[@react.component] measured () =
+  >   let box = React.useRef Js.Nullable.null in
+  >   (div ~ref:(ReactDOM.Ref.domRef box) ~title:(string_of_int (Obj.magic box.current)) ~children:[] () [@JSX])
+  > let[@react.component] inline () = (span ~children:[ React.int (fst (React.useState (fun () -> 0))) ] () [@JSX])
+  > EOF
+  $ ./pp.exe -melact-explain -impl explain.ml > /dev/null
+  File "explain.ml", line 1, characters 4-12:
+  melact: useCount has a hook fact: 1 hook slot
+  File "explain.ml", line 2, characters 26-56:
+  melact: useHidden has no hook fact, so a component that calls it is Component.make: calls React.useState inside an expression, or a hook the fact cannot count; a custom hook gets a fact when it calls React's hooks, custom hooks with facts and its hook parameters as the value of a let or a statement at the top of its body
+  File "explain.ml", line 3, characters 0-170:
+  melact: Explain.counter is Component.pure: its render reads only props, state, context and hooks
+  File "explain.ml", line 3, characters 0-170:
+  melact: Explain.counter has an update graph of 1 step: a change runs only the steps it reaches
+  File "explain.ml", line 8, characters 32-48:
+  melact: Explain.clock is Component.make and renders whole on every update: calls Js.Date.now with (), read as a getter of the world
+  File "explain.ml", line 9, characters 62-76:
+  melact: Explain.hidden is Component.make and renders whole on every update: calls useHidden, a hook without a fact: a custom hook gets one when its body is pure and calls its hooks at its top level, and another module's only under -typed
+  File "explain.ml", line 10, characters 65-86:
+  melact: Explain.getter is Component.make and renders whole on every update: calls Settings.current with (), read as a getter of the world
+  File "explain.ml", line 13, characters 71-82:
+  melact: Explain.measured is Component.make, scheduled with the components that read the page: reads box.current, the page or what an effect left there
+  File "explain.ml", line 11, characters 0-189:
+  melact: Explain.measured has an update graph of 1 step: a change runs only the steps it reaches
+  File "explain.ml", line 14, characters 0-111:
+  melact: Explain.inline is Component.pure: its render reads only props, state, context and hooks
+  File "explain.ml", line 14, characters 68-82:
+  melact: Explain.inline has no update graph, so every step of its render runs on every update: uses React.useState inside an expression; the update graph reads hooks only as the value of a let or a statement at the top of the body
+
 A function that calls a hook is a hook: named without use, it is an error at its first hook call, at the top level
 and in a module, also when use is followed by a lower-case letter; a component, a hook, a plain function and a
 value named with a leading underscore, which nothing calls, compile:
