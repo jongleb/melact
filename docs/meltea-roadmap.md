@@ -185,6 +185,16 @@ every combination of parts.
 only mounts. Route adoption through the `start` of step 2, so that a client that never hydrates
 links none of it.
 
+Measured on 2026-11-16, after Meltea got its own runtime: a client compiled without `-hydratable`
+already links almost none of it (bench/meltea carries `browser_adopt`, a stub that raises, and
+the `medium` indirection, about 250 B minified). The cost is in templates compiled `-hydratable`,
+whose writers check what the server wrote (`served_*`) and which carry their adoption code: the
+TodoMVC example's library was compiled so for its tests, which render it on the server and
+hydrate it, though its app only mounts. The tests now compile their own copy hydratable and the
+example's bundle went from 21,852 to 20,816 B gzipped (−1,036 B). So the flag belongs to the
+module of the app that hydrates; what is left of this step is a template compiled `-hydratable`
+that costs nothing in an app that mounts it.
+
 ### 6. View helpers spliced into the page
 
 A local or module-level function that returns a view, called with arguments the compiler can

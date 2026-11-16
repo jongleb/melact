@@ -84,7 +84,7 @@ const located = async (name) => {
   const { transform } = await esbuild();
   const sections = plain.split(/^\/\/ (?=\S+\.m?js$)/m).slice(1);
   const functions = [];
-  for (const section of sections.filter((section) => /^\S*\/node_modules\/(melhole|meltea)\//.test(section))) {
+  for (const section of sections.filter((section) => /^\S*\/node_modules\/(melhole|meltea|meltea\.runtime)\//.test(section))) {
     const path = section.slice(0, section.indexOf("\n")).replace(/^.*\/output\/(node_modules\/)?/, "");
     const declarations = [...section.matchAll(/^(?:function|const|let|var) ([\w$]+)/gm)];
     for (const [index, declaration] of declarations.entries()) {

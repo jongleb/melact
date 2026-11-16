@@ -63,8 +63,9 @@ Measured, each against `main`, sizes gzipped.
    (`patch_order`, item visits) behind an `ordering` record saved Meltea 3 B and cost Melact +20 to
    +115 B. Neither is worth it: Meltea already links none of it. The same holds for refs, `pure`,
    portals and useId until a measurement says otherwise.
-4. **What still costs Meltea is not Melact's but general:** the hydration medium in bundles that
-   never hydrate (about 600 B minified), the parts of `View.rows` a loop does not use, and nested
+4. **What still costs Meltea is not Melact's but general:** hydratable templates in bundles that
+   never hydrate (TodoMVC's were, −1,036 B gzipped once only its tests compiled them so; a client
+   compiled without `-hydratable` links about 250 B of it), the parts of `View.rows` a loop does not use, and nested
    templates for view helpers. These are the Meltea roadmap's steps 5, 4 and 6, and the deltas track
    (per-message draws from what `update` did) goes past them: code emitted per program, not paths
    chosen at run time.

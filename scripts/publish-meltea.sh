@@ -28,6 +28,7 @@ copy ppx/meltea
 copy test/support
 copy test/meltea
 copy test/todomvc
+perl -pi -e 's|\.\./\.\./meltea/examples/|../../examples/|g' test/todomvc/dune
 copy test/served
 copy test/laws
 copy vite.config.js
