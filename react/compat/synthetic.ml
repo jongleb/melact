@@ -219,7 +219,7 @@ let put element prop handler =
   | Walked native, Some _ -> (
       match prop.phase with
       | Bubble ->
-          ignore (Events.delegate native);
+          ignore (match native with "onchange" -> Events.delegate_tracked native | _ -> Events.delegate native);
           Events.set element (Events.key_of native) (dispatcher native prop.shown)
       | Capture ->
           (match List.mem (prop.shown, native) !capture_names with

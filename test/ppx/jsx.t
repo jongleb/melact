@@ -156,7 +156,7 @@ Every kind of prop, static and dynamic, required and optional:
   $ ./pp.exe -impl props.ml
   [@@@alert "-hook"]
   let () = React.reason_react_is_also_in_this_build_remove_it ()
-  let __melhole_event_1 = Melhole.Events.delegate "onchange"
+  let __melhole_event_1 = Melhole.Events.delegate_tracked "onchange"
   let __melhole_event_2 = Melhole.Events.delegate "keydown"
   type ('melhole_0, 'melhole_1, 'melhole_2, 'melhole_3,
     'melhole_4) __melhole_frame_3 =

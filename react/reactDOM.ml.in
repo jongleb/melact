@@ -512,9 +512,12 @@ let apply built props name =
         | None ->
             let key = Events.key_of event in
             built.events <- (event, key) :: built.events;
-            (match Events.register element event with
-            | Delegated -> ()
-            | Direct stop -> built.cleanups <- stop :: built.cleanups);
+            (match event with
+            | "onchange" -> ignore (Events.delegate_tracked event)
+            | _ -> (
+                match Events.register element event with
+                | Delegated -> ()
+                | Direct stop -> built.cleanups <- stop :: built.cleanups));
             key
       in
       let handle : React.Event.Synthetic.t -> unit = read props name in
