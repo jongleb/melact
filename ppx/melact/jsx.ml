@@ -1161,6 +1161,9 @@ let mapper =
     val mutable hooks : string list = []
     val mutable custom : (string * Melhole_typed.Question.t Graph.counted) list = []
 
+    (** The props builders the component rewrite made, which call the component's hooks inside. *)
+    val mutable made : string list = []
+
     method private known callee =
       match callee.pexp_desc with
       | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name custom
@@ -1238,6 +1241,45 @@ let mapper =
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
           Location.raise_errorf ~loc:item.pstr_loc "melact: a [@react.component] external is bound before the JSX rewrite"
       | Pstr_value (flag, bindings) -> (
+          List.iter
+            (fun binding ->
+              match (binding.pvb_pat.ppat_desc, binding.pvb_expr.pexp_desc, without_component binding.pvb_attributes) with
+              | ( (Ppat_var { txt = name; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt = name; _ }; _ }, _)),
+                  Pexp_function _,
+                  None )
+                when (match Melhole_compiler.Hook_name.of_name name with
+                     | Plain -> not (String.equal name "make" || List.mem name made || String.starts_with ~prefix:"_" name)
+                     | Hook _ -> false) ->
+                  Option.iter
+                    (fun (hook, loc) ->
+                      Location.raise_errorf ~loc
+                        "melact: %s calls the hook %s, so it is a hook itself and must run on every render; React's \
+                         rules and melact both need its name to start with use (rename it %s), or a call of it is \
+                         cached like a plain function's and its hooks get out of order"
+                        name hook
+                        ("use" ^ String.capitalize_ascii name))
+                    ((object
+                        inherit [(string * location) option] Ast_traverse.fold as super
+
+                        method! expression expression found =
+                          match (found, expression.pexp_desc) with
+                          | Some _, _ -> found
+                          | None, _
+                            when List.exists
+                                   (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed")
+                                   expression.pexp_attributes ->
+                              found
+                          | None, Pexp_apply ({ pexp_desc = Pexp_ident { txt; loc }; _ }, _)
+                            when match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+                                 | Hook _ -> true
+                                 | Plain -> false ->
+                              Some (String.concat "." (Longident.flatten_exn txt), loc)
+                          | None, _ -> super#expression expression found
+                      end)
+                       #expression
+                       binding.pvb_expr None)
+              | _ -> ())
+            bindings;
           let bindings, pending =
             List.split
               (List.map
@@ -1396,6 +1438,7 @@ let mapper =
                 Location.raise_errorf ~loc
                   "melact: [@react.component] needs a plain name, like make"
           in
+          made <- props_name name :: made;
           let type_name = props_type name in
           let props_constructor = String.capitalize_ascii type_name in
           let builder =

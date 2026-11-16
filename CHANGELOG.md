@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- A function that calls a hook but is not named `use…` is a compile error at its first hook call,
+  with the name to rename it to: its call was cached by its arguments like a plain function's, so its
+  hooks were skipped on some renders and the runtime failed with "hooks were called in a different
+  order than in the previous render" (the team's `whenChanged`). Components, the props builders and
+  npm hook wrappers melact-ppx makes, and values named with a leading `_` are exempt. Laws:
+  `test/ppx` shows the error at the top level, in a module and for `userName`, and that a component,
+  a hook, a plain function and an unused value compile (mutants: without the exemptions, the
+  components of `test/ppx` and the npm hooks of `test/dual` fail to build); `test/team` runs the
+  renamed `useWhenChanged` against reason-react (`WhenChanged.re`).
+
 - A closure a custom hook only calls after the render no longer makes the component whole. A hook's
   fact now also lists the arguments it calls only in an effect, a callback, a reducer or a handler, or
   hands only to such an argument of another hook (`[@melhole.hook (3, slots, [label…], [argument…])]`;

@@ -894,6 +894,68 @@ Under a file-wide open React a bare hook is React's, unless a local binding of t
         (fun () -> 0)
   let useHidden useState = useState (fun () -> 0)
 
+A function that calls a hook is a hook: named without use, it is an error at its first hook call, at the top level
+and in a module, also when use is followed by a lower-case letter; a component, a hook, a plain function and a
+value named with a leading underscore, which nothing calls, compile:
+
+  $ cat > whenchanged.ml <<'EOF'
+  > let whenChanged value = let previous = React.useRef value in ignore previous
+  > EOF
+  $ ./pp.exe -impl whenchanged.ml
+  File "whenchanged.ml", line 1, characters 39-51:
+  1 | let whenChanged value = let previous = React.useRef value in ignore previous
+                                             ^^^^^^^^^^^^
+  Error: melact: whenChanged calls the hook React.useRef, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it useWhenChanged), or a call of it is cached like a plain function's and its hooks get out of order
+  [1]
+
+  $ cat > nested.ml <<'EOF'
+  > module Inner = struct let pick ~useMemo value = useMemo (fun () -> value) [| value |] end
+  > EOF
+  $ ./pp.exe -impl nested.ml
+  File "nested.ml", line 1, characters 48-55:
+  1 | module Inner = struct let pick ~useMemo value = useMemo (fun () -> value) [| value |] end
+                                                      ^^^^^^^
+  Error: melact: pick calls the hook useMemo, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it usePick), or a call of it is cached like a plain function's and its hooks get out of order
+  [1]
+
+  $ cat > userName.ml <<'EOF'
+  > let userName context = React.useContext context
+  > EOF
+  $ ./pp.exe -impl userName.ml
+  File "userName.ml", line 1, characters 23-39:
+  1 | let userName context = React.useContext context
+                             ^^^^^^^^^^^^^^^^
+  Error: melact: userName calls the hook React.useContext, so it is a hook itself and must run on every render; React's rules and melact both need its name to start with use (rename it useUserName), or a call of it is cached like a plain function's and its hooks get out of order
+  [1]
+
+  $ cat > allowed.ml <<'EOF'
+  > let useWhenChanged value = let previous = React.useRef value in ignore previous
+  > let make () = let previous = React.useRef 0 in ignore previous; React.null
+  > let plain value = value + 1
+  > let _unused value = React.useRef value
+  > EOF
+  $ ./pp.exe -impl allowed.ml
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  let __melhole_hook_1 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let ((useWhenChanged)[@melhole.hook (3, 1, [], [])]) =
+    fun value ->
+      let previous =
+        (React.useRef (Melact_runtime.Hook.unchecked __melhole_hook_1)) value in
+      ignore previous
+  let __melhole_hook_2 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let make () =
+    let previous =
+      (React.useRef (Melact_runtime.Hook.unchecked __melhole_hook_2)) 0 in
+    ignore previous; React.null
+  let plain value = value + 1
+  let __melhole_hook_3 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let _unused value =
+    (React.useRef (Melact_runtime.Hook.unchecked __melhole_hook_3)) value
+
 Reason input:
 
   $ cat > greeting.re <<'EOF'

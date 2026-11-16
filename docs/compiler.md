@@ -958,6 +958,15 @@ its place mounts afresh, as React does. Only components that call hooks get an i
 slots, effects and a place in the scheduler. A dual test checks the remount against React 18:
 replacing one hookless component by another with the same output resets the state below it.
 
+The rule needs the converse too: a function that calls a hook is a hook, and runs on every render.
+A plain function's call is a value the compiler may cache by its arguments, so a `whenChanged(value)`
+that calls `useRef` and `useEffect1` would skip its hooks on a render with the same value and the
+runtime would find them out of order. melact-ppx makes it an error at the first hook call of a
+top-level or module-level function named otherwise, with the name to rename it to
+(`useWhenChanged`). A component (`[@react.component]`, or a function named `make`), the props
+builders the component rewrite makes, the wrappers it makes for npm's React hooks, and a value whose
+name starts with `_`, which nothing calls, are exempt.
+
 ### Spliced into the caller
 
 Where a hookless component is the row of a `map`, `melact-ppx` splices its body in: the props
