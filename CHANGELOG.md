@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- The update graph reads hooks under `open React`. A local open (`React.( … )`, or `open React;`
+  in a Reason block) is pushed down through `let`, sequences, applications, tuples, arrays,
+  constructors and `if` to the expressions that read React's names, which keep it, so the hooks
+  between get their full path; where a binding under the open names a value, type, label, module or
+  class of React's, the open stays where it is. Under a file-wide `open React` a bare hook that no
+  local binding hides is React's, as the keys already took it. React's names come from the three
+  `react.mli` at build time. Laws: `test/react_open` runs `React.(e)` and its rewrite in the OCaml
+  toplevel on random expressions where React's names and others shadow each other, and asks for the
+  same string (mutants: a binding of React's name pushed through, the open dropped, a name left
+  unqualified, binders, labels, types or module heads not read, each caught); `test/ppx` shows the
+  facts and the open that stays; `test/dual` runs the uncurried component also written under
+  `let open React`.
+
 - The update graph reads `React.Uncurried.useState`, `useReducer`, `useReducerWithMapState` and
   `useCallback` to `useCallback7` as it reads their curried twins: their state is a cell whose
   setter never changes, a callback is remembered by its dependencies, the steps and the view a change

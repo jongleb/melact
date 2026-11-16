@@ -1,0 +1,5 @@
+(test
+ (name react_open_laws)
+ (package melact-ppx)
+ (modes byte)
+ (libraries compiler-libs.toplevel qcheck-core qcheck-core.runner ppxlib melact-ppx))

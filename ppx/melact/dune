@@ -5,3 +5,14 @@
  (libraries ppxlib melhole.compiler melhole.typed)
  (preprocess
   (pps ppxlib.metaquot)))
+
+(rule
+ (target react_names.ml)
+ (deps
+  ../../react/react.mli
+  ../../react/server/react.mli
+  ../../react/server/native/react.mli)
+ (action
+  (with-stdout-to
+   %{target}
+   (run names/names.exe %{deps}))))

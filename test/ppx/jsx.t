@@ -849,11 +849,14 @@ Hooks get one key per call site, also inside custom hooks:
       external make : make_props -> React.element = "%identity"
     end
 
-reason-react's uncurried hooks get keys as the others do, also under a local open, and a hook fact when named in full:
+reason-react's uncurried hooks get keys as the others do, and a hook fact also under a local open, which is
+pushed down to where React's names are read; it stays where it is when a binding under it names one of them:
 
   $ cat > uncurried.ml <<'EOF'
   > let useCount () = React.Uncurried.useState (fun () -> 0)
   > let useTotal () = React.(Uncurried.useReducer (fun total by -> total + by) 0)
+  > let useLabel () = React.(let label, _ = useState (fun () -> string "label") in label)
+  > let useShadowed () = React.(let string = useState (fun () -> 0) in string)
   > EOF
   $ ./pp.exe -impl uncurried.ml
   [@@@alert "-hook"]
@@ -864,13 +867,48 @@ reason-react's uncurried hooks get keys as the others do, also under a local ope
     fun () ->
       (React.Uncurried.useState
          (Melact_runtime.Hook.unchecked __melhole_hook_1)) (fun () -> 0)
-  let __melhole_hook_2_Uncurried =
+  let __melhole_hook_2 =
     (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-  let useTotal () =
-    let open React in
-      (Uncurried.useReducer
-         (Melact_runtime.Hook.unchecked __melhole_hook_2_Uncurried))
+  let ((useTotal)[@melhole.hook (2, 1)]) =
+    fun () ->
+      (React.Uncurried.useReducer
+         (Melact_runtime.Hook.unchecked __melhole_hook_2))
         (fun total by -> total + by) 0
+  let __melhole_hook_3 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let ((useLabel)[@melhole.hook (2, 1)]) =
+    fun () ->
+      let (label, _) =
+        (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_3))
+          (let open React in fun () -> string "label") in
+      label
+  let __melhole_hook_4_Uncurried =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let useShadowed () =
+    let open React in
+      let string =
+        (useState (Melact_runtime.Hook.unchecked __melhole_hook_4_Uncurried))
+          (fun () -> 0) in
+      string
+
+Under a file-wide open React a bare hook is React's, unless a local binding of the same name hides it:
+
+  $ cat > opened.ml <<'EOF'
+  > open React
+  > let useCount () = useState (fun () -> 0)
+  > let useHidden useState = useState (fun () -> 0)
+  > EOF
+  $ ./pp.exe -impl opened.ml
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  open React
+  let __melhole_hook_1 =
+    (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
+  let ((useCount)[@melhole.hook (2, 1)]) =
+    fun () ->
+      (React.useState (Melact_runtime.Hook.unchecked __melhole_hook_1))
+        (fun () -> 0)
+  let useHidden useState = useState (fun () -> 0)
 
 Reason input:
 

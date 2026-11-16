@@ -1141,6 +1141,30 @@ let mapper =
       Option.bind (self#known callee) (fun (counted : _ Graph.counted) ->
           match counted.conditions with [] -> Some counted.fact | _ :: _ -> None)
 
+    method private qualified expression =
+      let expression = React_open.qualified expression in
+      match react with
+      | Closed -> expression
+      | Opened ->
+          let outer = self#locals in
+          (object (inner)
+             inherit Scope.mapper as super
+
+             method! expression expression =
+               match expression.pexp_desc with
+               | Pexp_ident { txt = Lident name; loc }
+                 when (match Melhole_compiler.Hook_name.of_name name with Hook _ -> true | Plain -> false)
+                      && List.exists (String.equal name) React_names.values
+                      && not (List.mem name inner#locals || List.mem name outer) ->
+                   { expression with pexp_desc = Pexp_ident { txt = Ldot (Lident "React", name); loc } }
+               | Pexp_ident { txt = Ldot (Lident (("Uncurried" | "Experimental") as owner), name); loc }
+                 when match Melhole_compiler.Hook_name.of_name name with Hook _ -> true | Plain -> false ->
+                   { expression with pexp_desc = Pexp_ident { txt = Ldot (Ldot (Lident "React", owner), name); loc } }
+               | _ -> super#expression expression
+           end)
+            #expression
+            expression
+
     method! structure items =
       let saved = react and known = hooks and facts = custom in
       let mapped = Hoist.structure self#structure_item items in
@@ -1192,6 +1216,7 @@ let mapper =
                        match Melhole_compiler.Hook_name.of_name name with
                        | Plain -> (binding, None)
                        | Hook _ -> (
+                           let binding = { binding with pvb_expr = self#qualified binding.pvb_expr } in
                            match Graph.slots ~hooks:self#known binding.pvb_expr with
                            | None -> (binding, None)
                            | Some { fact; values = []; conditions = [] } ->
@@ -1344,7 +1369,7 @@ let mapper =
           let props_constructor = String.capitalize_ascii type_name in
           let builder =
             component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor ~hooks:self#custom
-              binding.pvb_expr
+              (self#qualified binding.pvb_expr)
           in
           ( [
               pstr_type ~loc Recursive
