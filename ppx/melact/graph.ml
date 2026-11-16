@@ -11,20 +11,32 @@ type local = Own_cell of string | Own_ref of string
 
 exception Reads_the_world
 
+type argument = Position of int | Label of string
+
+let numbered arguments =
+  List.rev
+    (snd
+       (List.fold_left
+          (fun (position, found) (label, value) ->
+            match label with
+            | Nolabel -> (position + 1, (Position position, value) :: found)
+            | Labelled name | Optional name -> (position, (Label name, value) :: found))
+          (0, []) arguments))
+
 (** Which renders use what a render evaluates. *)
 type kept =
   | Every_render
   | First_render  (** The argument of [useState] or [useRef], a reducer's initial state: only the first render keeps it. *)
 
+let hook callee =
+  match callee.pexp_desc with
+  | Pexp_ident { txt; _ } -> (
+      match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
+      | Hook { base; _ } -> Some base
+      | Plain -> None)
+  | _ -> None
+
 let rendering ~hooks body =
-  let hook callee =
-    match callee.pexp_desc with
-    | Pexp_ident { txt; _ } -> (
-        match Melhole_compiler.Hook_name.of_name (Longident.last_exn txt) with
-        | Hook { base; _ } -> Some base
-        | Plain -> None)
-    | _ -> None
-  in
   let found = ref Pure in
   let rec now kept cells expression =
     let each = List.iter (now kept cells) in
@@ -76,7 +88,15 @@ let rendering ~hooks body =
         | Some ("useState" | "useRef"), _ -> List.iter (now First_render cells) values
         | Some ("useMemo" | "useContext" | "useId" | "useDebugValue"), _ -> each values
         | Some _, _ -> (
-            match hooks callee with Some _ -> each values | None -> raise Reads_the_world)
+            match hooks callee with
+            | Some later ->
+                List.iter
+                  (fun (argument, value) ->
+                    match List.find_opt (( = ) argument) later with
+                    | Some _ -> called_later value
+                    | None -> now kept cells value)
+                  (numbered arguments)
+            | None -> raise Reads_the_world)
         | None, [ (Nolabel, { pexp_desc = Pexp_construct ({ txt = Lident "()"; _ }, None); _ }) ] -> (
             match kept with Every_render -> raise Reads_the_world | First_render -> now kept cells callee)
         | None, _ ->
@@ -176,7 +196,7 @@ type shape =
 
 exception Beyond
 
-type fact = { slots : int; through : string list }
+type fact = { slots : int; through : string list; later : argument list }
 
 type 'condition counted = { fact : fact; values : expression list; conditions : 'condition list }
 
@@ -193,7 +213,7 @@ let react_slots name =
 
 let combined found more =
   {
-    fact = { slots = found.fact.slots + more.fact.slots; through = found.fact.through @ more.fact.through };
+    fact = { slots = found.fact.slots + more.fact.slots; through = found.fact.through @ more.fact.through; later = [] };
     values = found.values @ more.values;
     conditions = found.conditions @ more.conditions;
   }
@@ -210,7 +230,7 @@ let passed ~hooks ~named counted arguments =
         match (value.pexp_desc, named value, hooks value) with
         | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ }, _, _ -> (
             match react_slots name with
-            | Some slots -> { fact = { slots; through = [] }; values = []; conditions = [] }
+            | Some slots -> { fact = { slots; through = []; later = [] }; values = []; conditions = [] }
             | None -> raise Beyond)
         | _, `Local local, _ -> local
         | _, `Outer, Some ({ fact = { through = []; _ }; _ } as known) -> known
@@ -437,21 +457,21 @@ let slots ~hooks body =
     end)
       #expression expression
   in
-  let none = { fact = { slots = 0; through = [] }; values = []; conditions = [] } in
+  let none = { fact = { slots = 0; through = []; later = [] }; values = []; conditions = [] } in
   let named locals hook =
     match hook.pexp_desc with
     | Pexp_ident { txt = Lident name; _ } -> (
         match (List.assoc_opt name locals, own hook) with
         | Some (Some local), _ -> `Local local
         | Some None, _ -> `Shadowed
-        | None, Some label -> `Local { none with fact = { slots = 0; through = [ label ] } }
+        | None, Some label -> `Local { none with fact = { slots = 0; through = [ label ]; later = [] } }
         | None, None -> `Outer)
     | _ -> `Outer
   in
   let rec chosen locals value =
     match value.pexp_desc with
     | Pexp_ident { txt = (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)); _ } ->
-        Option.map (fun slots -> { none with fact = { slots; through = [] } }) (react_slots name)
+        Option.map (fun slots -> { none with fact = { slots; through = []; later = [] } }) (react_slots name)
     | Pexp_ident _ -> (
         match (named locals value, hooks value) with
         | `Local local, _ -> Some local
@@ -494,7 +514,7 @@ let slots ~hooks body =
         | `Outer, Some counted, _ -> called counted
         | `Outer, None, (Ldot (Lident "React", name) | Ldot (Ldot (Lident "React", "Uncurried"), name)) -> (
             match react_slots name with
-            | Some slots -> called { none with fact = { slots; through = [] } }
+            | Some slots -> called { none with fact = { slots; through = []; later = [] } }
             | None ->
                 free_of_hooks value;
                 none)
@@ -524,13 +544,80 @@ let slots ~hooks body =
               (counted (List.map (fun name -> (name, None)) (Free.bound binding.pvb_pat) @ locals) rest))
     | _ -> taken locals expression
   in
+  let later =
+    let rec parameters expression position found =
+      match expression.pexp_desc with
+      | Pexp_function (given, _, Pfunction_body body) ->
+          let position, found =
+            List.fold_left
+              (fun (position, found) param ->
+                match param.pparam_desc with
+                | Pparam_val
+                    ( label,
+                      _,
+                      { ppat_desc = Ppat_var { txt; _ } | Ppat_constraint ({ ppat_desc = Ppat_var { txt; _ }; _ }, _); _ } ) -> (
+                    match label with
+                    | Nolabel -> (position + 1, (txt, Position position) :: found)
+                    | Labelled name | Optional name -> (position, (txt, Label name) :: found))
+                | Pparam_val (Nolabel, _, _) -> (position + 1, found)
+                | Pparam_val ((Labelled _ | Optional _), _, _) | Pparam_newtype _ -> (position, found))
+              (position, found) given
+          in
+          parameters body position found
+      | _ -> found
+    in
+    let used = ref [] in
+    let walker =
+      object (self)
+        inherit Ast_traverse.iter as super
+
+        method private handed value =
+          match value.pexp_desc with Pexp_function _ | Pexp_ident { txt = Lident _; _ } -> () | _ -> self#expression value
+
+        method! expression expression =
+          match expression.pexp_desc with
+          | Pexp_ident { txt = Lident name; _ } -> used := name :: !used
+          | Pexp_apply (_, arguments) when Option.is_some (Element.without_jsx expression.pexp_attributes) ->
+              List.iter
+                (fun (label, value) ->
+                  match (label, Element.list_items value) with
+                  | Labelled "children", Some items -> List.iter self#expression items
+                  | _ -> self#handed value)
+                arguments
+          | Pexp_apply (callee, arguments) -> (
+              self#expression callee;
+              match (hook callee, arguments) with
+              | Some ("useEffect" | "useLayoutEffect" | "useInsertionEffect" | "useCallback" | "useImperativeHandle"), _ ->
+                  List.iter (fun (_, value) -> self#handed value) arguments
+              | Some ("useReducer" | "useReducerWithMapState"), (_, reducer) :: rest ->
+                  self#handed reducer;
+                  List.iter (fun (_, value) -> self#expression value) rest
+              | Some _, _ ->
+                  let handed = Option.fold ~none:[] ~some:(fun counted -> counted.fact.later) (hooks callee) in
+                  List.iter
+                    (fun (argument, value) ->
+                      match List.find_opt (( = ) argument) handed with
+                      | Some _ -> self#handed value
+                      | None -> self#expression value)
+                    (numbered arguments)
+              | None, _ -> List.iter (fun (_, value) -> self#expression value) arguments)
+          | _ -> super#expression expression
+      end
+    in
+    walker#expression inner;
+    List.rev
+      (List.filter_map
+         (fun (name, argument) -> Option.fold ~none:(Some argument) ~some:(fun _ -> None) (List.find_opt (String.equal name) !used))
+         (parameters body 0 []))
+  in
   match
     rendering
-      ~hooks:(fun callee -> Option.fold ~none:(Option.map ignore (hooks callee)) ~some:(fun _ -> Some ()) (own callee))
+      ~hooks:(fun callee ->
+        Option.fold ~none:(Option.map (fun counted -> counted.fact.later) (hooks callee)) ~some:(fun _ -> Some []) (own callee))
       body
   with
   | Impure | Reads_the_page -> None
   | Pure -> (
       match counted [] inner with
-      | found -> Some { found with values = found.values @ !read }
+      | found -> Some { found with fact = { found.fact with later }; values = found.values @ !read }
       | exception Beyond -> None)

@@ -5,10 +5,12 @@
 // takes React.useMemo1 as a parameter and reads a bool named useLayoutEffect (UseRemoteData), whose fact makes the
 // component pure, and types -typed must classify without unfolding them: 32 levels that each hold the one below
 // twice (Shared), a polymorphic variant and a Js.t object that hold themselves (Looping), and one attribute that reads 30 props,
-// whose guard must compile in linear time (Wide). Melact must build them and
+// whose guard must compile in linear time (Wide), and closures a data hook calls only in its effect that call a
+// getter with () (RemoteRequest). Melact must build them and
 // show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
+import { readFileSync } from "node:fs";
 import { tick, shown } from "../compat/harness.mjs";
 
 const settle = async () => {
@@ -36,4 +38,10 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[0][traces[0].length - 1]).toContain("hi!!!");
   expect(traces[0][0]).toContain('href="/legal/usat"');
   expect(traces[0][traces[0].length - 1]).toContain(`"data hi!!!!!"" shown"`);
+});
+
+test("a closure a data hook calls only in its effect leaves the component pure, as one it calls while rendering does not", () => {
+  const compiled = readFileSync("_build/default/test/team/melact/output/test/team/melact/RemoteRequest.mjs", "utf8");
+  const kind = (name) => compiled.match(new RegExp(`Component\\.(pure|make)\\("RemoteRequest\\.${name}\\.make"`))?.[1];
+  expect([kind("ViaUse1"), kind("ViaUse"), kind("CalledNow")]).toEqual(["pure", "pure", "make"]);
 });

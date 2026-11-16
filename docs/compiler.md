@@ -1248,8 +1248,9 @@ module, does the rest. That works under `pps`, through an `.mli` and across libr
 
 What a module boundary hides is a custom hook. A top-level `useX` whose body is pure and calls only
 React's hooks and known custom hooks at its top level gets a fact on its pattern, which reaches the
-`.cmi`: `[@melhole.hook (2, slots, label…)]`, a format version, the hook slots it takes on every call
-and the labels whose hooks it calls. A
+`.cmi`: `[@melhole.hook (3, slots, [label…], [argument…])]`, a format version, the hook slots it takes
+on every call, the labels whose hooks it calls, and the arguments it calls only after the render
+(`` `Position 0 ``, `` `Label "onDone" ``). A
 component that calls it, in the same file or, under `staged_pps`, from another module (read with
 `Env.lookup_value`, as `melhole.inline` is), keeps its purity and its graph: the call is a step that
 runs on every render, and the hook's state cells are numbered after the component's slots before
@@ -1259,9 +1260,17 @@ to npm's React hooks are such custom hooks too.
 
 A hook can be given to a custom hook: `use(~useMemo, …)` calls `useMemo(…)`, and
 `use1 = (…) => use(~useMemo=React.useMemo1, …)` picks it. `use`'s fact names the label once per
-call of it, `(2, 2, "useMemo")`; a caller that passes React's hook, a custom hook with a fact or a
-hook given to it under its own label adds that hook's slots, so `use1` gets `(2, 3)`. The runtime
-numbers the slots as they are called, through the parameter as through a name.
+call of it, `(3, 2, ["useMemo"], …)`; a caller that passes React's hook, a custom hook with a fact or
+a hook given to it under its own label adds that hook's slots, so `use1` gets `(3, 3, [], …)`. The
+runtime numbers the slots as they are called, through the parameter as through a name.
+
+A data hook takes the code that fetches: `use(…, fetch, deps)` calls `fetch` only in its effect. A
+parameter every use of which is in an effect, a callback, a reducer or a JSX handler, or handed to an
+argument another hook calls later, is in the fact's last list, so `use`'s fact holds `` `Position 0 ``
+and so does `use1`'s, which hands it on. A component that passes a function literal there does not
+run its body while it renders: `use1(deps => Request.make() ++ deps[0], …)` stays pure though the
+body calls a getter with `()`, as an effect's callback would. A hook that calls the argument while it
+renders, or keeps it anywhere else, leaves it out, and its body is read as running.
 
 A local name for a hook counts as that hook: `let useEffect3 = useLayoutEffect ? React.useLayoutEffect3
 : React.useEffect3` (an `if` or a `match`, Reason's ternary) whose branches are all hooks of the same

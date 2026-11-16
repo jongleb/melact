@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- A closure a custom hook only calls after the render no longer makes the component whole. A hook's
+  fact now also lists the arguments it calls only in an effect, a callback, a reducer or a handler, or
+  hands only to such an argument of another hook (`[@melhole.hook (3, slots, [label…], [argument…])]`;
+  facts of version 2 are read as none), and a component that passes a function there does not read its
+  body as run while it renders: the team's fetches, `Remote.use1(deps => Other.request() ++ deps[0],
+  …)`, stay pure though they call a getter with `()`. Laws in `test/graph`: a render reads the world
+  exactly when such a body would not run (mutants: the fact ignored, every argument taken as later,
+  labels numbered as positions); a hook's later arguments are exactly those every use of which is
+  later (mutants: a parameter handed on taken as called, a handler, an effect or another hook's later
+  argument taken as now); `test/team` (`RemoteRequest.re`: two pure, one whose hook calls the closure
+  while it renders whole; mutant: the fact ignored).
+
 - Fixed: since the warning 4 fix, a hole that read many props compiled in time exponential in their
   number, as its guard was an or-pattern with one alternative per prop and OCaml checks such a match
   for exhaustiveness by trying their combinations (the team's `wide-guard`: 22 s at 24 props, more

@@ -55,7 +55,7 @@ let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionStat
 let inline_fact = "melhole.inline"
 let inline_version = 1
 let hook_fact = "melhole.hook"
-let hook_version = 2
+let hook_version = 3
 
 let with_hook_fact ~loc (fact : Graph.fact) pattern =
   {
@@ -66,7 +66,19 @@ let with_hook_fact ~loc (fact : Graph.fact) pattern =
           (PStr
              [
                pstr_eval ~loc
-                 (pexp_tuple ~loc (eint ~loc hook_version :: eint ~loc fact.slots :: List.map (estring ~loc) fact.through))
+                 (pexp_tuple ~loc
+                    [
+                      eint ~loc hook_version;
+                      eint ~loc fact.slots;
+                      elist ~loc (List.map (estring ~loc) fact.through);
+                      elist ~loc
+                        (List.map
+                           (fun argument ->
+                             match argument with
+                             | Graph.Position position -> pexp_variant ~loc "Position" (Some (eint ~loc position))
+                             | Graph.Label label -> pexp_variant ~loc "Label" (Some (estring ~loc label)))
+                           fact.later);
+                    ])
                  [];
              ])
       :: pattern.ppat_attributes;
@@ -87,6 +99,12 @@ let imported_hook path =
         (fun (attribute : Ocaml_common.Typedtree.attribute) ->
           match (attribute.attr_name.txt, attribute.attr_payload) with
           | name, PStr payload when String.equal name hook_fact -> (
+              let rec items expression =
+                match expression.pexp_desc with
+                | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
+                | Pexp_construct ({ txt = Lident "::"; _ }, Some { pexp_desc = Pexp_tuple [ item; rest ]; _ }) -> item :: items rest
+                | _ -> raise Exit
+              in
               match Ppxlib_ast.Selected_ast.of_ocaml Structure payload with
               | [
                {
@@ -95,9 +113,12 @@ let imported_hook path =
                      ( {
                          pexp_desc =
                            Pexp_tuple
-                             ({ pexp_desc = Pexp_constant (Pconst_integer (version, None)); _ }
-                             :: { pexp_desc = Pexp_constant (Pconst_integer (slots, None)); _ }
-                             :: labels);
+                             [
+                               { pexp_desc = Pexp_constant (Pconst_integer (version, None)); _ };
+                               { pexp_desc = Pexp_constant (Pconst_integer (slots, None)); _ };
+                               through;
+                               later;
+                             ];
                          _;
                        },
                        _ );
@@ -114,7 +135,17 @@ let imported_hook path =
                             match label.pexp_desc with
                             | Pexp_constant (Pconst_string (label, _, _)) -> label
                             | _ -> raise Exit)
-                          labels;
+                          (items through);
+                      later =
+                        List.map
+                          (fun argument ->
+                            match argument.pexp_desc with
+                            | Pexp_variant ("Position", Some { pexp_desc = Pexp_constant (Pconst_integer (position, None)); _ }) ->
+                                Graph.Position (int_of_string position)
+                            | Pexp_variant ("Label", Some { pexp_desc = Pexp_constant (Pconst_string (label, _, _)); _ }) ->
+                                Graph.Label label
+                            | _ -> raise Exit)
+                          (items later);
                     }
               | _ -> None
               | exception _ -> None)
@@ -288,7 +319,7 @@ let component ~loc ~name ~props_constructor ~hooks expression =
     | `Missing ->
         aliased @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? ()]) } ]
   in
-  let rendering = Graph.rendering ~hooks expression in
+  let rendering = Graph.rendering ~hooks:(fun callee -> Option.map (fun (fact : Graph.fact) -> fact.later) (hooks callee)) expression in
   let definition =
     lazy
       (Hoist.hoist ~loc ~unused:Hoist.Kept "component"

@@ -98,14 +98,14 @@ so a component in another file that calls the hook compiles to an update graph:
   >   data
   > EOF
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' remote.ml 2>&1 | grep -E '^let (\(\()?use'
-  let ((use)[@melhole.hook (2, 2, "useMemo")]) =
-  let ((use1)[@melhole.hook (2, 3)]) =
-  let ((useBare)[@melhole.hook (2, 1, "useMemo")]) =
+  let ((use)[@melhole.hook (3, 2, ["useMemo"], [`Label "skip"; `Position 0])])
+  let ((use1)[@melhole.hook (3, 3, [], [`Label "skip"; `Position 0])]) =
+  let ((useBare)[@melhole.hook (3, 1, ["useMemo"], [])]) =
   let useLayered ~useLayoutEffect:(useLayoutEffect : unit -> unit) dependencies
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx' remote.ml 2>&1 | grep -E '^let (\(\()?use'
   let use ?(skip= false) ?(useLayoutEffect= false)
   let use1 ?skip ?useLayoutEffect fetch dependencies =
-  let ((useBare)[@melhole.hook (2, 1, "useMemo")]) =
+  let ((useBare)[@melhole.hook (3, 1, ["useMemo"], [])]) =
   let useLayered ~useLayoutEffect:(useLayoutEffect : unit -> unit) dependencies
   $ cat > view.ml <<'EOF'
   > let make ~id () =
@@ -156,12 +156,12 @@ makes the name unknown:
   >   useMemo2 (fun () -> dependencies) dependencies
   > EOF
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx' chosen.ml 2>&1 | grep -E '^let (\(\()?use'
-  let ((useChosen)[@melhole.hook (2, 1)]) =
-  let ((useMatched)[@melhole.hook (2, 1)]) =
+  let ((useChosen)[@melhole.hook (3, 1, [], [])]) =
+  let ((useMatched)[@melhole.hook (3, 1, [], [])]) =
   let useMismatched flag dependencies =
   let useUneven flag dependencies =
   let useShadowed ~useMemo dependencies =
-  let ((useRenamed)[@melhole.hook (2, 0, "useMemo")]) =
+  let ((useRenamed)[@melhole.hook (3, 0, ["useMemo"], [])]) =
 
 A binding to npm's useMemo is a custom hook with a fact of its own, so another file can pass it for a
 hook parameter, as UseRemoteData's use8 passes RR.useMemo8, and the slots add up across three files:
@@ -175,4 +175,4 @@ hook parameter, as UseRemoteData's use8 passes RR.useMemo8, and the slots add up
   $ ocamlc -c -ppx '../pp.exe --as-ppx -typed' rr.ml
   $ ocamlc -c -ppx '../pp.exe --as-ppx -typed' remote.ml
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' far.ml 2>&1 | grep -E '^let \(\('
-  let ((use8)[@melhole.hook (2, 3)]) =
+  let ((use8)[@melhole.hook (3, 3, [], [`Label "skip"; `Position 0])]) =

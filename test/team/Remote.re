@@ -28,3 +28,8 @@ let use = (~skip=false, ~useLayoutEffect=false, ~useMemo: (unit => 'deps, 'deps)
 
 let use1 = (~skip=?, ~useLayoutEffect=?, fetch, dependencies) =>
   use(~skip?, ~useLayoutEffect?, ~useMemo=React.useMemo1, fetch, dependencies);
+
+let useNow = make => {
+  let (count, _) = React.useState(() => 0);
+  make() ++ string_of_int(count);
+};

@@ -62,6 +62,10 @@ let rec body depth timing =
           two (Printf.sprintf "(React.useCallback1 (fun z -> ignore z; %s) [| %s |])") later now;
           two (Printf.sprintf "(fst (React.useReducer (fun state _ -> ignore %s; state) %s))") later first;
           two (Printf.sprintf "(React.useMemo1 (fun () -> %s) [| %s |])") now now;
+          two (Printf.sprintf "(useLater (fun () -> %s) (fun () -> %s))") later now;
+          two (Printf.sprintf "(useLater ~onDone:(fun () -> ignore %s) (fun () -> 0) (fun () -> %s))") later now;
+          two (Printf.sprintf "(useLater ~onDone:(fun () -> ()) (fun () -> %s) (fun () -> %s))") later now;
+          two (Printf.sprintf "(useTracked (fun () -> %s) + String.length %s)") now now;
           two (Printf.sprintf "(fst (React.useState (fun () -> %s)) + String.length %s)") first now;
           two (Printf.sprintf "(fst (React.useState %s) + String.length %s)") first now;
           two (Printf.sprintf "(let kept = React.useRef %s in ignore kept; %s)") first now;
@@ -101,8 +105,67 @@ let law =
     (Gen.sized_size (Gen.int_bound 5) (fun depth -> body depth Rendering))
     (fun { source; rendering } ->
       let hooks callee =
-        match callee.Ppxlib.pexp_desc with Pexp_ident { txt = Lident "useTracked"; _ } -> Some 1 | _ -> None
+        match callee.Ppxlib.pexp_desc with
+        | Pexp_ident { txt = Lident "useTracked"; _ } -> Some []
+        | Pexp_ident { txt = Lident "useLater"; _ } -> Some [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
+        | _ -> None
       in
       Melact_ppx.Graph.rendering ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) = rendering)
 
-let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law ])
+(** When a use of a custom hook's parameter in the hook's body calls it: during the render, or only after it. *)
+type moment = During | After
+
+let uses =
+  [
+    (After, Printf.sprintf "React.useEffect0 (fun () -> ignore (%s 1); None)");
+    (After, Printf.sprintf "React.useEffect0 %s");
+    (After, Printf.sprintf "React.useCallback0 (fun z -> %s z)");
+    (After, Printf.sprintf "React.useReducer (fun state _ -> %s state) 0");
+    (After, Printf.sprintf "useLater %s (fun () -> 0)");
+    (After, Printf.sprintf "useLater (fun () -> %s 1) (fun () -> 0)");
+    (After, Printf.sprintf "useLater ~onDone:%s (fun () -> 0) (fun () -> 0)");
+    (After, Printf.sprintf "(div ~onClick:%s ~children:[] () [@JSX])");
+    (During, Printf.sprintf "%s 1");
+    (During, Printf.sprintf "React.useMemo0 (fun () -> %s 1)");
+    (During, Printf.sprintf "React.useState (fun () -> %s 1)");
+    (During, Printf.sprintf "useLater (fun () -> 0) %s");
+    (During, Printf.sprintf "useLater (fun () -> 0) (fun () -> %s 1)");
+    (During, Printf.sprintf "useTracked %s");
+    (During, Printf.sprintf "(let kept = %s in kept)");
+    (During, Printf.sprintf "(div ~children:[ %s 1 ] () [@JSX])");
+  ]
+
+let later_law =
+  let parameters = [ ("fetch", Melact_ppx.Graph.Position 0); ("onDone", Melact_ppx.Graph.Label "onDone"); ("other", Melact_ppx.Graph.Position 1) ] in
+  Test.make
+    ~name:
+      "Graph: a custom hook's fact holds the parameters it calls only after the render, those every use of which is in an \
+       effect, a callback, a reducer, a handler or an argument another hook calls later"
+    ~count:2000
+    ~print:(fun picked -> String.concat "; " (List.map (fun ((name, _), (_, use)) -> use name) picked))
+    Gen.(list_size (int_bound 6) (pair (oneof_list parameters) (oneof_list uses)))
+    (fun picked ->
+      let source =
+        Printf.sprintf "fun fetch ~onDone other -> %s0"
+          (String.concat "" (List.mapi (fun index ((name, _), (_, use)) -> Printf.sprintf "let _use%d = %s in " index (use name)) picked))
+      in
+      let hooks callee =
+        let known later = Some { Melact_ppx.Graph.fact = { slots = 1; through = []; later }; values = []; conditions = [] } in
+        match callee.Ppxlib.pexp_desc with
+        | Pexp_ident { txt = Lident "useTracked"; _ } -> known []
+        | Pexp_ident { txt = Lident "useLater"; _ } -> known [ Melact_ppx.Graph.Position 0; Melact_ppx.Graph.Label "onDone" ]
+        | _ -> None
+      in
+      let expected =
+        List.filter_map
+          (fun (name, argument) ->
+            match List.exists (fun ((used, _), (moment, _)) -> String.equal used name && moment = During) picked with
+            | true -> None
+            | false -> Some argument)
+          parameters
+      in
+      match Melact_ppx.Graph.slots ~hooks (Ppxlib.Parse.expression (Lexing.from_string source)) with
+      | Some { fact = { later; _ }; _ } -> later = expected || Test.fail_reportf "%s: later is wrong" source
+      | None -> Test.fail_reportf "%s: no fact" source)
+
+let () = exit (QCheck_base_runner.run_tests ~verbose:true [ law; later_law ])

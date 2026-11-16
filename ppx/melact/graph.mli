@@ -10,10 +10,14 @@ type rendering =
       (** Another ref, a write to a ref, a reference cell, the clock, a getter called with [()], an unknown hook or
           construct. *)
 
+(** An argument of a call: by its place among the unlabelled ones, or by its label. *)
+type argument = Position of int | Label of string
+
 (** [rendering body]: how the body of a [@react.component] reads while it renders. A function's body
-    counts as run during the render unless the function is a JSX prop or the callback of an effect, a
-    reducer or [useCallback]. [hooks] gives the hook slots of a custom hook known to be pure, from its fact. *)
-val rendering : hooks:(Ppxlib.expression -> 'fact option) -> Ppxlib.expression -> rendering
+    counts as run during the render unless the function is a JSX prop, the callback of an effect, a
+    reducer or [useCallback], or an argument a custom hook only calls later. [hooks] gives, for a custom
+    hook known to be pure, the arguments its fact says it calls only after the render. *)
+val rendering : hooks:(Ppxlib.expression -> argument list option) -> Ppxlib.expression -> rendering
 
 (** One step of a body read as an update graph. A mask is the set of sources (bits of props, state
     cells and contexts) whose change makes the step run again; a render that knows nothing of what
@@ -33,8 +37,9 @@ type plan = { steps : step list; result : Ppxlib.expression; reads : int }
 val every_source : int
 
 (** What a custom hook takes on every call: [slots] of its own, and those of the hook given for each label of
-    [through], once per call of it. *)
-type fact = { slots : int; through : string list }
+    [through], once per call of it; [later] are the arguments it calls only after the render (in an effect, a
+    reducer, a callback or a handler), or hands only to such a place. *)
+type fact = { slots : int; through : string list; later : argument list }
 
 (** A custom hook's fact, holding when none of [values], hook-named identifiers read as values, is a function and
     every condition holds. *)
