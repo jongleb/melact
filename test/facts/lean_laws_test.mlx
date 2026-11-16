@@ -1,0 +1,145 @@
+open Testing
+
+external select_all : Dom.element -> string -> Dom.nodeList = "querySelectorAll" [@@mel.send]
+external element_of : Dom.node -> Dom.element = "%identity"
+external remove_root : Dom.element -> unit = "remove" [@@mel.send]
+
+type row = { id : int; label : string }
+
+(** Every change of [rows] is a fact or made anew, so the loop over them is compiled without scans. *)
+type model = { rows : row array; next : int; selection : int option }
+
+[@@@alert "-mutable_model"]
+
+let watched : row array -> row array =
+  [%mel.raw
+    {|function (items) {
+  items.forEach(function (item, index) {
+    var held = item;
+    Object.defineProperty(items, index, {
+      get: function () { if (!globalThis.__lean_quiet) globalThis.__lean_reads = (globalThis.__lean_reads || 0) + 1; return held; },
+      set: function (value) { held = value; },
+      enumerable: true,
+      configurable: true,
+    });
+  });
+  return items;
+}|}]
+
+let quiet : (unit -> model) -> model =
+  [%mel.raw
+    {|function (run) {
+  var was = globalThis.__lean_quiet;
+  globalThis.__lean_quiet = true;
+  try { return run(); } finally { globalThis.__lean_quiet = was; }
+}|}]
+
+let reads : unit -> int = [%mel.raw {|function () { var made = globalThis.__lean_reads || 0; globalThis.__lean_reads = 0; return made; }|}]
+
+type message = Run of int | Add of int | Remove of int | Swap of int * int | Tenth | Clear | Select of int
+
+let built next count = Array.init count (fun index -> { id = next + index; label = "row " ^ string_of_int (next + index) })
+
+let update message model =
+  let size = Array.length model.rows in
+  match message with
+  | Run count -> { rows = built model.next count; next = model.next + count; selection = None }
+  | Add count -> { model with rows = Array.append model.rows (built model.next count); next = model.next + count }
+  | Remove at when at < size -> { model with rows = Array.append (Array.sub model.rows 0 at) (Array.sub model.rows (at + 1) (size - at - 1)) }
+  | Swap (first, second) when first < size && second < size ->
+      let rows = Array.copy model.rows in
+      rows.(first) <- model.rows.(second);
+      rows.(second) <- model.rows.(first);
+      { model with rows }
+  | Tenth -> { model with rows = Array.mapi (fun index row -> match index mod 10 with 0 -> { row with label = row.label ^ " !" } | _ -> row) model.rows }
+  | Clear -> { model with rows = [||] }
+  | Select id -> { model with selection = Some id }
+  | Remove _ | Swap _ -> model
+
+let view { rows; selection; _ } =
+  let row { id; label } =
+    <tr key=(string_of_int id) className=(match selection with Some chosen when chosen = id -> "danger" | _ -> "")>
+      <td>(Html.int id)</td>
+      <td><a onClick=(Select id)>(Html.text label)</a></td>
+    </tr>
+  in
+  <table><tbody>(Html.array (Array.map row rows))</tbody></table>
+
+let rows_of root = Array.map element_of (nodes (select_all root "tr"))
+
+let () =
+  describe "A loop compiled without scans" (fun () ->
+      test "after every draw of random messages, the page is a fresh mount of the model, and every row whose key stays keeps its node"
+        (fun () ->
+          check
+            (property (tapes ~shortest:0 ~longest:60) (fun values ->
+                 let tape = tape values in
+                 let init = { rows = built 1 (draw tape 12); next = 100; selection = None } in
+                 let root = attached () in
+                 let program = Program.sandbox ~init ~update ~view root in
+                 let model = ref init in
+                 let before = ref (Array.map (fun row -> (text_content row, row)) (rows_of root)) in
+                 let rec go remaining =
+                   match remaining with
+                   | 0 -> ()
+                   | _ ->
+                       let size = Array.length !model.rows in
+                       let place () = draw tape (size + 1) in
+                       let message =
+                         match draw tape 7 with
+                         | 0 -> Run (draw tape 10)
+                         | 1 -> Add (1 + draw tape 4)
+                         | 2 -> Remove (place ())
+                         | 3 -> Swap (place (), place ())
+                         | 4 -> Tenth
+                         | 5 -> Clear
+                         | _ -> Select (match size with 0 -> 0 | _ -> !model.rows.(draw tape size).id)
+                       in
+                       model := update message !model;
+                       Program.dispatch program message;
+                       (match draw tape 3 with
+                       | 0 -> ()
+                       | _ ->
+                           Program.flush program;
+                           let fresh = attached () in
+                           let other = Program.sandbox ~init:!model ~update ~view fresh in
+                           expect (shapes (as_node root)) |. to_equal (shapes (as_node fresh));
+                           let now = Array.map (fun row -> (text_content row, row)) (rows_of root) in
+                           expect
+                             (List.filter_map
+                                (fun (label, node) ->
+                                  List.find_map
+                                    (fun (other, earlier) ->
+                                      match (String.equal label other, same node earlier) with
+                                      | true, false -> Some label
+                                      | true, true | false, _ -> None)
+                                    (Array.to_list !before))
+                                (Array.to_list now))
+                           |. to_equal [];
+                           before := now;
+                           Program.stop other;
+                           remove_root fresh);
+                       go (remaining - 1)
+                 in
+                 go (1 + draw tape 25);
+                 Program.stop program;
+                 remove_root root))
+            [%mel.obj { numRuns = 300 }]);
+      test "replacing 50 rows by 50 new ones goes straight to matching rows by key, with no scan of the rows first" (fun () ->
+          let root = attached () in
+          let init = { rows = watched (built 1 50); next = 100; selection = None } in
+          let counted message model =
+            quiet (fun () ->
+                let next = update message model in
+                ignore (watched next.rows);
+                next)
+          in
+          let program = Program.sandbox ~init ~update:counted ~view root in
+          Program.flush program;
+          Program.dispatch program (Run 50);
+          ignore (reads ());
+          Program.flush program;
+          let read = reads () in
+          Program.stop program;
+          remove_root root;
+          expect read |. to_equal 248))

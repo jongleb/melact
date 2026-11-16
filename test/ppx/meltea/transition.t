@@ -137,7 +137,7 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                    ((let id = __melhole_item in
                                      Melhole.Reconcile.int_key id)
                                    [@ocaml.warning "-26-27"]))
-                            }
+                            } Melhole.View.scans
                             {
                               Js.Fn.I4 =
                                 (fun __melhole_item __melhole_index

@@ -1,44 +1,44 @@
 {
   "sizes": {
-    "bench/melact": 18699,
-    "bench/meltea": 11666,
-    "bench/ssr/melact client": 19818,
-    "bench/ssr/meltea client": 12257,
-    "examples/counter": 12436,
+    "bench/melact": 18666,
+    "bench/meltea": 11272,
+    "bench/ssr/melact client": 19795,
+    "bench/ssr/meltea client": 12238,
+    "examples/counter": 12434,
     "examples/todomvc": 18570,
     "meltea/examples/counter": 5091,
-    "meltea/examples/todomvc": 22064,
+    "meltea/examples/todomvc": 22066,
     "meltea/examples/served client": 6528,
-    "bench/classics/admin": 29640,
-    "bench/classics/autocomplete": 27115,
-    "bench/classics/blocks": 29246,
-    "bench/classics/calendar": 43945,
-    "bench/classics/chat": 28964,
-    "bench/classics/chess": 28723,
-    "bench/classics/conduit": 30851,
-    "bench/classics/dashboard": 32394,
-    "bench/classics/datagrid": 30192,
-    "bench/classics/diff": 33824,
-    "bench/classics/email": 30349,
+    "bench/classics/admin": 29592,
+    "bench/classics/autocomplete": 27103,
+    "bench/classics/blocks": 29230,
+    "bench/classics/calendar": 43948,
+    "bench/classics/chat": 28934,
+    "bench/classics/chess": 28717,
+    "bench/classics/conduit": 30827,
+    "bench/classics/dashboard": 32372,
+    "bench/classics/datagrid": 30172,
+    "bench/classics/diff": 33779,
+    "bench/classics/email": 30335,
     "bench/classics/eventtable": 28919,
-    "bench/classics/feed": 27303,
-    "bench/classics/filetree": 26941,
-    "bench/classics/gallery": 28093,
-    "bench/classics/gantt": 43385,
-    "bench/classics/hackernews": 26106,
-    "bench/classics/jsontree": 24899,
-    "bench/classics/kanban": 31144,
-    "bench/classics/logs": 28726,
-    "bench/classics/markdown": 30530,
-    "bench/classics/minesweeper": 21154,
-    "bench/classics/playlist": 44529,
-    "bench/classics/settings": 31240,
-    "bench/classics/shop": 28956,
-    "bench/classics/spreadsheet": 29622,
-    "bench/classics/todomvc": 22107,
-    "bench/classics/trace": 31161,
+    "bench/classics/feed": 27285,
+    "bench/classics/filetree": 26940,
+    "bench/classics/gallery": 28057,
+    "bench/classics/gantt": 43361,
+    "bench/classics/hackernews": 26104,
+    "bench/classics/jsontree": 24901,
+    "bench/classics/kanban": 31128,
+    "bench/classics/logs": 28703,
+    "bench/classics/markdown": 30518,
+    "bench/classics/minesweeper": 21158,
+    "bench/classics/playlist": 44492,
+    "bench/classics/settings": 31210,
+    "bench/classics/shop": 28914,
+    "bench/classics/spreadsheet": 29600,
+    "bench/classics/todomvc": 22105,
+    "bench/classics/trace": 31143,
     "bench/classics/virtuallist": 25116,
-    "bench/classics/wizard": 32155
+    "bench/classics/wizard": 32141
   },
   "growth": [
     {
@@ -1040,6 +1040,28 @@
         "bench/meltea": [
           11536,
           11797
+        ]
+      }
+    },
+    {
+      "date": "2026-11-16",
+      "reason": "gzip only (+2 to +4 B, minified identical) after typed loops without scans; bench/meltea -419 B; approved by the user 2026-11-16",
+      "grown": {
+        "meltea/examples/todomvc": [
+          22064,
+          22066
+        ],
+        "bench/classics/calendar": [
+          43945,
+          43948
+        ],
+        "bench/classics/jsontree": [
+          24899,
+          24901
+        ],
+        "bench/classics/minesweeper": [
+          21154,
+          21158
         ]
       }
     }

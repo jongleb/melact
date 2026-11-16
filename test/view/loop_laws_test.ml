@@ -59,7 +59,7 @@ let line_template =
         View.text_hole { parent = node; before = Template.first_or_end node } ))
     { placed = None; released = None; forgotten = None }
 
-let lines items outer =
+let lines scanning items outer =
   View.rows items View.arrayed line_template
     (fun [@u] (root, _, _) -> root)
     (fun [@u] (_, marking, text) item ->
@@ -67,6 +67,7 @@ let lines items outer =
       View.set_attr marking (Some (marked outer item));
       View.set_text text (item.label ^ outer.suffix))
     (fun [@u] item -> Reconcile.string_key item.key)
+    scanning
     (fun [@u] item _ out at ->
       Array.unsafe_set out at (View.Input (marked outer item));
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
@@ -98,6 +99,7 @@ let numbered_lines items outer =
       View.set_attr marking (Some (marked outer item));
       View.set_text text (item.label ^ outer.suffix))
     (fun [@u] item -> int_keyed item)
+    View.scans
     (fun [@u] item _ out at ->
       Array.unsafe_set out at (View.Input (marked outer item));
       Array.unsafe_set out (at + 1) (View.Input (item.label ^ outer.suffix)))
@@ -111,13 +113,15 @@ type loop =
   | Numbered_each
   | Rows
   | Rows_int_keys  (** Keyed by ints, as [key=(string_of_int id)] compiles. *)
+  | Rows_unscanned  (** Without the scans: every change without a fact is matched by key. *)
 
 let looped kind items outer =
   match kind with
   | Each -> loop View.Items items outer
   | Numbered_each -> loop View.Numbered items outer
-  | Rows -> lines items outer
+  | Rows -> lines View.scans items outer
   | Rows_int_keys -> numbered_lines items outer
+  | Rows_unscanned -> lines View.unscanned items outer
 
 let loops =
   [
@@ -125,6 +129,7 @@ let loops =
     ("View.each, numbered rows", Numbered_each);
     ("View.rows", Rows);
     ("View.rows, int keys", Rows_int_keys);
+    ("View.rows, unscanned", Rows_unscanned);
   ]
 
 (** How a step changes the rows. *)
@@ -430,6 +435,7 @@ let hashed items =
     (fun [@u] (root, _) -> root)
     (fun [@u] (_, text) item -> View.set_text text ("#" ^ item.label))
     (fun [@u] item -> Reconcile.string_key item.key)
+    View.scans
     (fun [@u] _ _ _ _ -> ())
     0 View.no_inputs View.Unselecting
 
@@ -440,7 +446,7 @@ let () =
           check
             (property (tapes ~shortest:10 ~longest:80) (fun values ->
                  let tape = tape values in
-                 let drawn (items, outer) = match draw tape 2 with 0 -> lines items outer | _ -> hashed items in
+                 let drawn (items, outer) = match draw tape 2 with 0 -> lines View.scans items outer | _ -> hashed items in
                  let root = create_element document "ul" in
                  let mounted = View.mount (drawn start) ~parent:root ~before:None in
                  let rec run state remaining =
@@ -489,6 +495,7 @@ let referring items =
       View.set_text text item.label;
       View.set_reference reference callback callback)
     (fun [@u] item -> Reconcile.string_key item.key)
+    View.scans
     (fun [@u] _ _ _ _ -> ())
     0 View.no_inputs View.Unselecting
 
@@ -562,7 +569,7 @@ let selected kind keying items picked =
   let inputs = [| View.Input picked.choice; View.Input picked.suffix |] in
   match kind with
   | Each | Numbered_each ->
-      let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows | Rows_int_keys -> View.Items in
+      let numbering = match kind with Numbered_each -> View.Numbered | Each | Rows | Rows_int_keys | Rows_unscanned -> View.Items in
       View.each each_site numbering items View.arrayed
         (fun [@u] item index ->
           incr renders;
@@ -572,7 +579,7 @@ let selected kind keying items picked =
                [| HAttr (Some (class_of keying picked index item)); HText (place ^ item.label ^ picked.suffix) |]))
         (selected_project keying picked) 2 inputs
         (View.Selecting (each_selection, [| selector keying picked |]))
-  | Rows | Rows_int_keys ->
+  | Rows | Rows_int_keys | Rows_unscanned ->
       View.rows items View.arrayed line_template
         (fun [@u] (root, _, _) -> root)
         (fun [@u] (_, marking, text) item ->
@@ -582,7 +589,8 @@ let selected kind keying items picked =
         (fun [@u] item ->
           match kind with
           | Rows_int_keys -> int_keyed item
-          | Each | Numbered_each | Rows -> Reconcile.string_key item.key)
+          | Each | Numbered_each | Rows | Rows_unscanned -> Reconcile.string_key item.key)
+        (match kind with Rows_unscanned -> View.unscanned | Each | Numbered_each | Rows | Rows_int_keys -> View.scans)
         (selected_project keying picked) 2 inputs
         (View.Selecting (rows_selection, [| selector keying picked |]))
 
@@ -606,6 +614,7 @@ let selections =
     ("View.rows", Rows, Boxed_group);
     ("View.rows", Rows, Tag);
     ("View.rows, int keys", Rows_int_keys, Group);
+    ("View.rows, unscanned", Rows_unscanned, Group);
   ]
 
 let keyed = function

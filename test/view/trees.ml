@@ -77,6 +77,7 @@ let rec description tape depth =
           View.put_text word.written word.text (Melhole.Dom_api.shown_string item);
           word.written <- View.Input item)
         (fun [@u] item -> Reconcile.string_key item)
+        (match draw tape 2 with 0 -> View.scans | _ -> View.unscanned)
         (fun [@u] _ _ _ _ -> ())
         0
         [||]

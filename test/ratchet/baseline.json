@@ -1027,11 +1027,11 @@
     "created nodes": 7000,
     "frame layouts": 1,
     "view calls": 1,
-    "keys": 1064,
+    "keys": 1000,
     "row refreshes": 1000,
     "microtasks": 1,
     "mutation records": 1001,
-    "items read": 5126
+    "items read": 4998
   },
   "meltea: keyed benchmark, partial update": {
     "texts": 100,

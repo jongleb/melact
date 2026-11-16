@@ -68,7 +68,7 @@ let looped kind items outer =
           View.set_text text (item.label ^ outer.suffix);
           View.put_handler root clicked (fun _ -> incr outer.sent.clicks))
         (fun [@u] item -> Reconcile.int_key item.key)
-        project 3 inputs
+        View.scans project 3 inputs
         (match kind with
         | Rows_selecting ->
             View.Selecting

@@ -7,7 +7,7 @@ type row = { id : int; label : string }
 (** The row whose label was clicked last. *)
 type selection = Unselected | Selected of int
 
-(** Rows are copied on every change, never written in place; the runtime reads them through [Counters.watched]. *)
+(** Rows are copied on every change, never written in place; the runtime reads them through [Counters.watched], which keeps the array. *)
 type model = { rows : row array; next : int; selection : selection }
 
 [@@@alert "-mutable_model"]
@@ -50,7 +50,8 @@ let update message model =
                 { model with rows = Array.append (Array.sub model.rows 0 index) (Array.sub model.rows (index + 1) (count - index - 1)) })
               (found 0)
       in
-      match next.rows == model.rows with true -> next | false -> { next with rows = Counters.watched next.rows })
+      ignore (Counters.watched next.rows);
+      next)
 
 let view { rows; selection; _ } =
   let () = Counters.bump Viewed in

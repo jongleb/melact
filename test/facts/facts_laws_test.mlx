@@ -265,14 +265,15 @@ let () =
               [ Retitle 3; Rewrite 4; Reverse ];
               [ Leak (1, 6); Reverse ];
             ]);
-      test "a recognised edit of 50 rows reads only the rows it changes" (fun () ->
+      test "a recognised edit of 50 rows reads only the rows it changes, and an edit no fact names is found by the scans" (fun () ->
           let cost message =
             let root = attached () in
             let init = { rows = watched (made 1 50); next = 100; selection = None } in
             let counted message model =
               quiet (fun () ->
                   let next = update message model in
-                  match next.rows == model.rows with true -> next | false -> { next with rows = watched next.rows })
+                  ignore (watched next.rows);
+                  next)
             in
             let program = Program.sandbox ~init ~update:counted ~view root in
             Program.flush program;
@@ -285,5 +286,5 @@ let () =
             read
           in
           expect
-            (List.map cost [ Swap (3, 40); Cut 20; Append 5; Tenth; Relabel 7; Retitle 9 ])
-          |. to_equal [ 4; 0; 5; 10; 2; 2 ]))
+            (List.map cost [ Swap (3, 40); Cut 20; Append 5; Tenth; Relabel 7; Retitle 9; Prepend 1 ])
+          |. to_equal [ 4; 0; 5; 10; 2; 2; 103 ]))
