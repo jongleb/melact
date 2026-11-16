@@ -116,7 +116,7 @@ so a component in another file that calls the hook compiles to an update graph:
   $ ocamlc -c -ppx '../pp.exe --as-ppx -typed' remote.ml
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' view.ml 2>&1 | grep -E 'Component\.|reaches'
   let __melhole_component_2 = Melact_runtime.Component.pure ~name:"View.make"
-                     match Melact_runtime.Instance.reaches __melact_changed 29
+                         match Melact_runtime.Instance.reaches __melact_changed
   $ ocamlc -c -ppx '../pp.exe --as-ppx' remote.ml
   $ ocamlc -stop-after parsing -dsource -ppx '../pp.exe --as-ppx -typed' view.ml 2>&1 | grep -E 'Component\.|reaches'
   let __melhole_component_1 = Melact_runtime.Component.make ~name:"View.make"

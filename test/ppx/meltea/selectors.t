@@ -47,8 +47,8 @@ What is chosen reads only outer names, a row's key only the row's:
                                    {
                                      Js.Fn.I2 =
                                        (fun __melhole_item __melhole_index ->
-                                          ((let (id, label) = __melhole_item in
-                                            id)
+                                          ((match __melhole_item with
+                                            | (id, label) -> id)
                                           [@ocaml.warning "-26-27"]))
                                    })|])));
 

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- The team's next four from the whole-app build. `{j|… $name …|j}` strings are expanded by melact-ppx
+  as melange.ppx expands them, before any pass reads them (`Interpolation`, in `melhole.compiler`):
+  under plain `pps`, where melact-ppx can run first, a `{j|url("$path")|j}` attribute was a static
+  template string, so `$path` was never substituted, and any pass that asked what such a string reads
+  saw nothing. A row of a JSX list whose pattern is a record of another module (`({name, value}) =>
+  …` over `array(Item.t)`) takes the item through `match`, so the record is typed from the array as
+  under `Belt.Array.map` ("Unbound record field name"), in keyed and unkeyed lists. A component
+  function carries `[@warning "-16"]`, as reason-react-ppx's does, so a local function with an
+  optional argument followed only by labelled ones compiles as there. Laws: `test/interpolation`,
+  against melange.ppx's own `String_interp` on generated strings (mutants, each caught: a backslash
+  dropped, an uppercase name, `$(…)` unchecked, `.` not in a name, a trailing `$` accepted).
+  `test/team`: `Interpolated`, `Rows` (with `Item`) and `Notify`, against reason-react; `test/ppx`:
+  the attribute is a hole that reads `path`.
+
 - The team's whole-app trial under `staged_pps … -typed` (60 libraries, `dropin/`): `melact`
   re-exports `melhole` and `melact.runtime`, which the code melact-ppx writes names, so a library
   that lists only `reason-react` or `melact` builds with `(implicit_transitive_deps false)`

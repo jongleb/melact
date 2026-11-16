@@ -914,11 +914,14 @@ let component ~loc ~name ~props_constructor ~hooks ~summary expression =
                | None -> __melhole_element
                | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))]))
   in
-  pexp_function ~loc keyed None
-    (Pfunction_body
-       (with_defaults [%expr
-         let __melhole_element = [%e element] in
-         [%e constructed]]))
+  [%expr
+    ([%e
+       pexp_function ~loc keyed None
+         (Pfunction_body
+            (with_defaults [%expr
+              let __melhole_element = [%e element] in
+              [%e constructed]]))]
+    [@warning "-16"])]
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
 let props_type name = name ^ "_props"
@@ -1797,6 +1800,7 @@ let mapper =
   end
 
 let structure items =
+  let items = Melhole_compiler.Interpolation.expanded items in
   let loc = Location.none in
   let calls_hook bearing expression =
     let finder =

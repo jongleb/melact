@@ -1,0 +1,4 @@
+(test
+ (name interpolation_laws)
+ (package melact-ppx)
+ (libraries qcheck-core qcheck-core.runner ppxlib melhole.compiler melange.ppx))

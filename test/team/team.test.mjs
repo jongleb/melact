@@ -25,7 +25,7 @@ test("constructors found by annotations and memoized components declared in .rei
     build.mount(root);
     await settle();
     const trace = [shown({ root, layer }).root];
-    for (const selector of ["button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
+    for (const selector of [".notify", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
       root.querySelectorAll(selector)[0].click();
       await settle();
       trace.push(shown({ root, layer }).root);
@@ -39,6 +39,9 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[0][0]).toContain('href="/legal/usat"');
   expect(traces[0][0]).toContain('<div class="bare">"bare"</><span class="bare-inner"></>');
   expect(traces[0][0]).toContain('<span class="bare-inner"></>"4"');
+  expect(traces[0][traces[0].length - 1]).toContain(
+    '<div class="interpolated" id="$hi!!!!!" title="url(\\"#hi!!!!!\\")">"#hi!!!!!""[#hi!!!!! and hi!!!!!]"</><div class="rows"><span>"v1"</><span>"hi!!!!!"</><i>"hi!!!!!v1"</><i>"n2hi!!!!!"</></><button class="notify">"4"</>',
+  );
   expect(traces[0][traces[0].length - 1]).toContain(`"data hi!!!!!"" shown"`);
 });
 

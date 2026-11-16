@@ -493,65 +493,69 @@ A component with optional, defaulted and children props, and its signature:
                           (Melhole.View.Input Melhole.View.unset))
                  })
           }
-      let makeProps ~title:(title as __melhole_prop_0)
-        ?size:__melhole_prop_1_given ?subtitle:(subtitle as __melhole_prop_2)
-        ~children:(children as __melhole_prop_3) ?key:__melhole_key () =
-        let size as __melhole_prop_1 =
-          match __melhole_prop_1_given with
-          | Some __melhole_value when
-              not (Js.Undefined.testAny __melhole_value) -> __melhole_value
-          | Some _ | None -> 1 in
-        let __melhole_element =
-          React.of_child
-            (Melhole.View.pure __melhole_component_1
-               [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
-                                                          __melhole_prop_1);(
-                 Melhole.View.Input __melhole_prop_3)|]
-               (fun () ->
-                  React.to_child
-                    (React.of_child
-                       (Melhole.View.compiled __melhole_template_3
-                          {
-                            Js.Fn.I1 =
-                              (fun __melhole_frame ->
-                                 ((let __melhole_hole_0 =
-                                     __melhole_frame.__melhole_frame_2_hole_0 in
-                                   let __melhole_hole_1 =
-                                     __melhole_frame.__melhole_frame_2_hole_1 in
-                                   let __melhole_changed_0 =
-                                     Melhole.View.check
+      let makeProps =
+        ((fun ~title:(title as __melhole_prop_0) ?size:__melhole_prop_1_given
+            ?subtitle:(subtitle as __melhole_prop_2)
+            ~children:(children as __melhole_prop_3) ?key:__melhole_key () ->
+            let size as __melhole_prop_1 =
+              match __melhole_prop_1_given with
+              | Some __melhole_value when
+                  not (Js.Undefined.testAny __melhole_value) -> __melhole_value
+              | Some _ | None -> 1 in
+            let __melhole_element =
+              React.of_child
+                (Melhole.View.pure __melhole_component_1
+                   [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
+                                                              __melhole_prop_1);(
+                     Melhole.View.Input __melhole_prop_3)|]
+                   (fun () ->
+                      React.to_child
+                        (React.of_child
+                           (Melhole.View.compiled __melhole_template_3
+                              {
+                                Js.Fn.I1 =
+                                  (fun __melhole_frame ->
+                                     ((let __melhole_hole_0 =
+                                         __melhole_frame.__melhole_frame_2_hole_0 in
+                                       let __melhole_hole_1 =
+                                         __melhole_frame.__melhole_frame_2_hole_1 in
+                                       let __melhole_changed_0 =
+                                         Melhole.View.check
+                                           __melhole_frame.__melhole_frame_2_slot_0
+                                           children in
                                        __melhole_frame.__melhole_frame_2_slot_0
-                                       children in
-                                   __melhole_frame.__melhole_frame_2_slot_0 <-
-                                     (Melhole.View.Input children);
-                                   (let __melhole_changed_1 =
-                                      Melhole.View.check
+                                         <- (Melhole.View.Input children);
+                                       (let __melhole_changed_1 =
+                                          Melhole.View.check
+                                            __melhole_frame.__melhole_frame_2_slot_1
+                                            title in
                                         __melhole_frame.__melhole_frame_2_slot_1
-                                        title in
-                                    __melhole_frame.__melhole_frame_2_slot_1 <-
-                                      (Melhole.View.Input title);
-                                    if
-                                      __melhole_changed_1 ==
-                                        Melhole.View.Changed
-                                    then
-                                      Melhole.Dom_api.show __melhole_hole_0
-                                        (Melhole.Dom_api.shown_string
-                                           (title : string));
-                                    if
-                                      __melhole_changed_0 ==
-                                        Melhole.View.Changed
-                                    then
-                                      Melhole.View.set_content __melhole_hole_1
-                                        (React.to_child children);
-                                    ()))
-                                 [@ocaml.warning "-26-27"]))
-                          })))) in
-        Make_props
-          (match __melhole_key with
-           | None -> __melhole_element
-           | Some key ->
-               React.of_child
-                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+                                          <- (Melhole.View.Input title);
+                                        if
+                                          __melhole_changed_1 ==
+                                            Melhole.View.Changed
+                                        then
+                                          Melhole.Dom_api.show __melhole_hole_0
+                                            (Melhole.Dom_api.shown_string
+                                               (title : string));
+                                        if
+                                          __melhole_changed_0 ==
+                                            Melhole.View.Changed
+                                        then
+                                          Melhole.View.set_content
+                                            __melhole_hole_1
+                                            (React.to_child children);
+                                        ()))
+                                     [@ocaml.warning "-26-27"]))
+                              })))) in
+            Make_props
+              (match __melhole_key with
+               | None -> __melhole_element
+               | Some key ->
+                   React.of_child
+                     (Melhole.View.with_key key
+                        (React.to_child __melhole_element))))
+        [@warning "-16"])
       external make : make_props -> React.element = "%identity"
     end
   let __melhole_component_4 =
@@ -560,17 +564,20 @@ A component with optional, defaulted and children props, and its signature:
     struct
       type nothing_props =
         | Nothing_props of React.element [@@unboxed ]
-      let nothingProps ?key:__melhole_key () =
-        let __melhole_element =
-          React.of_child
-            (Melhole.View.pure __melhole_component_4 [||]
-               (fun () -> React.to_child React.null)) in
-        Nothing_props
-          (match __melhole_key with
-           | None -> __melhole_element
-           | Some key ->
-               React.of_child
-                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      let nothingProps =
+        ((fun ?key:__melhole_key () ->
+            let __melhole_element =
+              React.of_child
+                (Melhole.View.pure __melhole_component_4 [||]
+                   (fun () -> React.to_child React.null)) in
+            Nothing_props
+              (match __melhole_key with
+               | None -> __melhole_element
+               | Some key ->
+                   React.of_child
+                     (Melhole.View.with_key key
+                        (React.to_child __melhole_element))))
+        [@warning "-16"])
       external nothing : nothing_props -> React.element = "%identity"
     end
   $ cat > card.mli <<'EOF'
@@ -647,57 +654,63 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                           (Melhole.View.Input Melhole.View.unset))
                  })
           }
-      let makeProps ~label:(label as __melhole_prop_0)
-        ?ref:(__melhole_forwarded_ref as __melhole_prop_1) ?key:__melhole_key
-        () =
-        let __melhole_element =
-          React.of_child
-            (Melhole.View.pure __melhole_component_1
-               [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
-                                                          __melhole_prop_1)|]
-               (fun () ->
-                  React.to_child
-                    (let ref = ReactDOM.Ref.forwarded __melhole_forwarded_ref in
-                     React.of_child
-                       (Melhole.View.compiled __melhole_template_3
-                          {
-                            Js.Fn.I1 =
-                              (fun __melhole_frame ->
-                                 ((let __melhole_hole_0 =
-                                     __melhole_frame.__melhole_frame_2_hole_0 in
-                                   let __melhole_hole_1 =
-                                     __melhole_frame.__melhole_frame_2_hole_1 in
-                                   let __melhole_changed_0 =
-                                     Melhole.View.check
+      let makeProps =
+        ((fun ~label:(label as __melhole_prop_0)
+            ?ref:(__melhole_forwarded_ref as __melhole_prop_1)
+            ?key:__melhole_key () ->
+            let __melhole_element =
+              React.of_child
+                (Melhole.View.pure __melhole_component_1
+                   [|(Melhole.View.Input __melhole_prop_0);(Melhole.View.Input
+                                                              __melhole_prop_1)|]
+                   (fun () ->
+                      React.to_child
+                        (let ref =
+                           ReactDOM.Ref.forwarded __melhole_forwarded_ref in
+                         React.of_child
+                           (Melhole.View.compiled __melhole_template_3
+                              {
+                                Js.Fn.I1 =
+                                  (fun __melhole_frame ->
+                                     ((let __melhole_hole_0 =
+                                         __melhole_frame.__melhole_frame_2_hole_0 in
+                                       let __melhole_hole_1 =
+                                         __melhole_frame.__melhole_frame_2_hole_1 in
+                                       let __melhole_changed_0 =
+                                         Melhole.View.check
+                                           __melhole_frame.__melhole_frame_2_slot_0
+                                           label in
                                        __melhole_frame.__melhole_frame_2_slot_0
-                                       label in
-                                   __melhole_frame.__melhole_frame_2_slot_0 <-
-                                     (Melhole.View.Input label);
-                                   if
-                                     __melhole_changed_0 ==
-                                       Melhole.View.Changed
-                                   then
-                                     Melhole.View.write_attr __melhole_hole_0
-                                       "placeholder" (Some (label : string));
-                                   Melhole.View.set_reference __melhole_hole_1
-                                     (Stdlib.Option.fold
-                                        ~none:ReactDOM.Ref.absent
-                                        ~some:ReactDOM.Ref.identity
-                                        (Option.map ReactDOM.Ref.domRef
-                                           (Js.Nullable.toOption ref)))
-                                     (Stdlib.Option.fold ~none:ignore
-                                        ~some:ReactDOM.Ref.attach
-                                        (Option.map ReactDOM.Ref.domRef
-                                           (Js.Nullable.toOption ref)));
-                                   ())
-                                 [@ocaml.warning "-26-27"]))
-                          })))) in
-        Make_props
-          (match __melhole_key with
-           | None -> __melhole_element
-           | Some key ->
-               React.of_child
-                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+                                         <- (Melhole.View.Input label);
+                                       if
+                                         __melhole_changed_0 ==
+                                           Melhole.View.Changed
+                                       then
+                                         Melhole.View.write_attr
+                                           __melhole_hole_0 "placeholder"
+                                           (Some (label : string));
+                                       Melhole.View.set_reference
+                                         __melhole_hole_1
+                                         (Stdlib.Option.fold
+                                            ~none:ReactDOM.Ref.absent
+                                            ~some:ReactDOM.Ref.identity
+                                            (Option.map ReactDOM.Ref.domRef
+                                               (Js.Nullable.toOption ref)))
+                                         (Stdlib.Option.fold ~none:ignore
+                                            ~some:ReactDOM.Ref.attach
+                                            (Option.map ReactDOM.Ref.domRef
+                                               (Js.Nullable.toOption ref)));
+                                       ())
+                                     [@ocaml.warning "-26-27"]))
+                              })))) in
+            Make_props
+              (match __melhole_key with
+               | None -> __melhole_element
+               | Some key ->
+                   React.of_child
+                     (Melhole.View.with_key key
+                        (React.to_child __melhole_element))))
+        [@warning "-16"])
       external make : make_props -> React.element = "%identity"
     end
 
@@ -813,23 +826,27 @@ Hooks get one key per call site, also inside custom hooks:
         | Make_props of React.element [@@unboxed ]
       let __melhole_hook_3 =
         (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
-      let makeProps ?key:__melhole_key () =
-        let __melhole_element =
-          React.of_child
-            (Melact_runtime.Instance.component __melhole_component_2 [||]
-               (fun () ->
-                  React.to_child
-                    (let (shown, _) = useToggle () in
-                     (React.useEffect1
-                        (Melact_runtime.Hook.unchecked __melhole_hook_3))
-                       ((fun () -> None)[@alert "+hook"]) [|shown|];
-                     React.string (React.useContext Theme.context)))) in
-        Make_props
-          (match __melhole_key with
-           | None -> __melhole_element
-           | Some key ->
-               React.of_child
-                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+      let makeProps =
+        ((fun ?key:__melhole_key () ->
+            let __melhole_element =
+              React.of_child
+                (Melact_runtime.Instance.component __melhole_component_2 
+                   [||]
+                   (fun () ->
+                      React.to_child
+                        (let (shown, _) = useToggle () in
+                         (React.useEffect1
+                            (Melact_runtime.Hook.unchecked __melhole_hook_3))
+                           ((fun () -> None)[@alert "+hook"]) [|shown|];
+                         React.string (React.useContext Theme.context)))) in
+            Make_props
+              (match __melhole_key with
+               | None -> __melhole_element
+               | Some key ->
+                   React.of_child
+                     (Melhole.View.with_key key
+                        (React.to_child __melhole_element))))
+        [@warning "-16"])
       external make : make_props -> React.element = "%identity"
     end
 
@@ -1090,48 +1107,52 @@ Reason input:
                           (Melhole.View.Input Melhole.View.unset))
                  })
           }
-      let makeProps ~name:(name as __melhole_prop_0) ?key:__melhole_key () =
-        let __melhole_element =
-          React.of_child
-            (Melhole.View.pure __melhole_component_1
-               [|(Melhole.View.Input __melhole_prop_0)|]
-               (fun () ->
-                  React.to_child
-                    (React.of_child
-                       (Melhole.View.compiled __melhole_template_3
-                          {
-                            Js.Fn.I1 =
-                              (fun __melhole_frame ->
-                                 ((let __melhole_hole_0 =
-                                     __melhole_frame.__melhole_frame_2_hole_0 in
-                                   let __melhole_changed_0 =
-                                     Melhole.View.check
+      let makeProps =
+        ((fun ~name:(name as __melhole_prop_0) ?key:__melhole_key () ->
+            let __melhole_element =
+              React.of_child
+                (Melhole.View.pure __melhole_component_1
+                   [|(Melhole.View.Input __melhole_prop_0)|]
+                   (fun () ->
+                      React.to_child
+                        (React.of_child
+                           (Melhole.View.compiled __melhole_template_3
+                              {
+                                Js.Fn.I1 =
+                                  (fun __melhole_frame ->
+                                     ((let __melhole_hole_0 =
+                                         __melhole_frame.__melhole_frame_2_hole_0 in
+                                       let __melhole_changed_0 =
+                                         Melhole.View.check
+                                           __melhole_frame.__melhole_frame_2_slot_0
+                                           name in
                                        __melhole_frame.__melhole_frame_2_slot_0
-                                       name in
-                                   __melhole_frame.__melhole_frame_2_slot_0 <-
-                                     (Melhole.View.Input name);
-                                   if
-                                     __melhole_changed_0 ==
-                                       Melhole.View.Changed
-                                   then
-                                     (let __melhole_value =
-                                        ("Hello, " ^ name : string) in
-                                      Melhole.View.put_sole_text
-                                        __melhole_frame.__melhole_frame_2_slot_1
-                                        __melhole_hole_0
-                                        (Melhole.Dom_api.shown_string
-                                           __melhole_value);
-                                      __melhole_frame.__melhole_frame_2_slot_1
-                                        <- (Melhole.View.Input __melhole_value));
-                                   ())
-                                 [@ocaml.warning "-26-27"]))
-                          })))) in
-        Make_props
-          (match __melhole_key with
-           | None -> __melhole_element
-           | Some key ->
-               React.of_child
-                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+                                         <- (Melhole.View.Input name);
+                                       if
+                                         __melhole_changed_0 ==
+                                           Melhole.View.Changed
+                                       then
+                                         (let __melhole_value =
+                                            ("Hello, " ^ name : string) in
+                                          Melhole.View.put_sole_text
+                                            __melhole_frame.__melhole_frame_2_slot_1
+                                            __melhole_hole_0
+                                            (Melhole.Dom_api.shown_string
+                                               __melhole_value);
+                                          __melhole_frame.__melhole_frame_2_slot_1
+                                            <-
+                                            (Melhole.View.Input __melhole_value));
+                                       ())
+                                     [@ocaml.warning "-26-27"]))
+                              })))) in
+            Make_props
+              (match __melhole_key with
+               | None -> __melhole_element
+               | Some key ->
+                   React.of_child
+                     (Melhole.View.with_key key
+                        (React.to_child __melhole_element))))
+        [@warning "-16"])
       external make : make_props -> React.element = "%identity"[@@melhole.inline
                                                                  (2,
                                                                    (fun ~name
@@ -1197,48 +1218,52 @@ mlx input:
                           (Melhole.View.Input Melhole.View.unset))
                  })
           }
-      let makeProps ~name:(name as __melhole_prop_0) ?key:__melhole_key () =
-        let __melhole_element =
-          React.of_child
-            (Melhole.View.pure __melhole_component_1
-               [|(Melhole.View.Input __melhole_prop_0)|]
-               (fun () ->
-                  React.to_child
-                    (React.of_child
-                       (Melhole.View.compiled __melhole_template_3
-                          {
-                            Js.Fn.I1 =
-                              (fun __melhole_frame ->
-                                 ((let __melhole_hole_0 =
-                                     __melhole_frame.__melhole_frame_2_hole_0 in
-                                   let __melhole_changed_0 =
-                                     Melhole.View.check
+      let makeProps =
+        ((fun ~name:(name as __melhole_prop_0) ?key:__melhole_key () ->
+            let __melhole_element =
+              React.of_child
+                (Melhole.View.pure __melhole_component_1
+                   [|(Melhole.View.Input __melhole_prop_0)|]
+                   (fun () ->
+                      React.to_child
+                        (React.of_child
+                           (Melhole.View.compiled __melhole_template_3
+                              {
+                                Js.Fn.I1 =
+                                  (fun __melhole_frame ->
+                                     ((let __melhole_hole_0 =
+                                         __melhole_frame.__melhole_frame_2_hole_0 in
+                                       let __melhole_changed_0 =
+                                         Melhole.View.check
+                                           __melhole_frame.__melhole_frame_2_slot_0
+                                           name in
                                        __melhole_frame.__melhole_frame_2_slot_0
-                                       name in
-                                   __melhole_frame.__melhole_frame_2_slot_0 <-
-                                     (Melhole.View.Input name);
-                                   if
-                                     __melhole_changed_0 ==
-                                       Melhole.View.Changed
-                                   then
-                                     (let __melhole_value =
-                                        ("Hello, " ^ name : string) in
-                                      Melhole.View.put_sole_text
-                                        __melhole_frame.__melhole_frame_2_slot_1
-                                        __melhole_hole_0
-                                        (Melhole.Dom_api.shown_string
-                                           __melhole_value);
-                                      __melhole_frame.__melhole_frame_2_slot_1
-                                        <- (Melhole.View.Input __melhole_value));
-                                   ())
-                                 [@ocaml.warning "-26-27"]))
-                          })))) in
-        Make_props
-          (match __melhole_key with
-           | None -> __melhole_element
-           | Some key ->
-               React.of_child
-                 (Melhole.View.with_key key (React.to_child __melhole_element)))
+                                         <- (Melhole.View.Input name);
+                                       if
+                                         __melhole_changed_0 ==
+                                           Melhole.View.Changed
+                                       then
+                                         (let __melhole_value =
+                                            ("Hello, " ^ name : string) in
+                                          Melhole.View.put_sole_text
+                                            __melhole_frame.__melhole_frame_2_slot_1
+                                            __melhole_hole_0
+                                            (Melhole.Dom_api.shown_string
+                                               __melhole_value);
+                                          __melhole_frame.__melhole_frame_2_slot_1
+                                            <-
+                                            (Melhole.View.Input __melhole_value));
+                                       ())
+                                     [@ocaml.warning "-26-27"]))
+                              })))) in
+            Make_props
+              (match __melhole_key with
+               | None -> __melhole_element
+               | Some key ->
+                   React.of_child
+                     (Melhole.View.with_key key
+                        (React.to_child __melhole_element))))
+        [@warning "-16"])
       external make : make_props -> React.element = "%identity"[@@melhole.inline
                                                                  (2,
                                                                    (fun ~name
@@ -1266,6 +1291,15 @@ Errors point at the source:
   Error: melact: <div> has no prop colour
   [1]
 
+An interpolated string is the concatenation melange.ppx makes of it, before anything reads it, so
+the attribute is a hole that reads path and the template holds no text of it:
+
+  $ cat > interpolated.ml <<'EOF'
+  > let make ~id = let path = "#" ^ id in ((div ~title:{j|url("$path")|j} ~children:[] ()) [@JSX]) [@@react.component]
+  > EOF
+  $ ./pp.exe -impl interpolated.ml | grep -E 'Template.html|Stdlib\.\^|check'
+        Melhole.View.template (Melhole.Template.html "<div></div>")
+                                         Melhole.View.check
 Lazy loading is a prop of <img> and <iframe>:
 
   $ cat > lazy.ml <<'EOF'
@@ -1321,14 +1355,14 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  62:                       ((fun () -> 0)[@alert "+hook"]) in
-  69:                         [@alert "+hook"])
-  74:                              then ((1)[@alert "+hook"])
-  75:                              else ((0)[@alert "+hook"])))
-  76:                         [@alert "+hook"]) in
-  82:                       [@alert "+hook"])
-  124:                                                    [@alert "+hook"]))
-  125:                                                [@alert "+hook"])
+  64:                           ((fun () -> 0)[@alert "+hook"]) in
+  71:                             [@alert "+hook"])
+  76:                                  then ((1)[@alert "+hook"])
+  77:                                  else ((0)[@alert "+hook"])))
+  78:                             [@alert "+hook"]) in
+  84:                           [@alert "+hook"])
+  129:                                                        [@alert "+hook"]))
+  130:                                                    [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare
@@ -1343,33 +1377,36 @@ reads mutable state while rendering is left as written:
   > [@@react.component]
   > EOF
   $ ./pp.exe -impl props.ml | sed -n '/Box.make/,/())))) in/p'
-                     Box.make
-                       (Box.makeProps
-                          ~style:(let __melact_found =
-                                    Melact_runtime.Memo.lookup1 __melact_memo 0
-                                      n in
-                                  match Melact_runtime.Memo.kept __melact_found
-                                  with
-                                  | Some __melact_kept -> ((__melact_kept)
-                                      [@alert "+hook"])
-                                  | None ->
-                                      ((Melact_runtime.Memo.store __melact_memo
-                                          1 __melact_found
-                                          { pad = n; tone = (Strong 1) })
-                                      [@alert "+hook"])) ~tone:Soft
-                          ~pick:(let __melact_found =
-                                   Melact_runtime.Memo.lookup1 __melact_memo 2
-                                     n in
-                                 match Melact_runtime.Memo.kept __melact_found
-                                 with
-                                 | Some __melact_kept -> ((__melact_kept)
-                                     [@alert "+hook"])
-                                 | None ->
-                                     ((Melact_runtime.Memo.store __melact_memo
-                                         3 __melact_found ((fun () -> Strong n)
+                         Box.make
+                           (Box.makeProps
+                              ~style:(let __melact_found =
+                                        Melact_runtime.Memo.lookup1
+                                          __melact_memo 0 n in
+                                      match Melact_runtime.Memo.kept
+                                              __melact_found
+                                      with
+                                      | Some __melact_kept -> ((__melact_kept)
+                                          [@alert "+hook"])
+                                      | None ->
+                                          ((Melact_runtime.Memo.store
+                                              __melact_memo 1 __melact_found
+                                              { pad = n; tone = (Strong 1) })
+                                          [@alert "+hook"])) ~tone:Soft
+                              ~pick:(let __melact_found =
+                                       Melact_runtime.Memo.lookup1
+                                         __melact_memo 2 n in
+                                     match Melact_runtime.Memo.kept
+                                             __melact_found
+                                     with
+                                     | Some __melact_kept -> ((__melact_kept)
+                                         [@alert "+hook"])
+                                     | None ->
+                                         ((Melact_runtime.Memo.store
+                                             __melact_memo 3 __melact_found
+                                             ((fun () -> Strong n)
+                                             [@alert "+hook"]))
                                          [@alert "+hook"]))
-                                     [@alert "+hook"]))
-                          ~pair:(Soft, (!Box.outside)) ())))) in
+                              ~pair:(Soft, (!Box.outside)) ())))) in
 
 Bindings to npm's react: dependencies typed as an n-tuple pick the hook with n dependencies, an
 array the one with an array; uses below become Melact's hooks with their own keys, and the binding

@@ -6,7 +6,7 @@
  (compile_flags
   (:standard -w +4 -warn-error +4))
  (alias runtest-js)
- (libraries melact melange.dom)
+ (libraries melact melange.dom melange.belt)
  (module_systems
   (es6 mjs))
  (preprocess
