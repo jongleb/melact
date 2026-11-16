@@ -33,28 +33,15 @@ let following : View.medium =
         match count with
         | 0 -> [||]
         | _ ->
-            let numbered index position =
-              !View.positions.fork count index [@u];
-              let made = make index position [@u] in
-              !View.positions.join () [@u];
-              made
-            in
-            let first = numbered 0 position in
+            let first = make 0 position [@u] in
             let made = Array.make count first in
             let at = ref (after first position.before [@u]) in
             for index = 1 to count - 1 do
-              let next = numbered index { position with before = !at } in
+              let next = make index { position with before = !at } [@u] in
               Array.unsafe_set made index next;
               at := after next !at [@u]
             done;
             made);
-    aside =
-      (fun [@u] build ->
-        let serving = !View.medium in
-        View.medium := View.browser;
-        let live = build () [@u] in
-        View.medium := serving;
-        live);
     adopt = View.adopted;
   }
 

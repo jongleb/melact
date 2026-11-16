@@ -95,13 +95,8 @@ type live =
   | Keyed_state of string array * live array
   | Memo_state of input array * live
   | One_keyed_state of string * live  (** A child with a key outside a list: another key is another child. *)
-  | Pure_state of { identity : input; inputs : input array; inner : live }
-      (** A function of its inputs; another identity is another kind of child. *)
-  | Portal_state of Dom.element * live
   | Compiled_state : { template : 'frame template; frame : 'frame; root : Dom.element } -> live
   | Static_state of Melhole.Template.t * Dom.element
-  | Paths_state of { markup : Melhole.Template.t; root : Dom.element; write : hole array -> unit; release : unit -> unit }
-      (** Writes the next values to its holes. *)
   | Hosted : 'value hosting * 'value -> live
   | Each_state : {
       site : loop_site;  (** The loop in the code that drew the rows. *)
@@ -145,16 +140,6 @@ and child = {
   shape : shape;
 }
 
-and hole =
-  | HText of string
-  | HAttr of string option
-  | HProp : 'a -> hole
-  | HClass of string list
-  | HStyle of (string * string) list
-  | HHandler of (Dom.event -> unit)
-  | HRef of (Dom.element Js.nullable -> unit)
-  | HChild of child
-
 type mounted = {
   position : Melhole.Template.position;
   mutable source : child;
@@ -165,17 +150,17 @@ let nothing = Empty_state
 
 let rec visit live see =
   match live with
-  | Empty_state | Portal_state _ -> ()
+  | Empty_state -> ()
   | Text_state { node; _ } -> see (Melhole.Dom_api.to_node node) [@u]
   | List_state lives | Keyed_state (_, lives) | Each_state { lives; _ } -> Array.iter (fun live -> visit live see) lives
-  | Memo_state (_, inner) | One_keyed_state (_, inner) | Pure_state { inner; _ } -> visit inner see
-  | Compiled_state { root; _ } | Static_state (_, root) | Paths_state { root; _ } -> see (Melhole.Dom_api.to_node root) [@u]
+  | Memo_state (_, inner) | One_keyed_state (_, inner) -> visit inner see
+  | Compiled_state { root; _ } | Static_state (_, root) -> see (Melhole.Dom_api.to_node root) [@u]
   | Hosted (hosting, value) -> hosting.visit value see [@u]
   | Rows_state { frames; root; _ } -> Array.iter (fun frame -> see (Melhole.Dom_api.to_node (root frame [@u])) [@u]) frames
 
 let rec front live after =
   match live with
-  | Empty_state | Portal_state _ -> after
+  | Empty_state -> after
   | Text_state { node; _ } -> Js.Null.return (Melhole.Dom_api.to_node node)
   | List_state lives | Keyed_state (_, lives) | Each_state { lives; _ } ->
       let rec first index =
@@ -186,8 +171,8 @@ let rec front live after =
             if Melhole.Dom_api.same found Js.null then first (index + 1) else found
       in
       first 0
-  | Memo_state (_, inner) | One_keyed_state (_, inner) | Pure_state { inner; _ } -> front inner after
-  | Compiled_state { root; _ } | Static_state (_, root) | Paths_state { root; _ } -> Js.Null.return (Melhole.Dom_api.to_node root)
+  | Memo_state (_, inner) | One_keyed_state (_, inner) -> front inner after
+  | Compiled_state { root; _ } | Static_state (_, root) -> Js.Null.return (Melhole.Dom_api.to_node root)
   | Hosted (hosting, value) -> hosting.first value after [@u]
   | Rows_state { frames; root; _ } -> (
       match Array.length frames with
@@ -198,12 +183,8 @@ let rec release live =
   match live with
   | Empty_state | Text_state _ | Static_state _ -> ()
   | List_state lives | Keyed_state (_, lives) | Each_state { lives; _ } -> Array.iter release lives
-  | Memo_state (_, inner) | One_keyed_state (_, inner) | Pure_state { inner; _ } -> release inner
-  | Portal_state (container, inner) ->
-      visit inner (fun [@u] node -> Melhole.Dom_api.remove_child (Melhole.Dom_api.to_node container) node);
-      release inner
+  | Memo_state (_, inner) | One_keyed_state (_, inner) -> release inner
   | Compiled_state { template; frame; _ } -> Option.iter (fun released -> released frame [@u]) template.duties.released
-  | Paths_state { release; _ } -> release ()
   | Hosted (hosting, value) -> hosting.let_go value [@u]
   | Rows_state { template; frames; _ } ->
       Option.iter (fun released -> Array.iter (fun frame -> released frame [@u]) frames) template.duties.released
@@ -244,7 +225,6 @@ type medium = {
     ('made -> Dom.node Js.null -> Dom.node Js.null[@u]) ->
     'made array[@u]);
       (** Makes children in order; the last argument gives the node after one, from where it started. *)
-  aside : ((unit -> live[@u]) -> live[@u]);  (** Children that live elsewhere, like a portal's. *)
   adopt : 'frame. ('frame template -> ('frame -> unit[@u]) -> Melhole.Template.position -> Dom.element * 'frame[@u]);
       (** Takes the server's nodes of a template over, as its frame. *)
 }
@@ -272,15 +252,10 @@ let browser =
               Array.unsafe_set made index (make index position [@u])
             done;
             made);
-    aside = (fun [@u] build -> build () [@u]);
     adopt = (fun [@u] _ _ _ -> mismatch ());
   }
 
 let medium = ref browser
-
-type positions = { fork : (int -> int -> unit[@u]); join : (unit -> unit[@u]) }
-
-let positions = ref { fork = (fun [@u] _ _ -> ()); join = (fun [@u] () -> ()) }
 
 let remove (position : Melhole.Template.position) live =
   visit live (fun [@u] node -> Melhole.Dom_api.remove_child position.parent node);
@@ -361,49 +336,15 @@ let remember memory inputs compute =
       memory.kept <- Some value;
       value
 
-type order = In_document_order | Out_of_order | Last_item_first
-
-let patch_order = ref In_document_order
-
-type visit = Opened | Next_item | Closed
-
-let item_visits = ref (fun [@u] _ -> ())
-
-let out_of_order run =
-  let saved = !patch_order in
-  patch_order := Out_of_order;
-  match run () with
-  | result ->
-      patch_order := saved;
-      result
-  | exception error ->
-      patch_order := saved;
-      raise error
-
-let last_item_first run =
-  let saved = !patch_order in
-  patch_order := (match saved with Out_of_order -> Out_of_order | In_document_order | Last_item_first -> Last_item_first);
-  !item_visits Opened [@u];
-  match run () with
-  | result ->
-      !item_visits Closed [@u];
-      patch_order := saved;
-      result
-  | exception error ->
-      !item_visits Closed [@u];
-      patch_order := saved;
-      raise error
-
 let backwards count (position : Melhole.Template.position) make front =
   match count with
   | 0 -> [||]
   | _ ->
-      last_item_first (fun () ->
+      (
           let last = make (count - 1) position [@u] in
           let result = Array.make count last in
           let rec fill i before =
             if i >= 0 then (
-              !item_visits Next_item [@u];
               let made = make i { position with before } [@u] in
               Array.unsafe_set result i made;
               fill (i - 1) (front made before [@u]))
@@ -702,7 +643,7 @@ let each site numbering source listed render project pieces outer selectors =
               match outer_change with
               | Unchanged -> None
               | Changed ->
-                  out_of_order (fun () ->
+                  (
                       reselected old.items old.selectors old.indexes old.outer items selectors outer redraw)
             with
             | Some indexes ->
@@ -879,7 +820,6 @@ let each site numbering source listed render project pieces outer selectors =
                     (match Origin.kept_from (Array.unsafe_get origins index) with
                     | Some from when from = index -> ()
                     | Some _ | None ->
-                        !item_visits Next_item [@u];
                         Array.unsafe_set lives index
                           (update
                              { position with before = ahead (index + 1) }
@@ -887,7 +827,7 @@ let each site numbering source listed render project pieces outer selectors =
                              (described index)));
                     refresh (index - 1))
                 in
-                last_item_first (fun () -> refresh (count - 1));
+                ( refresh (count - 1));
                 Some (Each_state { site; source = Input source; items; keys; outer; projections; lives; selectors; indexes = Unindexed })
             | _, (`Same | `Moved) ->
                 let plan = Melhole.Reconcile.plan ~old:(Melhole.Reconcile.string_keys old.keys) ~next:(Melhole.Reconcile.string_keys keys) in
@@ -963,40 +903,6 @@ let memo inputs render =
             match compare_inputs old inputs with
             | Unchanged -> Some live
             | Changed -> Some (skipping (update position inner (render ()))))
-        | _ -> None);
-  }
-
-let pure identity inputs render =
-  let named inner = Pure_state { identity = Input identity; inputs; inner } in
-  {
-    shape = Single;
-    build = (fun [@u] position -> named ((render ()).build position [@u]));
-    patch =
-      (fun [@u] position live ->
-        match live with
-        | Pure_state old -> (
-            let (Input known) = old.identity in
-            match (Melhole.Dom_api.same known identity, compare_inputs old.inputs inputs) with
-            | true, Unchanged -> Some live
-            | true, Changed -> Some (named (update position old.inner (render ())))
-            | false, _ -> None)
-        | _ -> None);
-  }
-
-let lazy1 render a = memo [| Input render; Input a |] (fun () -> render a)
-let lazy2 render a b = memo [| Input render; Input a; Input b |] (fun () -> render a b)
-
-let portal container child =
-  let inside = { Melhole.Template.parent = Melhole.Dom_api.to_node container; before = Js.null } in
-  {
-    shape = Single;
-    build =
-      (fun [@u] _ -> Portal_state (container, !medium.aside (fun [@u] () -> child.build inside [@u]) [@u]));
-    patch =
-      (fun [@u] _ live ->
-        match live with
-        | Portal_state (target, inner) when Melhole.Dom_api.same target container ->
-            Some (Portal_state (container, update inside inner child))
         | _ -> None);
   }
 
@@ -1187,7 +1093,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
               match outer_change with
               | Unchanged -> None
               | Changed ->
-                  out_of_order (fun () ->
+                  (
                       reselected old.items old.selectors old.indexes old.outer items selectors outer redraw)
             with
             | Some indexes -> Some (shown items old.keys old.projections old.frames indexes)
@@ -1231,7 +1137,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                 let around whole size middle = joined (Array.sub whole 0 (from * size)) middle (Array.sub whole (from * size) ((old_count - from) * size)) in
                 Some (shown items (around old.keys 1 keys) (around old.projections pieces projections) (around old.frames 1 frames) Unindexed)
             | `Shuffled (moved, claimed, renewed) ->
-                out_of_order (fun () ->
+                (
                     let frames = old.frames and projections = old.projections and keys = old.keys in
                     let sources = Array.map (fun source -> fst (Array.unsafe_get moved source)) claimed in
                     let taken = Array.map (fun source -> Array.unsafe_get frames source) sources in
@@ -1410,7 +1316,7 @@ let rows (type frame source item) (source : source) (listed : source -> item arr
                   match count with
                   | 0 -> [||]
                   | _ ->
-                      out_of_order (fun () ->
+                      (
                           let last = settled (count - 1) position.before in
                           let frames = Array.make count last in
                           let before = ref (Js.Null.return (root_of last)) in
@@ -1485,16 +1391,7 @@ let static markup =
         | _ -> None);
   }
 
-let rec forget live =
-  match live with
-  | Compiled_state { template; frame; _ } -> Option.iter (fun forgotten -> forgotten frame [@u]) template.duties.forgotten
-  | One_keyed_state (_, inner) | Memo_state (_, inner) | Pure_state { inner; _ } -> forget inner
-  | _ -> ()
-
 let check (Input remembered) value = if Melhole.Dom_api.same remembered value then Unchanged else Changed
-
-(** Whether a template's root is in the document yet. *)
-type placement = Detached | Placed
 
 module Hole = struct
   type text = { node : Dom.text; mutable value : string }
@@ -1509,14 +1406,6 @@ module Hole = struct
 
   type prop = { element : Dom.element; name : string; mutable value : input; echo : echo }
   type style = { element : Dom.element; mutable value : (string * string) list }
-  type classes = { element : Dom.element; mutable value : string list }
-  type handler = { element : Dom.element; event : string; key : string }
-  type reference = {
-    mutable placement : placement;
-    element : Dom.element;
-    mutable identity : input;  (** What tells this ref from another, like React's ref object or function. *)
-    mutable callback : Dom.element Js.nullable -> unit;
-  }
   type content = { parent : Dom.node; before : Dom.node Js.null; mutable live : live; range : range }
 end
 
@@ -1664,22 +1553,6 @@ let set_style (hole : Hole.style) value =
       value;
     hole.value <- value)
 
-let classes_hole element : Hole.classes = { element; value = [] }
-
-let set_classes (hole : Hole.classes) value =
-  if not (List.equal Melhole.Dom_api.same hole.value value) then (
-    let classes = Melhole.Dom_api.class_list hole.element in
-    List.iter (Melhole.Dom_api.remove_class classes) hole.value;
-    List.iter (Melhole.Dom_api.add_class classes) value;
-    (match value with [] -> Melhole.Dom_api.remove_attribute hole.element "class" | _ :: _ -> ());
-    hole.value <- value)
-
-let handler_hole element event =
-  Melhole.Events.listen element event;
-  ({ element; event; key = Melhole.Events.key_of event } : Hole.handler)
-
-let set_handler (hole : Hole.handler) next = Melhole.Events.set hole.element hole.key next
-
 let text_at position = !medium.text position None [@u]
 
 let put_text (Input last) node value = if not (Melhole.Dom_api.same last value) then Melhole.Dom_api.show node value
@@ -1771,31 +1644,6 @@ let written run =
       decr writing;
       raise error
 
-let reference_hole element : Hole.reference = { placement = Detached; element; identity = unset; callback = ignore }
-
-let attached (hole : Hole.reference) () =
-  match hole.placement with Placed -> hole.callback (Js.Nullable.return hole.element) | Detached -> ()
-
-let place_reference (hole : Hole.reference) =
-  hole.placement <- Placed;
-  attach_later (attached hole)
-
-let release_reference (hole : Hole.reference) =
-  hole.placement <- Detached;
-  hole.callback Js.Nullable.null
-
-let set_reference (hole : Hole.reference) identity callback =
-  let (Input held) = hole.identity in
-  if not (Melhole.Dom_api.same held identity) then (
-    let previous = hole.callback in
-    hole.identity <- Input identity;
-    hole.callback <- callback;
-    match hole.placement with
-    | Placed ->
-        previous Js.Nullable.null;
-        attach_later (attached hole)
-    | Detached -> ())
-
 let content_hole (position : Melhole.Template.position) : Hole.content =
   { parent = position.parent; before = position.before; live = nothing; range = !medium.opened position [@u] }
 
@@ -1865,17 +1713,6 @@ let adopt_content cursor child ending : Hole.content =
   let before = match ending with Before_next -> cursor.at | Before_anchor -> Js.Null.return (anchor cursor) in
   { parent = cursor.parent; before; live; range = Settled }
 
-let adopt_forked cursor child ending path =
-  let pairs = Array.length path / 2 in
-  for at = 0 to pairs - 1 do
-    !positions.fork (Array.unsafe_get path (2 * at)) (Array.unsafe_get path ((2 * at) + 1)) [@u]
-  done;
-  let hole = adopt_content cursor child ending in
-  for _ = 1 to pairs do
-    !positions.join () [@u]
-  done;
-  hole
-
 let adopt_finish cursor =
   let rec rest node =
     match Js.Null.toOption node with
@@ -1891,166 +1728,7 @@ let collected (hole : Hole.content) =
   match hole.range with Collecting collecting -> collecting.given | Settled -> mismatch ()
 let collected_text node = Melhole.Dom_api.data (Melhole.Dom_api.to_node node)
 
-(** A hole of a hand-written template. *)
-type site =
-  | Text_hole of Hole.text
-  | Attr_hole of Hole.attr
-  | Prop_hole of Hole.prop
-  | Style_hole of Hole.style
-  | Class_hole of Hole.classes
-  | Handler_hole of Hole.handler
-  | Reference_hole of Hole.reference
-  | Content_hole of Hole.content
 
-
-let tpl_instance markup values =
-  let mismatch () = Js.Exn.raiseError "melhole: hole value does not match its template hole" in
-  let refresh sites values =
-    if Array.length sites <> Array.length values then
-      Js.Exn.raiseError
-        ("melhole: template expects "
-        ^ string_of_int (Array.length sites)
-        ^ " hole values, got "
-        ^ string_of_int (Array.length values));
-    Array.iter2
-      (fun site value ->
-        match (site, value) with
-        | Text_hole hole, HText value -> set_text hole value
-        | Attr_hole hole, HAttr value -> set_attr hole value
-        | Prop_hole hole, HProp value -> set_prop hole value
-        | Style_hole hole, HStyle value -> set_style hole value
-        | Class_hole hole, HClass value -> set_classes hole value
-        | Handler_hole hole, HHandler value -> set_handler hole value
-        | Reference_hole hole, HRef value -> set_reference hole value value
-        | Content_hole hole, HChild value -> set_content hole value
-        | ( ( Text_hole _ | Attr_hole _ | Prop_hole _ | Style_hole _ | Class_hole _
-            | Handler_hole _ | Reference_hole _ | Content_hole _ ),
-            _ ) ->
-            mismatch ())
-      sites values
-  in
-  let shown position root sites =
-    !medium.placed position root [@u];
-    Array.iter (fun site -> match site with Reference_hole hole -> place_reference hole | _ -> ()) sites;
-    Paths_state
-      {
-        markup;
-        root;
-        write = refresh sites;
-        release =
-          (fun () ->
-            Array.iter
-              (fun site ->
-                match site with
-                | Handler_hole hole -> Melhole.Events.unlisten hole.element hole.event
-                | Reference_hole hole -> release_reference hole
-                | Content_hole hole -> release_content hole
-                | Text_hole _ | Attr_hole _ | Prop_hole _ | Style_hole _ | Class_hole _ -> ())
-              sites);
-      }
-  in
-  let adopt_instance (position : Melhole.Template.position) =
-    let root = !medium.root position markup [@u] in
-    let paths = Melhole.Template.paths markup in
-    let elements = ref [] in
-    let adopted = Array.make (Array.length paths) None in
-    let slot cursor index ending =
-      Array.unsafe_set adopted index
-        (match (Array.unsafe_get paths index, Array.unsafe_get values index) with
-        | Text _, HText text -> Some (Text_hole { node = adopt_text cursor text; value = text })
-        | Child _, HChild child -> Some (Content_hole (adopt_content cursor child ending))
-        | _, _ -> mismatch ())
-    in
-    let rec walk shape server path =
-      elements := (path, server) :: !elements;
-      let cursor = inside (Melhole.Dom_api.to_node server) in
-      let rec step node index =
-        let ending =
-          match Option.map (fun current -> (Melhole.Dom_api.node_type current, Melhole.Dom_api.data current)) node with
-          | Some ((3, "") | (8, _)) -> Before_anchor
-          | Some _ | None -> Before_next
-        in
-        let taken = ref Before_next in
-        Array.iteri
-          (fun at hole ->
-            match hole with
-            | Melhole.Template.Text (parent, before) when before = index && List.equal (fun (a : int) b -> a = b) parent path ->
-                slot cursor at Before_next
-            | Child (parent, before) when before = index && List.equal (fun (a : int) b -> a = b) parent path ->
-                slot cursor at ending;
-                taken := ending
-            | Text _ | Child _ | Attr _ | Prop _ | Handler _ | Ref _ | Style _ | Class_list _ -> ())
-          paths;
-        Option.iter
-          (fun current ->
-            (match (Melhole.Dom_api.node_type current, Melhole.Dom_api.data current, !taken) with
-            | 1, _, _ ->
-                walk current (adopt_element cursor (Melhole.Dom_api.node_name current)) (path @ [ index ])
-            | 3, "", Before_anchor | 8, _, Before_anchor -> ()
-            | 3, "", Before_next | 8, _, Before_next -> adopt_anchor cursor
-            | _, text, _ -> adopt_static cursor text);
-            step (Melhole.Dom_api.next_sibling current) (index + 1))
-          node
-      in
-      step (Melhole.Dom_api.first_child (Melhole.Dom_api.to_node shape)) 0;
-      adopt_finish cursor
-    in
-    walk (Melhole.Dom_api.to_node (Melhole.Template.parsed markup)) (Melhole.Dom_api.to_node root) [];
-    let at path =
-      Melhole.Template.element
-        (Option.get
-           (List.find_map
-              (fun (known, server) -> match List.equal (fun (a : int) b -> a = b) known path with true -> Some server | false -> None)
-              !elements))
-    in
-    let sites =
-      Array.mapi
-        (fun index hole ->
-          match (hole : (int list, int list * int) Melhole.Template.hole) with
-          | Text _ | Child _ -> Option.get (Array.unsafe_get adopted index)
-          | Attr (path, name) -> Attr_hole (attr_hole (at path) name)
-          | Prop (path, name) -> Prop_hole (prop_hole (at path) name)
-          | Handler (path, event) -> Handler_hole (handler_hole (at path) event)
-          | Ref path -> Reference_hole (reference_hole (at path))
-          | Style path -> Style_hole (style_hole (at path))
-          | Class_list path -> Class_hole (classes_hole (at path)))
-        paths
-    in
-    refresh sites values;
-    shown position root sites
-  in
-  {
-    shape = Single;
-    build =
-      (fun [@u] position ->
-        match !medium.adoption with
-        | Server_nodes -> adopt_instance position
-        | Fresh_nodes ->
-        let root = !medium.root position markup [@u] in
-        let sites =
-          Array.map
-            (fun (site : (Dom.element, Melhole.Template.position) Melhole.Template.hole) ->
-              match site with
-              | Text at -> Text_hole (text_hole at)
-              | Child at -> Content_hole (content_hole at)
-              | Attr (element, name) -> Attr_hole (attr_hole element name)
-              | Prop (element, name) -> Prop_hole (prop_hole element name)
-              | Handler (element, event) -> Handler_hole (handler_hole element event)
-              | Ref element -> Reference_hole (reference_hole element)
-              | Style element -> Style_hole (style_hole element)
-              | Class_list element -> Class_hole (classes_hole element))
-            (Melhole.Template.locate markup (Melhole.Dom_api.to_node root))
-        in
-        refresh sites values;
-        shown position root sites);
-    patch =
-      (fun [@u] _ live ->
-        match live with
-        | Paths_state shown when Melhole.Dom_api.same shown.markup markup ->
-            shown.write values;
-            Some live
-        | _ -> None);
-  }
 
 let mount child ~parent ~before =
   let position =

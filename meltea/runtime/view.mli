@@ -7,17 +7,6 @@ type child
 (** A prop value of any type, compared physically to decide whether a component re-renders. *)
 type input = Input : 'a -> input [@@unboxed]
 
-(** The value of one template hole. *)
-type hole =
-  | HText of string
-  | HAttr of string option  (** [None] removes the attribute. *)
-  | HProp : 'a -> hole  (** Written as a JS property ([value], [checked]). *)
-  | HClass of string list  (** The classes that are on. *)
-  | HStyle of (string * string) list  (** camelCase property, value. *)
-  | HHandler of (Dom.event -> unit)  (** Replaced on every patch, never compared. *)
-  | HRef of (Dom.element Js.nullable -> unit)  (** Called with the element when mounted, with null when it goes; a new one replaces the old, called with null first. *)
-  | HChild of child
-
 val text : string -> child
 val empty : child
 val list : child list -> child
@@ -129,13 +118,8 @@ val rows :
   input array ->
   'item selectors ->
   child
-val tpl_instance : Melhole.Template.t -> hole array -> child
-val lazy1 : ('a -> child) -> 'a -> child
-val lazy2 : ('a -> 'b -> child) -> 'a -> 'b -> child
-val portal : Dom.element -> child -> child
+
 val memo : input array -> (unit -> child) -> child
-val pure : 'identity -> input array -> (unit -> child) -> child
-val items : child -> child list
 
 (** Whether a value differs from the one a scope remembers for it. *)
 type change = Changed | Unchanged
@@ -207,7 +191,6 @@ type medium = {
     ('made -> Dom.node Js.null -> Dom.node Js.null[@u]) ->
     'made array[@u]);
       (** Makes children in order; the last argument gives the node after one, from where it started. *)
-  aside : ((unit -> live[@u]) -> live[@u]);  (** Children that live elsewhere, like a portal's. *)
   adopt : 'frame. ('frame template -> ('frame -> unit[@u]) -> Melhole.Template.position -> Dom.element * 'frame[@u]);
       (** Takes the server's nodes of a template over, as its frame. *)
 }
@@ -217,34 +200,6 @@ val medium : medium ref
 
 (** How the server's medium adopts a template: the server's root and a frame made over its nodes. *)
 val adopted : ('frame template -> ('frame -> unit[@u]) -> Melhole.Template.position -> Dom.element * 'frame[@u])
-
-(** What hydration tells about the positions it adopts children at, item [index] of [count]: Melact
-    counts them as React's [useId] does; by default nothing does. [join] leaves the last [fork]. *)
-type positions = { fork : (int -> int -> unit[@u]); join : (unit -> unit[@u]) }
-
-val positions : positions ref
-
-(** In what order the patch under way reaches the children it patches. *)
-type order =
-  | In_document_order
-  | Out_of_order  (** A list moves its items or picks the rows a selection changed. *)
-  | Last_item_first  (** A list patches its items from the last one, each item's children in this order. *)
-
-val patch_order : order ref
-
-(** What a list that patches its items from the last one tells: [Opened] as it starts, [Next_item]
-    before an item it patches, [Closed] as it is done. *)
-type visit = Opened | Next_item | Closed
-
-(** Told of every [visit]; by default nothing listens. *)
-val item_visits : (visit -> unit[@u]) ref
-
-val backwards :
-  int ->
-  Melhole.Template.position ->
-  (int -> Melhole.Template.position -> 'made[@u]) ->
-  ('made -> Dom.node Js.null -> Dom.node Js.null[@u]) ->
-  'made array
 
 val host :
   build:(Melhole.Template.position -> live[@u]) -> patch:(Melhole.Template.position -> live -> live option[@u]) -> child
@@ -259,8 +214,6 @@ module Hole : sig
   type attr
   type prop
   type style
-  type handler
-  type reference
   type content
 end
 
@@ -270,9 +223,6 @@ val attr_hole : Dom.element -> string -> Hole.attr
 val set_attr : Hole.attr -> string option -> unit
 val prop_hole : Dom.element -> string -> Hole.prop
 val set_prop : Hole.prop -> 'a -> unit
-(** Forgets the values a mounted template's holes last read, so that its next update evaluates
-    and writes every hole again: for a render that threw halfway through its holes. *)
-val forget : live -> unit
 
 (** The HTML of a [dangerouslySetInnerHTML] prop; compiled code reads it through this, so that it
     needs no ppx of its own. *)
@@ -285,8 +235,7 @@ val restore_controlled : unit -> unit
 val controlled_hole : Dom.element -> string -> Hole.prop
 val style_hole : Dom.element -> Hole.style
 val set_style : Hole.style -> (string * string) list -> unit
-val handler_hole : Dom.element -> string -> Hole.handler
-val set_handler : Hole.handler -> (Dom.event -> unit) -> unit
+
 val text_at : Melhole.Template.position -> Dom.text
 val put_text : input -> Dom.text -> Melhole.Dom_api.shown -> unit
 
@@ -305,6 +254,8 @@ val served_set_prop : Hole.prop -> 'a -> unit
 
 (** The property a delegated handler for an event is kept in, the same for every element. *)
 val event_key : string -> string
+
+(** Writes a handler that is a closure of its own, for one the compiler cannot link to a site. *)
 val put_handler : Dom.element -> string -> (Dom.event -> unit) -> unit
 
 (** A handler site compiled once, shared by every element that uses it. *)
@@ -312,18 +263,10 @@ type ('data, 'dispatch) link
 
 val link : ('data -> 'dispatch -> Dom.event -> unit[@u]) -> ('data, 'dispatch) link
 val put_linked : Dom.element -> string -> ('data, 'dispatch) link -> 'dispatch -> 'data -> unit
-val reference_hole : Dom.element -> Hole.reference
-val place_reference : Hole.reference -> unit
-val release_reference : Hole.reference -> unit
-(** [set_reference hole identity callback]: a ref whose identity is not the one held replaces it, the
-    old one called with null and the new one with the element, as React compares its refs. *)
+
 (** Runs [attach] once the current write is over, as React attaches refs after its commit. *)
 val attach_later : (unit -> unit) -> unit
 
-(** Runs the attachments waiting for the end of the write: Melact calls it after a flush's renders. *)
-val attach_references : unit -> unit
-
-val set_reference : Hole.reference -> 'identity -> (Dom.element Js.nullable -> unit) -> unit
 val content_hole : Melhole.Template.position -> Hole.content
 val release_content : Hole.content -> unit
 val set_content : Hole.content -> child -> unit
@@ -345,9 +288,6 @@ type ending = Before_next | Before_anchor
 
 val adopt_content : cursor -> child -> ending -> Hole.content
 
-(** [adopt_content] of a child at the positions given as count, index, count, index…, counted by
-    [positions]. *)
-val adopt_forked : cursor -> child -> ending -> int array -> Hole.content
 val adopt_finish : cursor -> unit
 val collected : Hole.content -> child
 val collected_text : Dom.text -> string

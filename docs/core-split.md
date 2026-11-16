@@ -17,38 +17,21 @@ by the code that uses it.
 
 ## Layers
 
-- **core** (shared by both):
-  - templates and holes;
-  - `Reconcile` and keyed moves;
-  - `Dom_api`;
-  - event delegation: bubbling, disabled elements, pacing, controlled fields;
-  - the `View` core: `compiled`/`static`, text/list/keyed, `rows`/`each` with selectors and pieces,
-    `memo`, `chunks`, the `Hosted` extension point, `Transition`;
-  - the deferred-write queue (`written`/`attach_later`; `<select>` values need it, not only refs).
-  - Compiler: `Element`, `Markup`, `Free`, `Hoist`, `Selector`, a `Scope` without hooks, a neutral
-    `Dom_props`.
-  - An optional hydration layer (medium, `adopt_*`, `served_*`, `Served`) that only programs that
-    hydrate link.
-- **Meltea layer** (`melhole.meltea`): `Delta`, the facts `update` records, which install
-  `View.hinting`. `link`/`put_linked` (linked handlers) and `remember` stay in `View` (see step 2);
-  only Meltea links them.
-- **Melact layer**:
-  - refs (`reference_hole`, `set_reference`);
-  - the traversal order for hooks (`patch_order`, item visits);
-  - React's `onChange` value tracker;
-  - islands (`segment`, `resume_at`, `until`/`resume`);
-  - portal and `pure` as `Hosted` kinds;
-  - recovery after a throw (`Recovers`, `forget`);
-  - useId (`positions`, `Tree_ids`, `adopt_forked`);
-  - `items`/`Deferred`, `put_handler` (closure handlers);
-  - `Hook_name`, `react_name`.
-- `react/meltea` (Meltea inside Melact) stays above both.
-
-Checked against the code, not part of the Melact layer:
-- the `written` queue: `set_prop` uses it for `<select>` values;
-- controlled fields: Meltea's TodoMVC uses `controlled_hole`, and the deltas' guarantee rests on
-  them;
-- `lazy1`, `lazy2`, `tpl_instance`: the loop and view laws use them.
+- **core** (`melhole`), shared by both and by nothing else: `Dom_api`, `Template`, `Witness`,
+  `Reconcile`, `Keyed`, `Events` (delegation, pacing, controlled fields). Compiler: `Element` (the
+  template compiler, which writes `Melhole.View.*` as a placeholder each front end binds), `Markup`,
+  `Dom_props`, `Free`, `Hoist`, `Selector`, `Scope`.
+- **Meltea** (`meltea.runtime`, `meltea/runtime/`): its own `View`, `Served`, `Transition`, and
+  `Delta`. `meltea-ppx` rewrites the placeholder `Melhole.View`/`Served`/`Transition` of its output to
+  `Meltea_runtime.*`. Its `View` has none of Melact's: no `pure`, portals, hand-written templates,
+  refs, useId positions, hook order (`patch_order`, item visits) or `forget`. Every Meltea bundle
+  shrank when they went: bench/meltea −146 B, the server-rendered client −226 B, TodoMVC −214 B,
+  the counter −76 B.
+- **Melact**: `melhole`'s `View`, `Served`, `Transition` are still where they were and are now
+  Melact's alone; moving them into Melact's own library is the Melact session's to do when it suits.
+  `melact.runtime` holds the rest.
+- `react/meltea` (Meltea inside Melact and back) bridges the two trees: each side mounts the other's
+  as a `Hosted` kind.
 
 ## Rules
 
