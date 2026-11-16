@@ -7,6 +7,12 @@ type settling = Idle | Queued
 
 let settling = ref Idle
 
+let melact =
+  Meltea_runtime.View.hosting
+    ~visit:(fun [@u] live see -> View.visit live see)
+    ~first:(fun [@u] live after -> View.front live after)
+    ~let_go:(fun [@u] live -> View.release live)
+
 let element make =
   Html.node (fun send ->
       let child = React.to_child (make send) in
@@ -19,10 +25,12 @@ let element make =
                 settling := Idle;
                 Melact_runtime.Instance.settle ())
       in
-      View.host
+      Meltea_runtime.View.host
         ~build:(fun [@u] position ->
           drawn ();
-          View.build child position)
+          Meltea_runtime.View.live melact (View.build child position))
         ~patch:(fun [@u] position live ->
           drawn ();
-          Some (View.update position live child)))
+          Option.map
+            (fun inner -> Meltea_runtime.View.live melact (View.update position inner child))
+            (Meltea_runtime.View.hosted melact live)))

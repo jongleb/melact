@@ -1,6 +1,12 @@
 open Melhole
 open Melact_runtime
 
+let meltea =
+  View.hosting
+    ~visit:(fun [@u] live see -> Meltea_runtime.View.visit live see)
+    ~first:(fun [@u] live after -> Meltea_runtime.View.front live after)
+    ~let_go:(fun [@u] live -> Meltea_runtime.View.release live)
+
 (** What a program is made of, with its two ends towards the component around it. *)
 type ('input, 'report, 'model, 'msg) spec = {
   init : 'input -> 'model * 'msg Cmd.t;
@@ -122,7 +128,13 @@ let makeProps ~program ~input ?(onReport = ignore) ?key () =
         | View.Unchanged -> Instance.unchanged
         | View.Changed ->
             running.drawn <- Drawn running.model;
-            Html.render (spec.view running.model) running.send
+            let child = Html.render (spec.view running.model) running.send in
+            View.host
+              ~build:(fun [@u] position -> View.live meltea (Meltea_runtime.View.build child position))
+              ~patch:(fun [@u] position live ->
+                Option.map
+                  (fun inner -> View.live meltea (Meltea_runtime.View.update position inner child))
+                  (View.hosted meltea live))
       in
       let mounted = Instance.component component [| View.Input input; View.Input onReport |] render in
       Make_props (React.of_child (Option.fold ~none:mounted ~some:(fun key -> View.with_key key mounted) key))

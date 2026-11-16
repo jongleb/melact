@@ -4,6 +4,6 @@
  (wrapped false)
  (optional)
  (modes melange)
- (libraries melact melact_runtime meltea melhole melange.dom)
+ (libraries melact melact_runtime meltea meltea.runtime melhole melange.dom)
  (preprocess
   (pps melange.ppx)))
