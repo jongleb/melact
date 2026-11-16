@@ -124,26 +124,22 @@ Holes at every depth; markers only between neighbours that would merge:
                         __melhole_frame.__melhole_frame_1_slot_2 name in
                     __melhole_frame.__melhole_frame_1_slot_2 <-
                       (Melhole.View.Input name);
-                    (match __melhole_changed_2 with
-                     | Melhole.View.Unchanged -> ()
-                     | Melhole.View.Changed ->
-                         Melhole.Dom_api.show __melhole_hole_0
-                           (Melhole.Dom_api.shown_string (name : string)));
-                    (match __melhole_changed_1 with
-                     | Melhole.View.Unchanged -> ()
-                     | Melhole.View.Changed ->
-                         Melhole.View.set_content __melhole_hole_1
-                           (React.to_child extra));
-                    (match __melhole_changed_1 with
-                     | Melhole.View.Unchanged -> ()
-                     | Melhole.View.Changed ->
-                         Melhole.View.set_content __melhole_hole_2
-                           (React.to_child extra));
-                    (match __melhole_changed_0 with
-                     | Melhole.View.Unchanged -> ()
-                     | Melhole.View.Changed ->
-                         Melhole.View.write_sole_text __melhole_hole_3
-                           (Melhole.Dom_api.shown_int count));
+                    if __melhole_changed_2 == Melhole.View.Changed
+                    then
+                      Melhole.Dom_api.show __melhole_hole_0
+                        (Melhole.Dom_api.shown_string (name : string));
+                    if __melhole_changed_1 == Melhole.View.Changed
+                    then
+                      Melhole.View.set_content __melhole_hole_1
+                        (React.to_child extra);
+                    if __melhole_changed_1 == Melhole.View.Changed
+                    then
+                      Melhole.View.set_content __melhole_hole_2
+                        (React.to_child extra);
+                    if __melhole_changed_0 == Melhole.View.Changed
+                    then
+                      Melhole.View.write_sole_text __melhole_hole_3
+                        (Melhole.Dom_api.shown_int count);
                     ())))
                 [@ocaml.warning "-26-27"]))
          })
@@ -343,80 +339,67 @@ Every kind of prop, static and dynamic, required and optional:
                               __melhole_frame.__melhole_frame_3_slot_6 () in
                           __melhole_frame.__melhole_frame_3_slot_6 <-
                             (Melhole.View.Input ());
-                          (match __melhole_changed_5 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.write_attr __melhole_hole_0 "class"
-                                 (Some (text : string)));
-                          (match __melhole_changed_0 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               let __melhole_value =
-                                 if (flag : bool) then Some "" else None in
-                               (Melhole.View.put_attr
-                                  __melhole_frame.__melhole_frame_3_slot_7
-                                  __melhole_hole_1 "disabled" __melhole_value;
-                                __melhole_frame.__melhole_frame_3_slot_7 <-
-                                  (Melhole.View.Input __melhole_value)));
-                          (match __melhole_changed_0 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               let __melhole_value =
-                                 Some
-                                   (if (flag : bool) then "true" else "false") in
-                               (Melhole.View.put_attr
-                                  __melhole_frame.__melhole_frame_3_slot_8
-                                  __melhole_hole_2 "aria-hidden"
-                                  __melhole_value;
-                                __melhole_frame.__melhole_frame_3_slot_8 <-
-                                  (Melhole.View.Input __melhole_value)));
-                          (match __melhole_changed_4 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.write_attr __melhole_hole_3
-                                 "tabIndex" (Some (string_of_int (tab : int))));
-                          (match __melhole_changed_5 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.set_prop __melhole_hole_4
-                                 (text : string));
-                          (match __melhole_changed_0 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.set_prop __melhole_hole_5
-                                 (flag : bool));
-                          (match __melhole_changed_3 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.set_style __melhole_hole_6
-                                 (ReactDOM.Style.declarations style));
+                          if __melhole_changed_5 == Melhole.View.Changed
+                          then
+                            Melhole.View.write_attr __melhole_hole_0 "class"
+                              (Some (text : string));
+                          if __melhole_changed_0 == Melhole.View.Changed
+                          then
+                            (let __melhole_value =
+                               if (flag : bool) then Some "" else None in
+                             Melhole.View.put_attr
+                               __melhole_frame.__melhole_frame_3_slot_7
+                               __melhole_hole_1 "disabled" __melhole_value;
+                             __melhole_frame.__melhole_frame_3_slot_7 <-
+                               (Melhole.View.Input __melhole_value));
+                          if __melhole_changed_0 == Melhole.View.Changed
+                          then
+                            (let __melhole_value =
+                               Some (if (flag : bool) then "true" else "false") in
+                             Melhole.View.put_attr
+                               __melhole_frame.__melhole_frame_3_slot_8
+                               __melhole_hole_2 "aria-hidden" __melhole_value;
+                             __melhole_frame.__melhole_frame_3_slot_8 <-
+                               (Melhole.View.Input __melhole_value));
+                          if __melhole_changed_4 == Melhole.View.Changed
+                          then
+                            Melhole.View.write_attr __melhole_hole_3 "tabIndex"
+                              (Some (string_of_int (tab : int)));
+                          if __melhole_changed_5 == Melhole.View.Changed
+                          then
+                            Melhole.View.set_prop __melhole_hole_4
+                              (text : string);
+                          if __melhole_changed_0 == Melhole.View.Changed
+                          then
+                            Melhole.View.set_prop __melhole_hole_5
+                              (flag : bool);
+                          if __melhole_changed_3 == Melhole.View.Changed
+                          then
+                            Melhole.View.set_style __melhole_hole_6
+                              (ReactDOM.Style.declarations style);
                           Melhole.View.set_reference __melhole_hole_7
                             (ReactDOM.Ref.identity ref)
                             (ReactDOM.Ref.attach ref);
-                          (match __melhole_changed_1 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.write_attr __melhole_hole_8 "title"
-                                 (maybe : string option));
-                          (match __melhole_changed_2 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.put_handler __melhole_hole_9
-                                 __melhole_key_9
-                                 (fun __melhole_event ->
-                                    onInput
-                                      (React.Event.ofNative __melhole_event)));
-                          (match __melhole_changed_6 with
-                           | Melhole.View.Unchanged -> ()
-                           | Melhole.View.Changed ->
-                               Melhole.View.put_handler __melhole_hole_10
-                                 __melhole_key_10
-                                 (fun __melhole_event ->
-                                    Stdlib.Option.iter
-                                      (fun handle ->
-                                         handle
-                                           (React.Event.ofNative
-                                              __melhole_event)) None));
+                          if __melhole_changed_1 == Melhole.View.Changed
+                          then
+                            Melhole.View.write_attr __melhole_hole_8 "title"
+                              (maybe : string option);
+                          if __melhole_changed_2 == Melhole.View.Changed
+                          then
+                            Melhole.View.put_handler __melhole_hole_9
+                              __melhole_key_9
+                              (fun __melhole_event ->
+                                 onInput (React.Event.ofNative __melhole_event));
+                          if __melhole_changed_6 == Melhole.View.Changed
+                          then
+                            Melhole.View.put_handler __melhole_hole_10
+                              __melhole_key_10
+                              (fun __melhole_event ->
+                                 Stdlib.Option.iter
+                                   (fun handle ->
+                                      handle
+                                        (React.Event.ofNative __melhole_event))
+                                   None);
                           ())))))))
                   [@ocaml.warning "-26-27"]))
            })),
@@ -432,11 +415,10 @@ Every kind of prop, static and dynamic, required and optional:
                          __melhole_frame.__melhole_frame_5_slot_0 html in
                      __melhole_frame.__melhole_frame_5_slot_0 <-
                        (Melhole.View.Input html);
-                     (match __melhole_changed_0 with
-                      | Melhole.View.Unchanged -> ()
-                      | Melhole.View.Changed ->
-                          Melhole.View.set_prop __melhole_hole_0
-                            (Melhole.View.html_of html));
+                     if __melhole_changed_0 == Melhole.View.Changed
+                     then
+                       Melhole.View.set_prop __melhole_hole_0
+                         (Melhole.View.html_of html);
                      ())
                    [@ocaml.warning "-26-27"]))
             })))
@@ -548,18 +530,19 @@ A component with optional, defaulted and children props, and its signature:
                                         title in
                                     __melhole_frame.__melhole_frame_2_slot_1 <-
                                       (Melhole.View.Input title);
-                                    (match __melhole_changed_1 with
-                                     | Melhole.View.Unchanged -> ()
-                                     | Melhole.View.Changed ->
-                                         Melhole.Dom_api.show __melhole_hole_0
-                                           (Melhole.Dom_api.shown_string
-                                              (title : string)));
-                                    (match __melhole_changed_0 with
-                                     | Melhole.View.Unchanged -> ()
-                                     | Melhole.View.Changed ->
-                                         Melhole.View.set_content
-                                           __melhole_hole_1
-                                           (React.to_child children));
+                                    if
+                                      __melhole_changed_1 ==
+                                        Melhole.View.Changed
+                                    then
+                                      Melhole.Dom_api.show __melhole_hole_0
+                                        (Melhole.Dom_api.shown_string
+                                           (title : string));
+                                    if
+                                      __melhole_changed_0 ==
+                                        Melhole.View.Changed
+                                    then
+                                      Melhole.View.set_content __melhole_hole_1
+                                        (React.to_child children);
                                     ()))
                                  [@ocaml.warning "-26-27"]))
                           })))) in
@@ -690,12 +673,12 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                                        label in
                                    __melhole_frame.__melhole_frame_2_slot_0 <-
                                      (Melhole.View.Input label);
-                                   (match __melhole_changed_0 with
-                                    | Melhole.View.Unchanged -> ()
-                                    | Melhole.View.Changed ->
-                                        Melhole.View.write_attr
-                                          __melhole_hole_0 "placeholder"
-                                          (Some (label : string)));
+                                   if
+                                     __melhole_changed_0 ==
+                                       Melhole.View.Changed
+                                   then
+                                     Melhole.View.write_attr __melhole_hole_0
+                                       "placeholder" (Some (label : string));
                                    Melhole.View.set_reference __melhole_hole_1
                                      (Stdlib.Option.fold
                                         ~none:ReactDOM.Ref.absent
@@ -789,13 +772,14 @@ Calls with children, keys and fragments:
                                        item in
                                    __melhole_frame.__melhole_frame_1_slot_0 <-
                                      (Melhole.View.Input item);
-                                   (match __melhole_changed_0 with
-                                    | Melhole.View.Unchanged -> ()
-                                    | Melhole.View.Changed ->
-                                        Melhole.View.write_sole_text
-                                          __melhole_hole_0
-                                          (Melhole.Dom_api.shown_string
-                                             (item : string)));
+                                   if
+                                     __melhole_changed_0 ==
+                                       Melhole.View.Changed
+                                   then
+                                     Melhole.View.write_sole_text
+                                       __melhole_hole_0
+                                       (Melhole.Dom_api.shown_string
+                                          (item : string));
                                    ())
                                  [@ocaml.warning "-26-27"]))
                           }))))) items)
@@ -979,19 +963,19 @@ Reason input:
                                        name in
                                    __melhole_frame.__melhole_frame_2_slot_0 <-
                                      (Melhole.View.Input name);
-                                   (match __melhole_changed_0 with
-                                    | Melhole.View.Unchanged -> ()
-                                    | Melhole.View.Changed ->
-                                        let __melhole_value =
-                                          ("Hello, " ^ name : string) in
-                                        (Melhole.View.put_sole_text
-                                           __melhole_frame.__melhole_frame_2_slot_1
-                                           __melhole_hole_0
-                                           (Melhole.Dom_api.shown_string
-                                              __melhole_value);
-                                         __melhole_frame.__melhole_frame_2_slot_1
-                                           <-
-                                           (Melhole.View.Input __melhole_value)));
+                                   if
+                                     __melhole_changed_0 ==
+                                       Melhole.View.Changed
+                                   then
+                                     (let __melhole_value =
+                                        ("Hello, " ^ name : string) in
+                                      Melhole.View.put_sole_text
+                                        __melhole_frame.__melhole_frame_2_slot_1
+                                        __melhole_hole_0
+                                        (Melhole.Dom_api.shown_string
+                                           __melhole_value);
+                                      __melhole_frame.__melhole_frame_2_slot_1
+                                        <- (Melhole.View.Input __melhole_value));
                                    ())
                                  [@ocaml.warning "-26-27"]))
                           })))) in
@@ -1086,19 +1070,19 @@ mlx input:
                                        name in
                                    __melhole_frame.__melhole_frame_2_slot_0 <-
                                      (Melhole.View.Input name);
-                                   (match __melhole_changed_0 with
-                                    | Melhole.View.Unchanged -> ()
-                                    | Melhole.View.Changed ->
-                                        let __melhole_value =
-                                          ("Hello, " ^ name : string) in
-                                        (Melhole.View.put_sole_text
-                                           __melhole_frame.__melhole_frame_2_slot_1
-                                           __melhole_hole_0
-                                           (Melhole.Dom_api.shown_string
-                                              __melhole_value);
-                                         __melhole_frame.__melhole_frame_2_slot_1
-                                           <-
-                                           (Melhole.View.Input __melhole_value)));
+                                   if
+                                     __melhole_changed_0 ==
+                                       Melhole.View.Changed
+                                   then
+                                     (let __melhole_value =
+                                        ("Hello, " ^ name : string) in
+                                      Melhole.View.put_sole_text
+                                        __melhole_frame.__melhole_frame_2_slot_1
+                                        __melhole_hole_0
+                                        (Melhole.Dom_api.shown_string
+                                           __melhole_value);
+                                      __melhole_frame.__melhole_frame_2_slot_1
+                                        <- (Melhole.View.Input __melhole_value));
                                    ())
                                  [@ocaml.warning "-26-27"]))
                           })))) in
@@ -1153,8 +1137,8 @@ callbacks of a component, so a hook called there is reported by the type checker
   75:                              else ((0)[@alert "+hook"])))
   76:                         [@alert "+hook"]) in
   82:                       [@alert "+hook"])
-  125:                                                       [@alert "+hook"]))
-  126:                                                   [@alert "+hook"])
+  124:                                                    [@alert "+hook"]))
+  125:                                                [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare

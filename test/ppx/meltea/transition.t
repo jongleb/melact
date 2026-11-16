@@ -100,32 +100,33 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                             id in
                                         __melhole_frame.__melhole_frame_4_slot_1
                                           <- (Melhole.View.Input id);
-                                        (match (__melhole_changed_0,
-                                                 __melhole_changed_1)
-                                         with
-                                         | (Melhole.View.Unchanged,
-                                            Melhole.View.Unchanged) -> ()
-                                         | (Melhole.View.Changed, _)
-                                           | (_, Melhole.View.Changed) ->
-                                             let __melhole_value =
-                                               Some
-                                                 (if id = chosen
-                                                  then "on"
-                                                  else "" : string) in
-                                             (Melhole.View.put_attr
-                                                __melhole_frame.__melhole_frame_4_slot_2
-                                                __melhole_hole_0 "class"
-                                                __melhole_value;
-                                              __melhole_frame.__melhole_frame_4_slot_2
-                                                <-
-                                                (Melhole.View.Input
-                                                   __melhole_value)));
-                                        (match __melhole_changed_1 with
-                                         | Melhole.View.Unchanged -> ()
-                                         | Melhole.View.Changed ->
-                                             Melhole.View.write_sole_text
-                                               __melhole_hole_1
-                                               (Melhole.Dom_api.shown_int id));
+                                        if
+                                          (__melhole_changed_0 ==
+                                             Melhole.View.Changed)
+                                            ||
+                                            (__melhole_changed_1 ==
+                                               Melhole.View.Changed)
+                                        then
+                                          (let __melhole_value =
+                                             Some
+                                               (if id = chosen
+                                                then "on"
+                                                else "" : string) in
+                                           Melhole.View.put_attr
+                                             __melhole_frame.__melhole_frame_4_slot_2
+                                             __melhole_hole_0 "class"
+                                             __melhole_value;
+                                           __melhole_frame.__melhole_frame_4_slot_2
+                                             <-
+                                             (Melhole.View.Input
+                                                __melhole_value));
+                                        if
+                                          __melhole_changed_1 ==
+                                            Melhole.View.Changed
+                                        then
+                                          Melhole.View.write_sole_text
+                                            __melhole_hole_1
+                                            (Melhole.Dom_api.shown_int id);
                                         ()))
                                        [@ocaml.warning "-26-27"]))
                                    [@ocaml.warning "-26-27"]))
@@ -233,11 +234,10 @@ With -hydratable, every template also gets the code that takes over a server's n
                         __melhole_frame.__melhole_frame_1_slot_0 count in
                     __melhole_frame.__melhole_frame_1_slot_0 <-
                       (Melhole.View.Input count);
-                    (match __melhole_changed_0 with
-                     | Melhole.View.Unchanged -> ()
-                     | Melhole.View.Changed ->
-                         Melhole.View.served_write_text __melhole_hole_0
-                           (string_of_int (count : int)));
+                    if __melhole_changed_0 == Melhole.View.Changed
+                    then
+                      Melhole.View.served_write_text __melhole_hole_0
+                        (string_of_int (count : int));
                     ())
                   [@ocaml.warning "-26-27"]))
            })

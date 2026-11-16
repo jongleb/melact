@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: since the warning 4 fix, a hole that read many props compiled in time exponential in their
+  number, as its guard was an or-pattern with one alternative per prop and OCaml checks such a match
+  for exhaustiveness by trying their combinations (the team's `wide-guard`: 22 s at 24 props, more
+  than a minute at 28, no end at 34). The guard is now `c0 == Changed || c1 == Changed || …`, which
+  warning 4 has nothing to say about; 37 of the 39 bundles of `test/ratchet/sizes.json` shrink by 70
+  to 226 bytes. Law: `test/team` builds a component whose attribute, title and text each read 30
+  props (`Wide.re`; mutant: the or-pattern, whose build had not ended after 90 s).
+
 - The update graph reads hooks under `open React`. A local open (`React.( … )`, or `open React;`
   in a Reason block) is pushed down through `let`, sequences, applications, tuples, arrays,
   constructors and `if` to the expressions that read React's names, which keep it, so the hooks

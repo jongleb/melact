@@ -4,7 +4,8 @@
 // open of a module that has top-level JSX of its own (TosUsat opens TosT), and a component calling a data hook that
 // takes React.useMemo1 as a parameter and reads a bool named useLayoutEffect (UseRemoteData), whose fact makes the
 // component pure, and types -typed must classify without unfolding them: 32 levels that each hold the one below
-// twice (Shared), a polymorphic variant and a Js.t object that hold themselves (Looping). Melact must build them and
+// twice (Shared), a polymorphic variant and a Js.t object that hold themselves (Looping), and one attribute that reads 30 props,
+// whose guard must compile in linear time (Wide). Melact must build them and
 // show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
