@@ -942,7 +942,7 @@ let foreign_name name = name ^ "__foreign"
 
 let mapper =
   object (self)
-    inherit Scope.mapper as super
+    inherit Hooked_scope.mapper as super
 
     method private frontend =
       {
@@ -1220,10 +1220,10 @@ let mapper =
           (List.init (List.length modules + 1) (fun taken -> List.rev (List.filteri (fun index _ -> index < taken) modules)))
         @ custom
 
-    method! hook_call callee =
-      match (super#hook_call callee, self#summary callee) with
-      | `Hook, _ | `Plain, Some _ -> `Hook
-      | `Plain, None -> `Plain
+    method! stateful_call callee =
+      match (super#stateful_call callee, self#summary callee) with
+      | `Stateful, _ | `Pure, Some _ -> `Stateful
+      | `Pure, None -> `Pure
 
     method private custom callee =
       Option.bind (self#known callee) (fun (counted : _ Graph.counted) ->
@@ -1244,7 +1244,7 @@ let mapper =
       | Opened ->
           let outer = self#locals in
           (object (inner)
-             inherit Scope.mapper as super
+             inherit Hooked_scope.mapper as super
 
              method! expression expression =
                match expression.pexp_desc with
@@ -1319,9 +1319,9 @@ let mapper =
                           expression.pexp_attributes ->
                      found
                  | None, Pexp_apply (callee, _) -> (
-                     match self#hook_call callee with
-                     | `Hook -> Some (Pprintast.string_of_expression callee, expression.pexp_loc)
-                     | `Plain -> super#expression expression found)
+                     match self#stateful_call callee with
+                     | `Stateful -> Some (Pprintast.string_of_expression callee, expression.pexp_loc)
+                     | `Pure -> super#expression expression found)
                  | None, _ -> super#expression expression found
              end)
               #expression
@@ -2062,7 +2062,7 @@ let structure items =
   in
   let inliner =
     object (self)
-      inherit Scope.mapper as super
+      inherit Hooked_scope.mapper as super
       val mutable known : (string * ((string * string) list * expression * string list)) list = []
       val mutable shadowed : (string * string list) list = []
       val mutable toplevel : string list = []

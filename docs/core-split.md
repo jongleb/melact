@@ -20,7 +20,10 @@ by the code that uses it.
 - **core** (`melhole`), shared by both and by nothing else: `Dom_api`, `Template`, `Witness`,
   `Reconcile`, `Keyed`, `Events` (delegation, pacing, controlled fields). Compiler: `Element` (the
   template compiler, which writes `Melhole.View.*` as a placeholder each front end binds), `Markup`,
-  `Dom_props`, `Free`, `Hoist`, `Selector`, `Scope`.
+  `Dom_props`, `Free`, `Hoist`, `Selector`, `Scope`. `Scope` knows nothing of hooks: its
+  `stateful_call` says `Pure`, and Melact's `Hooked_scope` (in `ppx/melact`) overrides it with
+  `Hook_name`. `Hook_name` still sits in `melhole.compiler`, used by Melact alone, until the Melact
+  session moves it.
 - **Meltea** (`meltea.runtime`, `meltea/runtime/`): its own `View`, `Served`, `Transition`, and
   `Delta`. `meltea-ppx` rewrites the placeholder `Melhole.View`/`Served`/`Transition` of its output to
   `Meltea_runtime.*`. Its `View` has none of Melact's: no `pure`, portals, hand-written templates,
