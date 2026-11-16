@@ -993,7 +993,9 @@ creating 1,000 rows went from 20.7 to 16.6 ms and 10,000 rows from 193.9 to 179.
 
 Across modules the body travels in the component's signature. When a file's top-level `make` can
 be spliced, `melact-ppx` puts it, with a format version, on the `external make` it emits, as the
-attribute `melhole.inline`; names of the file that the body reads (values, constructors, fields,
+attribute `melhole.inline`, a function of the labelled props and a last `()` (format version 2: the
+compiler checks that a function takes a positional parameter, so a component without props needs one
+under `staged_pps`); names of the file that the body reads (values, constructors, fields,
 types, modules, each in its own namespace) are written as paths of the module itself. The attribute
 reaches the `.cmi`. A caller compiled under `(preprocess (staged_pps melange.ppx melact-ppx))` has
 the dependencies' `.cmi` on its load path: at `<Row …/>` it finds `Row.make`, reads the attribute,

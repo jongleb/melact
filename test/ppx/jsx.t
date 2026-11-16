@@ -1133,9 +1133,9 @@ Reason input:
                React.of_child
                  (Melhole.View.with_key key (React.to_child __melhole_element)))
       external make : make_props -> React.element = "%identity"[@@melhole.inline
-                                                                 (1,
+                                                                 (2,
                                                                    (fun ~name
-                                                                      ->
+                                                                      () ->
                                                                       ((
                                                                       span
                                                                       ~className:"greeting"
@@ -1240,9 +1240,9 @@ mlx input:
                React.of_child
                  (Melhole.View.with_key key (React.to_child __melhole_element)))
       external make : make_props -> React.element = "%identity"[@@melhole.inline
-                                                                 (1,
+                                                                 (2,
                                                                    (fun ~name
-                                                                      ->
+                                                                      () ->
                                                                       ((
                                                                       span ()
                                                                       ~children:
@@ -1265,6 +1265,49 @@ Errors point at the source:
                             ^^^^^
   Error: melact: <div> has no prop colour
   [1]
+
+Lazy loading is a prop of <img> and <iframe>:
+
+  $ cat > lazy.ml <<'EOF'
+  > let image ~src = ((img ~src ~loading:"lazy" ()) [@JSX])
+  > let frame ~src = ((iframe ~src ~loading:"lazy" ()) [@JSX])
+  > EOF
+  $ ./pp.exe -impl lazy.ml | grep -c loading
+  2
+
+The right of ## is a field name: it stays as written under open React, in the keyed-hook rewrite
+and next to a local of the same name:
+
+  $ cat > sent.ml <<'EOF'
+  > let make ~props = React.(let (x, _) = useState (fun () -> props##string) in string (props##useState ^ x)) [@@react.component]
+  > let shown ~context = React.(string ((useContext context)##null)) [@@react.component]
+  > let tip () =
+  >   let base = React.useContext context in
+  >   let label j = string_of_int (j + base) in
+  >   ((Tip.createElement ~renderTooltip:(fun props _default -> React.string (label (int_of_string props##label))) ~children:[] ()) [@JSX])
+  > [@@react.component]
+  > EOF
+  $ ./pp.exe -impl sent.ml | tr -s " \n" "  " | grep -o "## [a-zA-Z(.]*"
+  ## string
+  ## useState
+  ## null
+  ## label
+  $ cat > opened.ml <<'EOF'
+  > open React
+  > let make ~props = string (props##useState) [@@react.component]
+  > let plain props = props##useState
+  > EOF
+  $ ./pp.exe -impl opened.ml | tr -s " \n" "  " | grep -o "## [a-zA-Z(.]*"
+  ## useState
+  ## useState
+
+A component without props keeps a valid parsetree when the compiler checks the rewriter's output,
+as under staged_pps: its inline fact takes ():
+
+  $ cat > bare.ml <<'EOF'
+  > let make () = ((div ~children:[ React.string "bare" ] ()) [@JSX]) [@@react.component]
+  > EOF
+  $ ocamlc -stop-after parsing -ppx './pp.exe --as-ppx' bare.ml
 
 Hooks keep their order: the hook alert is off in the file and back on in branches, loops and
 callbacks of a component, so a hook called there is reported by the type checker, through any alias:

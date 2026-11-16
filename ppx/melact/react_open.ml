@@ -75,6 +75,8 @@ let qualified expression =
     | `Free, `Free, _ -> expression
     | `Mentioned, `Free, Pexp_ident { txt; loc } ->
         Option.fold ~none:wrapped ~some:(fun txt -> rebuilt (Pexp_ident { txt; loc })) (rooted txt)
+    | `Mentioned, `Free, Pexp_apply (({ pexp_desc = Pexp_ident { txt = Lident "##"; _ }; _ } as send), [ (label, target); field ]) ->
+        rebuilt (Pexp_apply (send, [ (label, pushed declaration target); field ]))
     | `Mentioned, `Free, Pexp_apply (callee, arguments) ->
         rebuilt
           (Pexp_apply

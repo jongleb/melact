@@ -53,7 +53,7 @@ let keyed_hooks =
 
 let experimental_hooks = [ "useTransitionAsync"; "useOptimistic"; "useActionState" ]
 let inline_fact = "melhole.inline"
-let inline_version = 1
+let inline_version = 2
 let hook_fact = "melhole.hook"
 let hook_version = 4
 let uncounted_hook = "melhole.hook_uncounted"
@@ -1248,6 +1248,8 @@ let mapper =
 
              method! expression expression =
                match expression.pexp_desc with
+               | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Lident "##"; _ }; _ } as send), [ (label, target); field ]) ->
+                   { expression with pexp_desc = Pexp_apply (send, [ (label, inner#expression target); field ]) }
                | Pexp_ident { txt = Lident name; loc }
                  when (match Melhole_compiler.Hook_name.of_name name with Hook _ -> true | Plain -> false)
                       && List.exists (String.equal name) React_names.values
@@ -1581,6 +1583,8 @@ let mapper =
     method! expression expression =
       let loc = expression.pexp_loc in
       match expression.pexp_desc with
+      | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Lident "##"; _ }; _ } as send), [ (label, target); field ]) ->
+          { expression with pexp_desc = Pexp_apply (send, [ (label, self#expression target); field ]) }
       | Pexp_ident { txt = Ldot (Lident "React", name) | Lident name; _ }
         when List.exists (String.equal name) keyed_hooks
              && (match (expression.pexp_desc, react) with
@@ -1969,7 +1973,8 @@ let structure items =
                 Pexp_function
                   ( List.map
                       (fun (label, variable) -> { pparam_loc = loc; pparam_desc = Pparam_val (Labelled label, None, pvar ~loc variable) })
-                      named,
+                      named
+                    @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, punit ~loc) } ],
                     None,
                     Pfunction_body qualified );
               pexp_attributes = [];
@@ -2049,10 +2054,13 @@ let structure items =
                                   | Pparam_val _ | Pparam_newtype _ -> None)
                                 params
                             in
-                            match Free.of_expression body with
-                            | Reads reads when List.length named = List.length params ->
+                            match (Free.of_expression body, List.rev params) with
+                            | ( Reads reads,
+                                { pparam_desc = Pparam_val (Nolabel, None, { ppat_desc = Ppat_construct ({ txt = Lident "()"; _ }, None); _ }); _ }
+                                :: _ )
+                              when List.length named = List.length params - 1 ->
                                 Some (named, body, List.filter (fun read -> not (List.mem read (List.map snd named))) reads)
-                            | Reads _ | Volatile -> None)
+                            | (Reads _ | Volatile), _ -> None)
                         | _ -> None)
                     | _ -> None
                     | exception _ -> None)

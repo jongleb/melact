@@ -1,0 +1,9 @@
+; A project that lists only melact, with implicit_transitive_deps off, as the team's apps are: the code melact-ppx
+; writes names Melhole and Melact_runtime, which melact re-exports.
+
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact)
+ (preprocess
+  (staged_pps melange.ppx melact-ppx -- -typed)))

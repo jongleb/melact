@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- The team's whole-app trial under `staged_pps … -typed` (60 libraries, `dropin/`): `melact`
+  re-exports `melhole` and `melact.runtime`, which the code melact-ppx writes names, so a library
+  that lists only `reason-react` or `melact` builds with `(implicit_transitive_deps false)`
+  (`test/deps`). A component without props no longer breaks the parsetree under `staged_pps`
+  ("Function without any value parameters"): its `melhole.inline` fact takes a last `()` (format
+  version 2). `<img loading>` and `<iframe loading>` are props, as in reason-react's main. Under
+  `-typed`, the right of `##` stays a field name when a local value has the same name (the
+  generalization pass replaced it, "invalid ## syntax"), and so it does under `open React` and in
+  the keyed-hook rewrite. `test/team`: `Bare` (no props, also in a nested module) and `Tooltip`
+  (the team's file: `props##label` next to a local `label` in a component with `useContext`), against
+  reason-react;
+  `test/ppx`: `loading`, `##` through each of the three passes, and a component without props
+  through `ocamlc -ppx`, which checks the parsetree (mutants, each caught: no `()`, no re-export, no
+  `loading`, each `##` case removed). `docs/migration.md`: rebuild from source the opam packages that depend on reason-react.
+
 - Under `staged_pps … -typed`, a function that calls a hook is a hook whatever its name: it gets a
   hook fact from its body, in the order of the file, through its modules and through `.cmi`s, so a
   chain `columns → defaultShape → fetchData` needs no rename (the team had renamed 115 functions in 47

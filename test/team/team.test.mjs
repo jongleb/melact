@@ -6,7 +6,7 @@
 // component pure, and types -typed must classify without unfolding them: 32 levels that each hold the one below
 // twice (Shared), a polymorphic variant and a Js.t object that hold themselves (Looping), and one attribute that reads 30 props,
 // whose guard must compile in linear time (Wide), and closures a data hook calls only in its effect that call a
-// getter with () (RemoteRequest). Melact must build them and
+// getter with () (RemoteRequest), components without props (Bare), and a field read with ## named as a local (Tooltip). Melact must build them and
 // show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
@@ -37,6 +37,8 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[1]).toEqual(traces[0]);
   expect(traces[0][traces[0].length - 1]).toContain("hi!!!");
   expect(traces[0][0]).toContain('href="/legal/usat"');
+  expect(traces[0][0]).toContain('<div class="bare">"bare"</><span class="bare-inner"></>');
+  expect(traces[0][0]).toContain('<span class="bare-inner"></>"4"');
   expect(traces[0][traces[0].length - 1]).toContain(`"data hi!!!!!"" shown"`);
 });
 

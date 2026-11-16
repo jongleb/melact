@@ -52,7 +52,10 @@ $ opam pin add --subpath dropin reason-react-ppx git+https://github.com/jongleb/
 ```
 
 In a dune workspace, copying `dropin/` into the tree does the same without opam: a library of the
-workspace shadows the installed one of the same name. Files keep `(pps reason-react-ppx)`, which
+workspace shadows the installed one of the same name. Installed opam packages that depend on
+reason-react (server-reason-react, styled-ppx, melange-react-dnd, reshowcase) still link the
+installed one, and shadowing one of their sub-libraries is not enough: put their sources in the
+workspace too, or use an opam switch with `dropin/` pinned as above. Files keep `(pps reason-react-ppx)`, which
 runs melact-ppx without `-typed`; change an app's stanza to `(staged_pps melange.ppx
 reason-react-ppx -- -typed)` for the typed passes. A component a library binds from npm
 (`[@react.component] external`) renders on melact.compat, the default engine; a library built
