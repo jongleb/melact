@@ -44,6 +44,8 @@ module App = {
       {double ? <Tabs.Tab name="a" /> : <Tabs.Tab name="b" />}
       <Tabs.Tab name="c" active=true />
     </Tabs>
+    <Framed wrapper=Framed.NoWrapper> <button className="framed-plain"> {React.string("plain")} </button> </Framed>
+    <Framed wrapper=Framed.Div> <span className="framed-inner"> {React.string("inner")} </span> </Framed>
     <Menu> <Menu.Item label="first" /> <Menu.Item label="second" /> <Menu.Item label="third" /> </Menu>
     <Shared flag=true seed={Obj.magic("seed")} />
     <Looping start={"label": "start", "next": Js.Nullable.null} />

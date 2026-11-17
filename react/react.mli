@@ -124,7 +124,7 @@ val overridden : 'props -> overrides -> 'props
 
 (** A clone of an element whose creation site melact-ppx could not see: it works only if that site was compiled clonable. *)
 val cloneElementUntraced : element -> 'props -> element
-[@@alert unsupported "melact: this element's creation site cannot be traced to here, so it may not be clonable: clone a prop that callers write inline as JSX (children, or another label), directly or through let, React.Children.only, map, mapWithIndex or toArray"]
+[@@alert unsupported "melact: this element's creation site cannot be traced to here, so it may not be clonable: clone a prop that callers write inline as JSX (children, or another label) or a JSX literal of the same function, directly or through let, match, React.Children.only, map, mapWithIndex or toArray, with every branch traced"]
 val setDisplayName : ('props -> element) -> string -> unit
 val displayName : ('props -> element) -> string option
 val createContext : 'value -> 'value Context.t

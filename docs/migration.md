@@ -313,9 +313,13 @@ or by passing them on to another component's cloned label, records that on its `
 Where a caller writes JSX into such a label (`<Tooltip> <button …/> </Tooltip>`, `<Menu> <Menu.Item …/> </Menu>`),
 each literal is compiled so that a clone can build it again with its props over the literal's own, as
 React does: a DOM element as one built from a props object, a component with every label it takes, also the
-optional ones the literal did not set (`isFocused` from a menu). Updates go through the usual guarded holes.
-Limits: a literal must be written in the call (a variable bound elsewhere, an element from JavaScript or from
-an array built at run time cannot be cloned, and its clone raises); a component reached through an open or a
+optional ones the literal did not set (`isFocused` from a menu). A JSX literal of the cloning function itself
+works too: bound by `let`, returned by a branch of a `match` or `if` (the other branch may be a prop), or
+written in the clone's argument. Updates go through the usual guarded holes.
+Limits: a literal must be written in the call or in the cloning function (an element carried in a record or a
+variant, from JavaScript or from an array built at run time cannot be cloned: carry a function that takes the
+injected props instead, such as `render: (~isFocused, ~onClose) => React.element`); a clone is traced only when
+every branch that can reach it is traced; a component reached through an open or a
 module alias (`module T = Tooltip`) is a compile error at the call, since its literals were compiled before
 typing could tell; a clone that the compiler cannot trace to a label is reported at build time by the alert
 `unsupported` (`-alert ++unsupported` makes it an error); the native server cannot clone.

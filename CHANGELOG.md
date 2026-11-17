@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `React.cloneElement` of an element written in the same function, from the team's build: a JSX literal bound by
+  `let` and cloned, a prop rebound by a `match` whose other branch wraps it in a new element, both branches of a
+  conditional, a literal written in the clone's argument. The untyped pass nominates every literal that may
+  reach a clone; the typed scan of the whole file, components or not, keeps the clonable form for each one a
+  traced clone reaches. A clone is traced only when every branch that can reach it is a label or a literal, so
+  one with an element of unknown origin stays `cloneElementUntraced`. `test/team`: `Framed` click by click
+  against reason-react, `Framed.Partial` compiled untraced. Mutants, each caught: branches of unknown origin
+  ignored, literals always plain, no literal nominated.
+
 - `React.cloneElement`, compiled. Under `-typed` the compiler follows, on the typed tree of each component,
   which labels reach a clone: directly, through `let` and `match`, `React.Children.only`, `toArray`, and any
   function that hands the elements to a callback (`Children.map`, `mapWithIndex`, `Array.mapi`, …), or by

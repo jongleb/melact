@@ -1672,10 +1672,19 @@ through `React.override overrides "label" own`, and the typed pass adds every op
 only where the callee's fact, found through the file's environment, has the label, and makes a call with a
 literal in a cloned label it did not nominate (the callee reached through an open or an alias) a compile
 error. A `React.cloneElement` whose element it cannot trace to a label becomes `cloneElementUntraced`, which
-carries the alert `unsupported`. At run time `cloneElement` builds the element again with the merged props
-and keeps them for a clone of the clone. Laws: `test/team` `Hint`, `HintCard`, `Menu` and `Tabs` against
-reason-react on React 18, click by click; mutants that always keep the plain form, add no missing labels,
-ignore the overrides or do not follow callbacks each fail them.
+carries the alert `unsupported`.
+
+An element can also come from a JSX literal of the same function: bound by `let`, returned by a branch of a
+`match` or `if` bound by `let` (the other branch may be a label), or written in the clone's argument. The
+untyped pass nominates every literal that may reach a clone through such bindings and compiles it both ways;
+the typed scan of the whole file, components or not, sees the clonable form as an origin and keeps it only for
+a clone it traces. A clone is traced only when every element that can reach it comes from a label or a
+literal: a `match` with one branch of unknown origin (an element taken out of an option, a call) leaves it
+`cloneElementUntraced`. At run time `cloneElement` builds the element again with the merged props
+and keeps them for a clone of the clone. Laws: `test/team` `Hint`, `HintCard`, `Menu`, `Tabs` and `Framed` against
+reason-react on React 18, click by click, and `Framed.Partial` compiled untraced; mutants that always keep the
+plain form, add no missing labels, ignore the overrides, do not follow callbacks, nominate no literal or trace a
+clone some of whose branches are unknown each fail them.
 
 ## DOM elements built at run time
 

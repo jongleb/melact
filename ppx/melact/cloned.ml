@@ -1,32 +1,22 @@
 open Ppxlib
 open Ast_builder.Default
 
-type t = { labels : string list; traced : Location.t list }
+type t = { labels : string list; traced : Location.t list; literals : Location.t list }
 
 let name = "melact.cloned"
 
-let candidates ~of_component expression =
-  let rec bound pattern =
-    match pattern.ppat_desc with
-    | Ppat_var { txt; _ } -> Some txt
-    | Ppat_constraint (inner, _) | Ppat_alias (inner, _) -> bound inner
-    | _ -> None
-  in
-  let rec split expression =
-    match expression.pexp_desc with
-    | Pexp_function (given, _, Pfunction_body inner) ->
-        let more, body = split inner in
-        ( List.filter_map
-            (fun parameter ->
-              match parameter.pparam_desc with
-              | Pparam_val ((Labelled label | Optional label), _, pattern) -> Option.map (fun variable -> (variable, label)) (bound pattern)
-              | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
-            given
-          @ more,
-          body )
-    | Pexp_constraint (inner, _) -> split inner
-    | _ -> ([], expression)
-  in
+(** Where an element that reaches a clone comes from. *)
+type origin =
+  | Label of string  (** The elements a component is given as this label. *)
+  | Literal of Location.t  (** The JSX literal at this location. *)
+
+let rec bound pattern =
+  match pattern.ppat_desc with
+  | Ppat_var { txt; _ } -> Some txt
+  | Ppat_constraint (inner, _) | Ppat_alias (inner, _) -> bound inner
+  | _ -> None
+
+let reached ~of_component sources expression =
   let found = ref [] in
   let piped expression =
     match expression.pexp_desc with
@@ -42,27 +32,33 @@ let candidates ~of_component expression =
     let expression = piped expression in
     let rec derived expression =
       let expression = piped expression in
-      match expression.pexp_desc with
-      | Pexp_ident { txt = Lident variable; _ } -> List.assoc_opt variable sources
-      | Pexp_constraint (inner, _) -> derived inner
-      | Pexp_apply
-          ({ pexp_desc = Pexp_ident { txt = Ldot (Ldot (Lident "React", "Children"), ("only" | "toArray")); _ }; _ }, [ (_, inner) ]) ->
+      match (Melhole_compiler.Element.without_jsx expression.pexp_attributes, expression.pexp_desc) with
+      | Some _, _ -> [ Literal expression.pexp_loc ]
+      | None, Pexp_ident { txt = Lident variable; _ } ->
+          List.filter_map (fun (name, origin) -> match String.equal name variable with true -> Some origin | false -> None) sources
+      | None, (Pexp_constraint (inner, _) | Pexp_let (_, _, inner) | Pexp_sequence (_, inner)) -> derived inner
+      | None, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Ldot (Lident "React", "Children"), ("only" | "toArray")); _ }; _ }, [ (_, inner) ])
+        ->
           derived inner
-      | _ -> None
+      | None, Pexp_match (_, cases) -> List.concat_map (fun case -> derived case.pc_rhs) cases
+      | None, Pexp_ifthenelse (_, yes, no) -> derived yes @ Option.fold ~none:[] ~some:derived no
+      | None, _ -> []
     in
+    let bind variable origins = List.map (fun origin -> (variable, origin)) origins in
     let over items row =
       walk sources items;
-      match (derived items, row.pexp_desc) with
-      | Some label, Pexp_function ({ pparam_desc = Pparam_val (_, _, pattern); _ } :: _, _, _) ->
-          walk (Option.fold ~none:sources ~some:(fun variable -> (variable, label) :: sources) (bound pattern)) row
-      | (Some _ | None), _ -> walk sources row
+      match row.pexp_desc with
+      | Pexp_function ({ pparam_desc = Pparam_val (_, _, pattern); _ } :: _, _, _) ->
+          walk (Option.fold ~none:sources ~some:(fun variable -> bind variable (derived items) @ sources) (bound pattern)) row
+      | _ -> walk sources row
     in
+    let reach item = match derived item with [] -> walk sources item | origins -> found := origins @ !found in
     match expression.pexp_desc with
     | Pexp_let (_, bindings, rest) ->
         List.iter (fun binding -> walk sources binding.pvb_expr) bindings;
         walk
-          (List.filter_map
-             (fun binding -> Option.bind (bound binding.pvb_pat) (fun variable -> Option.map (fun label -> (variable, label)) (derived binding.pvb_expr)))
+          (List.concat_map
+             (fun binding -> Option.fold ~none:[] ~some:(fun variable -> bind variable (derived binding.pvb_expr)) (bound binding.pvb_pat))
              bindings
           @ sources)
           rest
@@ -86,9 +82,7 @@ let candidates ~of_component expression =
           [ (_, row); (_, items) ] ) ->
         over items row
     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "cloneElement"); _ }; _ }, (_, element) :: rest) ->
-        Option.fold ~none:(walk sources element)
-          ~some:(fun label -> found := label :: !found)
-          (derived element);
+        reach element;
         List.iter (fun (_, argument) -> walk sources argument) rest
     | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (path, "createElement"); _ }; _ }, arguments)
       when Option.is_some (Melhole_compiler.Element.without_jsx expression.pexp_attributes) ->
@@ -97,9 +91,7 @@ let candidates ~of_component expression =
           (fun (label, value) ->
             match label with
             | (Labelled given | Optional given) when List.mem given cloned ->
-                List.iter
-                  (fun item -> Option.fold ~none:(walk sources item) ~some:(fun label -> found := label :: !found) (derived item))
-                  (Option.value ~default:[ value ] (Melhole_compiler.Element.list_items value))
+                List.iter reach (Option.value ~default:[ value ] (Melhole_compiler.Element.list_items value))
             | Labelled _ | Optional _ | Nolabel -> walk sources value)
           arguments
     | _ ->
@@ -117,9 +109,34 @@ let candidates ~of_component expression =
           #expression
           expression
   in
+  walk sources expression;
+  !found
+
+let candidates ~of_component expression =
+  let rec split expression =
+    match expression.pexp_desc with
+    | Pexp_function (given, _, Pfunction_body inner) ->
+        let more, body = split inner in
+        ( List.filter_map
+            (fun parameter ->
+              match parameter.pparam_desc with
+              | Pparam_val ((Labelled label | Optional label), _, pattern) -> Option.map (fun variable -> (variable, Label label)) (bound pattern)
+              | Pparam_val (Nolabel, _, _) | Pparam_newtype _ -> None)
+            given
+          @ more,
+          body )
+    | Pexp_constraint (inner, _) -> split inner
+    | _ -> ([], expression)
+  in
   let parameters, body = split expression in
-  walk parameters body;
-  List.sort_uniq String.compare !found
+  List.sort_uniq String.compare
+    (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ -> None) (reached ~of_component parameters body))
+
+let literals ~of_component bindings =
+  List.concat_map
+    (fun binding ->
+      List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ -> None) (reached ~of_component [] binding.pvb_expr))
+    bindings
 
 let element_kind env type_expr =
   let rec kind answer =
@@ -152,23 +169,36 @@ let of_attributes (attributes : Ocaml_common.Typedtree.attributes) =
       | _ -> None)
     attributes
 
-let traced ~known (expression : Ocaml_common.Typedtree.expression) =
+let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
   let open Ocaml_common in
   let found = ref [] and calls = ref [] in
   let value_name env path = match Env.normalize_value_path None env path with exception _ -> Path.name path | normal -> Path.name normal in
-  let elements sources (pattern : Typedtree.pattern) label =
-    List.filter_map
+  let elements sources (pattern : Typedtree.pattern) origins =
+    List.concat_map
       (fun (ident, _, type_expr, _) ->
-        match element_kind pattern.pat_env type_expr with `Element | `Elements -> Some (ident, label) | `Other -> None)
+        match element_kind pattern.pat_env type_expr with
+        | `Element | `Elements -> List.map (fun origin -> (ident, origin)) origins
+        | `Other -> [])
       (Typedtree.pat_bound_idents_full pattern)
     @ sources
   in
+  let given arguments = List.filter_map (fun (label, argument) -> match argument with Typedtree.Arg value -> Some (label, value) | Typedtree.Omitted () -> None) arguments in
   let rec walk sources (expression : Typedtree.expression) =
     let rec derived (expression : Typedtree.expression) =
+      let every branches =
+        List.fold_left (fun all branch -> Option.bind all (fun all -> Option.map (fun more -> all @ more) (derived branch))) (Some []) branches
+      in
       match expression.exp_desc with
-      | Texp_ident (Path.Pident ident, _, _) -> List.assoc_opt ident sources
+      | Texp_ident (Path.Pident ident, _, _) -> (
+          match List.filter_map (fun (bound, origin) -> match Ident.same bound ident with true -> Some origin | false -> None) sources with
+          | [] -> None
+          | origins -> Some origins)
+      | Texp_let (_, _, body) | Texp_sequence (_, body) -> derived body
+      | Texp_ifthenelse (_, yes, Some no) -> every [ yes; no ]
+      | Texp_match (_, cases, _, _) -> every (List.map (fun (case : Typedtree.computation Typedtree.case) -> case.c_rhs) cases)
       | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments) -> (
-          match (value_name exp_env path, List.filter_map (fun (_, argument) -> match argument with Typedtree.Arg given -> Some given | Typedtree.Omitted () -> None) arguments) with
+          match (value_name exp_env path, List.map snd (given arguments)) with
+          | "React.clonable", _ -> Some [ Literal expression.exp_loc ]
           | ("React.Children.only" | "React.Children.toArray" | "Stdlib.Array.get" | "Stdlib.Array.unsafe_get" | "Stdlib.List.hd" | "Stdlib.List.nth"
             | "Stdlib.Option.get" | "Belt_Array.getExn" | "Belt_Array.getUnsafe" | "Belt_List.headExn" | "Belt_List.getExn"), given :: _ ->
               derived given
@@ -180,7 +210,6 @@ let traced ~known (expression : Ocaml_common.Typedtree.expression) =
       let iterator = { Tast_iterator.default_iterator with expr = (fun _ inner -> walk sources inner) } in
       Tast_iterator.default_iterator.expr iterator expression
     in
-    let given arguments = List.filter_map (fun (label, argument) -> match argument with Typedtree.Arg value -> Some (label, value) | Typedtree.Omitted () -> None) arguments in
     let expression =
       let rec flat (expression : Typedtree.expression) =
         match expression.Typedtree.exp_desc with
@@ -207,7 +236,7 @@ let traced ~known (expression : Ocaml_common.Typedtree.expression) =
           (fun (case : Typedtree.computation Typedtree.case) ->
             let sources =
               match (derived scrutinee, Typedtree.split_pattern case.c_lhs) with
-              | Some label, (Some value, _) -> elements sources value label
+              | Some origins, (Some value, _) -> elements sources value origins
               | Some _, (None, _) | None, _ -> sources
             in
             Option.iter (walk sources) case.c_guard;
@@ -225,8 +254,8 @@ let traced ~known (expression : Ocaml_common.Typedtree.expression) =
         match (name, arguments) with
         | "React.cloneElement", (_, element) :: rest ->
             Option.fold ~none:(walk sources element)
-              ~some:(fun label ->
-                found := label :: !found;
+              ~some:(fun origins ->
+                found := origins @ !found;
                 calls := expression.exp_loc :: !calls)
               (derived element);
             List.iter (fun (_, argument) -> walk sources argument) rest
@@ -241,10 +270,12 @@ let traced ~known (expression : Ocaml_common.Typedtree.expression) =
                   | _ -> [ argument ]
                 in
                 match (label, List.find_map derived items) with
-                | (Asttypes.Labelled forwarded | Asttypes.Optional forwarded), Some label when List.mem forwarded cloned -> found := label :: !found
+                | (Asttypes.Labelled forwarded | Asttypes.Optional forwarded), Some origins when List.mem forwarded cloned ->
+                    found := origins @ !found;
+                    walk sources argument
                 | _ -> (
                     match (source, argument.exp_desc) with
-                    | Some label, Texp_function _ ->
+                    | Some origins, Texp_function _ ->
                         let rec parameters (lambda : Typedtree.expression) =
                           match lambda.exp_desc with
                           | Texp_function (given, Tfunction_body body) -> given @ parameters body
@@ -255,7 +286,7 @@ let traced ~known (expression : Ocaml_common.Typedtree.expression) =
                           (List.fold_left
                              (fun sources (parameter : Typedtree.function_param) ->
                                match parameter.fp_kind with
-                               | Tparam_pat pattern | Tparam_optional_default (pattern, _) -> elements sources pattern label)
+                               | Tparam_pat pattern | Tparam_optional_default (pattern, _) -> elements sources pattern origins)
                              sources (parameters argument))
                           argument
                     | (Some _ | None), _ -> walk sources argument))
@@ -269,14 +300,19 @@ let traced ~known (expression : Ocaml_common.Typedtree.expression) =
           (List.fold_left
              (fun sources (parameter : Typedtree.function_param) ->
                match (parameter.fp_arg_label, parameter.fp_kind) with
-               | (Asttypes.Labelled label | Asttypes.Optional label), (Tparam_pat pattern | Tparam_optional_default (pattern, _)) -> elements sources pattern label
+               | (Asttypes.Labelled label | Asttypes.Optional label), (Tparam_pat pattern | Tparam_optional_default (pattern, _)) ->
+                   elements sources pattern [ Label label ]
                | Asttypes.Nolabel, _ -> sources)
              sources given)
           body
     | _ -> walk sources expression
   in
-  parameters [] expression;
-  { labels = List.sort_uniq String.compare !found; traced = !calls }
+  (match seeded with `Labels -> parameters [] expression | `Unseeded -> walk [] expression);
+  {
+    labels = List.sort_uniq String.compare (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ -> None) !found);
+    traced = !calls;
+    literals = List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ -> None) !found;
+  }
 
 let fact ~loc labels = attribute ~loc ~name:{ loc; txt = name } ~payload:(PStr [ pstr_eval ~loc (elist ~loc (List.map (estring ~loc) labels)) [] ])
 
@@ -315,15 +351,34 @@ let scanned =
                   when List.exists
                          (fun (at, props) -> Location.compare at binding.vb_loc = 0 && String.equal props (Ocaml_common.Ident.name ident))
                          !components ->
-                    found := (binding.vb_loc, binding.vb_pat.pat_loc, traced ~known:(labels_in !found) binding.vb_expr) :: !found
+                    found := (binding.vb_loc, binding.vb_pat.pat_loc, traced ~known:(labels_in !found) ~seeded:`Labels binding.vb_expr) :: !found
                 | _ -> ());
                 Ocaml_common.Tast_iterator.default_iterator.value_binding self binding);
           }
         in
-        iterator.structure iterator (Melhole_typed.File.typed file);
-        cached := Some (file, !found);
-        !found
+        let typed = Melhole_typed.File.typed file in
+        iterator.structure iterator typed;
+        let loose = ref [] in
+        let everywhere =
+          {
+            Ocaml_common.Tast_iterator.default_iterator with
+            expr = (fun _ expression -> loose := traced ~known:(labels_in !found) ~seeded:`Unseeded expression :: !loose);
+          }
+        in
+        everywhere.structure everywhere typed;
+        let scans = List.map (fun (_, _, scan) -> scan) !found @ !loose in
+        let whole =
+          {
+            labels = List.sort_uniq String.compare (List.concat_map (fun scan -> scan.labels) scans);
+            traced = List.concat_map (fun scan -> scan.traced) scans;
+            literals = List.concat_map (fun scan -> scan.literals) scans;
+          }
+        in
+        cached := Some (file, (!found, whole));
+        (!found, whole)
 
-let in_file file = List.map (fun (at, _, scan) -> (at, scan)) (scanned file)
+let in_file file = List.map (fun (at, _, scan) -> (at, scan)) (fst (scanned file))
 
-let known file description = labels_in (scanned file) description
+let whole file = snd (scanned file)
+
+let known file description = labels_in (fst (scanned file)) description

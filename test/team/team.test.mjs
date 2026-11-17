@@ -35,7 +35,7 @@ test("constructors found by annotations and memoized components declared in .rei
     build.mount(root);
     await settle(root);
     const trace = [shown({ root, layer }).root];
-    for (const selector of [".tabs-next", ".tabs-next", '[title="tip"]', '[title="card"]', '[title="tip"]', ".menu-item", ".menu-item", ".spread-toggle", ".spread-toggle", ".spread-toggle", ".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
+    for (const selector of [".tabs-next", ".tabs-next", '[title="tip"]', '[title="card"]', '[title="tip"]', ".menu-item", ".menu-item", '[title="framed off"]', '[title="framed off"]', '[title="framed"]', ".spread-toggle", ".spread-toggle", ".spread-toggle", ".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
       root.querySelectorAll(selector)[0].click();
       await settle(root);
       trace.push(shown({ root, layer }).root);
@@ -51,14 +51,22 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[0][3]).toContain('<span class="hint"><button class="trigger open" title="tip">"hint"</><span class="hint-label">"tip"</></>');
   expect(traces[0][4]).toContain('<div class="hint-card"><span class="hint"><button class="trigger open" title="card">"card"</><span class="hint-label">"card"</>');
   expect(traces[0][6]).toContain('<button class="menu-item">"first"</><button class="menu-item focused">"second"</><button class="menu-item">"third"</><span class="menu-picked">"first"</>');
-  expect([traces[0][7], traces[0][8]].map((trace) => trace.match(/<span[^>]*>"spread"/)[0])).toEqual([
+  expect(traces[0][0]).toContain(
+    '<div class="framed"><iframe class="framed-frame" loading="lazy" title="frame"></><span class="tab">"local"</><i class="framed-off" title="off"></><u class="framed-direct" title="direct"></><span class="hint"><button class="trigger" title="framed">"framed"</></><button class="framed-plain" title="framed off">"plain"</></>',
+  );
+  expect(traces[0][9]).toContain(
+    '<b class="framed-on" title="on"></><u class="framed-direct" title="direct on"></><span class="hint"><button class="trigger" title="framed">"framed"</></><button class="framed-plain" title="framed on">"plain"</></>',
+  );
+  expect(traces[0][9]).toContain('<div class="framed-wrap" title="framed on"><span class="framed-inner">"inner"</></>');
+  expect(traces[0][10]).toContain('<span class="hint"><button class="trigger open" title="framed">"framed"</><span class="hint-label">"framed"</></>');
+  expect([traces[0][10], traces[0][11]].map((trace) => trace.match(/<span[^>]*>"spread"/)[0])).toEqual([
     '<span aria-expanded="false" aria-label="L" count="3" custom="c" data-flag="true" data-n="0" data-state="closed" id="spread-a">"spread"',
     '<span aria-controls="menu" aria-expanded="true" custom="d" data-flag="false" data-state="open" id="spread-b" nothing="now">"spread"',
   ]);
-  expect(traces[0][13]).toContain(
+  expect(traces[0][16]).toContain(
     '<section class="route-dashboard"><h2>"Board!"</><button class="route-count">"2"</></><section class="route-dashboard"><h2>"Board! raw?"</>',
   );
-  expect(traces[0][18]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
+  expect(traces[0][21]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
   expect(traces[0][0]).toContain('<div class="bare">"bare"</><span class="bare-inner"></>');
   expect(traces[0][0]).toContain('<span class="bare-inner"></>"4"');
   expect(traces[0][traces[0].length - 1]).toContain(
@@ -74,6 +82,12 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[0][traces[0].length - 1]).toContain(
     '<svg class="axis"><text class="tick doubled" x="6" y="8">"pp"</><text class="tick doubled" x="10" y="12">"qq%"</><text class="tick" x="3" y="4">"p"</><text class="tick local" x="11">"q%"</>',
   );
+});
+
+test("a clone is traced only when every element that can reach it was written as JSX: here or given as a label", () => {
+  const compiled = readFileSync("_build/default/test/team/melact/output/test/team/melact/Framed.mjs", "utf8");
+  expect(compiled.match(/React\.cloneElementUntraced\(/g)).toHaveLength(1);
+  expect(compiled.match(/React\.cloneElement\(/g)).toHaveLength(5);
 });
 
 test("a closure a data hook calls only in its effect leaves the component pure, as one it calls while rendering does not", () => {

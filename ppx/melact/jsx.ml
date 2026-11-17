@@ -1245,6 +1245,9 @@ let mapper =
     (** The labels each component of this file clones, by the names its [makeProps] has here, as the untyped pass sees them. *)
     val mutable clones : (string * string list) list = []
 
+    (** The JSX literals of this file that may reach a clone, as the untyped pass sees them. *)
+    val mutable literals : Location.t list = []
+
     method private summary callee =
       match callee.pexp_desc with
       | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name custom
@@ -1358,6 +1361,7 @@ let mapper =
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "react.component") description.pval_attributes ->
           Location.raise_errorf ~loc:item.pstr_loc "melact: a [@react.component] external is bound before the JSX rewrite"
       | Pstr_value (flag, bindings) -> (
+          literals <- Cloned.literals ~of_component:self#cloned_of bindings @ literals;
           let first_hook expression =
             (object
                inherit [(string * location) option] Ast_traverse.fold as super
@@ -1658,6 +1662,21 @@ let mapper =
       let loc = expression.pexp_loc in
       let here = position in
       position <- `Value;
+      match (Element.without_jsx expression.pexp_attributes, List.find_opt (fun at -> Location.compare at loc = 0) literals) with
+      | Some _, Some _ ->
+          literals <- List.filter (fun at -> Location.compare at loc <> 0) literals;
+          position <- here;
+          Option.fold ~none:(self#expression expression)
+            ~some:(fun clonable ->
+              let clonable = self#expression clonable in
+              position <- here;
+              Melhole_typed.Site.choice clonable
+                ~among:[ (`Plain, self#expression expression) ]
+                ~decide:(fun file ->
+                  Option.fold ~none:(Some `Plain) ~some:(fun _ -> None)
+                    (List.find_opt (fun at -> Location.compare at loc = 0) (Cloned.whole file).literals)))
+            (self#clonable_literal expression)
+      | (Some _ | None), (Some _ | None) ->
       match expression.pexp_desc with
       | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Lident "##"; _ }; _ } as send), [ (label, target); field ]) ->
           { expression with pexp_desc = Pexp_apply (send, [ (label, self#expression target); field ]) }
@@ -1718,9 +1737,7 @@ let mapper =
             { expression with pexp_desc = Pexp_apply (asked, List.map (fun (label, argument) -> (label, self#expression argument)) arguments) }
             ~decide:(fun file escaped ->
               match
-                ( List.exists
-                    (fun (_, (scan : Cloned.t)) -> List.exists (fun at -> Location.compare at loc = 0) scan.traced)
-                    (Cloned.in_file file),
+                ( List.exists (fun at -> Location.compare at loc = 0) (Cloned.whole file).traced,
                   Option.bind (Melhole_typed.File.answer file question) (fun answer ->
                       Option.bind (Ocaml_common.Longident.unflatten (Longident.flatten_exn txt)) (fun name ->
                           match Ocaml_common.Env.find_value_by_name name answer.Melhole_typed.Answer.env with
