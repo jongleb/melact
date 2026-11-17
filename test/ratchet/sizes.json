@@ -1,13 +1,13 @@
 {
   "sizes": {
     "bench/melact": 18666,
-    "bench/meltea": 11125,
+    "bench/meltea": 11038,
     "bench/ssr/melact client": 19795,
     "bench/ssr/meltea client": 12012,
     "examples/counter": 12434,
     "examples/todomvc": 18570,
     "meltea/examples/counter": 5012,
-    "meltea/examples/todomvc": 20816,
+    "meltea/examples/todomvc": 20679,
     "meltea/examples/served client": 6350,
     "bench/classics/admin": 29592,
     "bench/classics/autocomplete": 27103,

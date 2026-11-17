@@ -110,10 +110,9 @@ A list inside Html.transition_group is still the keyed loop with selectors, insi
                                                Meltea_runtime.View.Changed)
                                         then
                                           (let __melhole_value =
-                                             Some
-                                               (if id = chosen
-                                                then "on"
-                                                else "" : string) in
+                                             if id = chosen
+                                             then Some "on"
+                                             else None in
                                            Meltea_runtime.View.put_attr
                                              __melhole_frame.__melhole_frame_4_slot_2
                                              __melhole_hole_0 "class"

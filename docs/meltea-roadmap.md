@@ -204,6 +204,22 @@ rows" Run)` becomes part of the page's markup, with one handler hole and no cont
 is Melact's "Spliced into the caller" for Meltea, without components. A law: a spliced and a
 non-spliced build of random views show the same page after random messages.
 
+Done for local helpers (`ppx/meltea/splice.ml`, before the templates are compiled). A
+`let f a b = <element …>` whose call is a child of an element, with every argument a constant, a
+constructor or a name, is replaced there by its body with the arguments put in place, and a helper
+with no call left is dropped. Since a view is pure, the place of a call does not matter, unlike
+Melact's components, which splice only into the rows of a `map`. The check is conservative: a call
+stays a call when a name the body reads, or the helper's own, is bound anywhere between the helper
+and its calls, when an argument is a name the body binds, or when a module is opened in either. On
+bench/meltea the six buttons join the page's template (11,125 → 11,038 B gzipped) and TodoMVC's
+three filter links join the footer's (20,816 → 20,679 B); each spliced call is one template, one
+content hole and one frame fewer. Laws (`test/meltea/splice_laws_test.mlx`): a view with helpers
+spliced, and the same view with every call kept inside `Html.list`, show the same page after random
+messages; a helper whose read name is bound again and a call whose argument the body binds are
+there too, and dropping either check, or putting the arguments in the wrong places, breaks the law
+or the build. Next: helpers at the top level of the module, and arguments that are expressions
+(bound once by a `let` in the caller where the compiler can keep the hole guarded).
+
 ### 7. Field gates through view functions
 
 Elm programs split their view: `view_header model`, `view_footer model.items`. Today gates stop
