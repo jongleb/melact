@@ -33,6 +33,8 @@ module App = {
     <Axis double />
     <LocalGadt selection={double ? Selection.Custom(["a", "b", "c"]) : Selection.Top5} />
     <ClientLinks.shown />
+    <Preset />
+    <Shadowed a={String.length(message)} />
     <LocalGadt.Whole selection={double ? Selection.Custom(["a", "b"]) : Selection.Top5} />
     <Shared flag=true seed={Obj.magic("seed")} />
     <Looping start={"label": "start", "next": Js.Nullable.null} />

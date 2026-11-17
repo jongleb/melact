@@ -8,5 +8,4 @@ type component =
 val component : Melhole_typed.Answer.t -> component option
 val element : Melhole_typed.Answer.t -> [ `Element | `Other ]
 
-(** The labels of a compiled component's props, from [< x : unit; y : unit option > React.props -> React.element]. *)
-val labels : Melhole_typed.Answer.t -> Ppxlib.arg_label list option
+val builder_labels : Melhole_typed.Answer.t -> Ppxlib.longident -> Ppxlib.arg_label list option

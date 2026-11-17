@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Two from the team's check of 292fcf2. A component written where a value goes is rebuilt through the
+  labels its module's `makeProps` takes, read from the type checker's environment, not the labels of
+  its props type: a module that presets another's props (`let make = Base.make; let makeProps =
+  Base.makeProps(~color=Current)`) broke the second level of such a chain ("cannot be applied with
+  label ~color"), a regression of 292fcf2. Under `-hook-modules Shadow`, a binding of npm's
+  `useEffect6` in `Shadow` takes the key its callers in other files give, as they give one to every
+  `Shadow.useEffect6` ("'a Melact_runtime.Hook.key but an expression was expected of type unit ->
+  …"). `test/team` (now built with `-hook-modules Shadow`): `Preset` (two levels, in JSX and passed
+  to a JavaScript function) and `Shadowed`, against reason-react; `test/typed/laws`: labels read from
+  a generated `makeProps`, preset or not. Mutants, each caught: optional labels dropped from the
+  rebuild, the binding keeping a key of its own.
+
 - Components passed as values to JavaScript, from the team's recharts axis. A `[@react.component]`'s
   props are `< label : unit; … > React.props`, typed by its labels, instead of a type of its own, so
   components with the same labels are interchangeable across modules, as in reason-react: a branch

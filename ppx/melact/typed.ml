@@ -19,28 +19,25 @@ let component answer =
   | Melhole_typed.Answer.Named _ | Melhole_typed.Answer.Js_object _ | Melhole_typed.Answer.Object _ | Melhole_typed.Answer.Other ->
       None
 
-let labels answer =
-  match Melhole_typed.Answer.view answer with
-  | Melhole_typed.Answer.Function (Melhole_typed.Answer.Unlabelled, props, _) -> (
-      match Melhole_typed.Answer.view props with
-      | Melhole_typed.Answer.Named { path = "React.props"; arguments = [ labels ]; _ } -> (
-          match Melhole_typed.Answer.view labels with
-          | Melhole_typed.Answer.Object { fields; _ } ->
-              Some
-                (List.map
-                   (fun (name, field) ->
-                     match Melhole_typed.Answer.view field with
-                     | Melhole_typed.Answer.Named { path = "option"; _ } -> Ppxlib.Optional name
-                     | Melhole_typed.Answer.Named _ | Melhole_typed.Answer.Function _ | Melhole_typed.Answer.Js_object _
-                     | Melhole_typed.Answer.Object _ | Melhole_typed.Answer.Other ->
-                         Ppxlib.Labelled name)
-                   fields)
-          | Melhole_typed.Answer.Named _ | Melhole_typed.Answer.Function _ | Melhole_typed.Answer.Js_object _
-          | Melhole_typed.Answer.Other ->
-              None)
-      | Melhole_typed.Answer.Named _ | Melhole_typed.Answer.Function _ | Melhole_typed.Answer.Js_object _
-      | Melhole_typed.Answer.Object _ | Melhole_typed.Answer.Other ->
-          None)
-  | Melhole_typed.Answer.Function ((Melhole_typed.Answer.Labelled _ | Melhole_typed.Answer.Optional _), _, _)
-  | Melhole_typed.Answer.Named _ | Melhole_typed.Answer.Js_object _ | Melhole_typed.Answer.Object _ | Melhole_typed.Answer.Other ->
-      None
+let builder_labels answer builder =
+  match component answer with
+  | Some Compiled ->
+      Option.bind (Ocaml_common.Longident.unflatten (Ppxlib.Longident.flatten_exn builder)) (fun builder ->
+          match Ocaml_common.Env.find_value_by_name builder answer.Melhole_typed.Answer.env with
+          | exception Not_found -> None
+          | _, description ->
+              let rec labels taken =
+                match Melhole_typed.Answer.view taken with
+                | Melhole_typed.Answer.Function ((Melhole_typed.Answer.Labelled "key" | Melhole_typed.Answer.Optional "key"), _, rest) ->
+                    labels rest
+                | Melhole_typed.Answer.Function (Melhole_typed.Answer.Labelled name, _, rest) ->
+                    Option.map (List.cons (Ppxlib.Labelled name)) (labels rest)
+                | Melhole_typed.Answer.Function (Melhole_typed.Answer.Optional name, _, rest) ->
+                    Option.map (List.cons (Ppxlib.Optional name)) (labels rest)
+                | Melhole_typed.Answer.Function (Melhole_typed.Answer.Unlabelled, _, _) -> Some []
+                | Melhole_typed.Answer.Named _ | Melhole_typed.Answer.Js_object _ | Melhole_typed.Answer.Object _
+                | Melhole_typed.Answer.Other ->
+                    None
+              in
+              labels (Melhole_typed.Answer.make answer.Melhole_typed.Answer.env description.val_type))
+  | Some (Of_props _) | None -> None

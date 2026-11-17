@@ -2,7 +2,10 @@ open Ppxlib
 open Ast_builder.Default
 
 (** Whether Melact's function for a binding is a hook, which takes its call site's key first. *)
-type keying = Keyed | Plain
+type keying =
+  | Keyed  (** A hook: the binding keeps a key of its own. *)
+  | Given  (** A hook whose callers in other files give their call site's key, as [-hook-modules] has them. *)
+  | Plain
 
 (** How a binding's arguments reach Melact's function. *)
 type passing =
@@ -89,7 +92,7 @@ let target package name type_ attributes =
       component type_)
   | _ -> None
 
-let structure items =
+let structure ~keys items =
   let hook ~loc name =
     pexp_ident ~loc
       {
@@ -118,7 +121,7 @@ let structure items =
         | _ -> super#expression expression
     end
   in
-  let rec go renames items =
+  let rec go level renames items =
     match items with
     | [] -> ([], [])
     | item :: rest -> (
@@ -131,11 +134,22 @@ let structure items =
             with
             | Some (found, keying, passing) ->
                 let loc = description.pval_loc and name = description.pval_name.txt in
+                let keying =
+                  match (keying, level) with
+                  | Keyed, `Top -> (
+                      match
+                        keys (String.capitalize_ascii (Filename.remove_extension (Filename.basename loc.loc_start.pos_fname))) name
+                      with
+                      | `Given -> Given
+                      | `Own -> Keyed)
+                  | (Keyed | Plain | Given), (`Top | `Nested) -> keying
+                in
                 let given = parameters description.pval_type in
                 let arguments = List.mapi (fun index (label, _) -> (label, Printf.sprintf "_melact_argument_%d" index)) given in
                 let callee =
                   match keying with
                   | Plain -> pexp_ident ~loc { loc; txt = found }
+                  | Given -> pexp_apply ~loc (pexp_ident ~loc { loc; txt = found }) [ (Nolabel, evar ~loc "_melact_key") ]
                   | Keyed ->
                       pexp_apply ~loc (pexp_ident ~loc { loc; txt = found })
                         [ (Nolabel, pexp_apply ~loc (hook ~loc "unchecked") [ (Nolabel, evar ~loc ("melact_key_" ^ name)) ]) ]
@@ -173,12 +187,12 @@ let structure items =
                 let wrapper =
                   List.fold_right
                     (fun (label, argument) body -> pexp_fun ~loc label None (pvar ~loc argument) body)
-                    arguments
+                    ((match keying with Given -> [ (Nolabel, "_melact_key") ] | Plain | Keyed -> []) @ arguments)
                     { call with pexp_attributes = [ attribute ~loc ~name:{ loc; txt = "melact.keyed" } ~payload:(PStr []) ] }
                 in
                 let defined =
                   (match keying with
-                  | Plain -> []
+                  | Plain | Given -> []
                   | Keyed -> [ [%stri let[@warning "-32"] [%p pvar ~loc ("melact_key_" ^ name)] = [%e hook ~loc "key"] ()] ])
                   @ [ [%stri let[@warning "-32"] [%p pvar ~loc name] = [%e wrapper]] ]
                 in
@@ -187,10 +201,10 @@ let structure items =
                   | As_given -> [ (Lident name, found) ]
                   | Listed _ | Children_from _ | Children_spread _ | Key_at _ -> []
                 in
-                let later, exported = go (renamed @ renames) rest in
+                let later, exported = go level (renamed @ renames) rest in
                 (defined @ later, renamed @ exported)
             | None -> (
-                let later, exported = go renames rest in
+                let later, exported = go level renames rest in
                 match (source description.pval_attributes, description.pval_prim) with
                 | Some ("react" | "react/jsx-runtime" | "react/jsx-dev-runtime"), [ "Fragment" ] ->
                     let question, asked = Melhole_typed.Question.value description in
@@ -226,10 +240,10 @@ let structure items =
                       description.pval_name.txt package (String.concat " " description.pval_prim)
                 | _ -> ((rewrite renames)#structure_item item :: later, exported)))
         | Pstr_module ({ pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ } as body; _ } as binding) ->
-            let inner, found = go renames inner in
+            let inner, found = go `Nested renames inner in
             let qualified = List.map (fun (local, target) -> (Ldot (Lident name, Longident.last_exn local), target)) found in
             let item = { item with pstr_desc = Pstr_module { binding with pmb_expr = { body with pmod_desc = Pmod_structure inner } } } in
-            let later, exported = go (qualified @ renames) rest in
+            let later, exported = go level (qualified @ renames) rest in
             (item :: later, exported)
         | _ -> (
             let item = (rewrite renames)#structure_item item in
@@ -237,11 +251,11 @@ let structure items =
             | Pstr_value (_, bindings) ->
                 let shadowed = List.concat_map (fun binding -> Melhole_compiler.Free.bound binding.pvb_pat) bindings in
                 let later, exported =
-                  go (List.filter (fun (name, _) -> match name with Lident name -> not (List.mem name shadowed) | _ -> true) renames) rest
+                  go level (List.filter (fun (name, _) -> match name with Lident name -> not (List.mem name shadowed) | _ -> true) renames) rest
                 in
                 (item :: later, exported)
             | _ ->
-                let later, exported = go renames rest in
+                let later, exported = go level renames rest in
                 (item :: later, exported)))
   in
-  fst (go [] items)
+  fst (go `Top [] items)

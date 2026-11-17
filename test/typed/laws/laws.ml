@@ -463,21 +463,27 @@ let labels_case =
   let open Gen in
   let* count = int_range 0 6 in
   let* kinds = list_size (pure count) (oneof_list [ `Labelled; `Optional ]) in
-  let* written = oneof_list [ `Direct; `Abbreviated ] in
-  pure (List.mapi (fun index kind -> (Printf.sprintf "l%d" index, kind)) kinds, written)
+  let* preset = oneof_list [ `Preset; `As_built ] in
+  pure (List.mapi (fun index kind -> (Printf.sprintf "l%d" index, kind)) kinds, preset)
 
-let labels_source (labels, written) =
+let labels_source (labels, preset) =
   let props =
     "< "
     ^ String.concat "; " (List.map (fun (name, kind) -> name ^ " : " ^ match kind with `Labelled -> "unit" | `Optional -> "unit option") labels)
     ^ " > React.props"
   in
+  let arrows =
+    String.concat "" (List.map (fun (name, kind) -> (match kind with `Labelled -> name ^ ":int -> " | `Optional -> "?" ^ name ^ ":int -> ")) labels)
+  in
   String.concat "\n"
     [
       "module React = struct type element type 'labels props = Props of element [@@unboxed] end";
-      "type labels = " ^ props;
-      "let probe : " ^ (match written with `Direct -> props | `Abbreviated -> "labels") ^ " -> React.element = Obj.magic 0";
-      "let _ = (probe [@melhole.ask 1])";
+      "module Base = struct let makeProps : " ^ arrows ^ "?key:string -> unit -> " ^ props ^ " = Obj.magic 0 end";
+      "module M = struct";
+      (match preset with `As_built -> "  let makeProps = Base.makeProps" | `Preset -> "  let makeProps = Base.makeProps ~p:1");
+      "  let make : " ^ props ^ " -> React.element = Obj.magic 0";
+      "end";
+      "let _ = (M.make [@melhole.ask 1])";
     ]
 
 let labels_found case =
@@ -487,13 +493,16 @@ let labels_found case =
         (List.map
            (fun label -> match label with Ppxlib.Labelled name -> (name, `Labelled) | Ppxlib.Optional name -> (name, `Optional) | Ppxlib.Nolabel -> ("", `Labelled))
            labels))
-    (Option.bind (answer (labels_source case)) Melact_ppx.Typed.labels)
+    (Option.bind (answer (labels_source case)) (fun answer -> Melact_ppx.Typed.builder_labels answer (Ppxlib.Ldot (Ppxlib.Lident "M", "makeProps"))))
 
 let component_laws =
   let print found = match found with Some `Compiled -> "Compiled" | Some `Of_props -> "Of_props" | None -> "None" in
   [
-    Test.make ~count:300 ~name:"Labels: a compiled component's props type gives back the labels it was written with" ~print:labels_source labels_case
-      (fun ((labels, _) as case) -> labels_found case = Some (List.sort compare labels));
+    Test.make ~count:300 ~name:"Labels: a compiled component is rebuilt with the labels its module's makeProps still takes"
+      ~print:labels_source
+      (Gen.map (fun ((labels, preset) : (string * [ `Labelled | `Optional ]) list * [ `Preset | `As_built ]) -> match preset with `Preset -> (("p", `Labelled) :: labels, preset) | `As_built -> (labels, preset)) labels_case)
+      (fun ((labels, preset) as case) ->
+        labels_found case = Some (List.sort compare (match preset with `Preset -> List.filter (fun (name, _) -> not (String.equal name "p")) labels | `As_built -> labels)));
     Test.make ~count:500 ~name:"Component: a function type is a component exactly as its expanded shape says"
       ~print:(fun case -> component_source case ^ "\nexpected " ^ print (component_expected case) ^ ", found " ^ print (component_found case))
       component_case

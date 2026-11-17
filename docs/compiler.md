@@ -1594,7 +1594,10 @@ props object of its own (recharts' `tick`, through a binding typed `'props -> Re
 `-typed`, every `Foo.make` (or a component of the same file) written where a value goes, other than
 the first argument of `React.createElement`, `jsx` or `memo`, whose type is a compiled component's,
 becomes `fun props -> React.called_with props (fun object -> Foo.make (Foo.makeProps ~label:object##label
-?size:object##size ()))` with the labels its type lists. The type stays the same, so wrappers that take
+?size:object##size ()))` with the labels `Foo.makeProps` takes, read from the type checker's environment:
+a module that presets another's props (`let make = Base.make` and `let makeProps = Base.makeProps
+~color:Current`, chained as deep as written) is rebuilt through its own `makeProps`, so its preset
+holds. The type stays the same, so wrappers that take
 `'props React.component` still get it, and `React.called_with` returns the props when they are
 Melact's element (an object with `build` and `patch`), and builds the element from the object
 otherwise. Without `-typed`, a component of another file passed to JavaScript gets an element where it

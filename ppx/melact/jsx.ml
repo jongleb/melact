@@ -1731,7 +1731,7 @@ let mapper =
                                          | Nolabel -> None)
                                        labels
                                     @ [ (Nolabel, [%expr ()]) ])])])
-                    (Option.bind (Melhole_typed.File.answer file question) Typed.labels))
+                    (Option.bind (Melhole_typed.File.answer file question) (fun answer -> Typed.builder_labels answer builder)))
           | (`Value | `Called), (Element.Server | Element.Client_only | Element.Hydratable), (Some _ | None) -> super#expression expression)
       | _ -> super#expression expression
 
@@ -2488,5 +2488,9 @@ let bound items =
 
 let () =
   Driver.register_transformation "melact"
-    ~instrument:(Driver.Instrument.make (fun items -> Npm_react.structure (bound items)) ~position:Before)
+    ~instrument:(Driver.Instrument.make (fun items ->
+         Npm_react.structure
+           ~keys:(fun file name ->
+             match (List.mem file !hook_modules, List.mem name keyed_hooks) with true, true -> `Given | (true | false), (true | false) -> `Own)
+           (bound items)) ~position:Before)
     ~impl:structure ~intf:signature

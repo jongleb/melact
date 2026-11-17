@@ -10,4 +10,4 @@
  (module_systems
   (es6 mjs))
  (preprocess
-  (staged_pps melange.ppx melact-ppx -- -typed)))
+  (staged_pps melange.ppx melact-ppx -- -typed -hook-modules Shadow)))
