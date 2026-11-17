@@ -416,6 +416,32 @@ their three rows as one item was worse (`hide 10 stories` 1.95), since the rank 
 and every row after a hidden one is redrawn. What would remove it is a compiled loop whose row has
 several root elements: `rows` builds one element per item today. The bundle is 17.7 kB gzip (Svelte
 24.8, React 51.4) and the heap 2.9 MB (Svelte 7.4, React 11.5).
+
+Where a compiler wins outright (2026-11-17). Over the five apps Meltea's script was 11% of a step's
+time (Svelte's 19%), layout 19% and style 7%; the rest, about 63%, was the browser walking and
+painting the whole page every frame, which grows with the DOM and was the same for both. Only
+having the browser skip what is out of view removes it, and the compiler knows every long list and
+its row. `content-visibility: auto` on each row was mixed (3 to 5 times faster on some steps, 1.6 to
+5 times slower on others, the browser checking every row's visibility each frame); on groups of 100
+rows (`Html.chunks`) it was 3 to 7 times faster than Svelte on nearly every step of TodoMVC and
+kanban. Groups change the DOM, and a selector that counts siblings (the real TodoMVC's
+`.todo-list li:last-child`), a `>` to a row or a `+`/`~` between rows would see them; so the compiler
+reads the CSS. A module declares its stylesheets with `[@@@meltea.styles "app.css"]`; `Styles` reads
+them at build time, and a list built by `List.map`/`Array.map` inside a `div`, `ul`, `ol`, `section`,
+`main`, `article`, `aside` or `nav`, in a build for the browser alone, becomes `Html.grouped` when no
+selector would see its rows grouped, and stays whole with an alert naming the selector when one
+would. `Html.grouped` groups a list once it has passed 100 rows and from then on at any length, so a
+list filtered below 100 keeps its rows' nodes (grouping every list at any length, small ones
+included, added layouts again). A law in `test/meltea/grouped_laws_test.mlx` (the grouped list shows
+what the whole list shows after any messages across the threshold both ways, has groups exactly
+once it has passed it and has rows, and keeps its rows' nodes but on the draw that first groups it;
+three mutants: no hysteresis, never grouped, always grouped), and `test/ppx/meltea/styles.t` (safe
+CSS groups; `:last-child`, `ul > li` and no declared CSS keep the list whole; two mutants). With the
+classic stylesheets declared, against Svelte: TodoMVC 0.14 to 0.52 per step (`toggle 20 todos` 0.98),
+kanban 0.28 to 0.88; over the five apps the geometric mean is 0.64 of Svelte's time (0.60 at 4x) and
+0.56 of React's (0.51 at 4x), the DOM identical to both once the groups are unwrapped. Next: rewriting
+a selector that would see the groups (`:last-child` of the last group's last row) instead of keeping
+the list whole, and a row height measured instead of the 40-pixel estimate.
 ## Guards
 
 Every step, before it is pushed: `opam exec -- dune build`, `dune test`, `dune build @runtest-js &&

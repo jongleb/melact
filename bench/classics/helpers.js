@@ -132,6 +132,8 @@
         if (node.nodeType === 3) out.push(node.data.replace(/&/g, "&amp;").replace(/</g, "&lt;"));
         else if (node.nodeType === 8) {
           if (node.data !== "") out.push(`<!--${node.data}-->`);
+        } else if (node.nodeType === 1 && (node.getAttribute("style") ?? "").startsWith("content-visibility:auto")) {
+          for (const child of node.childNodes) walk(child);
         } else if (node.nodeType === 1) {
           const field = node.tagName === "INPUT" || node.tagName === "TEXTAREA" || node.tagName === "SELECT";
           const attributes = [...node.attributes]

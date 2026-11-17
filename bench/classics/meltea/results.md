@@ -12,8 +12,8 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 64 steps of at least 5 ms under React; geometric mean Meltea/React 0.78; Meltea slower (> 1.05) in 3, faster (< 0.95) in 57.
-- CPU 4x: 64 steps of at least 5 ms under React; geometric mean Meltea/React 0.77; Meltea slower (> 1.05) in 1, faster (< 0.95) in 60.
+- CPU 1x: 64 steps of at least 5 ms under React; geometric mean Meltea/React 0.56; Meltea slower (> 1.05) in 3, faster (< 0.95) in 58.
+- CPU 4x: 64 steps of at least 5 ms under React; geometric mean Meltea/React 0.51; Meltea slower (> 1.05) in 1, faster (< 0.95) in 62.
 
 ## Where Meltea is slower (ratio > 1.05)
 
@@ -28,8 +28,30 @@ against Meltea's first run.
 
 | app | cpu | step | layouts R/M | styles R/M | React ms | Meltea ms |
 |---|---|---|---:|---:|---:|---:|
+| kanban | 1x | mount | 1/2 | 1/2 | 121.6 | 57.8 |
+| kanban | 1x | move 30 cards by buttons | 29/43 | 29/43 | 243.0 | 147.4 |
+| kanban | 1x | drag 20 cards | 18/26 | 18/28 | 159.0 | 69.7 |
+| kanban | 1x | filter by label | 1/2 | 1/2 | 19.0 | 17.5 |
+| kanban | 1x | clear filter | 1/3 | 1/3 | 110.0 | 83.6 |
+| kanban | 1x | collapse 4 columns | 4/6 | 4/6 | 27.1 | 23.4 |
+| kanban | 1x | expand 4 columns | 4/6 | 4/6 | 79.4 | 34.0 |
+| kanban | 4x | mount | 1/2 | 1/2 | 516.3 | 246.2 |
+| kanban | 4x | move 30 cards by buttons | 29/43 | 29/43 | 1040.0 | 531.4 |
+| kanban | 4x | drag 20 cards | 18/26 | 18/28 | 671.9 | 244.3 |
+| kanban | 4x | filter by label | 1/2 | 1/2 | 85.1 | 58.4 |
+| kanban | 4x | clear filter | 1/3 | 1/3 | 453.8 | 310.9 |
+| kanban | 4x | collapse 4 columns | 4/6 | 4/6 | 110.3 | 89.1 |
+| kanban | 4x | expand 4 columns | 4/6 | 4/6 | 318.3 | 141.5 |
 | spreadsheet | 1x | undo the rest | 12/12 | 3/4 | 579.3 | 292.5 |
 | spreadsheet | 4x | undo the rest | 12/12 | 3/4 | 2145.8 | 912.4 |
+| todomvc | 1x | mount | 1/2 | 1/2 | 179.3 | 28.1 |
+| todomvc | 1x | toggle 20 todos | 19/20 | 19/20 | 311.5 | 114.4 |
+| todomvc | 1x | filter completed | 1/2 | 1/2 | 75.7 | 14.2 |
+| todomvc | 1x | filter all | 1/2 | 1/3 | 129.7 | 28.2 |
+| todomvc | 4x | mount | 1/2 | 1/2 | 750.9 | 123.3 |
+| todomvc | 4x | toggle 20 todos | 19/20 | 19/20 | 1249.3 | 343.8 |
+| todomvc | 4x | filter completed | 1/2 | 1/2 | 312.8 | 50.7 |
+| todomvc | 4x | filter all | 1/2 | 1/3 | 556.4 | 97.7 |
 
 ## DOM differences and crashes
 
@@ -69,18 +91,18 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | hackernews | hide 10 stories | 234.6 | 163.0 | 0.69 | 9/9 | 9/9 | yes |
 | hackernews | unvote 10 | 54.4 | 57.5 | 1.06 | 9/9 | 9/9 | yes |
 | hackernews | unmount | 12.1 | 8.4 | 0.70 | 1/1 | 0/0 | – |
-| kanban | mount | 116.7 | 108.1 | 0.93 | 1/1 | 1/1 | yes |
-| kanban | move 30 cards by buttons | 234.0 | 204.4 | 0.87 | 29/29 | 29/29 | yes |
-| kanban | drag 20 cards | 155.6 | 136.4 | 0.88 | 18/18 | 18/18 | yes |
-| kanban | edit 10 cards in modal | 708.4 | 646.9 | 0.91 | 130/130 | 150/150 | yes |
-| kanban | open a card and edit | 98.2 | 97.0 | 0.99 | 21/21 | 22/22 | yes |
-| kanban | close card with Escape | 8.3 | 7.0 | 0.84 | 1/1 | 2/2 | yes |
-| kanban | add 10 cards | 783.0 | 730.0 | 0.93 | 120/120 | 150/150 | yes |
-| kanban | filter by label | 20.4 | 18.1 | 0.89 | 1/1 | 1/1 | yes |
-| kanban | clear filter | 111.3 | 103.5 | 0.93 | 1/1 | 1/1 | yes |
-| kanban | collapse 4 columns | 25.1 | 21.8 | 0.87 | 4/4 | 4/4 | yes |
-| kanban | expand 4 columns | 82.0 | 77.6 | 0.95 | 4/4 | 4/4 | yes |
-| kanban | unmount | 13.3 | 8.8 | 0.66 | 1/1 | 0/0 | – |
+| kanban | mount | 121.6 | 57.8 | 0.48 | 1/2 | 1/2 | yes |
+| kanban | move 30 cards by buttons | 243.0 | 147.4 | 0.61 | 29/43 | 29/43 | yes |
+| kanban | drag 20 cards | 159.0 | 69.7 | 0.44 | 18/26 | 18/28 | yes |
+| kanban | edit 10 cards in modal | 673.2 | 230.2 | 0.34 | 130/127 | 150/150 | yes |
+| kanban | open a card and edit | 93.0 | 26.0 | 0.28 | 21/21 | 22/22 | yes |
+| kanban | close card with Escape | 8.2 | 2.1 | 0.26 | 1/1 | 2/2 | yes |
+| kanban | add 10 cards | 777.0 | 223.0 | 0.29 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 19.0 | 17.5 | 0.92 | 1/2 | 1/2 | yes |
+| kanban | clear filter | 110.0 | 83.6 | 0.76 | 1/3 | 1/3 | yes |
+| kanban | collapse 4 columns | 27.1 | 23.4 | 0.87 | 4/6 | 4/6 | yes |
+| kanban | expand 4 columns | 79.4 | 34.0 | 0.43 | 4/6 | 4/6 | yes |
+| kanban | unmount | 13.3 | 6.5 | 0.49 | 1/1 | 0/0 | – |
 | spreadsheet | mount | 143.4 | 101.0 | 0.70 | 1/1 | 2/2 | yes |
 | spreadsheet | select 30 cells | 389.8 | 283.8 | 0.73 | 30/29 | 30/29 | yes |
 | spreadsheet | edit 10 cells | 937.5 | 535.8 | 0.57 | 60/40 | 96/80 | yes |
@@ -93,19 +115,19 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | spreadsheet | undo x10 | 402.5 | 155.6 | 0.39 | 8/8 | 8/8 | yes |
 | spreadsheet | undo the rest | 579.3 | 292.5 | 0.50 | 12/12 | 3/4 | yes |
 | spreadsheet | unmount | 7.3 | 5.8 | 0.80 | 1/1 | 2/2 | – |
-| todomvc | mount | 176.2 | 150.2 | 0.85 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 484.1 | 354.2 | 0.73 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 291.2 | 90.8 | 0.31 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 34.7 | 31.3 | 0.90 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 73.7 | 59.9 | 0.81 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 126.2 | 109.6 | 0.87 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 91.1 | 76.4 | 0.84 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 44.4 | 34.2 | 0.77 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 63.1 | 47.9 | 0.76 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 662.8 | 378.8 | 0.57 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 62.1 | 52.7 | 0.85 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 24.1 | 15.2 | 0.63 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 1.1 | 0.9 | 0.81 | 1/1 | 1/1 | – |
+| todomvc | mount | 179.3 | 28.1 | 0.16 | 1/2 | 1/2 | yes |
+| todomvc | add 10 todos | 496.2 | 169.5 | 0.34 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 311.5 | 114.4 | 0.37 | 19/20 | 19/20 | yes |
+| todomvc | filter active | 34.2 | 10.6 | 0.31 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 75.7 | 14.2 | 0.19 | 1/2 | 1/2 | yes |
+| todomvc | filter all | 129.7 | 28.2 | 0.22 | 1/2 | 1/3 | yes |
+| todomvc | edit one todo | 101.4 | 42.9 | 0.42 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 47.9 | 10.2 | 0.21 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 70.2 | 10.9 | 0.15 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 721.5 | 118.9 | 0.16 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 70.2 | 15.6 | 0.22 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 24.8 | 4.9 | 0.20 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 1.0 | 1.1 | 1.05 | 1/1 | 1/1 | – |
 
 ## All steps, CPU 4x
 
@@ -139,18 +161,18 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | hackernews | hide 10 stories | 916.5 | 809.6 | 0.88 | 9/9 | 9/9 | yes |
 | hackernews | unvote 10 | 284.3 | 244.2 | 0.86 | 9/9 | 9/9 | yes |
 | hackernews | unmount | 45.9 | 32.9 | 0.72 | 1/1 | 0/0 | – |
-| kanban | mount | 494.4 | 450.2 | 0.91 | 1/1 | 1/1 | yes |
-| kanban | move 30 cards by buttons | 937.9 | 790.4 | 0.84 | 29/29 | 29/29 | yes |
-| kanban | drag 20 cards | 600.4 | 516.1 | 0.86 | 18/18 | 18/18 | yes |
-| kanban | edit 10 cards in modal | 1996.6 | 1825.1 | 0.91 | 130/130 | 150/150 | yes |
-| kanban | open a card and edit | 267.2 | 277.6 | 1.04 | 21/21 | 22/22 | yes |
-| kanban | close card with Escape | 26.9 | 21.9 | 0.81 | 1/1 | 2/2 | yes |
-| kanban | add 10 cards | 2520.0 | 2341.9 | 0.93 | 120/120 | 150/150 | yes |
-| kanban | filter by label | 71.8 | 65.1 | 0.91 | 1/1 | 1/1 | yes |
-| kanban | clear filter | 432.1 | 380.8 | 0.88 | 1/1 | 1/1 | yes |
-| kanban | collapse 4 columns | 105.5 | 92.1 | 0.87 | 4/4 | 4/4 | yes |
-| kanban | expand 4 columns | 306.6 | 282.3 | 0.92 | 4/4 | 4/4 | yes |
-| kanban | unmount | 52.9 | 36.1 | 0.68 | 1/1 | 0/0 | – |
+| kanban | mount | 516.3 | 246.2 | 0.48 | 1/2 | 1/2 | yes |
+| kanban | move 30 cards by buttons | 1040.0 | 531.4 | 0.51 | 29/43 | 29/43 | yes |
+| kanban | drag 20 cards | 671.9 | 244.3 | 0.36 | 18/26 | 18/28 | yes |
+| kanban | edit 10 cards in modal | 2318.1 | 529.5 | 0.23 | 130/127 | 150/150 | yes |
+| kanban | open a card and edit | 320.5 | 71.5 | 0.22 | 21/21 | 22/22 | yes |
+| kanban | close card with Escape | 27.7 | 4.9 | 0.18 | 1/1 | 2/2 | yes |
+| kanban | add 10 cards | 2881.1 | 490.1 | 0.17 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 85.1 | 58.4 | 0.69 | 1/2 | 1/2 | yes |
+| kanban | clear filter | 453.8 | 310.9 | 0.69 | 1/3 | 1/3 | yes |
+| kanban | collapse 4 columns | 110.3 | 89.1 | 0.81 | 4/6 | 4/6 | yes |
+| kanban | expand 4 columns | 318.3 | 141.5 | 0.44 | 4/6 | 4/6 | yes |
+| kanban | unmount | 55.0 | 27.0 | 0.49 | 1/1 | 0/0 | – |
 | spreadsheet | mount | 466.8 | 351.1 | 0.75 | 1/1 | 2/2 | yes |
 | spreadsheet | select 30 cells | 1232.9 | 1023.9 | 0.83 | 30/29 | 30/29 | yes |
 | spreadsheet | edit 10 cells | 2971.4 | 2201.1 | 0.74 | 60/40 | 96/80 | yes |
@@ -163,19 +185,19 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | spreadsheet | undo x10 | 1551.7 | 560.8 | 0.36 | 9/8 | 9/8 | yes |
 | spreadsheet | undo the rest | 2145.8 | 912.4 | 0.43 | 12/12 | 3/4 | yes |
 | spreadsheet | unmount | 38.3 | 20.9 | 0.55 | 1/1 | 2/2 | – |
-| todomvc | mount | 730.7 | 632.1 | 0.87 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 1466.7 | 1141.0 | 0.78 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 1187.7 | 295.6 | 0.25 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 129.2 | 102.4 | 0.79 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 291.4 | 251.5 | 0.86 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 543.0 | 495.8 | 0.91 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 396.0 | 380.3 | 0.96 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 255.2 | 184.9 | 0.72 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 258.6 | 221.7 | 0.86 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 2947.0 | 2009.1 | 0.68 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 258.9 | 219.7 | 0.85 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 99.6 | 62.9 | 0.63 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 3.5 | 3.5 | 0.99 | 1/1 | 1/1 | – |
+| todomvc | mount | 750.9 | 123.3 | 0.16 | 1/2 | 1/2 | yes |
+| todomvc | add 10 todos | 1732.5 | 332.9 | 0.19 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 1249.3 | 343.8 | 0.28 | 19/20 | 19/20 | yes |
+| todomvc | filter active | 140.9 | 34.7 | 0.25 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 312.8 | 50.7 | 0.16 | 1/2 | 1/2 | yes |
+| todomvc | filter all | 556.4 | 97.7 | 0.18 | 1/2 | 1/3 | yes |
+| todomvc | edit one todo | 478.5 | 164.6 | 0.34 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 280.4 | 35.5 | 0.13 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 257.3 | 40.8 | 0.16 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 3147.4 | 420.4 | 0.13 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 300.0 | 39.2 | 0.13 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 106.2 | 15.9 | 0.15 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 3.2 | 3.2 | 0.97 | 1/1 | 1/1 | – |
 
 ## JS heap after the scenario (MB, after two forced GCs)
 
@@ -183,6 +205,6 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 |---|---:|---:|---:|---:|
 | datagrid | 7.52 | 3.48 | 7.53 | 3.81 |
 | hackernews | 11.52 | 2.92 | 11.51 | 3.02 |
-| kanban | 7.85 | 4.47 | 7.99 | 4.53 |
+| kanban | 7.86 | 4.20 | 7.76 | 4.24 |
 | spreadsheet | 8.45 | 3.90 | 8.50 | 3.90 |
-| todomvc | 4.05 | 1.73 | 4.05 | 1.69 |
+| todomvc | 4.05 | 1.72 | 4.05 | 1.72 |

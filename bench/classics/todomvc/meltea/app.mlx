@@ -1,3 +1,5 @@
+[@@@meltea.styles "../../style.css" "../style.css"]
+
 (** Whether a todo is done. *)
 type status = Active | Completed
 

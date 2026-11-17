@@ -1,3 +1,5 @@
+[@@@meltea.styles "../../style.css" "../style.css"]
+
 (** A colour-coded tag on a card. *)
 type label = Bug | Feature | Chore | Design | Research | Urgent
 

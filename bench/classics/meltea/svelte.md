@@ -12,8 +12,8 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 63 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 6, faster (< 0.95) in 40.
-- CPU 4x: 64 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.91; Meltea slower (> 1.05) in 7, faster (< 0.95) in 38.
+- CPU 1x: 63 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.64; Meltea slower (> 1.05) in 5, faster (< 0.95) in 47.
+- CPU 4x: 64 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.60; Meltea slower (> 1.05) in 6, faster (< 0.95) in 45.
 
 ## Where Meltea is slower (ratio > 1.05)
 
@@ -28,8 +28,6 @@ against Meltea's first run.
 | hackernews | 1x | unvote 10 | 46.4 | 51.1 | 1.10 | 9/9 | 9/9 |
 | datagrid | 1x | sort by name | 102.1 | 111.0 | 1.09 | 1/1 | 1/1 |
 | hackernews | 4x | back to front page | 160.9 | 174.7 | 1.09 | 1/1 | 1/1 |
-| kanban | 1x | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 |
-| todomvc | 4x | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 |
 | datagrid | 4x | sort by name | 433.0 | 458.6 | 1.06 | 1/1 | 1/1 |
 | hackernews | 4x | expand them back | 1451.0 | 1525.8 | 1.05 | 49/49 | 49/49 |
 
@@ -37,8 +35,30 @@ against Meltea's first run.
 
 | app | cpu | step | layouts S/M | styles S/M | Svelte 5 ms | Meltea ms |
 |---|---|---|---:|---:|---:|---:|
-| kanban | 1x | close card with Escape | 1/1 | 1/2 | 6.3 | 6.8 |
-| kanban | 4x | close card with Escape | 1/1 | 1/2 | 22.8 | 21.4 |
+| kanban | 1x | mount | 1/2 | 1/2 | 148.5 | 59.0 |
+| kanban | 1x | move 30 cards by buttons | 29/43 | 29/43 | 242.5 | 149.5 |
+| kanban | 1x | drag 20 cards | 18/26 | 18/28 | 181.5 | 71.0 |
+| kanban | 1x | close card with Escape | 1/1 | 1/2 | 7.0 | 2.0 |
+| kanban | 1x | filter by label | 1/2 | 1/2 | 21.5 | 18.0 |
+| kanban | 1x | clear filter | 1/3 | 1/3 | 137.9 | 78.3 |
+| kanban | 1x | collapse 4 columns | 4/6 | 4/6 | 25.6 | 22.5 |
+| kanban | 1x | expand 4 columns | 4/6 | 4/6 | 82.2 | 31.1 |
+| kanban | 4x | mount | 1/2 | 1/2 | 594.4 | 237.9 |
+| kanban | 4x | move 30 cards by buttons | 29/43 | 29/43 | 1008.5 | 517.4 |
+| kanban | 4x | drag 20 cards | 18/26 | 18/28 | 744.4 | 236.6 |
+| kanban | 4x | close card with Escape | 1/1 | 1/2 | 24.4 | 5.1 |
+| kanban | 4x | filter by label | 1/2 | 1/2 | 86.7 | 55.8 |
+| kanban | 4x | clear filter | 1/3 | 1/3 | 522.4 | 296.2 |
+| kanban | 4x | collapse 4 columns | 4/6 | 4/6 | 101.3 | 92.3 |
+| kanban | 4x | expand 4 columns | 4/6 | 4/6 | 349.9 | 125.3 |
+| todomvc | 1x | mount | 1/2 | 1/2 | 206.3 | 28.8 |
+| todomvc | 1x | toggle 20 todos | 19/20 | 19/20 | 112.8 | 110.1 |
+| todomvc | 1x | filter completed | 1/2 | 1/2 | 76.5 | 14.3 |
+| todomvc | 1x | filter all | 1/2 | 1/3 | 155.7 | 29.1 |
+| todomvc | 4x | mount | 1/2 | 1/2 | 832.1 | 124.0 |
+| todomvc | 4x | toggle 20 todos | 19/20 | 19/20 | 444.1 | 354.3 |
+| todomvc | 4x | filter completed | 1/2 | 1/2 | 314.2 | 56.2 |
+| todomvc | 4x | filter all | 1/2 | 1/3 | 635.7 | 103.0 |
 
 ## DOM differences and crashes
 
@@ -76,18 +96,18 @@ None.
 | hackernews | hide 10 stories | 166.2 | 147.9 | 0.89 | 9/9 | 9/9 | yes |
 | hackernews | unvote 10 | 46.4 | 51.1 | 1.10 | 9/9 | 9/9 | yes |
 | hackernews | unmount | 8.0 | 7.4 | 0.92 | 1/1 | 1/0 | – |
-| kanban | mount | 139.6 | 110.6 | 0.79 | 1/1 | 1/1 | yes |
-| kanban | move 30 cards by buttons | 230.4 | 211.8 | 0.92 | 29/29 | 29/29 | yes |
-| kanban | drag 20 cards | 166.7 | 133.5 | 0.80 | 18/18 | 18/18 | yes |
-| kanban | edit 10 cards in modal | 641.1 | 628.1 | 0.98 | 140/130 | 160/150 | yes |
-| kanban | open a card and edit | 89.9 | 89.7 | 1.00 | 22/21 | 24/22 | yes |
-| kanban | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 | yes |
-| kanban | add 10 cards | 727.4 | 706.8 | 0.97 | 120/120 | 150/150 | yes |
-| kanban | filter by label | 21.5 | 18.3 | 0.85 | 1/1 | 1/1 | yes |
-| kanban | clear filter | 130.7 | 102.7 | 0.79 | 1/1 | 1/1 | yes |
-| kanban | collapse 4 columns | 23.5 | 23.0 | 0.98 | 4/4 | 4/4 | yes |
-| kanban | expand 4 columns | 85.7 | 77.8 | 0.91 | 4/4 | 4/4 | yes |
-| kanban | unmount | 10.6 | 9.0 | 0.84 | 1/1 | 1/0 | – |
+| kanban | mount | 148.5 | 59.0 | 0.40 | 1/2 | 1/2 | yes |
+| kanban | move 30 cards by buttons | 242.5 | 149.5 | 0.62 | 29/43 | 29/43 | yes |
+| kanban | drag 20 cards | 181.5 | 71.0 | 0.39 | 18/26 | 18/28 | yes |
+| kanban | edit 10 cards in modal | 646.3 | 281.8 | 0.44 | 140/127 | 160/150 | yes |
+| kanban | open a card and edit | 88.2 | 30.0 | 0.34 | 22/21 | 24/22 | yes |
+| kanban | close card with Escape | 7.0 | 2.0 | 0.28 | 1/1 | 1/2 | yes |
+| kanban | add 10 cards | 751.7 | 241.8 | 0.32 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 21.5 | 18.0 | 0.84 | 1/2 | 1/2 | yes |
+| kanban | clear filter | 137.9 | 78.3 | 0.57 | 1/3 | 1/3 | yes |
+| kanban | collapse 4 columns | 25.6 | 22.5 | 0.88 | 4/6 | 4/6 | yes |
+| kanban | expand 4 columns | 82.2 | 31.1 | 0.38 | 4/6 | 4/6 | yes |
+| kanban | unmount | 11.1 | 6.4 | 0.58 | 1/1 | 1/0 | – |
 | spreadsheet | mount | 92.3 | 75.0 | 0.81 | 1/1 | 2/2 | yes |
 | spreadsheet | select 30 cells | 288.0 | 212.0 | 0.74 | 29/29 | 29/29 | yes |
 | spreadsheet | edit 10 cells | 503.5 | 440.3 | 0.87 | 40/40 | 80/80 | yes |
@@ -100,19 +120,19 @@ None.
 | spreadsheet | undo x10 | 137.0 | 129.2 | 0.94 | 8/8 | 8/8 | yes |
 | spreadsheet | undo the rest | 204.4 | 194.2 | 0.95 | 12/12 | 4/4 | yes |
 | spreadsheet | unmount | 8.7 | 4.7 | 0.54 | 1/1 | 2/2 | – |
-| todomvc | mount | 198.5 | 149.6 | 0.75 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 428.7 | 350.9 | 0.82 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 115.2 | 84.0 | 0.73 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 35.8 | 33.0 | 0.92 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 74.9 | 61.1 | 0.82 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 151.6 | 111.1 | 0.73 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 86.5 | 85.7 | 0.99 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 38.8 | 35.9 | 0.93 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 52.6 | 51.4 | 0.98 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 532.3 | 443.9 | 0.83 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 53.9 | 53.3 | 0.99 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 19.4 | 15.6 | 0.80 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 1.1 | 1.1 | 0.98 | 1/1 | 1/1 | – |
+| todomvc | mount | 206.3 | 28.8 | 0.14 | 1/2 | 1/2 | yes |
+| todomvc | add 10 todos | 427.4 | 169.7 | 0.40 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 112.8 | 110.1 | 0.98 | 19/20 | 19/20 | yes |
+| todomvc | filter active | 33.3 | 9.3 | 0.28 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 76.5 | 14.3 | 0.19 | 1/2 | 1/2 | yes |
+| todomvc | filter all | 155.7 | 29.1 | 0.19 | 1/2 | 1/3 | yes |
+| todomvc | edit one todo | 89.7 | 46.8 | 0.52 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 40.5 | 9.9 | 0.25 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 54.4 | 11.7 | 0.22 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 558.2 | 120.5 | 0.22 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 55.3 | 16.0 | 0.29 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 20.1 | 5.1 | 0.25 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 1.2 | 1.0 | 0.86 | 1/1 | 1/1 | – |
 
 ## All steps, CPU 4x
 
@@ -146,18 +166,18 @@ None.
 | hackernews | hide 10 stories | 764.6 | 690.0 | 0.90 | 9/9 | 9/9 | yes |
 | hackernews | unvote 10 | 179.3 | 228.3 | 1.27 | 9/9 | 9/9 | yes |
 | hackernews | unmount | 33.0 | 31.1 | 0.94 | 1/1 | 1/0 | – |
-| kanban | mount | 578.3 | 466.3 | 0.81 | 1/1 | 1/1 | yes |
-| kanban | move 30 cards by buttons | 922.2 | 853.2 | 0.93 | 29/29 | 29/29 | yes |
-| kanban | drag 20 cards | 673.9 | 533.2 | 0.79 | 18/18 | 18/18 | yes |
-| kanban | edit 10 cards in modal | 1932.4 | 1943.7 | 1.01 | 140/130 | 160/150 | yes |
-| kanban | open a card and edit | 274.0 | 276.7 | 1.01 | 22/21 | 24/22 | yes |
-| kanban | close card with Escape | 22.8 | 21.4 | 0.94 | 1/1 | 1/2 | yes |
-| kanban | add 10 cards | 2458.5 | 2399.5 | 0.98 | 120/120 | 150/150 | yes |
-| kanban | filter by label | 75.2 | 63.5 | 0.84 | 1/1 | 1/1 | yes |
-| kanban | clear filter | 491.2 | 409.5 | 0.83 | 1/1 | 1/1 | yes |
-| kanban | collapse 4 columns | 94.2 | 91.7 | 0.97 | 4/4 | 4/4 | yes |
-| kanban | expand 4 columns | 319.7 | 280.5 | 0.88 | 4/4 | 4/4 | yes |
-| kanban | unmount | 43.6 | 36.5 | 0.84 | 1/1 | 1/0 | – |
+| kanban | mount | 594.4 | 237.9 | 0.40 | 1/2 | 1/2 | yes |
+| kanban | move 30 cards by buttons | 1008.5 | 517.4 | 0.51 | 29/43 | 29/43 | yes |
+| kanban | drag 20 cards | 744.4 | 236.6 | 0.32 | 18/26 | 18/28 | yes |
+| kanban | edit 10 cards in modal | 2113.2 | 543.7 | 0.26 | 140/127 | 160/150 | yes |
+| kanban | open a card and edit | 295.5 | 70.3 | 0.24 | 22/21 | 24/22 | yes |
+| kanban | close card with Escape | 24.4 | 5.1 | 0.21 | 1/1 | 1/2 | yes |
+| kanban | add 10 cards | 2710.5 | 477.9 | 0.18 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 86.7 | 55.8 | 0.64 | 1/2 | 1/2 | yes |
+| kanban | clear filter | 522.4 | 296.2 | 0.57 | 1/3 | 1/3 | yes |
+| kanban | collapse 4 columns | 101.3 | 92.3 | 0.91 | 4/6 | 4/6 | yes |
+| kanban | expand 4 columns | 349.9 | 125.3 | 0.36 | 4/6 | 4/6 | yes |
+| kanban | unmount | 45.5 | 25.8 | 0.57 | 1/1 | 1/0 | – |
 | spreadsheet | mount | 371.7 | 321.4 | 0.86 | 1/1 | 2/2 | yes |
 | spreadsheet | select 30 cells | 1244.4 | 943.9 | 0.76 | 29/29 | 29/29 | yes |
 | spreadsheet | edit 10 cells | 2177.0 | 1964.3 | 0.90 | 40/40 | 80/80 | yes |
@@ -170,19 +190,19 @@ None.
 | spreadsheet | undo x10 | 583.0 | 536.0 | 0.92 | 8/8 | 8/8 | yes |
 | spreadsheet | undo the rest | 910.9 | 860.2 | 0.94 | 12/12 | 4/4 | yes |
 | spreadsheet | unmount | 36.6 | 18.7 | 0.51 | 1/1 | 2/2 | – |
-| todomvc | mount | 795.2 | 656.4 | 0.83 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 1538.5 | 1263.9 | 0.82 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 434.7 | 324.5 | 0.75 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 115.7 | 103.7 | 0.90 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 303.7 | 247.5 | 0.82 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 616.1 | 568.3 | 0.92 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 427.4 | 416.9 | 0.98 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 254.3 | 215.4 | 0.85 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 2624.9 | 2086.0 | 0.79 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 237.7 | 242.0 | 1.02 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 86.5 | 64.0 | 0.74 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 3.8 | 3.3 | 0.86 | 1/1 | 1/1 | – |
+| todomvc | mount | 832.1 | 124.0 | 0.15 | 1/2 | 1/2 | yes |
+| todomvc | add 10 todos | 1544.3 | 355.5 | 0.23 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 444.1 | 354.3 | 0.80 | 19/20 | 19/20 | yes |
+| todomvc | filter active | 126.1 | 38.1 | 0.30 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 314.2 | 56.2 | 0.18 | 1/2 | 1/2 | yes |
+| todomvc | filter all | 635.7 | 103.0 | 0.16 | 1/2 | 1/3 | yes |
+| todomvc | edit one todo | 425.9 | 173.9 | 0.41 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 174.5 | 32.8 | 0.19 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 263.8 | 40.0 | 0.15 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 2583.7 | 436.4 | 0.17 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 264.4 | 39.0 | 0.15 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 85.0 | 17.4 | 0.20 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 3.7 | 3.4 | 0.92 | 1/1 | 1/1 | – |
 
 ## JS heap after the scenario (MB, after two forced GCs)
 
@@ -190,6 +210,6 @@ None.
 |---|---:|---:|---:|---:|
 | datagrid | 5.18 | 3.47 | 4.95 | 3.81 |
 | hackernews | 7.41 | 2.91 | 7.43 | 3.01 |
-| kanban | 22.45 | 4.44 | 22.56 | 4.27 |
+| kanban | 22.57 | 4.26 | 22.44 | 4.21 |
 | spreadsheet | 15.30 | 3.73 | 15.29 | 3.82 |
-| todomvc | 1.53 | 1.73 | 1.53 | 1.69 |
+| todomvc | 1.54 | 1.72 | 1.53 | 1.72 |

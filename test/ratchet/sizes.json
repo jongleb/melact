@@ -1,14 +1,14 @@
 {
   "sizes": {
     "bench/melact": 18666,
-    "bench/meltea": 11036,
+    "bench/meltea": 11039,
     "bench/ssr/melact client": 19793,
-    "bench/ssr/meltea client": 12014,
+    "bench/ssr/meltea client": 12013,
     "examples/counter": 12434,
     "examples/todomvc": 18569,
-    "meltea/examples/counter": 5009,
+    "meltea/examples/counter": 5003,
     "meltea/examples/todomvc": 20641,
-    "meltea/examples/served client": 6350,
+    "meltea/examples/served client": 6352,
     "bench/classics/admin": 29592,
     "bench/classics/autocomplete": 27103,
     "bench/classics/blocks": 29230,
@@ -1154,6 +1154,20 @@
         "bench/classics/trace": [
           31142,
           31144
+        ]
+      }
+    },
+    {
+      "date": "2026-11-17",
+      "reason": "minifier names shift when meltea's html.mjs and view.mjs gain grouped; the bundles that grew do not use it (approved by the user 2026-11-17)",
+      "grown": {
+        "bench/meltea": [
+          11036,
+          11039
+        ],
+        "meltea/examples/served client": [
+          6350,
+          6352
         ]
       }
     }

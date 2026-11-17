@@ -6,5 +6,6 @@
  (libraries meltea melange.dom)
  (module_systems
   (es6 mjs))
+ (preprocessor_deps ../../style.css ../style.css)
  (preprocess
   (staged_pps melange.ppx meltea-ppx -- -typed)))
