@@ -3,3 +3,4 @@ _dist-profile/
 results.json
 profile.json
 _server/
+classics/meltea/*.json

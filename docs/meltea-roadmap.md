@@ -263,6 +263,22 @@ Port a handful of `bench/classics` apps (todomvc, kanban, spreadsheet, hackernew
 Meltea and to Svelte 5, driven by the same scenarios, so that time, layouts and size are measured
 on real programs and not only on the keyed benchmark.
 
+Started with TodoMVC (5,000 todos, 12 steps). `bench/classics/run.mjs --frameworks=<base>,<other>`
+compares any two builds; Meltea's are `<app>/meltea/app.mlx` with `common/meltea/classic.ml`,
+Svelte's `<app>/svelte/App.svelte` (idiomatic runes: `$state`, `$derived`, mutation in place),
+compiled by esbuild with the Svelte 5.57.3 compiler. The DOM is identical to React's and to
+Svelte's after every step. Results in `bench/classics/meltea/results.md` (against React) and
+`svelte.md`: the geometric mean of Meltea's time is 0.71 of React's and 0.89 of Svelte's (1x;
+0.72 and 0.93 at 4x), with the same layouts and style recalcs; the bundle is 14.4 kB gzip
+(Svelte 23.2, React 50.2); the heap after the scenario is 1.73 MB (Svelte 1.53). Meltea is slower
+than Svelte in `filter active` (1.28, 1.21 at 4x: about 1,650 of 5,000 rows leave the list),
+`edit one todo` at 4x (1.13) and `toggle all again` at 4x (1.07).
+
+Kanban, next, needs what Meltea does not have yet: a portal (its dialog renders into `#portal`),
+a subscription to the document's keys (Escape closes the dialog), `preventDefault` on drag events
+(without it a browser never fires `drop`) and the dragged card in the model instead of
+`dataTransfer`.
+
 ## Guards
 
 Every step, before it is pushed: `opam exec -- dune build`, `dune test`, `dune build @runtest-js &&

@@ -1,0 +1,174 @@
+(** Whether a todo is done. *)
+type status = Active | Completed
+
+type todo = { id : int; title : string; status : status }
+
+(** Which todos the list shows. *)
+type filter = All | Only_active | Only_completed
+
+(** The todo whose title is being edited, and the text typed so far. *)
+type editing = Not_editing | Editing of { id : int; text : string }
+
+type model = { todos : todo list; draft : string; editing : editing; filter : filter }
+
+type message =
+  | Type of string
+  | Add
+  | Toggle of int
+  | Toggle_all
+  | Edit of int
+  | Retype of string
+  | Finish
+  | Cancel
+  | Destroy of int
+  | Clear_completed
+  | Show of filter
+  | Ignore
+
+let initial =
+  let seed = Classic.Seed.make 7 in
+  List.init 5000 (fun index ->
+      {
+        id = index + 1;
+        title = Classic.sentence seed 4;
+        status = (match Classic.Seed.next seed 3 with 0 -> Completed | _ -> Active);
+      })
+
+let update message model =
+  let renamed id title = List.map (fun todo -> match todo.id = id with true -> { todo with title } | false -> todo) model.todos in
+  let without id = List.filter (fun todo -> todo.id <> id) model.todos in
+  match message with
+  | Type draft -> ({ model with draft }, Cmd.none)
+  | Add -> (
+      match String.trim model.draft with
+      | "" -> (model, Cmd.none)
+      | title ->
+          let id = List.fold_left (fun top todo -> max top todo.id) 0 model.todos + 1 in
+          ({ model with todos = model.todos @ [ { id; title; status = Active } ]; draft = "" }, Cmd.none))
+  | Toggle id ->
+      ( {
+          model with
+          todos =
+            List.map
+              (fun todo ->
+                match todo.id = id with
+                | true -> { todo with status = (match todo.status with Active -> Completed | Completed -> Active) }
+                | false -> todo)
+              model.todos;
+        },
+        Cmd.none )
+  | Toggle_all ->
+      let status =
+        match List.exists (fun todo -> todo.status = Active) model.todos with true -> Completed | false -> Active
+      in
+      ({ model with todos = List.map (fun todo -> { todo with status }) model.todos }, Cmd.none)
+  | Edit id ->
+      ( Option.fold ~none:model
+          ~some:(fun todo -> { model with editing = Editing { id; text = todo.title } })
+          (List.find_opt (fun todo -> todo.id = id) model.todos),
+        Classic.focus ".todo-list .edit" )
+  | Retype text -> (
+      match model.editing with
+      | Editing { id; _ } -> ({ model with editing = Editing { id; text } }, Cmd.none)
+      | Not_editing -> (model, Cmd.none))
+  | Finish -> (
+      match model.editing with
+      | Editing { id; text } -> (
+          match String.trim text with
+          | "" -> ({ model with todos = without id; editing = Not_editing }, Cmd.none)
+          | title -> ({ model with todos = renamed id title; editing = Not_editing }, Cmd.none))
+      | Not_editing -> (model, Cmd.none))
+  | Cancel -> ({ model with editing = Not_editing }, Cmd.none)
+  | Destroy id -> ({ model with todos = without id }, Cmd.none)
+  | Clear_completed -> ({ model with todos = List.filter (fun todo -> todo.status = Active) model.todos }, Cmd.none)
+  | Show filter -> ({ model with filter }, Cmd.none)
+  | Ignore -> (model, Cmd.none)
+
+let row editing todo =
+  let text =
+    match editing with
+    | Editing { id; text } -> (match id = todo.id with true -> Some text | false -> None)
+    | Not_editing -> None
+  in
+  <li
+    key=(string_of_int todo.id)
+    className=(String.concat " "
+       [ (match todo.status with Completed -> "completed" | Active -> "");
+         (match text with Some _ -> "editing" | None -> "") ])>
+    <div className="view">
+      <input
+        className="toggle"
+        type_="checkbox"
+        checked=(todo.status = Completed)
+        onCheck=(fun _ -> Toggle todo.id) />
+      <label onDoubleClick=(Edit todo.id)>(Html.text todo.title)</label>
+      <button className="destroy" onClick=(Destroy todo.id) />
+    </div>
+    (Option.fold ~none:Html.none
+       ~some:(fun text ->
+         <input
+           className="edit"
+           value=text
+           onInput=((fun text -> Retype text) [@alert "-fanout"])
+           onBlur=Finish
+           onKeyDown=(fun key -> match key with "Enter" -> Finish | "Escape" -> Cancel | _ -> Ignore) />)
+       text)
+  </li>
+
+let view { todos; draft; editing; filter } =
+  let shown =
+    List.filter
+      (fun todo ->
+        match (filter, todo.status) with
+        | All, _ | Only_active, Active | Only_completed, Completed -> true
+        | Only_active, Completed | Only_completed, Active -> false)
+      todos
+  in
+  let active = List.length (List.filter (fun todo -> todo.status = Active) todos) in
+  let completed = List.length todos - active in
+  let link label target =
+    <li>
+      <a href="#" className=(match filter = target with true -> "selected" | false -> "") onClick=(Show target)>
+        (Html.text label)
+      </a>
+    </li>
+  in
+  <section className="todoapp">
+    <header className="header">
+      <h1>(Html.text "todos")</h1>
+      <input
+        className="new-todo"
+        placeholder="What needs to be done?"
+        value=draft
+        onInput=(fun text -> Type text)
+        onKeyDown=(fun key -> match key with "Enter" -> Add | _ -> Ignore) />
+    </header>
+    <section className="main">
+      <input
+        id="toggle-all"
+        className="toggle-all"
+        type_="checkbox"
+        checked=(active = 0)
+        onCheck=(fun _ -> Toggle_all) />
+      <label htmlFor="toggle-all">(Html.text "Mark all as complete")</label>
+      <ul className="todo-list">(Html.list (List.map (row editing) shown))</ul>
+    </section>
+    <footer className="footer">
+      <span className="todo-count">
+        <strong>(Html.int active)</strong>
+        (Html.text (match active with 1 -> " item left" | _ -> " items left"))
+      </span>
+      <ul className="filters">(link "All" All) (link "Active" Only_active) (link "Completed" Only_completed)</ul>
+      (match completed with
+       | 0 -> Html.none
+       | _ -> <button className="clear-completed" onClick=Clear_completed>(Html.text "Clear completed")</button>)
+    </footer>
+  </section>
+
+let () =
+  Classic.start (fun root ->
+      Program.element
+        ~init:({ todos = initial; draft = ""; editing = Not_editing; filter = All }, Cmd.none)
+        ~update ~view
+        ~subscriptions:(fun _ -> Sub.none)
+        root)

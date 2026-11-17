@@ -3,6 +3,9 @@
 // recalcs, heap and the DOM after every step. Writes results.json and RESULTS.md next to itself.
 //
 //   node bench/classics/run.mjs [--apps=todomvc,grid] [--runs=5] [--cpu=1,4] [--no-build] [--headed]
+//   node bench/classics/run.mjs --frameworks=react,meltea --out=meltea-results.json --apps=todomvc
+//
+// A pair other than react,melact builds each app's own <app>/<framework> directory for both sides.
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -23,7 +26,11 @@ const args = Object.fromEntries(
 );
 const runs = Number(args.runs ?? 5);
 const rates = (args.cpu ?? "1,4").split(",").map(Number);
-const frameworks = ["react", "melact"];
+const frameworks = (args.frameworks ?? "react,melact").split(",");
+const [base, other] = frameworks;
+const label = { react: "React", melact: "Melact", meltea: "Meltea", svelte: "Svelte 5" };
+const [baseName, otherName] = [label[base], label[other]];
+const initials = `${baseName[0]}/${otherName[0]}`;
 const log = (...parts) => process.stderr.write(parts.join(" ") + "\n");
 
 const allApps = readdirSync(here)
@@ -49,6 +56,17 @@ const build = async () => {
       });
     },
   };
+  const svelteModules = join(repo, "bench/svelte/node_modules");
+  const svelte = {
+    name: "svelte",
+    setup(build) {
+      build.onLoad({ filter: /\.svelte$/ }, async ({ path }) => {
+        const { compile } = await import(join(svelteModules, "svelte/src/compiler/index.js"));
+        const { js } = compile(readFileSync(path, "utf8"), { filename: path, generate: "client", dev: false });
+        return { contents: js.code, loader: "js", resolveDir: dirname(path) };
+      });
+    },
+  };
   const shared = readFileSync(join(here, "style.css"), "utf8");
   const built = [];
   for (const app of apps) {
@@ -57,7 +75,10 @@ const build = async () => {
     mkdirSync(join(dist, app), { recursive: true });
     let ok = true;
     for (const framework of frameworks) {
-      const entry = join(repo, "_build/default/bench/classics", app, framework, "output/bench/classics", app, framework, "app.mjs");
+      const script = join(here, app, framework, "main.js");
+      const entry = existsSync(script)
+        ? script
+        : join(repo, "_build/default/bench/classics", app, framework, "output/bench/classics", app, framework, "app.mjs");
       if (!existsSync(entry)) {
         log(`missing ${entry}`);
         ok = false;
@@ -70,7 +91,9 @@ const build = async () => {
         minify: true,
         outfile: join(dist, app, `${framework}.js`),
         define: { "process.env.NODE_ENV": '"production"' },
-        plugins: [melangeOutput],
+        ...(existsSync(script)
+          ? { plugins: [svelte], nodePaths: [svelteModules], conditions: ["svelte", "browser", "production"] }
+          : { plugins: [melangeOutput] }),
         logLevel: "error",
       });
       writeFileSync(
@@ -112,8 +135,8 @@ const firstDifference = (left, right) => {
   while (index < left.length && left[index] === right[index]) index++;
   return {
     at: index,
-    react: left.slice(Math.max(0, index - 120), index + 200),
-    melact: right.slice(Math.max(0, index - 120), index + 200),
+    [base]: left.slice(Math.max(0, index - 120), index + 200),
+    [other]: right.slice(Math.max(0, index - 120), index + 200),
   };
 };
 
@@ -203,7 +226,7 @@ const measureApp = async (browser, origin, app) => {
   const { default: steps } = await import(pathToFileURL(join(here, app, "scenario.mjs")).href);
   const report = { app, rates: {} };
   for (const rate of rates) {
-    const samples = { react: [], melact: [] };
+    const samples = Object.fromEntries(frameworks.map((framework) => [framework, []]));
     for (let run = 0; run < runs; run++)
       for (const framework of run % 2 ? [...frameworks].reverse() : frameworks) {
         log(`${app} ${rate}x run ${run + 1}/${runs} ${framework}`);
@@ -226,18 +249,18 @@ const measureApp = async (browser, origin, app) => {
           samples: found.map((result) => Math.round(result.task * 10) / 10),
         };
       }
-      const react = samples.react[0].results.find((result) => result.step === name);
-      const melact = samples.melact[0].results.find((result) => result.step === name);
-      if (react && melact && name !== "unmount") {
-        row.identical = react.hash === melact.hash;
-        row.rawIdentical = react.rawHash === melact.rawHash;
+      const first = samples[base][0].results.find((result) => result.step === name);
+      const second = samples[other][0].results.find((result) => result.step === name);
+      if (first && second && name !== "unmount") {
+        row.identical = first.hash === second.hash;
+        row.rawIdentical = first.rawHash === second.rawHash;
         if (!row.identical) {
-          row.difference = firstDifference(react.html, melact.html);
+          row.difference = firstDifference(first.html, second.html);
           const dir = join(dist, app, "dom");
           mkdirSync(dir, { recursive: true });
           const file = `${rate}x-${names.indexOf(name)}`;
-          writeFileSync(join(dir, `${file}-react.html`), react.html);
-          writeFileSync(join(dir, `${file}-melact.html`), melact.html);
+          writeFileSync(join(dir, `${file}-${base}.html`), first.html);
+          writeFileSync(join(dir, `${file}-${other}.html`), second.html);
         }
       }
       const hashes = (framework) => new Set(samples[framework].map((sample) => sample.results.find((result) => result.step === name)?.hash));
@@ -260,18 +283,29 @@ const measureApp = async (browser, origin, app) => {
 const format = (value, digits = 1) => (value === undefined || Number.isNaN(value) ? "–" : value.toFixed(digits));
 
 const writeMarkdown = (all) => {
+  const heading =
+    other === "melact"
+      ? [
+          "# Classic apps: reason-react on React 18.3 vs Melact",
+          "",
+          "Generated by `node bench/classics/run.mjs`. Each app is one `app.mlx`, compiled against reason-react",
+          "(React 18.3.1, production build) and against Melact, bundled by esbuild, and driven through its",
+        ]
+      : [
+          `# Classic apps: ${baseName} vs ${otherName}`,
+          "",
+          `Generated by \`node bench/classics/run.mjs --frameworks=${frameworks.join(",")}\`. Each app is written once for`,
+          `each framework (\`<app>/${base}\` or \`app.mlx\`, and \`<app>/${other}\`), bundled by esbuild, and driven through its`,
+        ];
   const lines = [
-    "# Classic apps: reason-react on React 18.3 vs Melact",
-    "",
-    "Generated by `node bench/classics/run.mjs`. Each app is one `app.mlx`, compiled against reason-react",
-    "(React 18.3.1, production build) and against Melact, bundled by esbuild, and driven through its",
+    ...heading,
     "`scenario.mjs` in headless Chromium (Playwright). Per step: median over the runs of the main-thread",
     "busy time (CDP `TaskDuration` delta, from before the step until the page has settled: no DOM mutation",
     "during two animation frames, a task and an idle callback), and of the `LayoutCount` and `RecalcStyleCount`",
     "deltas. Runs per app: 5 at 1x; 5 at 4x except the apps marked with their run count.",
-    "Ratio is Melact / React; above 1 Melact is slower. DOM: the root's and the portal container's",
-    "markup after the step (attributes sorted, form fields' `value`/`checked` added), React's first run",
-    "against Melact's first run.",
+    `Ratio is ${otherName} / ${baseName}; above 1 ${otherName} is slower. DOM: the root's and the portal container's`,
+    `markup after the step (attributes sorted, an empty \`class\` and empty comments left out, form fields' \`value\` and \`checked\` attributes replaced by their live properties), ${baseName}'s first run`,
+    `against ${otherName}'s first run.`,
     "",
   ];
   const losses = [];
@@ -282,9 +316,9 @@ const writeMarkdown = (all) => {
   for (const report of Object.values(all).sort((a, b) => a.app.localeCompare(b.app))) {
     for (const [rate, data] of Object.entries(report.rates)) {
       for (const row of data.rows) {
-        const ratio = row.melact.task / row.react.task;
+        const ratio = row[other].task / row[base].task;
         if (ratio > 1.05) losses.push({ app: report.app, rate, row, ratio });
-        if (row.melact.layouts > row.react.layouts || row.melact.styles > row.react.styles) counts.push({ app: report.app, rate, row });
+        if (row[other].layouts > row[base].layouts || row[other].styles > row[base].styles) counts.push({ app: report.app, rate, row });
         if (row.identical === false && rate === String(rates[0])) differences.push({ app: report.app, row });
         if (row.identical === true && row.rawIdentical === false) rawOnly.add(report.app);
       }
@@ -296,25 +330,25 @@ const writeMarkdown = (all) => {
   for (const rate of rates) {
     const measured = Object.values(all)
       .flatMap((report) => report.rates[rate]?.rows ?? [])
-      .filter((row) => row.react.task >= 5 && row.melact.task > 0);
-    const ratios = measured.map((row) => row.melact.task / row.react.task);
+      .filter((row) => row[base].task >= 5 && row[other].task > 0);
+    const ratios = measured.map((row) => row[other].task / row[base].task);
     const mean = Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length);
     lines.push(
-      `- CPU ${rate}x: ${measured.length} steps of at least 5 ms under React; geometric mean Melact/React ${format(mean, 2)}; ` +
-        `Melact slower (> 1.05) in ${ratios.filter((ratio) => ratio > 1.05).length}, faster (< 0.95) in ${ratios.filter((ratio) => ratio < 0.95).length}.`,
+      `- CPU ${rate}x: ${measured.length} steps of at least 5 ms under ${baseName}; geometric mean ${otherName}/${baseName} ${format(mean, 2)}; ` +
+        `${otherName} slower (> 1.05) in ${ratios.filter((ratio) => ratio > 1.05).length}, faster (< 0.95) in ${ratios.filter((ratio) => ratio < 0.95).length}.`,
     );
   }
-  lines.push("", "## Where Melact is slower (ratio > 1.05)", "");
-  lines.push("| app | cpu | step | React ms | Melact ms | ratio | layouts R/M | styles R/M |", "|---|---|---|---:|---:|---:|---:|---:|");
+  lines.push("", `## Where ${otherName} is slower (ratio > 1.05)`, "");
+  lines.push(`| app | cpu | step | ${baseName} ms | ${otherName} ms | ratio | layouts ${initials} | styles ${initials} |`, "|---|---|---|---:|---:|---:|---:|---:|");
   for (const { app, rate, row, ratio } of losses.sort((a, b) => b.ratio - a.ratio))
     lines.push(
-      `| ${app} | ${rate}x | ${row.step} | ${format(row.react.task)} | ${format(row.melact.task)} | ${format(ratio, 2)} | ${format(row.react.layouts, 0)}/${format(row.melact.layouts, 0)} | ${format(row.react.styles, 0)}/${format(row.melact.styles, 0)} |`,
+      `| ${app} | ${rate}x | ${row.step} | ${format(row[base].task)} | ${format(row[other].task)} | ${format(ratio, 2)} | ${format(row[base].layouts, 0)}/${format(row[other].layouts, 0)} | ${format(row[base].styles, 0)}/${format(row[other].styles, 0)} |`,
     );
-  lines.push("", "## Where Melact lays out or recalculates style more often", "");
-  lines.push("| app | cpu | step | layouts R/M | styles R/M | React ms | Melact ms |", "|---|---|---|---:|---:|---:|---:|");
+  lines.push("", `## Where ${otherName} lays out or recalculates style more often`, "");
+  lines.push(`| app | cpu | step | layouts ${initials} | styles ${initials} | ${baseName} ms | ${otherName} ms |`, "|---|---|---|---:|---:|---:|---:|");
   for (const { app, rate, row } of counts)
     lines.push(
-      `| ${app} | ${rate}x | ${row.step} | ${format(row.react.layouts, 0)}/${format(row.melact.layouts, 0)} | ${format(row.react.styles, 0)}/${format(row.melact.styles, 0)} | ${format(row.react.task)} | ${format(row.melact.task)} |`,
+      `| ${app} | ${rate}x | ${row.step} | ${format(row[base].layouts, 0)}/${format(row[other].layouts, 0)} | ${format(row[base].styles, 0)}/${format(row[other].styles, 0)} | ${format(row[base].task)} | ${format(row[other].task)} |`,
     );
   lines.push("", "## DOM differences and crashes", "");
   if (!differences.length && !crashes.length) lines.push("None.");
@@ -324,24 +358,24 @@ const writeMarkdown = (all) => {
     const steps = Object.values(all).find((report) => report.app === app).rates[rates[0]].rows.length - 1;
     lines.push(
       `- **${app}**: differs after ${found.length} of ${steps} steps (${found.map(({ row }) => "`" + row.step + "`").join(", ")}); after \`${row.step}\`, at character ${row.difference.at}:`,
-      "  - React: `" + row.difference.react.replace(/`/g, "'").replace(/\n/g, " ") + "`",
-      "  - Melact: `" + row.difference.melact.replace(/`/g, "'").replace(/\n/g, " ") + "`",
+      `  - ${baseName}: \`` + row.difference[base].replace(/`/g, "'").replace(/\n/g, " ") + "`",
+      `  - ${otherName}: \`` + row.difference[other].replace(/`/g, "'").replace(/\n/g, " ") + "`",
     );
   }
   for (const { app, rate, framework, crash } of crashes)
     lines.push(`- **${app}** (${rate}x, ${framework}) crashed at \`${crash.step}\`: \`${crash.error.split("\n")[0].replace(/`/g, "'")}\``);
-  if (rawOnly.size)
+  if (rawOnly.size && base === "react")
     lines.push(
       "",
       "Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's " +
-        "`domProps`, Melact in source order) in: " +
+        `\`domProps\`, ${otherName} in source order) in: ` +
         [...rawOnly].sort().join(", ") +
         ". The comparison above sorts attributes and adds each form field's `value` and `checked` properties.",
     );
   for (const rate of rates) {
     lines.push("", `## All steps, CPU ${rate}x`, "");
     lines.push(
-      "| app | step | React ms | Melact ms | ratio | layouts R/M | style recalcs R/M | DOM identical |",
+      `| app | step | ${baseName} ms | ${otherName} ms | ratio | layouts ${initials} | style recalcs ${initials} | DOM identical |`,
       "|---|---|---:|---:|---:|---:|---:|---|",
     );
     for (const report of Object.values(all).sort((a, b) => a.app.localeCompare(b.app))) {
@@ -349,18 +383,18 @@ const writeMarkdown = (all) => {
       if (!data) continue;
       for (const row of data.rows)
         lines.push(
-          `| ${report.app}${(data.runs ?? 5) === 5 ? "" : ` (${data.runs} runs)`} | ${row.step} | ${format(row.react.task)} | ${format(row.melact.task)} | ${format(row.melact.task / row.react.task, 2)} | ${format(row.react.layouts, 0)}/${format(row.melact.layouts, 0)} | ${format(row.react.styles, 0)}/${format(row.melact.styles, 0)} | ${row.identical === undefined ? "–" : row.identical ? "yes" : "**no**"} |`,
+          `| ${report.app}${(data.runs ?? 5) === 5 ? "" : ` (${data.runs} runs)`} | ${row.step} | ${format(row[base].task)} | ${format(row[other].task)} | ${format(row[other].task / row[base].task, 2)} | ${format(row[base].layouts, 0)}/${format(row[other].layouts, 0)} | ${format(row[base].styles, 0)}/${format(row[other].styles, 0)} | ${row.identical === undefined ? "–" : row.identical ? "yes" : "**no**"} |`,
         );
     }
   }
   lines.push("", "## JS heap after the scenario (MB, after two forced GCs)", "");
-  lines.push(`| app | ${rates.map((rate) => `React ${rate}x | Melact ${rate}x`).join(" | ")} |`, `|---|${rates.map(() => "---:|---:").join("|")}|`);
+  lines.push(`| app | ${rates.map((rate) => `${baseName} ${rate}x | ${otherName} ${rate}x`).join(" | ")} |`, `|---|${rates.map(() => "---:|---:").join("|")}|`);
   for (const report of Object.values(all).sort((a, b) => a.app.localeCompare(b.app)))
     lines.push(
       `| ${report.app} | ${rates
         .map((rate) => {
           const heap = report.rates[rate]?.heap ?? {};
-          return `${format(heap.react / 1048576, 2)} | ${format(heap.melact / 1048576, 2)}`;
+          return `${format(heap[base] / 1048576, 2)} | ${format(heap[other] / 1048576, 2)}`;
         })
         .join(" | ")} |`,
     );
@@ -389,7 +423,7 @@ try {
     writeMarkdown(previous);
     for (const row of report.rates[rates[0]].rows)
       log(
-        `  ${row.step.padEnd(28)} R ${format(row.react.task).padStart(8)}  M ${format(row.melact.task).padStart(8)}  x${format(row.melact.task / row.react.task, 2)}  L ${row.react.layouts}/${row.melact.layouts}  S ${row.react.styles}/${row.melact.styles}  ${row.identical === false ? "DOM DIFFERS" : ""}`,
+        `  ${row.step.padEnd(28)} ${baseName[0]} ${format(row[base].task).padStart(8)}  ${otherName[0]} ${format(row[other].task).padStart(8)}  x${format(row[other].task / row[base].task, 2)}  L ${row[base].layouts}/${row[other].layouts}  S ${row[base].styles}/${row[other].styles}  ${row.identical === false ? "DOM DIFFERS" : ""}`,
       );
   }
 } finally {

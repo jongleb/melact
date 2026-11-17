@@ -1,5 +1,5 @@
 // Injected into every page before the app loads. Scenario steps call these through `__h`; they
-// dispatch the same DOM events a user's input would, so React and Melact see the same thing.
+// dispatch the same DOM events a user's input would, so every framework sees the same thing.
 (() => {
   const one = (target, index = 0) => {
     if (typeof target !== "string") return target;
@@ -130,10 +130,15 @@
       const out = [];
       const walk = (node) => {
         if (node.nodeType === 3) out.push(node.data.replace(/&/g, "&amp;").replace(/</g, "&lt;"));
-        else if (node.nodeType === 8) out.push(`<!--${node.data}-->`);
-        else if (node.nodeType === 1) {
-          const attributes = [...node.attributes].map((attribute) => `${attribute.name}="${attribute.value}"`).sort();
-          if (node.tagName === "INPUT" || node.tagName === "TEXTAREA" || node.tagName === "SELECT") {
+        else if (node.nodeType === 8) {
+          if (node.data !== "") out.push(`<!--${node.data}-->`);
+        } else if (node.nodeType === 1) {
+          const field = node.tagName === "INPUT" || node.tagName === "TEXTAREA" || node.tagName === "SELECT";
+          const attributes = [...node.attributes]
+            .filter(({ name, value }) => !(name === "class" && value === "") && !(field && (name === "value" || name === "checked")))
+            .map((attribute) => `${attribute.name}="${attribute.value}"`)
+            .sort();
+          if (field) {
             attributes.push(`:value="${node.value}"`);
             if (node.type === "checkbox" || node.type === "radio") attributes.push(`:checked="${node.checked}"`);
           }
