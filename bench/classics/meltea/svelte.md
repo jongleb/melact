@@ -12,17 +12,14 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 12 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 1, faster (< 0.95) in 8.
-- CPU 4x: 12 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.93; Meltea slower (> 1.05) in 3, faster (< 0.95) in 6.
+- CPU 1x: 12 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.85; Meltea slower (> 1.05) in 0, faster (< 0.95) in 9.
+- CPU 4x: 12 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.87; Meltea slower (> 1.05) in 1, faster (< 0.95) in 9.
 
 ## Where Meltea is slower (ratio > 1.05)
 
 | app | cpu | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | styles S/M |
 |---|---|---|---:|---:|---:|---:|---:|
-| todomvc | 1x | filter active | 27.2 | 34.7 | 1.28 | 1/1 | 1/1 |
-| todomvc | 4x | filter active | 118.4 | 142.7 | 1.21 | 1/1 | 1/1 |
-| todomvc | 4x | edit one todo | 393.5 | 445.1 | 1.13 | 9/9 | 11/11 |
-| todomvc | 4x | toggle all again | 256.7 | 273.8 | 1.07 | 1/1 | 1/1 |
+| todomvc | 4x | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 |
 
 ## Where Meltea lays out or recalculates style more often
 
@@ -37,40 +34,40 @@ None.
 
 | app | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | style recalcs S/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
-| todomvc | mount | 201.8 | 156.0 | 0.77 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 305.2 | 265.2 | 0.87 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 84.8 | 67.4 | 0.80 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 27.2 | 34.7 | 1.28 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 74.3 | 64.1 | 0.86 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 158.0 | 114.1 | 0.72 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 86.6 | 84.5 | 0.98 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 37.5 | 36.8 | 0.98 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 55.9 | 52.6 | 0.94 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 546.1 | 429.4 | 0.79 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 54.9 | 54.6 | 0.99 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 19.7 | 15.5 | 0.79 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 1.1 | 1.0 | 0.92 | 1/1 | 1/1 | – |
+| todomvc | mount | 198.5 | 149.6 | 0.75 | 1/1 | 1/1 | yes |
+| todomvc | add 10 todos | 428.7 | 350.9 | 0.82 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 115.2 | 84.0 | 0.73 | 19/19 | 19/19 | yes |
+| todomvc | filter active | 35.8 | 33.0 | 0.92 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 74.9 | 61.1 | 0.82 | 1/1 | 1/1 | yes |
+| todomvc | filter all | 151.6 | 111.1 | 0.73 | 1/1 | 1/1 | yes |
+| todomvc | edit one todo | 86.5 | 85.7 | 0.99 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 38.8 | 35.9 | 0.93 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 52.6 | 51.4 | 0.98 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 532.3 | 443.9 | 0.83 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 53.9 | 53.3 | 0.99 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 19.4 | 15.6 | 0.80 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 1.1 | 1.1 | 0.98 | 1/1 | 1/1 | – |
 
 ## All steps, CPU 4x
 
 | app | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | style recalcs S/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
-| todomvc | mount | 812.3 | 700.8 | 0.86 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 1388.2 | 1337.6 | 0.96 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 421.3 | 353.1 | 0.84 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 118.4 | 142.7 | 1.21 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 304.7 | 305.0 | 1.00 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 611.7 | 515.7 | 0.84 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 393.5 | 445.1 | 1.13 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 216.7 | 167.0 | 0.77 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 254.9 | 255.2 | 1.00 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 2853.7 | 2238.4 | 0.78 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 256.7 | 273.8 | 1.07 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 90.4 | 72.2 | 0.80 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 4.4 | 3.7 | 0.83 | 1/1 | 1/1 | – |
+| todomvc | mount | 795.2 | 656.4 | 0.83 | 1/1 | 1/1 | yes |
+| todomvc | add 10 todos | 1538.5 | 1263.9 | 0.82 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 434.7 | 324.5 | 0.75 | 19/19 | 19/19 | yes |
+| todomvc | filter active | 115.7 | 103.7 | 0.90 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 303.7 | 247.5 | 0.82 | 1/1 | 1/1 | yes |
+| todomvc | filter all | 616.1 | 568.3 | 0.92 | 1/1 | 1/1 | yes |
+| todomvc | edit one todo | 427.4 | 416.9 | 0.98 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 254.3 | 215.4 | 0.85 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 2624.9 | 2086.0 | 0.79 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 237.7 | 242.0 | 1.02 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 86.5 | 64.0 | 0.74 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 3.8 | 3.3 | 0.86 | 1/1 | 1/1 | – |
 
 ## JS heap after the scenario (MB, after two forced GCs)
 
 | app | Svelte 5 1x | Meltea 1x | Svelte 5 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
-| todomvc | 1.53 | 1.73 | 1.53 | 1.72 |
+| todomvc | 1.53 | 1.73 | 1.53 | 1.69 |

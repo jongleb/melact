@@ -12,8 +12,8 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 12 steps of at least 5 ms under React; geometric mean Meltea/React 0.71; Meltea slower (> 1.05) in 0, faster (< 0.95) in 11.
-- CPU 4x: 12 steps of at least 5 ms under React; geometric mean Meltea/React 0.72; Meltea slower (> 1.05) in 0, faster (< 0.95) in 12.
+- CPU 1x: 12 steps of at least 5 ms under React; geometric mean Meltea/React 0.72; Meltea slower (> 1.05) in 0, faster (< 0.95) in 12.
+- CPU 4x: 12 steps of at least 5 ms under React; geometric mean Meltea/React 0.73; Meltea slower (> 1.05) in 0, faster (< 0.95) in 11.
 
 ## Where Meltea is slower (ratio > 1.05)
 
@@ -35,37 +35,37 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 
 | app | step | React ms | Meltea ms | ratio | layouts R/M | style recalcs R/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
-| todomvc | mount | 184.5 | 160.2 | 0.87 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 388.8 | 272.7 | 0.70 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 295.5 | 68.9 | 0.23 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 33.0 | 31.7 | 0.96 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 77.2 | 63.1 | 0.82 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 131.4 | 111.3 | 0.85 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 97.2 | 89.5 | 0.92 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 47.3 | 36.8 | 0.78 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 69.7 | 59.0 | 0.85 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 706.0 | 437.5 | 0.62 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 69.8 | 52.8 | 0.76 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 25.8 | 15.8 | 0.61 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 1.1 | 1.0 | 0.89 | 1/1 | 1/1 | – |
+| todomvc | mount | 176.2 | 150.2 | 0.85 | 1/1 | 1/1 | yes |
+| todomvc | add 10 todos | 484.1 | 354.2 | 0.73 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 291.2 | 90.8 | 0.31 | 19/19 | 19/19 | yes |
+| todomvc | filter active | 34.7 | 31.3 | 0.90 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 73.7 | 59.9 | 0.81 | 1/1 | 1/1 | yes |
+| todomvc | filter all | 126.2 | 109.6 | 0.87 | 1/1 | 1/1 | yes |
+| todomvc | edit one todo | 91.1 | 76.4 | 0.84 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 44.4 | 34.2 | 0.77 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 63.1 | 47.9 | 0.76 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 662.8 | 378.8 | 0.57 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 62.1 | 52.7 | 0.85 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 24.1 | 15.2 | 0.63 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 1.1 | 0.9 | 0.81 | 1/1 | 1/1 | – |
 
 ## All steps, CPU 4x
 
 | app | step | React ms | Meltea ms | ratio | layouts R/M | style recalcs R/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
-| todomvc | mount | 729.4 | 625.6 | 0.86 | 1/1 | 1/1 | yes |
-| todomvc | add 10 todos | 1682.7 | 1282.7 | 0.76 | 69/69 | 69/69 | yes |
-| todomvc | toggle 20 todos | 1253.3 | 358.3 | 0.29 | 19/19 | 19/19 | yes |
-| todomvc | filter active | 141.2 | 129.7 | 0.92 | 1/1 | 1/1 | yes |
-| todomvc | filter completed | 320.5 | 268.3 | 0.84 | 1/1 | 1/1 | yes |
-| todomvc | filter all | 563.7 | 502.8 | 0.89 | 1/1 | 1/1 | yes |
-| todomvc | edit one todo | 481.3 | 378.7 | 0.79 | 9/9 | 11/11 | yes |
-| todomvc | toggle all | 268.7 | 196.6 | 0.73 | 1/1 | 1/1 | yes |
-| todomvc | toggle all back | 265.9 | 219.4 | 0.83 | 1/1 | 1/1 | yes |
-| todomvc | delete 20 todos | 3123.5 | 1941.2 | 0.62 | 20/20 | 20/20 | yes |
-| todomvc | toggle all again | 263.6 | 232.4 | 0.88 | 1/1 | 1/1 | yes |
-| todomvc | clear completed | 104.8 | 64.1 | 0.61 | 1/1 | 1/1 | yes |
-| todomvc | unmount | 3.6 | 3.1 | 0.85 | 1/1 | 1/1 | – |
+| todomvc | mount | 730.7 | 632.1 | 0.87 | 1/1 | 1/1 | yes |
+| todomvc | add 10 todos | 1466.7 | 1141.0 | 0.78 | 69/69 | 69/69 | yes |
+| todomvc | toggle 20 todos | 1187.7 | 295.6 | 0.25 | 19/19 | 19/19 | yes |
+| todomvc | filter active | 129.2 | 102.4 | 0.79 | 1/1 | 1/1 | yes |
+| todomvc | filter completed | 291.4 | 251.5 | 0.86 | 1/1 | 1/1 | yes |
+| todomvc | filter all | 543.0 | 495.8 | 0.91 | 1/1 | 1/1 | yes |
+| todomvc | edit one todo | 396.0 | 380.3 | 0.96 | 9/9 | 11/11 | yes |
+| todomvc | toggle all | 255.2 | 184.9 | 0.72 | 1/1 | 1/1 | yes |
+| todomvc | toggle all back | 258.6 | 221.7 | 0.86 | 1/1 | 1/1 | yes |
+| todomvc | delete 20 todos | 2947.0 | 2009.1 | 0.68 | 20/20 | 20/20 | yes |
+| todomvc | toggle all again | 258.9 | 219.7 | 0.85 | 1/1 | 1/1 | yes |
+| todomvc | clear completed | 99.6 | 62.9 | 0.63 | 1/1 | 1/1 | yes |
+| todomvc | unmount | 3.5 | 3.5 | 0.99 | 1/1 | 1/1 | – |
 
 ## JS heap after the scenario (MB, after two forced GCs)
 

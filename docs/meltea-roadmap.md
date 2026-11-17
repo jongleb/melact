@@ -280,7 +280,10 @@ navigation that lays out the page, because a Meltea handler could not cancel the
 Svelte's and React's do. `onClick=(Html.prevent (Show target))` now does: `meltea-ppx` takes the
 wrapper away and writes `preventDefault` into the handler, so the runtime is unchanged (a law in
 `test/meltea/prevent_laws_test.mlx`, with two mutants: never cancelling, cancelling every
-handler). The same step then takes 6.5 ms against Svelte's 10.4.
+handler). The same step then takes 6.5 ms against Svelte's 10.4 in a profile, and in the
+scenario 0.92 of Svelte's time. Measured again with it: the geometric mean is 0.72 of React's
+and 0.85 of Svelte's (1x; 0.73 and 0.87 at 4x), Meltea faster than Svelte in 9 of 12 steps at
+both rates and slower only in `toggle all` at 4x (1.08); the heap is 1.73 MB (1.69 at 4x).
 
 Kanban, next, needs what Meltea does not have yet: a portal (its dialog renders into `#portal`),
 a subscription to the document's keys (Escape closes the dialog), a way to cancel `dragover`
