@@ -396,6 +396,19 @@ to React's and to Svelte's after every step. Meltea's time is 0.77 of React's (0
 replaces the whole page of rows; a trace of that step on this machine without the classic runner
 gave Meltea 61.5 ms of tasks against Svelte's 114.6 and half the layout, so the gap depends on how
 it is measured and is still open.
+
+Hackernews (900 stories, a thread of 2,000 comments, 12 steps): what React keeps in each comment's
+own state (folded, the reply being typed, the replies added) and broadcasts with an effect
+("collapse all top-level") lives in the model. Written first as maps by comment id read by a
+`comment_view model comment`, every message rebuilt all 2,000 comments, since each row read the
+whole model: collapsing 50 comments took 1.30 of React's time and typing a reply 1.70. Kept in the
+thread itself, a tree whose node changed by a message is rebuilt along its path while every other
+node stays the same value, so the loops redraw only the node that changed, the same steps take
+0.95 and 1.03. The DOM is identical to React's after every step; Meltea's time is below React's in
+all steps but `upvote 30 stories` (1.07), `unvote 10` (1.06) and `reply to a comment` (1.03): the
+story rows are three `<tr>` each, so they go through a keyed list built at run time, which visits
+all 900 rows for one vote. Field gates through view functions (step 7) and selectors over a map read
+by the row's key would make the first, natural form fast as well.
 ## Guards
 
 Every step, before it is pushed: `opam exec -- dune build`, `dune test`, `dune build @runtest-js &&

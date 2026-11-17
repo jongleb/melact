@@ -1,0 +1,10 @@
+(copy_files
+ (files ../../common/meltea/*.ml))
+
+(melange.emit
+ (target output)
+ (libraries meltea melange.dom melange.belt)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (staged_pps melange.ppx meltea-ppx -- -typed)))

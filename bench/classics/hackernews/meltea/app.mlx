@@ -1,0 +1,347 @@
+(** Where a story points. *)
+type link = External of string | Self_post
+
+(** Whether the user upvoted a story. *)
+type vote = Voted | Not_voted
+
+type story = { id : int; title : string; link : link; points : int; by : string; age : int; descendants : int; vote : vote }
+
+type comment = { id : int; by : string; age : int; text : string; kids : comment array }
+
+(** Whether a comment shows its text and replies. *)
+type fold = Expanded | Collapsed
+
+(** A "collapse all" or "expand all" given to the top-level comments, numbered so a repeat is new. *)
+type command = Untouched | Fold_all of { fold : fold; generation : int }
+
+(** The reply box under a comment. *)
+type reply = Closed | Drafting of string
+
+(** The page the app shows. *)
+type route = Front of int | Item of int
+
+type state = { stories : story array; route : route }
+
+(** What the app's reducer does. *)
+type action = Upvote of int | Unvote of int | Hide of int | Show of route
+
+let per_page = 300
+
+let users =
+  let seed = Classic.Seed.make 3 in
+  Array.init 120 (fun index -> Classic.Seed.pick seed Classic.words ^ string_of_int (index * 7))
+
+let time_ago minutes =
+  match minutes with
+  | 1 -> "1 minute ago"
+  | _ when minutes < 60 -> string_of_int minutes ^ " minutes ago"
+  | _ when minutes < 120 -> "1 hour ago"
+  | _ when minutes < 1440 -> string_of_int (minutes / 60) ^ " hours ago"
+  | _ when minutes < 2880 -> "1 day ago"
+  | _ -> string_of_int (minutes / 1440) ^ " days ago"
+
+let stories =
+  let seed = Classic.Seed.make 1985 in
+  let domains = [| "github.com"; "nytimes.com"; "arxiv.org"; "lwn.net"; "ocaml.org"; "blog.janestreet.com"; "medium.com"; "acm.org" |] in
+  Array.init (per_page * 3) (fun index ->
+      let title = String.capitalize_ascii (Classic.sentence seed (4 + Classic.Seed.next seed 6)) in
+      let link = match Classic.Seed.next seed 6 with 0 -> Self_post | _ -> External (Classic.Seed.pick seed domains) in
+      let points = 1 + Classic.Seed.next seed 900 in
+      let by = Classic.Seed.pick seed users in
+      let age = 1 + (index * 3) + Classic.Seed.next seed 50 in
+      let descendants = Classic.Seed.next seed 600 in
+      {
+        id = 40000000 + index;
+        title = (match link with Self_post -> "Ask HN: " ^ title | External _ -> title);
+        link;
+        points;
+        by;
+        age;
+        descendants;
+        vote = Not_voted;
+      })
+
+let thread_of (story : story) =
+  let seed = Classic.Seed.make (story.id mod 100000 * 7) in
+  let budget = ref 2000 in
+  let next = ref story.id in
+  let rec grow depth =
+    let wanted =
+      match depth with
+      | 0 -> 220
+      | 1 -> Classic.Seed.next seed 7
+      | 2 -> Classic.Seed.next seed 5
+      | 3 | 4 | 5 -> Classic.Seed.next seed 3
+      | _ -> 0
+    in
+    let count = min wanted !budget in
+    budget := !budget - count;
+    Array.init count (fun _ ->
+        next := !next + 1;
+        let id = !next in
+        let by = Classic.Seed.pick seed users in
+        let age = 1 + Classic.Seed.next seed 600 in
+        let text = String.capitalize_ascii (Classic.sentence seed (5 + Classic.Seed.next seed 40)) ^ "." in
+        let kids = grow (depth + 1) in
+        { id; by; age; text; kids })
+  in
+  grow 0
+
+let user = "pg"
+
+(** A comment shown in a thread, with what the reader did to it: folded, replying, replies added. *)
+type node = { comment : comment; fold : fold; reply : reply; added : node array; kids : node array }
+
+let rec planted (comment : comment) =
+  { comment; fold = Expanded; reply = Closed; added = [||]; kids = Array.map planted comment.kids }
+
+let rec revise id change node =
+  match node.comment.id = id with
+  | true -> change node
+  | false -> (
+      let kids = revised id change node.kids and added = revised id change node.added in
+      match (kids == node.kids, added == node.added) with
+      | true, true -> node
+      | _ -> { node with kids; added })
+
+and revised id change nodes =
+  let touched = ref false in
+  let next =
+    Array.map
+      (fun node ->
+        let after = revise id change node in
+        if after != node then touched := true;
+        after)
+      nodes
+  in
+  match !touched with true -> next | false -> nodes
+
+type model = { stories : story array; route : route; thread : node array; draft : string }
+
+type message =
+  | Upvote of int
+  | Unvote of int
+  | Hide of int
+  | Show of route
+  | Toggle_fold of int
+  | Fold_top of fold
+  | Open_reply of int
+  | Draft_reply of int * string
+  | Submit_reply of int
+  | Draft of string
+  | Submit
+  | Ignore
+
+let update message model =
+  let change id revise_story =
+    Array.map (fun (story : story) -> match story.id = id with true -> revise_story story | false -> story) model.stories
+  in
+  let node id change = { model with thread = revised id change model.thread } in
+  match message with
+  | Upvote id ->
+      ({ model with stories = change id (fun story -> { story with vote = Voted; points = story.points + 1 }) }, Cmd.none)
+  | Unvote id ->
+      ({ model with stories = change id (fun story -> { story with vote = Not_voted; points = story.points - 1 }) }, Cmd.none)
+  | Hide id -> ({ model with stories = Js.Array.filter ~f:(fun (story : story) -> story.id <> id) model.stories }, Cmd.none)
+  | Show (Front _ as route) -> ({ model with route }, Cmd.none)
+  | Show (Item id as route) ->
+      ( {
+          model with
+          route;
+          thread =
+            Option.fold ~none:[||]
+              ~some:(fun story -> Array.map planted (thread_of story))
+              (Js.Array.find ~f:(fun (story : story) -> story.id = id) model.stories);
+          draft = "";
+        },
+        Cmd.none )
+  | Toggle_fold id ->
+      (node id (fun node -> { node with fold = (match node.fold with Expanded -> Collapsed | Collapsed -> Expanded) }), Cmd.none)
+  | Fold_top fold -> ({ model with thread = Array.map (fun node -> { node with fold }) model.thread }, Cmd.none)
+  | Open_reply id -> (node id (fun node -> { node with reply = Drafting "" }), Cmd.none)
+  | Draft_reply (id, text) -> (node id (fun node -> { node with reply = Drafting text }), Cmd.none)
+  | Submit_reply id ->
+      ( node id (fun node ->
+            match node.reply with
+            | Drafting text ->
+                {
+                  node with
+                  reply = Closed;
+                  added =
+                    Array.append
+                      [| planted { id = (id * 1000) + Array.length node.added + 1; by = user; age = 0; text; kids = [||] } |]
+                      node.added;
+                }
+            | Closed -> node),
+        Cmd.none )
+  | Draft draft -> ({ model with draft }, Cmd.none)
+  | Submit -> (
+      match model.route with
+      | Item id ->
+          ( {
+              model with
+              thread = Array.append [| planted { id = id * 10; by = user; age = 0; text = model.draft; kids = [||] } |] model.thread;
+              draft = "";
+            },
+            Cmd.none )
+      | Front _ -> (model, Cmd.none))
+  | Ignore -> (model, Cmd.none)
+
+let story_rows rank (story : story) =
+  let id = story.id in
+  let key = string_of_int id in
+  [
+    ( key ^ "a",
+      <tr className="athing">
+        <td className="rank">(Html.text (string_of_int rank ^ "."))</td>
+        <td className="votelinks">
+          <a
+            className=(match story.vote with Voted -> "votearrow nosee" | Not_voted -> "votearrow")
+            title="upvote"
+            onClick=(match story.vote with Not_voted -> Upvote id | Voted -> Ignore) />
+        </td>
+        <td className="title">
+          (match story.link with
+           | External domain ->
+               Html.list
+                 [
+                   <a className="titlelink" href=("https://" ^ domain ^ "/" ^ string_of_int id)>(Html.text story.title)</a>;
+                   <span className="sitebit">(Html.text (" (" ^ domain ^ ")"))</span>;
+                 ]
+           | Self_post -> <a className="titlelink" onClick=(Show (Item id))>(Html.text story.title)</a>)
+        </td>
+      </tr> );
+    ( key ^ "b",
+      <tr>
+        <td colSpan=2 />
+        <td className="subtext">
+          <span className="subline">
+            <span className="score">(Html.text (string_of_int story.points ^ " points"))</span>
+            (Html.text " by ")
+            <a className="hnuser">(Html.text story.by)</a>
+            (Html.text " ")
+            <span className="age" title=(string_of_int story.age)>(Html.text (time_ago story.age))</span>
+            (match story.vote with
+             | Voted -> Html.list [ Html.text " | "; <a className="unvote" onClick=(Unvote id)>(Html.text "unvote")</a> ]
+             | Not_voted -> Html.none)
+            (Html.text " | ")
+            <a className="hide-link" onClick=(Hide id)>(Html.text "hide")</a>
+            (Html.text " | ")
+            <a className="comments-link" onClick=(Show (Item id))>
+              (Html.text (match story.descendants with 0 -> "discuss" | 1 -> "1 comment" | count -> string_of_int count ^ "\u{a0}comments"))
+            </a>
+          </span>
+        </td>
+      </tr> );
+    (key ^ "c", <tr className="spacer" />);
+  ]
+
+let reply_form draft on_draft submit =
+  <form className="reply-form" onSubmit=submit>
+    <textarea className="reply-input" rows=4 cols=60 value=draft onInput=on_draft />
+    <br />
+    <button className="reply-submit" type_="submit">(Html.text "reply")</button>
+  </form>
+
+let rec comment_view { comment; fold; reply; added; kids } =
+  <div className="comtr" id=(string_of_int comment.id)>
+    <div className="comhead">
+      <a className="hnuser">(Html.text comment.by)</a>
+      (Html.text " ")
+      <span className="age">(Html.text (time_ago comment.age))</span>
+      (Html.text " ")
+      <a className=(match fold with Expanded -> "togg" | Collapsed -> "togg collapsed") onClick=(Toggle_fold comment.id)>
+        (Html.text
+           (match fold with
+           | Expanded -> "[\u{2013}]"
+           | Collapsed ->
+               let rec count (comment : comment) = Array.fold_left (fun total kid -> total + count kid) 1 comment.kids in
+               "[" ^ string_of_int (count comment + Array.length added) ^ " more]"))
+      </a>
+    </div>
+    (match fold with
+     | Collapsed -> Html.none
+     | Expanded ->
+         <div className="comment">
+           <div className="commtext">(Html.text comment.text)</div>
+           (match reply with
+            | Closed -> <div className="reply"><a className="reply-link" onClick=(Open_reply comment.id)>(Html.text "reply")</a></div>
+            | Drafting draft -> reply_form draft (fun text -> Draft_reply (comment.id, text)) (Submit_reply comment.id))
+           <div className="kids">(Html.array (Array.map comment_view (Array.append added kids)))</div>
+         </div>)
+  </div>
+
+let view model =
+  <center>
+    <div className="hn">
+      <table className="hn-header">
+        <tbody>
+          <tr>
+            <td className="logo"><span className="y">(Html.text "Y")</span></td>
+            <td className="pagetop">
+              <b className="hnname"><a className="hn-home" onClick=(Show (Front 0))>(Html.text "Hacker News")</a></b>
+              (Html.list
+                 (List.concat_map
+                    (fun label -> [ Html.text " | "; <a>(Html.text label)</a> ])
+                    [ "new"; "past"; "comments"; "ask"; "show"; "jobs"; "submit" ]))
+            </td>
+            <td className="pagetop user"><a>(Html.text user)</a></td>
+          </tr>
+        </tbody>
+      </table>
+      (match model.route with
+       | Front page ->
+           let shown = Js.Array.slice ~start:0 ~end_:((page + 1) * per_page) model.stories in
+           <table className="itemlist">
+             <tbody>
+               (Html.keyed (List.concat (Array.to_list (Array.mapi (fun index story -> story_rows (index + 1) story) shown))))
+               (match Array.length model.stories > Array.length shown with
+                | true ->
+                    <tr className="morespace">
+                      <td colSpan=2 />
+                      <td><a className="morelink" onClick=(Show (Front (page + 1)))>(Html.text "More")</a></td>
+                    </tr>
+                | false -> Html.none)
+             </tbody>
+           </table>
+       | Item id -> (
+           match Js.Array.find ~f:(fun (story : story) -> story.id = id) model.stories with
+           | Some story ->
+               <div className="item-page">
+                 <table className="fatitem">
+                   <tbody>
+                     (Html.keyed (story_rows 0 story))
+                     <tr>
+                       <td colSpan=2 />
+                       <td>(reply_form model.draft (fun text -> Draft text) Submit)</td>
+                     </tr>
+                   </tbody>
+                 </table>
+                 <div className="comment-tree">
+                   <div className="tree-tools">
+                     <a id="collapse-top" onClick=(Fold_top Collapsed)>(Html.text "collapse all top-level")</a>
+                     (Html.text " | ")
+                     <a id="expand-top" onClick=(Fold_top Expanded)>(Html.text "expand all top-level")</a>
+                   </div>
+                   (Html.array (Array.map comment_view model.thread))
+                 </div>
+               </div>
+           | None -> <p>(Html.text "No such item.")</p>))
+      <div className="footer">(Html.text "Guidelines | FAQ | Lists | API | Security | Legal | Apply to YC | Contact")</div>
+    </div>
+  </center>
+
+let () =
+  Classic.start (fun root ->
+      Program.element
+        ~init:
+          ( {
+              stories;
+              route = Front 0;
+              thread = [||];
+              draft = "";
+            },
+            Cmd.none )
+        ~update ~view
+        ~subscriptions:(fun _ -> Sub.none)
+        root)

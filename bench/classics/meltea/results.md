@@ -12,8 +12,8 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 50 steps of at least 5 ms under React; geometric mean Meltea/React 0.77; Meltea slower (> 1.05) in 1, faster (< 0.95) in 47.
-- CPU 4x: 50 steps of at least 5 ms under React; geometric mean Meltea/React 0.76; Meltea slower (> 1.05) in 1, faster (< 0.95) in 47.
+- CPU 1x: 64 steps of at least 5 ms under React; geometric mean Meltea/React 0.78; Meltea slower (> 1.05) in 3, faster (< 0.95) in 57.
+- CPU 4x: 64 steps of at least 5 ms under React; geometric mean Meltea/React 0.77; Meltea slower (> 1.05) in 1, faster (< 0.95) in 60.
 
 ## Where Meltea is slower (ratio > 1.05)
 
@@ -21,6 +21,8 @@ against Meltea's first run.
 |---|---|---|---:|---:|---:|---:|---:|
 | datagrid | 1x | reverse sort | 100.9 | 120.1 | 1.19 | 1/1 | 1/1 |
 | datagrid | 4x | reverse sort | 422.5 | 496.1 | 1.17 | 1/1 | 1/1 |
+| hackernews | 1x | upvote 30 stories | 69.2 | 74.3 | 1.07 | 29/29 | 29/29 |
+| hackernews | 1x | unvote 10 | 54.4 | 57.5 | 1.06 | 9/9 | 9/9 |
 
 ## Where Meltea lays out or recalculates style more often
 
@@ -33,7 +35,7 @@ against Meltea's first run.
 
 None.
 
-Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's `domProps`, Meltea in source order) in: datagrid, kanban, todomvc. The comparison above sorts attributes and adds each form field's `value` and `checked` properties.
+Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's `domProps`, Meltea in source order) in: datagrid, hackernews, kanban, todomvc. The comparison above sorts attributes and adds each form field's `value` and `checked` properties.
 
 ## All steps, CPU 1x
 
@@ -53,6 +55,20 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | datagrid | next page x5 | 428.8 | 383.1 | 0.89 | 4/4 | 4/4 | yes |
 | datagrid | close detail | 5.1 | 4.4 | 0.87 | 1/1 | 0/0 | yes |
 | datagrid | unmount | 9.7 | 6.7 | 0.69 | 1/1 | 1/1 | – |
+| hackernews | mount | 36.2 | 27.9 | 0.77 | 1/1 | 1/1 | yes |
+| hackernews | upvote 30 stories | 69.2 | 74.3 | 1.07 | 29/29 | 29/29 | yes |
+| hackernews | open a story | 186.6 | 155.4 | 0.83 | 1/1 | 1/1 | yes |
+| hackernews | collapse 50 comments | 394.6 | 376.9 | 0.95 | 49/49 | 49/49 | yes |
+| hackernews | expand them back | 410.4 | 384.7 | 0.94 | 49/49 | 49/49 | yes |
+| hackernews | collapse all top-level | 33.1 | 15.5 | 0.47 | 1/1 | 1/1 | yes |
+| hackernews | expand all top-level | 152.6 | 133.9 | 0.88 | 1/1 | 1/1 | yes |
+| hackernews | reply to a comment | 121.6 | 124.9 | 1.03 | 40/40 | 40/40 | yes |
+| hackernews | back to front page | 43.1 | 36.7 | 0.85 | 1/1 | 1/1 | yes |
+| hackernews | more | 35.6 | 30.2 | 0.85 | 1/1 | 1/1 | yes |
+| hackernews | more again | 30.1 | 27.6 | 0.92 | 1/1 | 1/1 | yes |
+| hackernews | hide 10 stories | 234.6 | 163.0 | 0.69 | 9/9 | 9/9 | yes |
+| hackernews | unvote 10 | 54.4 | 57.5 | 1.06 | 9/9 | 9/9 | yes |
+| hackernews | unmount | 12.1 | 8.4 | 0.70 | 1/1 | 0/0 | – |
 | kanban | mount | 116.7 | 108.1 | 0.93 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 234.0 | 204.4 | 0.87 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 155.6 | 136.4 | 0.88 | 18/18 | 18/18 | yes |
@@ -109,6 +125,20 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | datagrid | next page x5 | 1811.0 | 1625.9 | 0.90 | 4/4 | 4/4 | yes |
 | datagrid | close detail | 19.6 | 14.5 | 0.74 | 1/1 | 0/0 | yes |
 | datagrid | unmount | 38.2 | 25.7 | 0.67 | 1/1 | 1/1 | – |
+| hackernews | mount | 146.7 | 116.2 | 0.79 | 1/1 | 1/1 | yes |
+| hackernews | upvote 30 stories | 295.8 | 290.4 | 0.98 | 29/29 | 29/29 | yes |
+| hackernews | open a story | 741.9 | 638.2 | 0.86 | 1/1 | 1/1 | yes |
+| hackernews | collapse 50 comments | 1665.6 | 1564.9 | 0.94 | 49/49 | 49/49 | yes |
+| hackernews | expand them back | 1739.5 | 1535.9 | 0.88 | 49/49 | 49/49 | yes |
+| hackernews | collapse all top-level | 127.8 | 63.5 | 0.50 | 1/1 | 1/1 | yes |
+| hackernews | expand all top-level | 652.4 | 595.8 | 0.91 | 1/1 | 1/1 | yes |
+| hackernews | reply to a comment | 560.6 | 438.1 | 0.78 | 40/40 | 40/40 | yes |
+| hackernews | back to front page | 222.9 | 171.2 | 0.77 | 1/1 | 1/1 | yes |
+| hackernews | more | 146.3 | 127.4 | 0.87 | 1/1 | 1/1 | yes |
+| hackernews | more again | 125.9 | 117.4 | 0.93 | 1/1 | 1/1 | yes |
+| hackernews | hide 10 stories | 916.5 | 809.6 | 0.88 | 9/9 | 9/9 | yes |
+| hackernews | unvote 10 | 284.3 | 244.2 | 0.86 | 9/9 | 9/9 | yes |
+| hackernews | unmount | 45.9 | 32.9 | 0.72 | 1/1 | 0/0 | – |
 | kanban | mount | 494.4 | 450.2 | 0.91 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 937.9 | 790.4 | 0.84 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 600.4 | 516.1 | 0.86 | 18/18 | 18/18 | yes |
@@ -152,6 +182,7 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | app | React 1x | Meltea 1x | React 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
 | datagrid | 7.52 | 3.48 | 7.53 | 3.81 |
+| hackernews | 11.52 | 2.92 | 11.51 | 3.02 |
 | kanban | 7.85 | 4.47 | 7.99 | 4.53 |
 | spreadsheet | 8.45 | 3.90 | 8.50 | 3.90 |
 | todomvc | 4.05 | 1.73 | 4.05 | 1.69 |
