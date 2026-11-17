@@ -1,0 +1,393 @@
+(** A colour-coded tag on a card. *)
+type label = Bug | Feature | Chore | Design | Research | Urgent
+
+type card = {
+  id : int;
+  title : string;
+  description : string;
+  labels : label array;
+  members : string array;
+  due : int;
+  checked : int;
+  items : int;
+  comments : int;
+}
+
+type column = { key : int; name : string; cards : card array }
+
+(** Whether a column shows its cards. *)
+type fold = Expanded | Collapsed
+
+(** The add-card form at the bottom of a column. *)
+type composer = Idle_composer | Composing of string
+
+(** Whether a card is dragged over a column right now. *)
+type hover = Over | Away
+
+(** What a column shows around its cards. *)
+type lane = { fold : fold; composer : composer; hover : hover }
+
+(** The card being dragged, if any. *)
+type drag = Idle | Dragging of int
+
+(** Which labels the board shows. *)
+type filter = Every_label | Only of label
+
+(** The card shown in the detail dialog, with the title and description typed there so far. *)
+type modal = Closed | Showing of { id : int; title : string; description : string }
+
+type model = { columns : column array; lanes : lane array; filter : filter; modal : modal; drag : drag }
+
+type message =
+  | Move_next of int
+  | Drag_start of int
+  | Drag_end
+  | Enter of int
+  | Leave of int
+  | Drop of int
+  | Open of int
+  | Close
+  | Retitle of string
+  | Redescribe of string
+  | Toggle_label of int * label
+  | Save
+  | Fold of int
+  | Compose of int
+  | Draft of int * string
+  | Submit of int
+  | Cancel_compose of int
+  | Filter of filter
+  | Ignore
+
+let labels = [| Bug; Feature; Chore; Design; Research; Urgent |]
+
+let label_name label =
+  match label with
+  | Bug -> "bug"
+  | Feature -> "feature"
+  | Chore -> "chore"
+  | Design -> "design"
+  | Research -> "research"
+  | Urgent -> "urgent"
+
+let initial =
+  let seed = Classic.Seed.make 11 in
+  let people = [| "AK"; "BL"; "CM"; "DN"; "EO"; "FP"; "GQ"; "HR"; "IS"; "JT" |] in
+  let names = [| "Backlog"; "Ready"; "In progress"; "Review"; "Testing"; "Staging"; "Done"; "Archived" |] in
+  let next_id = ref 0 in
+  Array.mapi
+    (fun key name ->
+      {
+        key;
+        name;
+        cards =
+          Array.init (match key with 7 -> 184 | _ -> 188) (fun _ ->
+              incr next_id;
+              let items = Classic.Seed.next seed 9 in
+              {
+                id = !next_id;
+                title = String.capitalize_ascii (Classic.sentence seed (3 + Classic.Seed.next seed 4));
+                description = Classic.sentence seed 12;
+                labels =
+                  Array.of_list (List.filter (fun _ -> Classic.Seed.next seed 4 = 0) (Array.to_list labels));
+                members = Array.init (Classic.Seed.next seed 4) (fun _ -> Classic.Seed.pick seed people);
+                due = Classic.Seed.next seed 365;
+                checked = (match items with 0 -> 0 | _ -> Classic.Seed.next seed (items + 1));
+                items;
+                comments = Classic.Seed.next seed 12;
+              });
+      })
+    names
+
+let find columns id =
+  Array.find_map
+    (fun column -> Option.map (fun card -> (card, column.key)) (Array.find_opt (fun card -> card.id = id) column.cards))
+    columns
+
+let place columns card target =
+  Array.map
+    (fun column ->
+      let rest = Js.Array.filter ~f:(fun other -> other.id <> card.id) column.cards in
+      match column.key = target with
+      | true -> { column with cards = Array.append [| card |] rest }
+      | false -> (
+          match Array.length rest = Array.length column.cards with true -> column | false -> { column with cards = rest }))
+    columns
+
+let revise columns id change =
+  Array.map
+    (fun column ->
+      match Array.exists (fun card -> card.id = id) column.cards with
+      | true -> { column with cards = Array.map (fun card -> match card.id = id with true -> change card | false -> card) column.cards }
+      | false -> column)
+    columns
+
+let update message model =
+  let lane key change = { model with lanes = Array.mapi (fun at lane -> match at = key with true -> change lane | false -> lane) model.lanes } in
+  match message with
+  | Move_next id ->
+      ( Option.fold ~none:model
+          ~some:(fun (card, key) -> { model with columns = place model.columns card ((key + 1) mod Array.length model.columns) })
+          (find model.columns id),
+        Cmd.none )
+  | Drag_start id -> ({ model with drag = Dragging id }, Cmd.none)
+  | Drag_end -> ({ model with drag = Idle }, Cmd.none)
+  | Enter key -> (lane key (fun lane -> { lane with hover = Over }), Cmd.none)
+  | Leave key -> (lane key (fun lane -> { lane with hover = Away }), Cmd.none)
+  | Drop key ->
+      let dropped = lane key (fun lane -> { lane with hover = Away }) in
+      ( {
+          dropped with
+          drag = Idle;
+          columns =
+            (match model.drag with
+            | Dragging id ->
+                Option.fold ~none:model.columns
+                  ~some:(fun (card, from) -> match from = key with true -> model.columns | false -> place model.columns card key)
+                  (find model.columns id)
+            | Idle -> model.columns);
+        },
+        Cmd.none )
+  | Open id ->
+      ( Option.fold ~none:model
+          ~some:(fun (card, _) -> { model with modal = Showing { id; title = card.title; description = card.description } })
+          (find model.columns id),
+        Classic.focus ".modal .title-field" )
+  | Close -> ({ model with modal = Closed }, Cmd.none)
+  | Retitle title -> (
+      match model.modal with
+      | Showing shown -> ({ model with modal = Showing { shown with title } }, Cmd.none)
+      | Closed -> (model, Cmd.none))
+  | Redescribe description -> (
+      match model.modal with
+      | Showing shown -> ({ model with modal = Showing { shown with description } }, Cmd.none)
+      | Closed -> (model, Cmd.none))
+  | Toggle_label (id, label) ->
+      ( {
+          model with
+          columns =
+            revise model.columns id (fun card ->
+                match Array.mem label card.labels with
+                | true -> { card with labels = Js.Array.filter ~f:(fun other -> other <> label) card.labels }
+                | false -> { card with labels = Js.Array.filter ~f:(fun other -> other = label || Array.mem other card.labels) labels });
+        },
+        Cmd.none )
+  | Save -> (
+      match model.modal with
+      | Showing { id; title; description } ->
+          ({ model with modal = Closed; columns = revise model.columns id (fun card -> { card with title; description }) }, Cmd.none)
+      | Closed -> (model, Cmd.none))
+  | Fold key -> (lane key (fun lane -> { lane with fold = (match lane.fold with Expanded -> Collapsed | Collapsed -> Expanded) }), Cmd.none)
+  | Compose key -> (lane key (fun lane -> { lane with composer = Composing "" }), Classic.focus ".composer textarea")
+  | Draft (key, draft) -> (lane key (fun lane -> { lane with composer = Composing draft }), Cmd.none)
+  | Submit key -> (
+      let closed = lane key (fun lane -> { lane with composer = Idle_composer }) in
+      match model.lanes.(key).composer with
+      | Composing draft -> (
+          match String.trim draft with
+          | "" -> (closed, Cmd.none)
+          | title ->
+              let id =
+                1 + Array.fold_left (fun top column -> Array.fold_left (fun top card -> max top card.id) top column.cards) 0 model.columns
+              in
+              ( {
+                  closed with
+                  columns =
+                    Array.map
+                      (fun column ->
+                        match column.key = key with
+                        | true ->
+                            {
+                              column with
+                              cards =
+                                Array.append column.cards
+                                  [| { id; title; description = ""; labels = [||]; members = [||]; due = 0; checked = 0; items = 0; comments = 0 } |];
+                            }
+                        | false -> column)
+                      model.columns;
+                },
+                Cmd.none ))
+      | Idle_composer -> (closed, Cmd.none))
+  | Cancel_compose key -> (lane key (fun lane -> { lane with composer = Idle_composer }), Cmd.none)
+  | Filter filter -> ({ model with filter }, Cmd.none)
+  | Ignore -> (model, Cmd.none)
+
+let chip label = <span className=("label label-" ^ label_name label) title=(label_name label)>(Html.text (label_name label))</span>
+
+let badges card =
+  let months = [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"; "Oct"; "Nov"; "Dec" |] in
+  <div className="badges">
+    (match card.due with
+     | 0 -> Html.none
+     | due -> <span className="badge due">(Html.text (months.(due / 31 mod 12) ^ " " ^ string_of_int (1 + (due mod 28))))</span>)
+    (match card.items with
+     | 0 -> Html.none
+     | items ->
+         <span className=(match card.checked = items with true -> "badge checklist complete" | false -> "badge checklist")>
+           (Html.text (string_of_int card.checked ^ "/" ^ string_of_int items))
+         </span>)
+    (match card.comments with
+     | 0 -> Html.none
+     | comments -> <span className="badge comments">(Html.text ({js|💬 |js} ^ string_of_int comments))</span>)
+    (match card.description with "" -> Html.none | _ -> <span className="badge described">(Html.text {js|≡|js})</span>)
+  </div>
+
+let card_view drag card =
+  <div
+    key=(string_of_int card.id)
+    className=(match drag with Dragging id when id = card.id -> "card dragging" | Dragging _ | Idle -> "card")
+    draggable=true
+    onDragStart=(Drag_start card.id)
+    onDragEnd=Drag_end>
+    (match card.labels with
+     | [||] -> Html.none
+     | shown -> <div className="labels">(Html.array (Array.map chip shown))</div>)
+    <a className="card-title" onClick=(Open card.id)>(Html.text card.title)</a>
+    (badges card)
+    <div className="card-footer">
+      <div className="members">
+        (Html.array
+           (Array.map
+              (fun initials ->
+                <span
+                  className="avatar"
+                  style=[ ("background-color", "hsl(" ^ string_of_int (Char.code initials.[0] * 37 mod 360) ^ ", 55%, 45%)") ]>
+                  (Html.text initials)
+                </span>)
+              card.members))
+      </div>
+      <button className="move-next" title="Move to next column" onClick=(Move_next card.id)>(Html.text {js|→|js})</button>
+    </div>
+  </div>
+
+let column_view drag column lane =
+  <section
+    key=(string_of_int column.key)
+    className=(String.concat " "
+       [ "column";
+         (match lane.fold with Expanded -> "expanded" | Collapsed -> "collapsed");
+         (match (drag, lane.hover) with Dragging _, Over -> "drop-target" | (Dragging _ | Idle), _ -> "") ])>
+    <header className="column-header">
+      <h2>(Html.text column.name)</h2>
+      <span className="count">(Html.int (Array.length column.cards))</span>
+      <button className="fold" onClick=(Fold column.key)>
+        (Html.text (match lane.fold with Expanded -> {js|‹|js} | Collapsed -> {js|›|js}))
+      </button>
+    </header>
+    (match lane.fold with
+     | Collapsed -> Html.none
+     | Expanded ->
+         <div
+           className="column-body"
+           onDragEnter=(Enter column.key)
+           onDragLeave=(Leave column.key)
+           onDrop=(Drop column.key)>
+           (Html.array (Array.map (card_view drag) column.cards))
+         </div>)
+    (match (lane.fold, lane.composer) with
+     | Collapsed, _ -> Html.none
+     | Expanded, Idle_composer ->
+         <button className="add-card" onClick=(Compose column.key)>(Html.text "+ Add a card")</button>
+     | Expanded, Composing draft ->
+         <div className="composer">
+           <textarea
+             className="text-area"
+             placeholder="Enter a title for this card..."
+             value=draft
+             onInput=((fun text -> Draft (column.key, text)) [@alert "-fanout"])
+             onKeyDown=(fun key ->
+               match key with "Enter" -> Submit column.key | "Escape" -> Cancel_compose column.key | _ -> Ignore) />
+           <button className="composer-add" onClick=(Submit column.key)>(Html.text "Add card")</button>
+           <button className="composer-cancel" onClick=(Cancel_compose column.key)>(Html.text {js|×|js})</button>
+         </div>)
+  </section>
+
+let preview description =
+  Js.String.split ~sep:"\n" description
+  |> Array.map (fun line ->
+         Js.String.replaceByRe ~regexp:[%re "/&/g"] ~replacement:"&amp;" line
+         |> Js.String.replaceByRe ~regexp:[%re "/</g"] ~replacement:"&lt;"
+         |> Js.String.replaceByRe ~regexp:[%re "/\\*\\*([^*]+)\\*\\*/g"] ~replacement:"<b>$1</b>")
+  |> Js.Array.join ~sep:"<br>"
+
+let modal_view card title description =
+  <div className="modal-backdrop" onClick=Close>
+    <div className="modal" onClick=Html.stop>
+      <input className="title-field" value=title onInput=((fun text -> Retitle text) [@alert "-fanout"]) />
+      <div className="modal-labels">
+        (Html.array
+           (Array.map
+              (fun label ->
+                <button
+                  className=(match Array.mem label card.labels with true -> "label-toggle on" | false -> "label-toggle")
+                  onClick=(Toggle_label (card.id, label))>
+                  (chip label)
+                </button>)
+              labels))
+      </div>
+      <label>(Html.text "Description")</label>
+      <textarea className="description-field" value=description onInput=((fun text -> Redescribe text) [@alert "-fanout"]) />
+      <div className="description-preview" dangerouslySetInnerHTML=[%mel.obj { __html = preview description }] />
+      (badges card)
+      <div className="modal-actions">
+        <button className="save" onClick=Save>(Html.text "Save")</button>
+        <button className="close" onClick=Close>(Html.text "Close")</button>
+      </div>
+    </div>
+  </div>
+
+let view { columns; lanes; filter; modal; drag } =
+  let shown =
+    match filter with
+    | Every_label -> columns
+    | Only label ->
+        Array.map (fun column -> { column with cards = Js.Array.filter ~f:(fun card -> Array.mem label card.labels) column.cards }) columns
+  in
+  let total = Array.fold_left (fun total column -> total + Array.length column.cards) 0 columns in
+  <div className="kanban">
+    <header className="board-header">
+      <h1>(Html.text "Product board")</h1>
+      <span className="total">(Html.text (string_of_int total ^ " cards"))</span>
+      <div className="filter-bar">
+        <span>(Html.text "Filter:")</span>
+        <div className="label-filter">
+          (Html.array
+             (Array.map
+                (fun label ->
+                  <button
+                    className=(match filter with Only chosen when chosen = label -> "chip active" | Only _ | Every_label -> "chip")
+                    onClick=(Filter (Only label))>
+                    (Html.text (label_name label))
+                  </button>)
+                labels))
+        </div>
+        <button id="clear-filter" onClick=(Filter Every_label)>(Html.text "Clear filter")</button>
+      </div>
+    </header>
+    <div className="board">(Html.array (Array.mapi (fun at column -> column_view drag column lanes.(at)) shown))</div>
+    (match modal with
+     | Closed -> Html.none
+     | Showing { id; title; description } ->
+         Option.fold ~none:Html.none
+           ~some:(fun (card, _) -> Html.portal ~into:"portal" (modal_view card title description))
+           (find columns id))
+  </div>
+
+let subscriptions { modal; _ } =
+  match modal with
+  | Closed -> Sub.none
+  | Showing _ -> Sub.key_down (fun key -> match key with "Escape" -> Close | _ -> Ignore)
+
+let () =
+  Classic.start (fun root ->
+      Program.element
+        ~init:
+          ( {
+              columns = initial;
+              lanes = Array.map (fun _ -> { fold = Expanded; composer = Idle_composer; hover = Away }) initial;
+              filter = Every_label;
+              modal = Closed;
+              drag = Idle;
+            },
+            Cmd.none )
+        ~update ~view ~subscriptions root)

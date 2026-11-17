@@ -35,3 +35,4 @@ val target_value : Dom.event -> string
 val target_checked : Dom.event -> bool
 val key : Dom.event -> string
 val prevent_default : Dom.event -> unit
+external stop_propagation : Dom.event -> unit = "stopPropagation" [@@mel.send]

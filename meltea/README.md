@@ -97,8 +97,11 @@ let () = Option.iter (fun root -> ignore (Program.sandbox ~init:0 ~update ~view 
   form's submission, `onClick` on `<a href="#">` the jump to the top, and an element with `onDrop`
   takes drops, so its `drop`, `dragenter` and `dragover` are cancelled (the last two with no
   message when it gives none, which is what lets a browser drop there). Anywhere else
-  `onKeyDown=(Html.prevent (fun key -> Press key))` cancels the event and still sends; the
-  compiler writes the `preventDefault` into the handler, so nothing of it runs at run time.
+  `onKeyDown=(Html.prevent (fun key -> Press key))` cancels the event and still sends, and
+  `onClick=Html.stop` keeps a click inside a dialog from its backdrop's `onClick` (bare, `Html.stop`
+  and `Html.prevent` send nothing); the
+  compiler writes `preventDefault` and `stopPropagation` into the handler, so nothing of either
+  runs at run time.
 - **Keys.** `Sub.key_down (fun key -> Pressed key)` hears every key pressed on the page while
   `subscriptions` returns it.
 - **Portals.** `Html.portal ~into:"portal" (dialog card)` shows a view inside the element with that

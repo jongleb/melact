@@ -25,3 +25,4 @@ val target_value : event -> string
 val target_checked : event -> bool
 val key : event -> string
 val prevent_default : event -> unit
+val stop_propagation : event -> unit

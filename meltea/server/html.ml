@@ -19,3 +19,4 @@ let target_value _ = ""
 let target_checked _ = false
 let key _ = ""
 let prevent_default _ = ()
+let stop_propagation _ = ()

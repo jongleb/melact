@@ -9,6 +9,7 @@ external value : Dom.element -> string = "value" [@@mel.get]
 external checked : Dom.element -> bool = "checked" [@@mel.get]
 external event_key : Dom.event -> string = "key" [@@mel.get]
 external prevent : Dom.event -> unit = "preventDefault" [@@mel.send]
+external stop_propagation : Dom.event -> unit = "stopPropagation" [@@mel.send]
 
 let render view dispatch = view dispatch
 let none _ = View.empty
