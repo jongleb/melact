@@ -386,6 +386,16 @@ recalc). The bundle is 20.1 kB gzip (Svelte 26.2, React 53.0); the heap after th
 array).
 
 
+
+Datagrid (10,000 people, a page of 1,000 rows, 13 steps) needed nothing new: its sort headers,
+filters, selection kept in a `Belt.Set.Int` like the React build's, and a drawer through
+`Html.portal`; its row link to `#` cancels the jump from what the element is. The DOM is identical
+to React's and to Svelte's after every step. Meltea's time is 0.77 of React's (0.76 at 4x) and
+0.89 of Svelte's (both rates); the bundle is 20.0 kB gzip (Svelte 24.6, React 52.7) and the heap
+3.5 MB (React 7.5, Svelte 5.2). Slower in `reverse sort` (1.19 of React's, 1.26 of Svelte's), which
+replaces the whole page of rows; a trace of that step on this machine without the classic runner
+gave Meltea 61.5 ms of tasks against Svelte's 114.6 and half the layout, so the gap depends on how
+it is measured and is still open.
 ## Guards
 
 Every step, before it is pushed: `opam exec -- dune build`, `dune test`, `dune build @runtest-js &&

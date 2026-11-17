@@ -12,13 +12,15 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 36 steps of at least 5 ms under React; geometric mean Meltea/React 0.74; Meltea slower (> 1.05) in 0, faster (< 0.95) in 34.
-- CPU 4x: 36 steps of at least 5 ms under React; geometric mean Meltea/React 0.73; Meltea slower (> 1.05) in 0, faster (< 0.95) in 34.
+- CPU 1x: 50 steps of at least 5 ms under React; geometric mean Meltea/React 0.77; Meltea slower (> 1.05) in 1, faster (< 0.95) in 47.
+- CPU 4x: 50 steps of at least 5 ms under React; geometric mean Meltea/React 0.76; Meltea slower (> 1.05) in 1, faster (< 0.95) in 47.
 
 ## Where Meltea is slower (ratio > 1.05)
 
 | app | cpu | step | React ms | Meltea ms | ratio | layouts R/M | styles R/M |
 |---|---|---|---:|---:|---:|---:|---:|
+| datagrid | 1x | reverse sort | 100.9 | 120.1 | 1.19 | 1/1 | 1/1 |
+| datagrid | 4x | reverse sort | 422.5 | 496.1 | 1.17 | 1/1 | 1/1 |
 
 ## Where Meltea lays out or recalculates style more often
 
@@ -31,12 +33,26 @@ against Meltea's first run.
 
 None.
 
-Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's `domProps`, Meltea in source order) in: kanban, todomvc. The comparison above sorts attributes and adds each form field's `value` and `checked` properties.
+Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's `domProps`, Meltea in source order) in: datagrid, kanban, todomvc. The comparison above sorts attributes and adds each form field's `value` and `checked` properties.
 
 ## All steps, CPU 1x
 
 | app | step | React ms | Meltea ms | ratio | layouts R/M | style recalcs R/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| datagrid | mount | 101.0 | 89.1 | 0.88 | 1/1 | 1/1 | yes |
+| datagrid | sort by name | 128.2 | 110.8 | 0.86 | 1/1 | 1/1 | yes |
+| datagrid | sort by amount | 97.7 | 88.8 | 0.91 | 1/1 | 1/1 | yes |
+| datagrid | sort by joined | 118.9 | 96.9 | 0.82 | 1/1 | 1/1 | yes |
+| datagrid | reverse sort | 100.9 | 120.1 | 1.19 | 1/1 | 1/1 | yes |
+| datagrid | type into a filter | 90.2 | 79.0 | 0.88 | 1/1 | 1/1 | yes |
+| datagrid | clear the filter | 89.3 | 77.1 | 0.86 | 1/1 | 1/1 | yes |
+| datagrid | select 50 rows | 278.5 | 241.9 | 0.87 | 49/49 | 49/49 | yes |
+| datagrid | select all | 38.3 | 33.0 | 0.86 | 1/1 | 1/1 | yes |
+| datagrid | deselect all | 25.4 | 22.8 | 0.90 | 1/1 | 1/1 | yes |
+| datagrid | open detail of 10 rows | 55.5 | 35.0 | 0.63 | 9/9 | 9/5 | yes |
+| datagrid | next page x5 | 428.8 | 383.1 | 0.89 | 4/4 | 4/4 | yes |
+| datagrid | close detail | 5.1 | 4.4 | 0.87 | 1/1 | 0/0 | yes |
+| datagrid | unmount | 9.7 | 6.7 | 0.69 | 1/1 | 1/1 | – |
 | kanban | mount | 116.7 | 108.1 | 0.93 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 234.0 | 204.4 | 0.87 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 155.6 | 136.4 | 0.88 | 18/18 | 18/18 | yes |
@@ -79,6 +95,20 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 
 | app | step | React ms | Meltea ms | ratio | layouts R/M | style recalcs R/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| datagrid | mount | 420.7 | 371.0 | 0.88 | 1/1 | 1/1 | yes |
+| datagrid | sort by name | 513.3 | 484.4 | 0.94 | 1/1 | 1/1 | yes |
+| datagrid | sort by amount | 389.9 | 364.0 | 0.93 | 1/1 | 1/1 | yes |
+| datagrid | sort by joined | 488.4 | 401.9 | 0.82 | 1/1 | 1/1 | yes |
+| datagrid | reverse sort | 422.5 | 496.1 | 1.17 | 1/1 | 1/1 | yes |
+| datagrid | type into a filter | 372.1 | 332.9 | 0.89 | 1/1 | 1/1 | yes |
+| datagrid | clear the filter | 351.5 | 316.5 | 0.90 | 1/1 | 1/1 | yes |
+| datagrid | select 50 rows | 898.8 | 731.8 | 0.81 | 49/49 | 49/49 | yes |
+| datagrid | select all | 128.8 | 109.6 | 0.85 | 1/1 | 1/1 | yes |
+| datagrid | deselect all | 105.7 | 83.2 | 0.79 | 1/1 | 1/1 | yes |
+| datagrid | open detail of 10 rows | 214.4 | 111.8 | 0.52 | 9/9 | 9/5 | yes |
+| datagrid | next page x5 | 1811.0 | 1625.9 | 0.90 | 4/4 | 4/4 | yes |
+| datagrid | close detail | 19.6 | 14.5 | 0.74 | 1/1 | 0/0 | yes |
+| datagrid | unmount | 38.2 | 25.7 | 0.67 | 1/1 | 1/1 | – |
 | kanban | mount | 494.4 | 450.2 | 0.91 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 937.9 | 790.4 | 0.84 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 600.4 | 516.1 | 0.86 | 18/18 | 18/18 | yes |
@@ -121,6 +151,7 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 
 | app | React 1x | Meltea 1x | React 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
+| datagrid | 7.52 | 3.48 | 7.53 | 3.81 |
 | kanban | 7.85 | 4.47 | 7.99 | 4.53 |
 | spreadsheet | 8.45 | 3.90 | 8.50 | 3.90 |
 | todomvc | 4.05 | 1.73 | 4.05 | 1.69 |

@@ -1,0 +1,339 @@
+(** Where an account stands. *)
+type status = Active | Pending | Suspended | Closed
+
+type person = {
+  id : int;
+  name : string;
+  email : string;
+  country : string;
+  amount : float;
+  status : status;
+  joined : string;
+}
+
+type column = Id | Name | Email | Country | Amount | Status | Joined
+
+type order = Ascending | Descending
+
+(** How the rows are ordered. *)
+type sort = Unsorted | Sorted of column * order
+
+(** Whether a row is in the selection. *)
+type pick = Picked | Unpicked
+
+(** Which person the drawer shows. *)
+type drawer = Shut | Showing of int
+
+let columns = [| Id; Name; Email; Country; Amount; Status; Joined |]
+let page_size = 1000
+
+let status_name status =
+  match status with Active -> "active" | Pending -> "pending" | Suspended -> "suspended" | Closed -> "closed"
+
+let money amount = "$" ^ Js.Float.toFixed ~digits:2 amount
+
+let people =
+  let seed = Classic.Seed.make 2024 in
+  let first =
+    [| "Ada"; "Ben"; "Chloe"; "Dmitri"; "Elena"; "Farid"; "Grace"; "Hugo"; "Ines"; "Jonas"; "Kira"; "Liam"; "Maya";
+       "Nils"; "Olga"; "Pablo"; "Quinn"; "Rosa"; "Sven"; "Tara"; "Umar"; "Vera"; "Wen"; "Yara"; "Zoe" |]
+  in
+  let last =
+    [| "Andersen"; "Brown"; "Costa"; "Dubois"; "Eriksen"; "Fischer"; "Garcia"; "Horvat"; "Ivanova"; "Jensen";
+       "Kowalski"; "Lopez"; "Muller"; "Nakamura"; "Okafor"; "Petrov"; "Rossi"; "Silva"; "Tanaka"; "Weber" |]
+  in
+  let countries =
+    [| "Argentina"; "Brazil"; "Canada"; "Denmark"; "Egypt"; "France"; "Germany"; "India"; "Japan"; "Kenya";
+       "Mexico"; "Norway"; "Poland"; "Spain"; "Sweden"; "Turkey"; "Ukraine"; "Vietnam" |]
+  in
+  let domains = [| "example.com"; "mail.test"; "corp.local"; "post.example" |] in
+  Array.init 10000 (fun index ->
+      let given = Classic.Seed.pick seed first and family = Classic.Seed.pick seed last in
+      let month = Classic.Seed.next seed 12 + 1 and day = Classic.Seed.next seed 28 + 1 in
+      {
+        id = index + 1;
+        name = given ^ " " ^ family;
+        email =
+          String.lowercase_ascii given ^ "." ^ String.lowercase_ascii family ^ string_of_int (index mod 97) ^ "@"
+          ^ Classic.Seed.pick seed domains;
+        country = Classic.Seed.pick seed countries;
+        amount = float_of_int (Classic.Seed.next seed 1000000) /. 100.;
+        status = [| Active; Active; Active; Pending; Suspended; Closed |].(Classic.Seed.next seed 6);
+        joined =
+          string_of_int (2015 + Classic.Seed.next seed 10)
+          ^ (match month < 10 with true -> "-0" | false -> "-")
+          ^ string_of_int month
+          ^ (match day < 10 with true -> "-0" | false -> "-")
+          ^ string_of_int day;
+      })
+
+let column_title column =
+  match column with
+  | Id -> "ID"
+  | Name -> "Name"
+  | Email -> "Email"
+  | Country -> "Country"
+  | Amount -> "Amount"
+  | Status -> "Status"
+  | Joined -> "Joined"
+
+let column_text person column =
+  match column with
+  | Id -> string_of_int person.id
+  | Name -> person.name
+  | Email -> person.email
+  | Country -> person.country
+  | Amount -> money person.amount
+  | Status -> status_name person.status
+  | Joined -> person.joined
+
+type model = {
+  picked : Belt.Set.Int.t;
+  sort : sort;
+  filters : (column * string) list;
+  page : int;
+  drawer : drawer;
+}
+
+type message =
+  | Sort_by of column
+  | Filter of column * string
+  | Clear_filters
+  | Go_to of int
+  | Open of int
+  | Close
+  | Toggle of int
+  | Pick_all of int array
+  | Drop_all
+
+let update message model =
+  match message with
+  | Sort_by column ->
+      let sort =
+        match model.sort with
+        | Sorted (by, Ascending) when by = column -> Sorted (column, Descending)
+        | Sorted _ | Unsorted -> Sorted (column, Ascending)
+      in
+      ({ model with sort; page = 0 }, Cmd.none)
+  | Filter (column, text) ->
+      ( {
+          model with
+          filters =
+            (column, text) :: List.filter (fun (other, _) -> other <> column) model.filters
+            |> List.filter (fun (_, text) -> text <> "");
+          page = 0;
+        },
+        Cmd.none )
+  | Clear_filters -> ({ model with filters = []; page = 0 }, Cmd.none)
+  | Go_to page -> ({ model with page }, Cmd.none)
+  | Open id -> ({ model with drawer = Showing id }, Cmd.none)
+  | Close -> ({ model with drawer = Shut }, Cmd.none)
+  | Toggle id ->
+      ( {
+          model with
+          picked =
+            (match Belt.Set.Int.has model.picked id with
+            | true -> Belt.Set.Int.remove model.picked id
+            | false -> Belt.Set.Int.add model.picked id);
+        },
+        Cmd.none )
+  | Pick_all ids -> ({ model with picked = Belt.Set.Int.mergeMany model.picked ids }, Cmd.none)
+  | Drop_all -> ({ model with picked = Belt.Set.Int.empty }, Cmd.none)
+
+let badge status = <span className=("badge badge-" ^ status_name status)>(Html.text (status_name status))</span>
+
+let drawer_view person picked =
+  let seed = Classic.Seed.make person.id in
+  let transactions =
+    Array.init 25 (fun index ->
+        ( index,
+          Classic.sentence seed 3,
+          float_of_int (Classic.Seed.next seed 50000) /. 100.,
+          match Classic.Seed.next seed 4 with 0 -> "refund" | _ -> "charge" ))
+  in
+  <aside className="drawer">
+    <header>
+      <h2 id="drawer-title">(Html.text person.name)</h2>
+      <button id="close-drawer" onClick=Close>(Html.text "Close")</button>
+    </header>
+    <dl>
+      <dt>(Html.text "Email")</dt>
+      <dd>(Html.text person.email)</dd>
+      <dt>(Html.text "Country")</dt>
+      <dd>(Html.text person.country)</dd>
+      <dt>(Html.text "Balance")</dt>
+      <dd>(Html.text (money person.amount))</dd>
+      <dt>(Html.text "Status")</dt>
+      <dd>(badge person.status)</dd>
+      <dt>(Html.text "Joined")</dt>
+      <dd>(Html.text person.joined)</dd>
+    </dl>
+    <label className="drawer-pick">
+      <input type_="checkbox" checked=(Belt.Set.Int.has picked person.id) onCheck=(fun _ -> Toggle person.id) />
+      (Html.text " Selected")
+    </label>
+    <h3>(Html.text "Recent transactions")</h3>
+    <table className="transactions">
+      <tbody>
+        (Html.array
+           (Array.map
+              (fun (index, memo, value, kind) ->
+                <tr key=(string_of_int index) className=kind>
+                  <td>(Html.text memo)</td>
+                  <td>(Html.text kind)</td>
+                  <td className="num">(Html.text (money value))</td>
+                </tr>)
+              transactions))
+      </tbody>
+    </table>
+  </aside>
+
+let view { picked; sort; filters; page; drawer } =
+  let needles = List.map (fun (column, text) -> (column, String.lowercase_ascii text)) filters in
+  let matching =
+    Js.Array.filter
+      ~f:(fun person ->
+        List.for_all
+          (fun (column, needle) -> Js.String.includes ~search:needle (String.lowercase_ascii (column_text person column)))
+          needles)
+      people
+  in
+  let ordered =
+    match sort with
+    | Unsorted -> matching
+    | Sorted (column, order) ->
+        let compare_people left right =
+          match column with
+          | Id -> compare left.id right.id
+          | Amount -> compare left.amount right.amount
+          | Status -> compare left.status right.status
+          | Name | Email | Country | Joined -> compare (column_text left column) (column_text right column)
+        in
+        let sorted = Array.copy matching in
+        Array.stable_sort
+          (fun left right ->
+            match order with Ascending -> compare_people left right | Descending -> compare_people right left)
+          sorted;
+        sorted
+  in
+  let pages = max 1 ((Array.length ordered + page_size - 1) / page_size) in
+  let shown = Js.Array.slice ~start:(page * page_size) ~end_:((page + 1) * page_size) ordered in
+  let all_picked = Js.Array.every ~f:(fun person -> Belt.Set.Int.has picked person.id) ordered in
+  let ids = Belt.Set.Int.toArray picked in
+  let total = Array.fold_left (fun sum id -> sum +. people.(id - 1).amount) 0. ids in
+  <div className="datagrid-app">
+    <div className="grid-page">
+      <div className="grid-toolbar">
+        <span id="match-count">(Html.text (string_of_int (Array.length ordered) ^ " of 10000 people"))</span>
+        <button id="clear-filters" onClick=Clear_filters>(Html.text "Clear filters")</button>
+        <nav className="pager">
+          <button id="prev-page" disabled=(page = 0) onClick=(Go_to (page - 1))>(Html.text "Previous")</button>
+          (Html.array
+             (Array.init pages (fun index ->
+                  <button
+                    key=(string_of_int index)
+                    className=(match index = page with true -> "page current" | false -> "page")
+                    onClick=(Go_to index)>
+                    (Html.int (index + 1))
+                  </button>)))
+          <button id="next-page" disabled=(page >= pages - 1) onClick=(Go_to (page + 1))>(Html.text "Next")</button>
+        </nav>
+      </div>
+      <div className="table-scroll">
+        <table className="data-grid">
+          <thead>
+            <tr>
+              <th>
+                <input
+                  id="select-all"
+                  type_="checkbox"
+                  checked=(all_picked && Array.length ordered > 0)
+                  onCheck=(fun _ ->
+                    match all_picked with
+                    | true -> Drop_all
+                    | false -> Pick_all (Array.map (fun person -> person.id) ordered)) />
+              </th>
+              (Html.array
+                 (Array.map
+                    (fun column ->
+                      <th
+                        key=(column_title column)
+                        className="sortable"
+                        onClick=(Sort_by column)
+                        ariaSort=(match sort with
+                          | Sorted (by, Ascending) when by = column -> "ascending"
+                          | Sorted (by, Descending) when by = column -> "descending"
+                          | Sorted _ | Unsorted -> "none")>
+                        (Html.text (column_title column))
+                        <span className="sort-mark">
+                          (Html.text
+                             (match sort with
+                             | Sorted (by, Ascending) when by = column -> " \xe2\x96\xb2"
+                             | Sorted (by, Descending) when by = column -> " \xe2\x96\xbc"
+                             | Sorted _ | Unsorted -> ""))
+                        </span>
+                      </th>)
+                    columns))
+            </tr>
+            <tr className="filters">
+              <th />
+              (Html.array
+                 (Array.map
+                    (fun column ->
+                      <th key=(column_title column)>
+                        <input
+                          className=("filter filter-" ^ String.lowercase_ascii (column_title column))
+                          placeholder=("Filter " ^ String.lowercase_ascii (column_title column))
+                          value=(Option.value ~default:"" (List.assoc_opt column filters))
+                          onInput=((fun text -> Filter (column, text)) [@alert "-fanout"]) />
+                      </th>)
+                    columns))
+            </tr>
+          </thead>
+          <tbody>
+            (Html.array
+               (Array.map
+                  (fun person ->
+                    let picked = Belt.Set.Int.has picked person.id in
+                    <tr key=(string_of_int person.id) className=(match picked with true -> "row picked" | false -> "row")>
+                      <td><input className="row-select" type_="checkbox" checked=picked onCheck=(fun _ -> Toggle person.id) /></td>
+                      <td className="num">(Html.int person.id)</td>
+                      <td><a className="open-detail" href="#" onClick=(Open person.id)>(Html.text person.name)</a></td>
+                      <td>(Html.text person.email)</td>
+                      <td>(Html.text person.country)</td>
+                      <td className="num">(Html.text (money person.amount))</td>
+                      <td>(badge person.status)</td>
+                      <td>(Html.text person.joined)</td>
+                    </tr>)
+                  shown))
+          </tbody>
+        </table>
+      </div>
+      (match drawer with
+       | Showing id -> Html.portal ~into:"portal" (drawer_view people.(id - 1) picked)
+       | Shut -> Html.none)
+    </div>
+    <footer className="summary">
+      <span id="selected-count">(Html.text (string_of_int (Array.length ids) ^ " selected"))</span>
+      <span id="selected-total">(Html.text ("Total " ^ money total))</span>
+      <span className="by-status">
+        (Html.array
+           (Array.map
+              (fun status ->
+                <span key=(status_name status) className="status-count">
+                  (badge status)
+                  (Html.int (Array.length (Js.Array.filter ~f:(fun id -> people.(id - 1).status = status) ids)))
+                </span>)
+              [| Active; Pending; Suspended; Closed |]))
+      </span>
+      <button id="clear-selection" disabled=(Array.length ids = 0) onClick=Drop_all>(Html.text "Clear selection")</button>
+    </footer>
+  </div>
+
+let () =
+  Classic.start (fun root ->
+      Program.element
+        ~init:({ picked = Belt.Set.Int.empty; sort = Unsorted; filters = []; page = 0; drawer = Shut }, Cmd.none)
+        ~update ~view
+        ~subscriptions:(fun _ -> Sub.none)
+        root)

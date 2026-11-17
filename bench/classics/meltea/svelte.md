@@ -12,15 +12,20 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.86; Meltea slower (> 1.05) in 1, faster (< 0.95) in 27.
-- CPU 4x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.86; Meltea slower (> 1.05) in 1, faster (< 0.95) in 28.
+- CPU 1x: 49 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 4, faster (< 0.95) in 32.
+- CPU 4x: 50 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 3, faster (< 0.95) in 32.
 
 ## Where Meltea is slower (ratio > 1.05)
 
 | app | cpu | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | styles S/M |
 |---|---|---|---:|---:|---:|---:|---:|
+| datagrid | 1x | reverse sort | 92.5 | 116.8 | 1.26 | 1/1 | 1/1 |
+| datagrid | 4x | reverse sort | 382.0 | 478.8 | 1.25 | 1/1 | 1/1 |
+| datagrid | 1x | select all | 28.3 | 32.4 | 1.15 | 1/1 | 1/1 |
+| datagrid | 1x | sort by name | 102.1 | 111.0 | 1.09 | 1/1 | 1/1 |
 | kanban | 1x | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 |
 | todomvc | 4x | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 |
+| datagrid | 4x | sort by name | 433.0 | 458.6 | 1.06 | 1/1 | 1/1 |
 
 ## Where Meltea lays out or recalculates style more often
 
@@ -37,6 +42,20 @@ None.
 
 | app | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | style recalcs S/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| datagrid | mount | 101.4 | 86.9 | 0.86 | 1/1 | 1/1 | yes |
+| datagrid | sort by name | 102.1 | 111.0 | 1.09 | 1/1 | 1/1 | yes |
+| datagrid | sort by amount | 109.7 | 88.0 | 0.80 | 1/1 | 1/1 | yes |
+| datagrid | sort by joined | 91.6 | 95.0 | 1.04 | 1/1 | 1/1 | yes |
+| datagrid | reverse sort | 92.5 | 116.8 | 1.26 | 1/1 | 1/1 | yes |
+| datagrid | type into a filter | 102.7 | 76.8 | 0.75 | 1/1 | 1/1 | yes |
+| datagrid | clear the filter | 77.6 | 72.8 | 0.94 | 1/1 | 1/1 | yes |
+| datagrid | select 50 rows | 236.3 | 224.7 | 0.95 | 49/49 | 49/49 | yes |
+| datagrid | select all | 28.3 | 32.4 | 1.15 | 1/1 | 1/1 | yes |
+| datagrid | deselect all | 23.8 | 22.3 | 0.93 | 1/1 | 1/1 | yes |
+| datagrid | open detail of 10 rows | 34.7 | 33.7 | 0.97 | 9/9 | 5/5 | yes |
+| datagrid | next page x5 | 365.1 | 369.9 | 1.01 | 4/4 | 4/4 | yes |
+| datagrid | close detail | 4.2 | 4.2 | 1.00 | 1/1 | 0/0 | yes |
+| datagrid | unmount | 6.3 | 6.1 | 0.98 | 1/1 | 1/1 | – |
 | kanban | mount | 139.6 | 110.6 | 0.79 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 230.4 | 211.8 | 0.92 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 166.7 | 133.5 | 0.80 | 18/18 | 18/18 | yes |
@@ -79,6 +98,20 @@ None.
 
 | app | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | style recalcs S/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| datagrid | mount | 399.8 | 360.4 | 0.90 | 1/1 | 1/1 | yes |
+| datagrid | sort by name | 433.0 | 458.6 | 1.06 | 1/1 | 1/1 | yes |
+| datagrid | sort by amount | 448.6 | 356.8 | 0.80 | 1/1 | 1/1 | yes |
+| datagrid | sort by joined | 375.2 | 392.7 | 1.05 | 1/1 | 1/1 | yes |
+| datagrid | reverse sort | 382.0 | 478.8 | 1.25 | 1/1 | 1/1 | yes |
+| datagrid | type into a filter | 417.1 | 313.0 | 0.75 | 1/1 | 1/1 | yes |
+| datagrid | clear the filter | 308.7 | 296.7 | 0.96 | 1/1 | 1/1 | yes |
+| datagrid | select 50 rows | 689.6 | 609.4 | 0.88 | 49/49 | 49/49 | yes |
+| datagrid | select all | 100.6 | 102.7 | 1.02 | 1/1 | 1/1 | yes |
+| datagrid | deselect all | 82.1 | 79.1 | 0.96 | 1/1 | 1/1 | yes |
+| datagrid | open detail of 10 rows | 104.3 | 102.7 | 0.98 | 9/9 | 5/5 | yes |
+| datagrid | next page x5 | 1487.6 | 1504.2 | 1.01 | 4/4 | 4/4 | yes |
+| datagrid | close detail | 14.1 | 13.9 | 0.98 | 1/1 | 0/0 | yes |
+| datagrid | unmount | 25.1 | 25.6 | 1.02 | 1/1 | 1/1 | – |
 | kanban | mount | 578.3 | 466.3 | 0.81 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 922.2 | 853.2 | 0.93 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 673.9 | 533.2 | 0.79 | 18/18 | 18/18 | yes |
@@ -121,6 +154,7 @@ None.
 
 | app | Svelte 5 1x | Meltea 1x | Svelte 5 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
+| datagrid | 5.18 | 3.47 | 4.95 | 3.81 |
 | kanban | 22.45 | 4.44 | 22.56 | 4.27 |
 | spreadsheet | 15.30 | 3.73 | 15.29 | 3.82 |
 | todomvc | 1.53 | 1.73 | 1.53 | 1.69 |
