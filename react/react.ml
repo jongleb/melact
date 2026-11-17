@@ -13,6 +13,16 @@ type 'props component = ('props, element) componentLike
 
 external component : ('props, element) componentLike -> 'props component = "%identity"
 
+type 'labels props = Props of element [@@unboxed]
+
+let called_with : 'labels props -> ('fields Js.t -> element) -> element =
+  [%mel.raw
+    {|function (props, build) {
+        return props !== null && typeof props === "object" && typeof props.build === "function" && typeof props.patch === "function"
+          ? props
+          : build(props);
+      }|}]
+
 module Context = struct
   type 'value t = Context of 'value Melact_runtime.Context.t [@@unboxed]
 

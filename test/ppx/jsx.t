@@ -437,8 +437,6 @@ A component with optional, defaulted and children props, and its signature:
   let __melhole_component_1 = Melact_runtime.Component.pure ~name:"Card.make"
   include
     struct
-      type make_props =
-        | Make_props of React.element [@@unboxed ]
       type ('melhole_0, 'melhole_1) __melhole_frame_2 =
         {
         __melhole_frame_2_hole_0: 'melhole_0 ;
@@ -548,50 +546,68 @@ A component with optional, defaulted and children props, and its signature:
                                         ()))
                                      [@ocaml.warning "-26-27"]))
                               })))) in
-            Make_props
-              (match __melhole_key with
-               | None -> __melhole_element
-               | Some key ->
-                   React.of_child
-                     (Melhole.View.with_key key
-                        (React.to_child __melhole_element))))
+            (React.Props
+               (match __melhole_key with
+                | None -> __melhole_element
+                | Some key ->
+                    React.of_child
+                      (Melhole.View.with_key key
+                         (React.to_child __melhole_element))) : <
+                                                                  title: unit  ;
+                                                                  size: 
+                                                                    unit option 
+                                                                    ;subtitle: 
+                                                                      unit
+                                                                      option  ;
+                                                                  children: 
+                                                                    unit   > 
+                                                                  React.props))
         [@warning "-16"])
-      external make : make_props -> React.element = "%identity"
+      external make :
+        <
+          title: unit  ;size: unit option  ;subtitle: unit option  ;children: 
+                                                                      unit   > 
+          React.props -> React.element = "%identity"
     end
   let __melhole_component_4 =
     Melact_runtime.Component.pure ~name:"Card.nothing"
   include
     struct
-      type nothing_props =
-        | Nothing_props of React.element [@@unboxed ]
       let nothingProps =
         ((fun ?key:__melhole_key () ->
             let __melhole_element =
               React.of_child
                 (Melhole.View.pure __melhole_component_4 [||]
                    (fun () -> React.to_child React.null)) in
-            Nothing_props
-              (match __melhole_key with
-               | None -> __melhole_element
-               | Some key ->
-                   React.of_child
-                     (Melhole.View.with_key key
-                        (React.to_child __melhole_element))))
+            (React.Props
+               (match __melhole_key with
+                | None -> __melhole_element
+                | Some key ->
+                    React.of_child
+                      (Melhole.View.with_key key
+                         (React.to_child __melhole_element))) : <  > 
+                                                                  React.props))
         [@warning "-16"])
-      external nothing : nothing_props -> React.element = "%identity"
+      external nothing : <  >  React.props -> React.element = "%identity"
     end
   $ cat > card.mli <<'EOF'
   > val make : title:string -> ?size:int -> ?subtitle:string -> children:React.element -> React.element
   > [@@react.component]
   > EOF
   $ ./pp.exe -intf card.mli
-  type make_props
   val makeProps :
     title:string ->
       ?size:int ->
         ?subtitle:string ->
-          children:React.element -> ?key:string -> unit -> make_props
-  val make : make_props -> React.element
+          children:React.element ->
+            ?key:string ->
+              unit ->
+                <
+                  title: unit  ;size: unit option  ;subtitle: unit option  ;
+                  children: unit   >  React.props
+  val make :
+    < title: unit  ;size: unit option  ;subtitle: unit option  ;children: unit  
+      >  React.props -> React.element
 
 React.forwardRef: the ref becomes an optional prop and reaches the body as reason-react passes it:
 
@@ -606,8 +622,6 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
   let __melhole_component_1 = Melact_runtime.Component.pure ~name:"Fancy.make"
   include
     struct
-      type make_props =
-        | Make_props of React.element [@@unboxed ]
       type ('melhole_0, 'melhole_1) __melhole_frame_2 =
         {
         __melhole_frame_2_hole_0: 'melhole_0 ;
@@ -703,15 +717,18 @@ React.forwardRef: the ref becomes an optional prop and reaches the body as reaso
                                        ())
                                      [@ocaml.warning "-26-27"]))
                               })))) in
-            Make_props
-              (match __melhole_key with
-               | None -> __melhole_element
-               | Some key ->
-                   React.of_child
-                     (Melhole.View.with_key key
-                        (React.to_child __melhole_element))))
+            (React.Props
+               (match __melhole_key with
+                | None -> __melhole_element
+                | Some key ->
+                    React.of_child
+                      (Melhole.View.with_key key
+                         (React.to_child __melhole_element))) : < label: unit  
+                                                                  > 
+                                                                  React.props))
         [@warning "-16"])
-      external make : make_props -> React.element = "%identity"
+      external make :
+        < label: unit   >  React.props -> React.element = "%identity"
     end
 
 Calls with children, keys and fragments:
@@ -822,8 +839,6 @@ Hooks get one key per call site, also inside custom hooks:
   let __melhole_component_2 = Melact_runtime.Component.pure ~name:"Hooks.make"
   include
     struct
-      type make_props =
-        | Make_props of React.element [@@unboxed ]
       let __melhole_hook_3 =
         (Melact_runtime.Hook.key () : unit Melact_runtime.Hook.key)
       let makeProps =
@@ -839,15 +854,16 @@ Hooks get one key per call site, also inside custom hooks:
                             (Melact_runtime.Hook.unchecked __melhole_hook_3))
                            ((fun () -> None)[@alert "+hook"]) [|shown|];
                          React.string (React.useContext Theme.context)))) in
-            Make_props
-              (match __melhole_key with
-               | None -> __melhole_element
-               | Some key ->
-                   React.of_child
-                     (Melhole.View.with_key key
-                        (React.to_child __melhole_element))))
+            (React.Props
+               (match __melhole_key with
+                | None -> __melhole_element
+                | Some key ->
+                    React.of_child
+                      (Melhole.View.with_key key
+                         (React.to_child __melhole_element))) : <  > 
+                                                                  React.props))
         [@warning "-16"])
-      external make : make_props -> React.element = "%identity"
+      external make : <  >  React.props -> React.element = "%identity"
     end
 
 reason-react's uncurried hooks get keys as the others do, and a hook fact also under a local open, which is
@@ -1072,8 +1088,6 @@ Reason input:
     Melact_runtime.Component.pure ~name:"Greeting.make"
   include
     struct
-      type make_props =
-        | Make_props of React.element [@@unboxed ]
       type 'melhole_0 __melhole_frame_2 =
         {
         __melhole_frame_2_hole_0: 'melhole_0 ;
@@ -1145,20 +1159,23 @@ Reason input:
                                        ())
                                      [@ocaml.warning "-26-27"]))
                               })))) in
-            Make_props
-              (match __melhole_key with
-               | None -> __melhole_element
-               | Some key ->
-                   React.of_child
-                     (Melhole.View.with_key key
-                        (React.to_child __melhole_element))))
+            (React.Props
+               (match __melhole_key with
+                | None -> __melhole_element
+                | Some key ->
+                    React.of_child
+                      (Melhole.View.with_key key
+                         (React.to_child __melhole_element))) : < name: unit  
+                                                                  > 
+                                                                  React.props))
         [@warning "-16"])
-      external make : make_props -> React.element = "%identity"[@@melhole.inline
-                                                                 (2,
-                                                                   (fun ~name
-                                                                      () ->
-                                                                      ((
-                                                                      span
+      external make :
+        < name: unit   >  React.props -> React.element = "%identity"[@@melhole.inline
+                                                                      (2,
+                                                                      (fun
+                                                                      ~name ()
+                                                                      ->
+                                                                      ((span
                                                                       ~className:"greeting"
                                                                       ~children:
                                                                       [
@@ -1183,8 +1200,6 @@ mlx input:
     Melact_runtime.Component.pure ~name:"Greeting.make"
   include
     struct
-      type make_props =
-        | Make_props of React.element [@@unboxed ]
       type 'melhole_0 __melhole_frame_2 =
         {
         __melhole_frame_2_hole_0: 'melhole_0 ;
@@ -1256,20 +1271,23 @@ mlx input:
                                        ())
                                      [@ocaml.warning "-26-27"]))
                               })))) in
-            Make_props
-              (match __melhole_key with
-               | None -> __melhole_element
-               | Some key ->
-                   React.of_child
-                     (Melhole.View.with_key key
-                        (React.to_child __melhole_element))))
+            (React.Props
+               (match __melhole_key with
+                | None -> __melhole_element
+                | Some key ->
+                    React.of_child
+                      (Melhole.View.with_key key
+                         (React.to_child __melhole_element))) : < name: unit  
+                                                                  > 
+                                                                  React.props))
         [@warning "-16"])
-      external make : make_props -> React.element = "%identity"[@@melhole.inline
-                                                                 (2,
-                                                                   (fun ~name
-                                                                      () ->
-                                                                      ((
-                                                                      span ()
+      external make :
+        < name: unit   >  React.props -> React.element = "%identity"[@@melhole.inline
+                                                                      (2,
+                                                                      (fun
+                                                                      ~name ()
+                                                                      ->
+                                                                      ((span ()
                                                                       ~children:
                                                                       [
                                                                       React.string
@@ -1355,14 +1373,14 @@ callbacks of a component, so a hook called there is reported by the type checker
   > EOF
   $ ./pp.exe -impl rules.ml | grep -n "alert"
   1:[@@@alert "-hook"]
-  64:                           ((fun () -> 0)[@alert "+hook"]) in
-  71:                             [@alert "+hook"])
-  76:                                  then ((1)[@alert "+hook"])
-  77:                                  else ((0)[@alert "+hook"])))
-  78:                             [@alert "+hook"]) in
-  84:                           [@alert "+hook"])
-  129:                                                        [@alert "+hook"]))
-  130:                                                    [@alert "+hook"])
+  62:                           ((fun () -> 0)[@alert "+hook"]) in
+  69:                             [@alert "+hook"])
+  74:                                  then ((1)[@alert "+hook"])
+  75:                                  else ((0)[@alert "+hook"])))
+  76:                             [@alert "+hook"]) in
+  82:                           [@alert "+hook"])
+  127:                                                        [@alert "+hook"]))
+  128:                                                    [@alert "+hook"])
 
 Values written in props are cached as an expression whose first branch returns the kept value,
 so the type the prop expects reaches the value in the branch that stores it, and the bare
@@ -1471,7 +1489,7 @@ string tag builds a DOM element from the props object, a component is called wit
   > external createElement : string -> < .. > Js.t -> React.element = "createElement" [@@mel.module "react"]
   > external jsx : string -> < .. > Js.t -> ?key:string -> unit -> React.element = "jsx" [@@mel.module "react/jsx-runtime"]
   > type real
-  > external own : string -> < .. > Js.t -> real = "createElement" [@@mel.module "react"]
+  > external own : string -> < .. > Js.t -> real = "createElement" [@@mel.module "react"] [@@melact.npm]
   > let make () = createElement "h1" [%mel.obj { id = "x" }]
   > EOF
   $ ./pp.exe -impl elements.ml
@@ -1488,6 +1506,7 @@ string tag builds a DOM element from the props object, a component is called wit
   type real
   external own : string -> < .. >  Js.t -> real = "createElement"[@@mel.module
                                                                    "react"]
+  [@@melact.npm ]
   let make () = createElement "h1" ([%mel.obj { id = "x" }])
 
 A binding to npm's Fragment with a type of its own is left alone:
@@ -1770,3 +1789,25 @@ A hook runs in the component that calls it, so it cannot be marked for an island
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Error: melact: useThing is not a component: a hook runs in the component that calls it, on melact.compat, never on an island
   [1]
+
+A binding to npm's react that Melact cannot replace is a compile error, since a Melact app does not run
+npm's React; [@@melact.npm] keeps one on purpose:
+
+  $ cat > leftover.ml <<'EOF'
+  > external useSyncExternalStoreWithSelector : (unit -> unit) -> int = "useSyncExternalStoreWithSelector" [@@mel.module "react"]
+  > EOF
+  $ ./pp.exe -impl leftover.ml
+  File "leftover.ml", line 1, characters 0-125:
+  1 | external useSyncExternalStoreWithSelector : (unit -> unit) -> int = "useSyncExternalStoreWithSelector" [@@mel.module "react"]
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Error: melact: useSyncExternalStoreWithSelector binds npm's react directly, which a Melact app does not run, and Melact has no useSyncExternalStoreWithSelector of this type to put in its place: call Melact's React, or add [@@melact.npm] to keep the import on purpose
+  [1]
+  $ cat > kept.ml <<'EOF'
+  > external renderToString : int -> string = "renderToString" [@@mel.module "react-dom/server"] [@@melact.npm]
+  > EOF
+  $ ./pp.exe -impl kept.ml
+  [@@@alert "-hook"]
+  let () = React.reason_react_is_also_in_this_build_remove_it ()
+  external renderToString : int -> string = "renderToString"[@@mel.module
+                                                              "react-dom/server"]
+  [@@melact.npm ]

@@ -11,6 +11,8 @@ type 'props component = ('props, element) componentLike
 
 external component : ('props, element) componentLike -> 'props component = "%identity"
 
+type 'labels props = Props of element [@@unboxed]
+
 module Context = struct
   type 'value t = Context of 'value Melact_server.Context.t [@@unboxed]
 

@@ -1,0 +1,11 @@
+(copy_files
+ (files ../ticks.mlx))
+
+(melange.emit
+ (target output)
+ (alias runtest-js)
+ (libraries melact melact.island testing melange.dom)
+ (module_systems
+  (es6 mjs))
+ (preprocess
+  (staged_pps melange.ppx melact-ppx -- -typed -foreign-engine island)))

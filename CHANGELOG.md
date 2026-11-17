@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- Components passed as values to JavaScript, from the team's recharts axis. A `[@react.component]`'s
+  props are `< label : unit; … > React.props`, typed by its labels, instead of a type of its own, so
+  components with the same labels are interchangeable across modules, as in reason-react: a branch
+  may pick `Tick.doubled` or `Tick.default` (it was a type error). Under `-typed`, a compiled
+  component written where a value goes becomes a function that also takes a JavaScript library's
+  props object (`React.called_with`): recharts called `Tick.default` with its own props and got that
+  object back as an element ("Objects are not valid as a React child"). The type stays, so wrappers
+  over `'props React.component` keep compiling. On islands, a slot whose content is SVG is a `g` that
+  takes its content when React attaches its ref: a tick rendering `<text>` was an empty `melact-slot`,
+  which SVG does not render ("SVG slots", the gap left in Phase 1a). A binding to npm's `react` or
+  `react-dom` that Melact cannot replace is a compile error, since a Melact app does not run npm's
+  React; `[@@melact.npm]` keeps one on purpose, and `docs/migration.md` shows how to find such imports
+  in libraries melact-ppx does not compile. `melhole.typed` views OCaml object types (`Object`).
+  Laws: `test/team` `Axis` and `Tick` (a JavaScript function calls components, picked in branches, from
+  arrays, of this file and another, with an optional label, beside `React.createElement` and JSX),
+  against reason-react; `test/compat/ticks` (recharts 3 on islands under `-typed`, after random
+  clicks, against reason-react on React 18); `test/typed/laws` (labels read back from generated props
+  types; the component classifier on the new type); `test/ppx` (the error and `[@@melact.npm]`).
+  Mutants, each caught: no adapter, adapting the argument of `React.createElement`, optional labels
+  read as labelled, SVG slots as `melact-slot`.
+
+- The team's next two. `React.createElement(make, {"url": …})`, which server-reason-react's ppx writes
+  for `[@react.client.component]` (`make_client`), gives a component of the same file a props object:
+  it becomes `make (makeProps ~url:obj##url ())`, with the component's labels ("< url : url > Js.t but
+  expected make_props"). A local function annotated `type a.` or `'a.` in a component with hooks stays
+  as written: the update graph put it in a memo cell without its annotation ("Unbound constructor
+  Top5", or "less general" with the constructor qualified), and so did the cache of a component
+  without an update graph; it is now made on every render, as a cell would make it monomorphic.
+  `test/team`: `LocalGadt` (`fun` cases, `switch`, `'b.`, with and without an update graph) and
+  `ClientLinks` (three `make_client`s in one file, one with hooks, one with an optional label),
+  against reason-react. Mutants, each caught: the binding read as any other by the graph, cached
+  without a graph, `createElement` with an object left alone.
+
 - The team's next four from the whole-app build. `{j|… $name …|j}` strings are expanded by melact-ppx
   as melange.ppx expands them, before any pass reads them (`Interpolation`, in `melhole.compiler`):
   under plain `pps`, where melact-ppx can run first, a `{j|url("$path")|j}` attribute was a static

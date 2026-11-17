@@ -44,6 +44,7 @@ type step =
   | Memo of { pattern : Ppxlib.pattern; hook : Ppxlib.expression; mask : int }  (** [useMemo], [useCallback]. *)
   | Effect of { hook : Ppxlib.expression; mask : int }  (** An effect, skipped while its dependencies' sources stay. *)
   | Derived of { pattern : Ppxlib.pattern; value : Ppxlib.expression; mask : int }
+  | Bound of Ppxlib.value_binding  (** A binding with a polymorphic annotation, made on every render as written. *)
 
 (** A body as steps, then the expression it returns and the mask of what that reads. *)
 type plan = { steps : step list; result : Ppxlib.expression; reads : int }

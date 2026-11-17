@@ -23,7 +23,7 @@
     "bench/classics/eventtable": 28919,
     "bench/classics/feed": 27285,
     "bench/classics/filetree": 26940,
-    "bench/classics/gallery": 28057,
+    "bench/classics/gallery": 28058,
     "bench/classics/gantt": 43361,
     "bench/classics/hackernews": 26104,
     "bench/classics/jsontree": 24901,
@@ -1062,6 +1062,16 @@
         "bench/classics/minesweeper": [
           21154,
           21158
+        ]
+      }
+    },
+    {
+      "date": "2026-11-17",
+      "reason": "minifier renaming from an unused React.called_with; same minified size",
+      "grown": {
+        "bench/classics/gallery": [
+          28057,
+          28058
         ]
       }
     }

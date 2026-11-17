@@ -1,0 +1,48 @@
+(* recharts calls an axis's tick function with a props object of its own: here the tick is a component, or one of two
+   components with the same labels picked in a branch, as the team passes them. test/compat/ticks.test.mjs. *)
+
+module XAxis = struct
+  external make : dataKey:string -> tick:('props -> React.element) -> React.element = "XAxis"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module LineChart = struct
+  external make : data:< name : string > Js.t array -> width:int -> height:int -> children:React.element -> React.element = "LineChart"
+  [@@mel.module "recharts"] [@@react.component]
+end
+
+module Tick = struct
+  let[@react.component] make ~x ~y ~payload ?suffix () =
+    <text className="tick" x=(Js.Float.toString x) y=(Js.Float.toString y)>
+      (React.string (payload##value ^ Option.value suffix ~default:""))
+    </text>
+
+  let[@react.component] doubled ~x ~y ~payload ?suffix () =
+    <text className="tick doubled" x=(Js.Float.toString x) y=(Js.Float.toString (y +. 1.))>
+      (React.string (payload##value ^ payload##value ^ Option.value suffix ~default:""))
+    </text>
+end
+
+let data = [| [%mel.obj { name = "a" }]; [%mel.obj { name = "b" }]; [%mel.obj { name = "c" }] |]
+
+module Chart = struct
+  let[@react.component] make () =
+    let double, setDouble = React.useState (fun () -> false) in
+    let pick = if double then Tick.doubled else Tick.make in
+    <div>
+      <button className="double" onClick=(fun _ -> setDouble (fun double -> not double))>(React.string "double")</button>
+      <LineChart data width=300 height=200>
+        <XAxis dataKey="name" tick=pick />
+      </LineChart>
+      <LineChart data width=300 height=200>
+        <XAxis dataKey="name" tick=Tick.make />
+      </LineChart>
+    </div>
+end
+
+let mount_ticks root =
+  let client = ReactDOM.Client.createRoot root in
+  ReactDOM.Client.render client <Chart />;
+  client
+
+let unmount_ticks client = ReactDOM.Client.unmount client ()

@@ -20,6 +20,7 @@ external set_node_property : Dom.node -> string -> 'a -> unit = "" [@@mel.set_in
 external fragment : Dom.document -> Dom.node = "createDocumentFragment" [@@mel.send]
 external append : Dom.node -> Dom.node -> unit = "appendChild" [@@mel.send]
 external cancel_bubble : Dom.event -> bool = "cancelBubble" [@@mel.get]
+external namespace : Dom.node -> string Js.null = "namespaceURI" [@@mel.get]
 
 let element_of : value -> value Js.undefined =
   [%mel.raw
@@ -115,7 +116,8 @@ and placement =
   | In_slot of slot  (** Among the islands of a slot, Melact content of another island. *)
 
 (** Melact content where an island takes a React element: a [melact-slot] element React renders, which
-    takes the content in when React connects it, and the islands nested in that content. *)
+    takes the content in when React connects it, or a [g] that takes SVG content in when React attaches its
+    ref, and the islands nested in that content. *)
 and slot = {
   key : string;
   holder : Dom.node;  (** A fragment the content waits in until React connects the slot. *)
@@ -275,6 +277,13 @@ let scheduled () =
           requested := Unrequested;
           flush ())
 
+let attach slot element =
+  slot.element <- Some element;
+  set_node_property (Dom_api.to_node element) slot_key slot;
+  match slot.content with
+  | Built live -> View.visit live (fun [@u] node -> append (Dom_api.to_node element) node)
+  | Unbuilt -> ()
+
 let defined =
   lazy
     (let define : (string -> (Dom.element -> unit[@u]) Js.undefined[@u]) -> unit =
@@ -312,17 +321,7 @@ let defined =
               });
             }|}]
      in
-     define (fun [@u] key ->
-         Js.Undefined.fromOption
-           (Option.map
-              (fun slot ->
-                fun [@u] element ->
-                 slot.element <- Some element;
-                 set_node_property (Dom_api.to_node element) slot_key slot;
-                 match slot.content with
-                 | Built live -> View.visit live (fun [@u] node -> append (Dom_api.to_node element) node)
-                 | Unbuilt -> ())
-              (Hashtbl.find_opt slots key))))
+     define (fun [@u] key -> Js.Undefined.fromOption (Option.map (fun slot -> fun [@u] element -> attach slot element) (Hashtbl.find_opt slots key))))
 
 let handled given handler =
   List.iter
@@ -384,10 +383,27 @@ let shown_slot slot =
       Events.segment native synthetic##currentTarget;
       match cancel_bubble native with true -> synthetic##stopPropagation () | false -> ());
   set_field given "data-slot" (value slot.key);
-  set_field given "style" (value [%mel.obj { display = "contents" }]);
   set_field given "key" (value "slot");
+  let drawn =
+    match slot.content with
+    | Built live ->
+        let found = ref `Html in
+        View.visit live (fun [@u] node ->
+            match Js.Null.toOption (namespace node) with Some "http://www.w3.org/2000/svg" -> found := `Svg | Some _ | None -> ());
+        !found
+    | Unbuilt -> `Html
+  in
+  let tag =
+    match drawn with
+    | `Html ->
+        set_field given "style" (value [%mel.obj { display = "contents" }]);
+        "melact-slot"
+    | `Svg ->
+        set_field given "ref" (value (fun [@u] element -> Option.iter (attach slot) (Js.Null.toOption element)));
+        "g"
+  in
   let nested = views (Npm.use_sync_external_store slot.nested.subscribe slot.nested.read) in
-  Npm.many [| Npm.tag "melact-slot" (as_props given); nested |]
+  Npm.many [| Npm.tag tag (as_props given); nested |]
 
 let slot_view = Npm.memo (fun (props : < slot : slot > Js.t) -> shown_slot props##slot)
 

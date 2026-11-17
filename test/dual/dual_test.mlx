@@ -486,10 +486,10 @@ let rec page shape =
 (** An element of npm React, built without JSX. *)
 type real
 
-external h : string -> 'props Js.Nullable.t -> real array -> real = "createElement" [@@mel.module "react"] [@@mel.variadic]
+external h : string -> 'props Js.Nullable.t -> real array -> real = "createElement" [@@mel.module "react"] [@@mel.variadic] [@@melact.npm]
 external real_text : string -> real = "%identity"
 external real_null : real = "null"
-external render_real : real -> string = "renderToString" [@@mel.module "react-dom/server"]
+external render_real : real -> string = "renderToString" [@@mel.module "react-dom/server"] [@@melact.npm]
 
 let rec real shape =
   match shape with

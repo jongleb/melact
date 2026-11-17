@@ -34,6 +34,17 @@ without it. Plain `(pps melange.ppx melact-ppx)` still works, with fewer optimiz
 component of another module stays a call and its custom hooks are unknown. The benchmark apps and
 the examples of this repository build with the staged stanza.
 
+Bindings a codebase wrote to npm's `react` itself (`[@mel.module "react"] external useEffect8 : … =
+"useEffect"`) become Melact's own functions in every file melact-ppx compiles, hooks with any number
+of dependencies included. A binding to npm's `react` or `react-dom` that Melact cannot replace is a
+compile error, as the app does not run npm's React; `[@@melact.npm]` keeps one on purpose. A library
+whose `dune` does not run melact-ppx keeps its bindings as imports of npm's React, which fail only in
+the browser; list them in the emitted JavaScript:
+
+```console
+$ grep -rlE "from \"react(-dom)?(/[a-z-]+)?\"" _build/default/app/output --include=*.mjs | grep -v node_modules/melact
+```
+
 Nothing else changes. Run the tests; `compat/run.sh` shows what real reason-react apps look like
 after this step.
 

@@ -203,7 +203,19 @@ let react_text expression =
       Option.map (fun kind -> Element.Text (kind, value)) (text name)
   | _ -> None
 
-let component ~loc ~name ~props_constructor ~hooks ~summary expression =
+let labelled_props ~loc labels =
+  let fields =
+    List.filter_map
+      (fun label ->
+        match label with
+        | Nolabel | Labelled "ref" | Optional "ref" -> None
+        | Labelled name -> Some (otag ~loc { loc; txt = name } [%type: unit])
+        | Optional name -> Some (otag ~loc { loc; txt = name } [%type: unit option]))
+      labels
+  in
+  [%type: [%t ptyp_object ~loc fields Closed] React.props]
+
+let component ~loc ~name ~hooks ~summary expression =
   let expression =
     let annotated =
       object
@@ -609,7 +621,7 @@ let component ~loc ~name ~props_constructor ~hooks ~summary expression =
                     in
                     let value = binding.pvb_expr in
                     let kept =
-                      Option.bind named (fun name ->
+                      Option.bind (match binding.pvb_constraint with Some _ -> None | None -> named) (fun name ->
                           match value.pexp_desc with
                           | Pexp_function _ -> Some (Polymorphic.kept binding.pvb_pat value rest)
                           | Pexp_ident _ | Pexp_constant _ | Pexp_construct (_, None) | Pexp_variant (_, None) -> None
@@ -800,7 +812,8 @@ let component ~loc ~name ~props_constructor ~hooks ~summary expression =
                         | Melact_runtime.Instance.Reached -> (([%e hook] [@alert "-hook"]) : unit));
                         [%e rest]]
                   | Graph.Derived { pattern; value; mask } ->
-                      held pattern mask ~source:value ~step:`Derived (walker#expression value) [%expr __melact_kept] rest)
+                      held pattern mask ~source:value ~step:`Derived (walker#expression value) [%expr __melact_kept] rest
+                  | Graph.Bound binding -> pexp_let ~loc Nonrecursive [ binding ] rest)
                 plan.steps
                 [%expr
                   match Melact_runtime.Instance.reaches __melact_changed [%e eint ~loc plan.reads] with
@@ -903,8 +916,17 @@ let component ~loc ~name ~props_constructor ~hooks ~summary expression =
               [%e body]])
       body !defaulted
   in
+  let labels =
+    List.filter_map
+      (fun param ->
+        match param.pparam_desc with
+        | Pparam_val ((Labelled "ref" | Optional "ref" | Nolabel), _, _) | Pparam_newtype _ -> None
+        | Pparam_val (((Labelled _ | Optional _) as label), _, _) -> Some label)
+      params
+  in
+  let props = labelled_props ~loc labels in
   let constructed =
-    pexp_construct ~loc { loc; txt = Lident props_constructor }
+    pexp_construct ~loc { loc; txt = Ldot (Lident "React", "Props") }
       (Some
          (match !Element.output with
          | Element.Server -> [%expr __melhole_element]
@@ -914,17 +936,21 @@ let component ~loc ~name ~props_constructor ~hooks ~summary expression =
                | None -> __melhole_element
                | Some key -> React.of_child (Melhole.View.with_key key (React.to_child __melhole_element))]))
   in
-  [%expr
-    ([%e
-       pexp_function ~loc keyed None
-         (Pfunction_body
-            (with_defaults [%expr
-              let __melhole_element = [%e element] in
-              [%e constructed]]))]
-    [@warning "-16"])]
+  ( labels,
+    props,
+    [%expr
+      ([%e
+         pexp_function ~loc keyed None
+           (Pfunction_body
+              (with_defaults [%expr
+                let __melhole_element = [%e element] in
+                [%e pexp_constraint ~loc constructed props]]))]
+      [@warning "-16"])] )
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
-let props_type name = name ^ "_props"
+
+(** Marks a component React's [createElement], [jsx] or [memo] takes, which stays as it is. *)
+let taken = "melact.taken"
 
 (** Modules whose [use…] functions are React's hooks, from [-hook-modules]. *)
 let hook_modules = ref []
@@ -1145,7 +1171,7 @@ let mapper =
                   let collection value =
                     match Melhole_typed.Answer.view value with
                     | Melhole_typed.Answer.Named { path; _ } when String.equal path shown -> `Collection
-                    | Named _ | Function _ | Js_object _ | Other -> `Other
+                    | Named _ | Function _ | Js_object _ | Object _ | Other -> `Other
                   in
                   let row value =
                     match (numbering, Melhole_typed.Answer.view value) with
@@ -1155,7 +1181,7 @@ let mapper =
                         | Melhole_typed.Answer.Named { path = "int"; _ }, Melhole_typed.Answer.Function (Unlabelled, item, _) -> (
                             match Melhole_typed.Answer.view item with
                             | Melhole_typed.Answer.Named { path = "int"; _ } -> `Other
-                            | Named _ | Function _ | Js_object _ | Other -> `Row)
+                            | Named _ | Function _ | Js_object _ | Object _ | Other -> `Row)
                         | _ -> `Other)
                     | (Element.Items | Element.Numbered), _ -> `Other
                   in
@@ -1167,8 +1193,8 @@ let mapper =
                           | `Row, `Collection, _, _ -> Some `First
                           | _, _, `Collection, `Row -> Some `Second
                           | (`Row | `Other), (`Collection | `Other), (`Collection | `Other), (`Row | `Other) -> None)
-                      | Named _ | Function _ | Js_object _ | Other -> None)
-                  | Named _ | Function _ | Js_object _ | Other -> None
+                      | Named _ | Function _ | Js_object _ | Object _ | Other -> None)
+                  | Named _ | Function _ | Js_object _ | Object _ | Other -> None
                 in
                 let question, asked = Melhole_typed.Question.expression callee in
                 let marker =
@@ -1191,12 +1217,15 @@ let mapper =
       match String.equal attribute.attr_name.txt inline_fact with true -> attribute | false -> super#attribute attribute
 
     val mutable react : opened = Closed
+
+    (** Whether the expression being mapped is the function of an application. *)
+    val mutable position : [ `Called | `Value ] = `Value
     val mutable modules : string list = []
     val mutable hooks : string list = []
     val mutable custom : (string * Melhole_typed.Question.t Graph.counted Graph.summary) list = []
 
-    (** The props builders the component rewrite made, which call the component's hooks inside. *)
-    val mutable made : string list = []
+    (** The props builders the component rewrite made, which call the component's hooks inside, with their labels. *)
+    val mutable made : (string * arg_label list) list = []
 
     method private summary callee =
       match callee.pexp_desc with
@@ -1338,7 +1367,7 @@ let mapper =
                 Pexp_function _,
                 None )
               when (match Melhole_compiler.Hook_name.of_name name with
-                   | Plain -> not (String.equal name "make" || List.mem name made || String.starts_with ~prefix:"_" name)
+                   | Plain -> not (String.equal name "make" || List.mem_assoc name made || String.starts_with ~prefix:"_" name)
                    | Hook _ -> false) ->
                 Option.map (fun (hook, at) -> (name, hook, at)) (first_hook binding.pvb_expr)
             | _ -> None
@@ -1422,17 +1451,15 @@ let mapper =
           let item = { item with pstr_desc = Pstr_value (flag, bindings) } in
           let expanded = List.map self#component bindings in
           let mapped =
-            match List.concat_map (fun (types, _, _) -> types) expanded with
+            match List.concat_map snd expanded with
             | [] -> super#structure_item item
-            | types ->
+            | makes ->
                 let loc = item.pstr_loc in
                 super#structure_item
                   (pstr_include ~loc
                      (include_infos ~loc
                         (pmod_structure ~loc
-                           (types
-                           @ [ { item with pstr_desc = Pstr_value (flag, List.map (fun (_, value, _) -> value) expanded) } ]
-                           @ List.concat_map (fun (_, _, makes) -> makes) expanded))))
+                           ({ item with pstr_desc = Pstr_value (flag, List.map fst expanded) } :: makes))))
           in
           let decide file structure =
             let fact name =
@@ -1444,7 +1471,7 @@ let mapper =
                       (fun question ->
                         match Option.map Melhole_typed.Answer.view (Melhole_typed.File.answer file question) with
                         | Some (Named _ | Js_object _) -> false
-                        | Some (Function _ | Other) | None -> true)
+                        | Some (Function _ | Object _ | Other) | None -> true)
                       conditions
                   with
                   | None -> Some fact
@@ -1499,7 +1526,12 @@ let mapper =
                 ~some:(fun _ ->
                   let loc = item.psig_loc in
                   let name = description.pval_name.txt in
-                  let props = ptyp_constr ~loc { loc; txt = Lident (props_type name) } [] in
+                  let rec labels typ =
+                    match typ.ptyp_desc with
+                    | Ptyp_arrow (((Labelled _ | Optional _) as label), _, result) -> label :: labels result
+                    | _ -> []
+                  in
+                  let props = labelled_props ~loc (labels description.pval_type) in
                   let rec given typ =
                     match typ.ptyp_desc with
                     | Ptyp_arrow (((Labelled _ | Optional _) as label), argument, result) ->
@@ -1507,11 +1539,6 @@ let mapper =
                     | _ -> [%type: ?key:string -> unit -> [%t props]]
                   in
                   [
-                    psig_type ~loc Recursive
-                      [
-                        type_declaration ~loc ~name:{ loc; txt = props_type name } ~params:[] ~cstrs:[] ~kind:Ptype_abstract
-                          ~private_:Public ~manifest:None;
-                      ];
                     psig_value ~loc
                       (value_description ~loc ~name:{ loc; txt = props_name name }
                          ~type_:(given (with_unit description.pval_type)) ~prim:[]);
@@ -1524,7 +1551,7 @@ let mapper =
         items
 
     method private component binding =
-      Option.fold ~none:([], binding, [])
+      Option.fold ~none:(binding, [])
         ~some:(fun attributes ->
           let loc = binding.pvb_loc in
           let file =
@@ -1540,32 +1567,12 @@ let mapper =
                 Location.raise_errorf ~loc
                   "melact: [@react.component] needs a plain name, like make"
           in
-          made <- props_name name :: made;
-          let type_name = props_type name in
-          let props_constructor = String.capitalize_ascii type_name in
-          let builder =
-            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~props_constructor ~hooks:self#custom ~summary:self#counted
+          let labels, props, builder =
+            component ~loc ~name:(String.concat "." ((file :: List.rev modules) @ [ name ])) ~hooks:self#custom ~summary:self#counted
               (self#qualified binding.pvb_expr)
           in
-          ( [
-              pstr_type ~loc Recursive
-                [
-                  {
-                    (type_declaration ~loc ~name:{ loc; txt = type_name } ~params:[] ~cstrs:[]
-                       ~kind:
-                         (Ptype_variant
-                            [
-                              constructor_declaration ~loc ~name:{ loc; txt = props_constructor }
-                                ~args:(Pcstr_tuple [ [%type: React.element] ])
-                                ~res:None;
-                            ])
-                       ~private_:Public ~manifest:None)
-                    with
-                    ptype_attributes = [ attribute ~loc ~name:{ loc; txt = "unboxed" } ~payload:(PStr []) ];
-                  };
-                ];
-            ],
-            {
+          made <- (props_name name, labels) :: made;
+          ( {
               binding with
               pvb_pat = pvar ~loc (props_name name);
               pvb_attributes = List.filter (fun attribute -> not (String.equal attribute.attr_name.txt inline_fact)) attributes;
@@ -1575,7 +1582,7 @@ let mapper =
               pstr_primitive ~loc
                 {
                   (value_description ~loc ~name:{ loc; txt = name }
-                     ~type_:[%type: [%t ptyp_constr ~loc { loc; txt = Lident type_name } []] -> React.element]
+                     ~type_:[%type: [%t props] -> React.element]
                      ~prim:[ "%identity" ])
                   with
                   pval_attributes = List.filter (fun attribute -> String.equal attribute.attr_name.txt inline_fact) attributes;
@@ -1585,6 +1592,8 @@ let mapper =
 
     method! expression expression =
       let loc = expression.pexp_loc in
+      let here = position in
+      position <- `Value;
       match expression.pexp_desc with
       | Pexp_apply (({ pexp_desc = Pexp_ident { txt = Lident "##"; _ }; _ } as send), [ (label, target); field ]) ->
           { expression with pexp_desc = Pexp_apply (send, [ (label, self#expression target); field ]) }
@@ -1625,6 +1634,60 @@ let mapper =
           }
       | Pexp_apply (callee, arguments) -> (
           match (Element.without_jsx expression.pexp_attributes, callee.pexp_desc) with
+          | None, Pexp_ident { txt; _ } ->
+              let taking =
+                match (txt, react) with
+                | Ldot (Lident "React", name), _ | Lident name, Opened -> (
+                    match (name, arguments, !Element.output) with
+                    | ( ("createElement" | "jsx" | "jsxs"),
+                        [ (Nolabel, { pexp_desc = Pexp_ident { txt = Lident component; _ }; _ }); (Nolabel, given) ],
+                        (Element.Client_only | Element.Hydratable) )
+                      when List.mem_assoc (props_name component) made
+                           && (match given.pexp_desc with
+                              | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident builder; _ }; _ }, _) -> not (String.equal builder (props_name component))
+                              | _ -> true) ->
+                        `Object_props (component, List.assoc (props_name component) made, given)
+                    | ( ( "createElement" | "createElementVariadic" | "jsx" | "jsxs" | "jsxKeyed" | "jsxsKeyed" | "memo" | "memoCustomCompareProps"
+                        | "component" ),
+                        _,
+                        _ ) ->
+                        `Component
+                    | _ -> `Other)
+                | Lident _, Closed | Ldot _, _ | Lapply _, _ -> `Other
+              in
+              position <- `Called;
+              (match taking with
+              | `Object_props (component, labels, given) ->
+                  [%expr
+                    let __melact_object = [%e self#expression given] in
+                    [%e evar ~loc component]
+                      [%e
+                        pexp_apply ~loc
+                          (evar ~loc (props_name component))
+                          (List.filter_map
+                             (fun label ->
+                               match label with
+                               | Labelled name | Optional name ->
+                                   Some (label, pexp_send ~loc [%expr Js.OO.unsafe_downgrade __melact_object] { loc; txt = name })
+                               | Nolabel -> None)
+                             labels
+                          @ [ (Nolabel, [%expr ()]) ])]]
+              | `Other -> super#expression expression
+              | `Component ->
+                  super#expression
+                    {
+                      expression with
+                      pexp_desc =
+                        Pexp_apply
+                          ( callee,
+                            List.mapi
+                              (fun index (label, argument) ->
+                                match (index, argument.pexp_desc) with
+                                | 0, Pexp_ident _ ->
+                                    (label, { argument with pexp_attributes = attribute ~loc ~name:{ loc; txt = taken } ~payload:(PStr []) :: argument.pexp_attributes })
+                                | _ -> (label, argument))
+                              arguments );
+                    })
           | None, _ -> super#expression expression
           | Some attributes, Pexp_ident { txt = Lident tag; _ } ->
               Element.lowercase self#frontend ~loc ~attributes tag arguments
@@ -1639,6 +1702,37 @@ let mapper =
               Element.fragment self#frontend ~loc
                 (Option.value ~default:[] (Element.list_items expression))
           | None -> super#expression expression)
+      | Pexp_ident _ when List.exists (fun attribute -> String.equal attribute.attr_name.txt taken) expression.pexp_attributes ->
+          { expression with pexp_attributes = List.filter (fun attribute -> not (String.equal attribute.attr_name.txt taken)) expression.pexp_attributes }
+      | Pexp_ident { txt; _ } -> (
+          let builder =
+            match txt with
+            | Ldot (path, name) when String.equal name (String.uncapitalize_ascii name) -> Some (Ldot (path, props_name name))
+            | Lident name when List.mem_assoc (props_name name) made -> Some (Lident (props_name name))
+            | Ldot _ | Lident _ | Lapply _ -> None
+          in
+          match (here, !Element.output, builder) with
+          | `Value, (Element.Client_only | Element.Hydratable), Some builder ->
+              let question, asked = Melhole_typed.Question.expression expression in
+              Melhole_typed.Site.expression asked ~decide:(fun file escaped ->
+                  Option.fold ~none:escaped
+                    ~some:(fun labels ->
+                      let field name = pexp_send ~loc [%expr Js.OO.unsafe_downgrade __melact_object] { loc; txt = name } in
+                      [%expr
+                        fun __melact_props ->
+                          React.called_with __melact_props (fun __melact_object ->
+                              [%e escaped]
+                                [%e
+                                  pexp_apply ~loc (pexp_ident ~loc { loc; txt = builder })
+                                    (List.filter_map
+                                       (fun label ->
+                                         match label with
+                                         | Labelled name | Optional name -> Some (label, field name)
+                                         | Nolabel -> None)
+                                       labels
+                                    @ [ (Nolabel, [%expr ()]) ])])])
+                    (Option.bind (Melhole_typed.File.answer file question) Typed.labels))
+          | (`Value | `Called), (Element.Server | Element.Client_only | Element.Hydratable), (Some _ | None) -> super#expression expression)
       | _ -> super#expression expression
 
     method private keyed expression =

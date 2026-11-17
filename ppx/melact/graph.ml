@@ -232,6 +232,7 @@ type step =
   | Memo of { pattern : pattern; hook : expression; mask : int }
   | Effect of { hook : expression; mask : int }
   | Derived of { pattern : pattern; value : expression; mask : int }
+  | Bound of value_binding
 
 type plan = { steps : step list; result : expression; reads : int }
 
@@ -254,6 +255,7 @@ type shape =
   | Computed of pattern * expression
   | Changing of pattern * expression  (** A value the rest of the body may change in place: made on every render. *)
   | Custom of pattern option * expression * int * page  (** A custom hook whose fact gives its hook slots. *)
+  | Polymorphic of value_binding  (** A binding with a polymorphic annotation, which a cell would make monomorphic. *)
 
 exception Beyond of why
 
@@ -450,9 +452,10 @@ let plan ~hooks ~inputs ~props ~volatile body =
     match expression.pexp_desc with
     | Pexp_sequence (first, rest) -> read rest (shaped None first rest :: shapes)
     | Pexp_let (Nonrecursive, [ binding ], rest) -> (
-        match binding.pvb_pat.ppat_desc with
-        | Ppat_construct ({ txt = Lident "()"; _ }, None) -> read rest (shaped None binding.pvb_expr rest :: shapes)
-        | _ -> read rest (shaped (Some binding.pvb_pat) binding.pvb_expr rest :: shapes))
+        match (binding.pvb_constraint, binding.pvb_pat.ppat_desc) with
+        | Some _, _ -> read rest (Polymorphic binding :: shapes)
+        | None, Ppat_construct ({ txt = Lident "()"; _ }, None) -> read rest (shaped None binding.pvb_expr rest :: shapes)
+        | None, _ -> read rest (shaped (Some binding.pvb_pat) binding.pvb_expr rest :: shapes))
     | _ -> (List.rev shapes, checked expression)
   in
   match read body [] with
@@ -466,7 +469,7 @@ let plan ~hooks ~inputs ~props ~volatile body =
                (fun shape ->
                  match shape with
                  | Cell _ | Stable _ | Remembered _ | Effected _ -> true
-                 | Run _ | Read _ | Computed _ | Changing _ | Custom _ -> false)
+                 | Run _ | Read _ | Computed _ | Changing _ | Custom _ | Polymorphic _ -> false)
                shapes)
       in
       let contexts = List.length (List.filter (fun shape -> match shape with Read _ -> true | _ -> false) shapes) in
@@ -543,7 +546,9 @@ let plan ~hooks ~inputs ~props ~volatile body =
                     given (bind env pattern bits) slot context rest (Derived { pattern; value; mask = bits } :: steps)
                 | Changing (pattern, value) ->
                     given (bind env pattern every_source) slot context rest
-                      (Derived { pattern; value; mask = every_source } :: steps))
+                      (Derived { pattern; value; mask = every_source } :: steps)
+                | Polymorphic binding ->
+                    given (bind env binding.pvb_pat (mask env binding.pvb_expr)) slot context rest (Bound binding :: steps))
           in
           match given props 1 0 shapes [] with
           | exception Beyond why -> Error why

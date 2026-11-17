@@ -32,11 +32,15 @@ type ('input, 'output) callback = 'input -> 'output
 (** A [callback] whose result comes later; reason-react's name for it. *)
 type ('input, 'output) callbackAsync = 'input -> 'output Js.Promise.t
 
-(** A component: a function of its props. [[@react.component]] gives every component its own
-    abstract [props], built by [makeProps]. *)
+(** A component: a function of its props. *)
 type 'props component = ('props, element) componentLike
 
 external component : ('props, element) componentLike -> 'props component = "%identity"
+
+(** A [[@react.component]]'s props: the element [makeProps] builds, typed by its labels ([< x : unit; y : unit option >]). *)
+type 'labels props = Props of element [@@unboxed]
+
+val called_with : 'labels props -> ('fields Js.t -> element) -> element
 
 module Context : sig
   (** A value passed down to every component below its provider. *)

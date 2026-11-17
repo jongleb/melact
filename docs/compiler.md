@@ -641,7 +641,7 @@ float: JavaScript primitives), `Immutable_boxed`, `Mutable_inside` (an array, `b
 atomic field, a ref, a `Js.dict`, a `Js.t` with a setter, a `Hashtbl.t`, or a type that holds one) or
 `Unknown` (type variables, abstract and open types, OCaml objects, modules, `lazy`). Meltea's alert is
 `Mutable_inside`. `Melact_ppx.Typed.component` says whether a type is a component: `Compiled`
-(`x_props -> React.element`, a `[@react.component]`) or `Of_props` (`props -> React.element`). The
+(`labels React.props -> React.element`, a `[@react.component]`, whose labels `Typed.labels` reads) or `Of_props` (`props -> React.element`). The
 first site: a binding to npm's `Fragment` whose written type does not show a component, but expands
 to one of a `Js.t` with `children : React.element`, becomes `let fragment : t = Melact_npm.fragment`.
 The reported apps compile to the same JavaScript with and without `-typed`. The dual suite also
@@ -1230,7 +1230,8 @@ returns `Instance.unchanged` and the instance's holes are not touched at all: a 
 that only an effect reads costs the effect's comparison and nothing else. Hooks called on every
 render and statements always run, so hook slots, render-phase logs and `useEffect` without
 dependencies behave as before. A value a later statement may change in place (`Frozen`) is made on
-every render.
+every render, and so is a binding annotated as polymorphic (`let toOpt : type a. a selected -> a list
+option = …`), as written, since a value from a cell is monomorphic.
 
 A body the compiler cannot read as steps renders whole, as before: a hook it does not know
 (`useSyncExternalStore`, `useDeferredValue`, a custom hook without a fact), a hook inside an
@@ -1579,11 +1580,27 @@ native event; React's own members map onto the native ones (`isDefaultPrevented`
 sets `currentTarget` to the element whose handler runs, as React does, and removes it afterwards.
 
 A `[@react.component]` has reason-react's shape: `make : props -> React.element`, so `Foo.make` is a
-`Foo.props React.component` that wrappers, `React.memo` and `React.createElement` take as they do in
-reason-react, and `makeProps` takes the labels, an optional `key` and `()`. Here `props` is abstract
-and unboxed: `makeProps` builds the element itself (the component's instance or pure view, with the
-key), and `make` is `%identity`. JSX `<Foo label />` compiles to `Foo.make (Foo.makeProps ~label ())`,
-which is one call with no props object at run time. A module written by hand in reason-react's style,
+`props React.component` that wrappers, `React.memo` and `React.createElement` take as they do in
+reason-react, and `makeProps` takes the labels, an optional `key` and `()`. Here `props` is
+`< label : unit; size : unit option > React.props`, an unboxed element typed by the component's labels
+(a labelled one is `unit`, an optional one `unit option`): `makeProps` builds the element itself (the
+component's instance or pure view, with the key), and `make` is `%identity`. Components with the same
+labels have the same type, in any module, as reason-react's props objects do, so a branch can pick one
+of two (`if double then Tick.doubled else Tick.make`). JSX `<Foo label />` compiles to
+`Foo.make (Foo.makeProps ~label ())`, which is one call with no props object at run time.
+
+A component passed as a value is called by whoever takes it, and a JavaScript library calls it with a
+props object of its own (recharts' `tick`, through a binding typed `'props -> React.element`). Under
+`-typed`, every `Foo.make` (or a component of the same file) written where a value goes, other than
+the first argument of `React.createElement`, `jsx` or `memo`, whose type is a compiled component's,
+becomes `fun props -> React.called_with props (fun object -> Foo.make (Foo.makeProps ~label:object##label
+?size:object##size ()))` with the labels its type lists. The type stays the same, so wrappers that take
+`'props React.component` still get it, and `React.called_with` returns the props when they are
+Melact's element (an object with `build` and `patch`), and builds the element from the object
+otherwise. Without `-typed`, a component of another file passed to JavaScript gets an element where it
+expects a props object. `React.createElement` (or `jsx`) of a component of the same file with an
+argument other than its `makeProps` call, a props object as server-reason-react's `make_client` writes
+it, becomes `make (makeProps ~label:object##label ())`. A module written by hand in reason-react's style,
 with a `[@mel.obj] external makeProps` and `let make = props => …props##label…`, goes through the same
 call and gets its props object, as under React. Since `props` has no fields, `React.memoCustomCompareProps` takes a
 comparator over any type, as reason-react code writes it over the props object, and Melact does not
@@ -1772,6 +1789,10 @@ the boundary.
   run inside React's propagation, and a Melact `stopPropagation` becomes React's. As React's
   propagation leaves an island, the walk resumes at the island's host (`Events.resume_at`): content
   a library portals elsewhere bubbles to its Melact parents, as under React.
+- **SVG.** A slot whose Melact content is SVG (a recharts `tick` that renders `<text>`) is a `g`,
+  since an SVG parent renders no unknown element and a `melact-slot` there is no custom element; it
+  takes its content in when React attaches its ref, which React does before the layout effects of the
+  library's components above it.
 - **Context** crosses islands: an island nested in another's slot is a portal rendered under that
   slot, so React context and synthetic bubbling follow the tree. An island built while React renders
   a slot goes among that slot's islands at once.

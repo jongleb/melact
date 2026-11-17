@@ -420,7 +420,7 @@ let component_source (result, props, label, spelling, arity) =
   let props =
     match props with
     | Js_props -> "< children : React.element > Js.t"
-    | Compiled_props -> "x_props"
+    | Compiled_props -> "< x : unit; y : unit option > React.props"
     | Abstract_props -> "y_props"
     | Wrapper_props -> "thing"
     | Text_props -> "string"
@@ -436,10 +436,9 @@ let component_source (result, props, label, spelling, arity) =
   in
   String.concat "\n"
     [
-      "module React = struct type element type 'props component = 'props -> element end";
+      "module React = struct type element type 'props component = 'props -> element type 'labels props = Props of element [@@unboxed] end";
       "module Js = struct type 'a t end";
       "type el = React.element";
-      "type x_props = X_props of React.element [@@unboxed]";
       "type y_props";
       "type thing = Thing of React.element [@@unboxed]";
       "type c = " ^ written;
@@ -449,20 +448,52 @@ let component_source (result, props, label, spelling, arity) =
 
 let component_expected (result, props, label, spelling, arity) =
   match ((spelling, result, label, arity), result, label, arity, props) with
-  | (Component_type, Element, Unlabelled, One), _, _, _, (Compiled_props | Abstract_props) -> Some `Compiled
-  | (Component_type, Element, Unlabelled, One), _, _, _, (Js_props | Wrapper_props | Text_props) -> Some `Of_props
+  | (Component_type, Element, Unlabelled, One), _, _, _, Compiled_props -> Some `Compiled
+  | (Component_type, Element, Unlabelled, One), _, _, _, (Js_props | Abstract_props | Wrapper_props | Text_props) -> Some `Of_props
   | _, Text_result, _, _, _ | _, _, (Labelled | Optional), _, _ | _, _, _, Two, _ -> None
-  | _, (Element | Element_alias), Unlabelled, One, (Compiled_props | Abstract_props) -> Some `Compiled
-  | _, (Element | Element_alias), Unlabelled, One, (Js_props | Wrapper_props | Text_props) -> Some `Of_props
+  | _, (Element | Element_alias), Unlabelled, One, Compiled_props -> Some `Compiled
+  | _, (Element | Element_alias), Unlabelled, One, (Js_props | Abstract_props | Wrapper_props | Text_props) -> Some `Of_props
 
 let component_found case =
   Option.map
     (fun component -> match component with Melact_ppx.Typed.Compiled -> `Compiled | Melact_ppx.Typed.Of_props _ -> `Of_props)
     (Option.bind (answer (component_source case)) Melact_ppx.Typed.component)
 
+let labels_case =
+  let open Gen in
+  let* count = int_range 0 6 in
+  let* kinds = list_size (pure count) (oneof_list [ `Labelled; `Optional ]) in
+  let* written = oneof_list [ `Direct; `Abbreviated ] in
+  pure (List.mapi (fun index kind -> (Printf.sprintf "l%d" index, kind)) kinds, written)
+
+let labels_source (labels, written) =
+  let props =
+    "< "
+    ^ String.concat "; " (List.map (fun (name, kind) -> name ^ " : " ^ match kind with `Labelled -> "unit" | `Optional -> "unit option") labels)
+    ^ " > React.props"
+  in
+  String.concat "\n"
+    [
+      "module React = struct type element type 'labels props = Props of element [@@unboxed] end";
+      "type labels = " ^ props;
+      "let probe : " ^ (match written with `Direct -> props | `Abbreviated -> "labels") ^ " -> React.element = Obj.magic 0";
+      "let _ = (probe [@melhole.ask 1])";
+    ]
+
+let labels_found case =
+  Option.map
+    (fun labels ->
+      List.sort compare
+        (List.map
+           (fun label -> match label with Ppxlib.Labelled name -> (name, `Labelled) | Ppxlib.Optional name -> (name, `Optional) | Ppxlib.Nolabel -> ("", `Labelled))
+           labels))
+    (Option.bind (answer (labels_source case)) Melact_ppx.Typed.labels)
+
 let component_laws =
   let print found = match found with Some `Compiled -> "Compiled" | Some `Of_props -> "Of_props" | None -> "None" in
   [
+    Test.make ~count:300 ~name:"Labels: a compiled component's props type gives back the labels it was written with" ~print:labels_source labels_case
+      (fun ((labels, _) as case) -> labels_found case = Some (List.sort compare labels));
     Test.make ~count:500 ~name:"Component: a function type is a component exactly as its expanded shape says"
       ~print:(fun case -> component_source case ^ "\nexpected " ^ print (component_expected case) ^ ", found " ^ print (component_found case))
       component_case

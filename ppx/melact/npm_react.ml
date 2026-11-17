@@ -212,12 +212,18 @@ let structure items =
                                                               description.pval_type] =
                                         Melact_npm.fragment];
                                   ]
-                              | Melhole_typed.Answer.Js_object _ | Melhole_typed.Answer.Named _
+                              | Melhole_typed.Answer.Js_object _ | Melhole_typed.Answer.Object _ | Melhole_typed.Answer.Named _
                               | Melhole_typed.Answer.Function _ | Melhole_typed.Answer.Other ->
                                   items)
                           | Some Typed.Compiled | None -> items)
                       @ later,
                       exported )
+                | Some (("react" | "react-dom" | "react-dom/client" | "react-dom/server" | "react/jsx-runtime" | "react/jsx-dev-runtime") as package), _
+                  when not (List.exists (fun attribute -> String.equal attribute.attr_name.txt "melact.npm") description.pval_attributes) ->
+                    Location.raise_errorf ~loc:description.pval_loc
+                      "melact: %s binds npm's %s directly, which a Melact app does not run, and Melact has no %s of this type to put in its \
+                       place: call Melact's React, or add [@@@@melact.npm] to keep the import on purpose"
+                      description.pval_name.txt package (String.concat " " description.pval_prim)
                 | _ -> ((rewrite renames)#structure_item item :: later, exported)))
         | Pstr_module ({ pmb_name = { txt = Some name; _ }; pmb_expr = { pmod_desc = Pmod_structure inner; _ } as body; _ } as binding) ->
             let inner, found = go renames inner in

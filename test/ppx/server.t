@@ -17,8 +17,6 @@ positions of a JSX list of children carried for useId, keys and handlers dropped
   let () = React.reason_react_is_also_in_this_build_remove_it ()
   include
     struct
-      type make_props =
-        | Make_props of React.element [@@unboxed ]
       let __melhole_hook_1 =
         (Melact_server.Hook.key () : unit Melact_server.Hook.key)
       let __melhole_hook_2 =
@@ -89,7 +87,10 @@ positions of a JSX list of children carried for useId, keys and handlers dropped
                                  Melhole_server.markup __melhole_writer
                                    "</div>";
                                  ()))))) in
-            Make_props __melhole_element)
+            (React.Props __melhole_element : < label: unit  ;items: unit   > 
+                                               React.props))
         [@warning "-16"])
-      external make : make_props -> React.element = "%identity"
+      external make :
+        < label: unit  ;items: unit   >  React.props -> React.element =
+          "%identity"
     end
