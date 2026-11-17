@@ -130,6 +130,15 @@ the guarded path beside the delta and raising on any difference, with the messag
   (`{ row with label }` keeps the field the key reads), which brings partial update to 100.
 - **D5. Incremental `let`s.** `filter`, `map` and `length` of a collection follow its edits (they
   are linear), so TodoMVC's counts and filtered list do not recompute.
+
+  Measured first and put off (2026-11-17). Toggling one todo of TodoMVC in headless Chromium,
+  sampled every 50 µs over 100 toggles: 0.36 ms of script per toggle with 1,000 todos, 1.10 ms
+  with 5,000. The view's two `List.filter`s and its `List.length` take 0.12 ms of the 1.10 (0.02
+  of the 0.36), and the loop that follows them still passes over every row, so following edits
+  would save at most that until lists carry facts (D4). The largest part is the example's own
+  persistence, `encode` of every todo and `localStorage.setItem` on every message (0.40 ms).
+  Inside both, 0.19 ms in all is Melange's curried call (`_1`) of the callbacks given to
+  `List.filter`, `List.map` and the JSON encoder.
 - **D6. A draw per message and tables of states.** For a message with a structured change, a draw
   that writes what it implies with no bits and no checks; a field with finitely many constants gets
   its DOM transitions computed at build time.
