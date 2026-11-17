@@ -1125,7 +1125,7 @@
     },
     {
       "date": "2026-11-17",
-      "reason": "minifier names shift in bench/classics from View.fixed in view.mjs (Meltea's change); unminified bundles are identical with and without the cloneElement/unknown-props change (approved by the user 2026-11-17)",
+      "reason": "minifier names shift in bench/classics: esbuild picks short names by character frequency over its whole input, and the tree-shaken React unknown-attribute rule in reactDOM.mjs changed that frequency; the code is identical, only names differ (approved by the user 2026-11-17)",
       "grown": {
         "bench/classics/dashboard": [
           32373,
