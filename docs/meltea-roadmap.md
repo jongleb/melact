@@ -269,10 +269,24 @@ bundle no longer holds `rows` or `Reconcile`: 29.5 kB gzip to 25.7 (Svelte's is 
 view shows after any messages, keeps its rows' nodes and never computes a key (four mutants: no
 rewrite, any source taken as fixed, a change of outer values ignored, changed rows not refreshed).
 
-Next consumers, each with a law and a size ratchet: loops whose source `update` only appends to,
-filters or maps (order kept, so no moves and no `Reconcile.plan`); fields bound to the input that
-writes them (the field holds what the input shows, so no `restore_controlled`); programs with no
-commands or subscriptions (no general loop in `Program`).
+Tried next, and put off (2026-11-17): loops whose source keeps its order. `View.ordered`, a copy of
+`rows` that merges the new order with the old in one pass and moves a row it finds elsewhere (so
+nodes are always kept, and a wrong proof costs moves only), and a typed pass that proves a source
+is a model field the view filters and every value of it is filtered, mapped without touching what
+the key reads, or added to at either end. Three things stood in the way. `Reconcile.plan` has three
+callers (`rows`, `each` for rows given by a function, and `list` for keyed children built at run
+time), and TodoMVC and kanban reach it through `each` and `list`, so `ordered` alone removes it from
+no app; a shared core for `rows` and `ordered` cost every other app 126 bytes. Inlining a row
+function into a compiled loop (`List.map (row editing) shown`) took `each` and `Reconcile` out of
+the SSR client (1,022 bytes) but added 610 to TodoMVC, where compiled rows are larger than `each`,
+and raised the ratchet's key counts. And a value the proof took as new because it does not name the
+field can still come from it through the whole model (`reorder model`): new must mean that it reads
+no model at all. The work is kept in a stash on the `meltea` worktree; the saving it aims at is
+about 825 bytes gzip on TodoMVC.
+
+Next consumers, each with a law and a size ratchet: fields bound to the input that writes them (the
+field holds what the input shows, so no `restore_controlled`); programs with no commands or
+subscriptions (no general loop in `Program`).
 ### 10. What Svelte gives authors
 
 - Scoped styles: a style in an mlx file compiled at build time into class names private to the
