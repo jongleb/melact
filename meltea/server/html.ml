@@ -13,6 +13,7 @@ let keyed views dispatch = Melhole_server.list (List.map (fun (_, view) -> view 
 let transition ~name:_ ?duration:_ view = view
 let transition_group ~name:_ ?duration:_ view = view
 let map tag view dispatch = view (fun message -> dispatch (tag message))
+let portal ~into:_ _ _ = Melhole_server.empty
 let memo view model = view model
 let target_value _ = ""
 let target_checked _ = false

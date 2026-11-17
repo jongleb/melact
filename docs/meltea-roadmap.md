@@ -288,9 +288,12 @@ scenario 0.92 of Svelte's time. Measured again with it: the geometric mean is 0.
 and 0.85 of Svelte's (1x; 0.73 and 0.87 at 4x), Meltea faster than Svelte in 9 of 12 steps at
 both rates and slower only in `toggle all` at 4x (1.08); the heap is 1.73 MB (1.69 at 4x).
 
-Kanban, next, needs a portal (its dialog renders into `#portal`) and the dragged card in the
-model instead of `dataTransfer`. Escape now comes through `Sub.key_down`, and its columns' `onDrop`
-cancels what a browser needs cancelled to drop there.
+Kanban, next, needs the dragged card in the model instead of `dataTransfer`. Escape now comes
+through `Sub.key_down`, its columns' `onDrop` cancels what a browser needs cancelled to drop there,
+and its dialog goes into `#portal` through `Html.portal ~into:"portal"`: a module of its own in
+`meltea.runtime` on `View.host`, made on first use, so a bundle without a portal carries none of it
+(a law in `test/meltea/portal_laws_test.mlx`, with four mutants: nodes left behind, the parent
+moving the portal's nodes, a new id ignored, nodes shown in place hidden from the parent).
 
 
 ## Guards

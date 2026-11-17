@@ -101,6 +101,10 @@ let () = Option.iter (fun root -> ignore (Program.sandbox ~init:0 ~update ~view 
   compiler writes the `preventDefault` into the handler, so nothing of it runs at run time.
 - **Keys.** `Sub.key_down (fun key -> Pressed key)` hears every key pressed on the page while
   `subscriptions` returns it.
+- **Portals.** `Html.portal ~into:"portal" (dialog card)` shows a view inside the element with that
+  id, wherever it sits in the page (a dialog over everything else), and in its own place when no
+  element has the id. Its handlers send like any other; leaving the view takes its nodes away. A
+  server renders nothing there, and the browser builds it after hydration.
 - **Controlled inputs.** `value` and `checked` always show the model: after typing, the field
   gets the model's value back if the update did not take the input.
 - **Pacing.** A message sent by a click or a key is drawn at the next microtask; messages sent by

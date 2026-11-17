@@ -24,6 +24,7 @@ let keyed views dispatch = View.keyed (List.map (fun (key, view) -> (key, view d
 let transition ~name ?duration view dispatch = Transition.make ~name ?duration (view dispatch)
 let transition_group ~name ?duration view dispatch = Transition.group ~name ?duration (view dispatch)
 let map tag view dispatch = view (fun message -> dispatch (tag message))
+let portal ~into view dispatch = Portal.elsewhere into (view dispatch)
 
 let memo view model dispatch =
   View.memo [| View.Input view; View.Input model |] (fun () -> view model dispatch)
