@@ -12,7 +12,7 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.85; Meltea slower (> 1.05) in 1, faster (< 0.95) in 26.
+- CPU 1x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.86; Meltea slower (> 1.05) in 1, faster (< 0.95) in 27.
 - CPU 4x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.86; Meltea slower (> 1.05) in 1, faster (< 0.95) in 28.
 
 ## Where Meltea is slower (ratio > 1.05)
@@ -49,18 +49,18 @@ None.
 | kanban | collapse 4 columns | 23.5 | 23.0 | 0.98 | 4/4 | 4/4 | yes |
 | kanban | expand 4 columns | 85.7 | 77.8 | 0.91 | 4/4 | 4/4 | yes |
 | kanban | unmount | 10.6 | 9.0 | 0.84 | 1/1 | 1/0 | – |
-| spreadsheet | mount | 123.6 | 96.4 | 0.78 | 1/1 | 2/2 | yes |
-| spreadsheet | select 30 cells | 338.1 | 283.8 | 0.84 | 29/29 | 29/29 | yes |
-| spreadsheet | edit 10 cells | 749.8 | 588.1 | 0.78 | 40/40 | 80/80 | yes |
-| spreadsheet | edit A1 five times | 292.9 | 250.1 | 0.85 | 15/15 | 35/35 | yes |
-| spreadsheet | formula bar edit | 154.7 | 120.2 | 0.78 | 16/16 | 16/16 | yes |
-| spreadsheet | fill a column | 84.3 | 72.7 | 0.86 | 5/5 | 5/5 | yes |
-| spreadsheet | edit on double click | 160.0 | 159.8 | 1.00 | 11/11 | 15/15 | yes |
-| spreadsheet | arrow keys x40 | 546.6 | 373.5 | 0.68 | 41/41 | 41/41 | yes |
-| spreadsheet | delete 10 cells | 234.1 | 166.0 | 0.71 | 10/10 | 10/10 | yes |
-| spreadsheet | undo x10 | 170.0 | 167.9 | 0.99 | 8/8 | 8/8 | yes |
-| spreadsheet | undo the rest | 283.9 | 239.6 | 0.84 | 12/12 | 4/4 | yes |
-| spreadsheet | unmount | 9.8 | 4.9 | 0.50 | 1/1 | 2/2 | – |
+| spreadsheet | mount | 92.3 | 75.0 | 0.81 | 1/1 | 2/2 | yes |
+| spreadsheet | select 30 cells | 288.0 | 212.0 | 0.74 | 29/29 | 29/29 | yes |
+| spreadsheet | edit 10 cells | 503.5 | 440.3 | 0.87 | 40/40 | 80/80 | yes |
+| spreadsheet | edit A1 five times | 209.6 | 189.7 | 0.91 | 15/15 | 35/35 | yes |
+| spreadsheet | formula bar edit | 113.5 | 106.3 | 0.94 | 16/16 | 16/16 | yes |
+| spreadsheet | fill a column | 71.3 | 59.0 | 0.83 | 5/5 | 5/5 | yes |
+| spreadsheet | edit on double click | 121.3 | 118.9 | 0.98 | 11/11 | 15/15 | yes |
+| spreadsheet | arrow keys x40 | 397.0 | 285.0 | 0.72 | 41/41 | 41/41 | yes |
+| spreadsheet | delete 10 cells | 179.6 | 139.7 | 0.78 | 10/10 | 10/10 | yes |
+| spreadsheet | undo x10 | 137.0 | 129.2 | 0.94 | 8/8 | 8/8 | yes |
+| spreadsheet | undo the rest | 204.4 | 194.2 | 0.95 | 12/12 | 4/4 | yes |
+| spreadsheet | unmount | 8.7 | 4.7 | 0.54 | 1/1 | 2/2 | – |
 | todomvc | mount | 198.5 | 149.6 | 0.75 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 428.7 | 350.9 | 0.82 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 115.2 | 84.0 | 0.73 | 19/19 | 19/19 | yes |
@@ -91,18 +91,18 @@ None.
 | kanban | collapse 4 columns | 94.2 | 91.7 | 0.97 | 4/4 | 4/4 | yes |
 | kanban | expand 4 columns | 319.7 | 280.5 | 0.88 | 4/4 | 4/4 | yes |
 | kanban | unmount | 43.6 | 36.5 | 0.84 | 1/1 | 1/0 | – |
-| spreadsheet | mount | 402.9 | 364.9 | 0.91 | 1/1 | 2/2 | yes |
-| spreadsheet | select 30 cells | 1377.2 | 1017.8 | 0.74 | 29/29 | 29/29 | yes |
-| spreadsheet | edit 10 cells | 2415.6 | 2188.7 | 0.91 | 40/40 | 80/80 | yes |
-| spreadsheet | edit A1 five times | 992.3 | 940.3 | 0.95 | 15/15 | 35/35 | yes |
-| spreadsheet | formula bar edit | 512.3 | 474.8 | 0.93 | 16/16 | 16/16 | yes |
-| spreadsheet | fill a column | 327.8 | 279.2 | 0.85 | 5/5 | 5/5 | yes |
-| spreadsheet | edit on double click | 575.2 | 582.2 | 1.01 | 11/11 | 15/15 | yes |
-| spreadsheet | arrow keys x40 | 1906.8 | 1324.9 | 0.69 | 41/41 | 41/41 | yes |
-| spreadsheet | delete 10 cells | 830.3 | 656.0 | 0.79 | 10/10 | 10/10 | yes |
-| spreadsheet | undo x10 | 661.5 | 567.2 | 0.86 | 8/8 | 8/8 | yes |
-| spreadsheet | undo the rest | 1034.9 | 914.3 | 0.88 | 12/12 | 4/4 | yes |
-| spreadsheet | unmount | 41.9 | 20.6 | 0.49 | 1/1 | 2/2 | – |
+| spreadsheet | mount | 371.7 | 321.4 | 0.86 | 1/1 | 2/2 | yes |
+| spreadsheet | select 30 cells | 1244.4 | 943.9 | 0.76 | 29/29 | 29/29 | yes |
+| spreadsheet | edit 10 cells | 2177.0 | 1964.3 | 0.90 | 40/40 | 80/80 | yes |
+| spreadsheet | edit A1 five times | 925.8 | 852.6 | 0.92 | 15/15 | 35/35 | yes |
+| spreadsheet | formula bar edit | 453.6 | 429.0 | 0.95 | 16/16 | 16/16 | yes |
+| spreadsheet | fill a column | 306.0 | 253.5 | 0.83 | 5/5 | 5/5 | yes |
+| spreadsheet | edit on double click | 523.0 | 533.2 | 1.02 | 11/11 | 15/15 | yes |
+| spreadsheet | arrow keys x40 | 1740.3 | 1223.1 | 0.70 | 41/41 | 41/41 | yes |
+| spreadsheet | delete 10 cells | 753.3 | 584.1 | 0.78 | 10/10 | 10/10 | yes |
+| spreadsheet | undo x10 | 583.0 | 536.0 | 0.92 | 8/8 | 8/8 | yes |
+| spreadsheet | undo the rest | 910.9 | 860.2 | 0.94 | 12/12 | 4/4 | yes |
+| spreadsheet | unmount | 36.6 | 18.7 | 0.51 | 1/1 | 2/2 | – |
 | todomvc | mount | 795.2 | 656.4 | 0.83 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 1538.5 | 1263.9 | 0.82 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 434.7 | 324.5 | 0.75 | 19/19 | 19/19 | yes |
@@ -122,5 +122,5 @@ None.
 | app | Svelte 5 1x | Meltea 1x | Svelte 5 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
 | kanban | 22.45 | 4.44 | 22.56 | 4.27 |
-| spreadsheet | 15.30 | 3.90 | 15.29 | 3.90 |
+| spreadsheet | 15.30 | 3.73 | 15.29 | 3.82 |
 | todomvc | 1.53 | 1.73 | 1.53 | 1.69 |

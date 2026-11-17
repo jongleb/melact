@@ -1,0 +1,80 @@
+open Testing
+
+type model = { chosen : int; suffix : string; count : int }
+
+type message = Choose of int | Suffix of string | Count
+
+let update message model =
+  match message with
+  | Choose chosen -> { model with chosen }
+  | Suffix suffix -> { model with suffix }
+  | Count -> { model with count = model.count + 1 }
+
+let places = [| 0; 1; 2; 3; 4; 5 |]
+
+let keyed = ref 0
+
+let key place =
+  incr keyed;
+  string_of_int place
+
+let fixed { chosen; suffix; count } =
+  <ul>
+    (Html.array
+       (Array.map
+          (fun place ->
+            <li key=(key place) className=(match chosen = place with true -> "on" | false -> "")>
+              (Html.text (string_of_int place ^ suffix))
+            </li>)
+          places))
+    <p>(Html.int count)</p>
+  </ul>
+
+let local { chosen; suffix; count } =
+  let shown = Array.map Fun.id places in
+  <ul>
+    (Html.array
+       (Array.map
+          (fun place ->
+            <li key=(string_of_int place) className=(match chosen = place with true -> "on" | false -> "")>
+              (Html.text (string_of_int place ^ suffix))
+            </li>)
+          shown))
+    <p>(Html.int count)</p>
+  </ul>
+
+let () =
+  describe "Loops over a value bound at the top of the module" (fun () ->
+      test "show what the same loop over a value made in the view shows, after any messages, keep their rows' nodes, and never compute a key"
+        (fun () ->
+          check
+            (property (tapes ~shortest:1 ~longest:40) (fun values ->
+                 let tape = tape values in
+                 keyed := 0;
+                 let init = { chosen = 0; suffix = ""; count = 0 } in
+                 let root = attached () and other = attached () in
+                 let program = Program.sandbox ~init ~update ~view:fixed root in
+                 let compared = Program.sandbox ~init ~update ~view:local other in
+                 let first = select root "li" and other_first = select other "li" in
+                 let compare () =
+                   Program.flush program;
+                   Program.flush compared;
+                   expect (shapes (as_node root), !keyed, select root "li" == first, select other "li" == other_first)
+                   |. to_equal (shapes (as_node other), 0, true, true)
+                 in
+                 compare ();
+                 List.iter
+                   (fun _ ->
+                     let message =
+                       match draw tape 3 with
+                       | 0 -> Choose (draw tape 7)
+                       | 1 -> Suffix (match draw tape 2 with 0 -> "" | _ -> "!")
+                       | _ -> Count
+                     in
+                     Program.dispatch program message;
+                     Program.dispatch compared message;
+                     compare ())
+                   (List.init (Array.length values) Fun.id);
+                 Program.stop program;
+                 Program.stop compared))
+            [%mel.obj { numRuns = 200 }]))

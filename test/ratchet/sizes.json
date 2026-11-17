@@ -2,13 +2,18 @@
   "sizes": {
     "bench/melact": 18666,
     "bench/meltea": 11036,
+<<<<<<< Updated upstream
     "bench/ssr/melact client": 19793,
     "bench/ssr/meltea client": 12012,
+=======
+    "bench/ssr/melact client": 19795,
+    "bench/ssr/meltea client": 12014,
+>>>>>>> Stashed changes
     "examples/counter": 12434,
     "examples/todomvc": 18569,
     "meltea/examples/counter": 5009,
-    "meltea/examples/todomvc": 20642,
-    "meltea/examples/served client": 6349,
+    "meltea/examples/todomvc": 20641,
+    "meltea/examples/served client": 6350,
     "bench/classics/admin": 29592,
     "bench/classics/autocomplete": 27103,
     "bench/classics/blocks": 29230,
@@ -1077,6 +1082,7 @@
     },
     {
       "date": "2026-11-17",
+<<<<<<< Updated upstream
       "reason": "lazy components (React.lazy_, preloadLazy) in react.mjs, tree-shaken; minifier renaming moves gzip by 1-2 bytes (approved by the user 2026-11-17)",
       "grown": {
         "bench/classics/chess": [
@@ -1106,6 +1112,17 @@
         "bench/classics/wizard": [
           32141,
           32143
+=======
+      "reason": "minifier names shift when view.mjs gains View.fixed; the unminified bundles are identical (approved 2026-11-17)",
+      "grown": {
+        "bench/ssr/meltea client": [
+          12012,
+          12014
+        ],
+        "meltea/examples/served client": [
+          6349,
+          6350
+>>>>>>> Stashed changes
         ]
       }
     }

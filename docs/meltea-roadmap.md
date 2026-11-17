@@ -250,6 +250,29 @@ collection in `update` (append, filter, swap of a copied array, point write) rec
 the compiled loop patches from in O(change) instead of scanning all rows
 (`_research/compiler-maximum.md` has the prototype and its laws).
 
+
+### 9a. The update graph, and the runtime it shows an app never needs
+
+The typed file shows every path a change can take: a message, the branch of `update` it takes, the
+fields that branch writes, the places in the view that read them, and the element the message came
+from. Each consumer of that graph removes a piece of the runtime an app is proved never to reach,
+so the runtime shrinks to what each app uses; script time is already within 0.1 to 0.6 ms of
+vanilla's on the keyed benchmark, and the bytes are what is left.
+
+First, loops whose source is the same value at every draw: a value bound at the top of a module,
+or one of another module. Such a loop never has other items to compare, so `Fixed` (a typed pass)
+calls `View.fixed` instead of `View.rows`: the build and the same-source path of `rows`, with no
+keys, scans, facts or moves; nothing has to be proved about the value, since `rows` itself
+compares nothing for a source that is the same. All three loops of spreadsheet are such, so its
+bundle no longer holds `rows` or `Reconcile`: 29.5 kB gzip to 25.7 (Svelte's is 25.6). A law in
+`test/facts/fixed_laws_test.mlx`: such a loop shows what the same loop over a value made in the
+view shows after any messages, keeps its rows' nodes and never computes a key (four mutants: no
+rewrite, any source taken as fixed, a change of outer values ignored, changed rows not refreshed).
+
+Next consumers, each with a law and a size ratchet: loops whose source `update` only appends to,
+filters or maps (order kept, so no moves and no `Reconcile.plan`); fields bound to the input that
+writes them (the field holds what the input shows, so no `restore_controlled`); programs with no
+commands or subscriptions (no general loop in `Program`).
 ### 10. What Svelte gives authors
 
 - Scoped styles: a style in an mlx file compiled at build time into class names private to the
