@@ -11,15 +11,16 @@
 // type a. in a component with hooks (LocalGadt), and server-reason-react's make_client, which gives a component a props
 // object through React.createElement (ClientLinks),
 // components that preset another's makeProps two levels deep (Preset), and a module named by -hook-modules that binds
-// npm's useEffect6 itself (Shadow, called from Shadowed). Melact must build them and
+// npm's useEffect6 itself (Shadow, called from Shadowed), and routes split by a binding to npm's React.lazy over Js.import of each
+// route's make, rendered by createElement with makeProps or a props object and by JSX, under one Suspense (Routes). Melact must build them and
 // show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
 import { readFileSync } from "node:fs";
 import { tick, shown } from "../compat/harness.mjs";
 
-const settle = async () => {
-  for (let round = 0; round < 4; round++) await tick();
+const settle = async (root) => {
+  for (let round = 0; round < 4 || (root.querySelector(".route-loading") && round < 2000); round++) await tick();
 };
 
 test("constructors found by annotations and memoized components declared in .rei render as under React 18", async () => {
@@ -28,11 +29,11 @@ test("constructors found by annotations and memoized components declared in .rei
     const root = document.body.appendChild(document.createElement("div"));
     const layer = document.body.appendChild(document.createElement("div"));
     build.mount(root);
-    await settle();
+    await settle(root);
     const trace = [shown({ root, layer }).root];
-    for (const selector of [".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
+    for (const selector of [".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
       root.querySelectorAll(selector)[0].click();
-      await settle();
+      await settle(root);
       trace.push(shown({ root, layer }).root);
     }
     traces.push(trace);
@@ -42,6 +43,10 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[1]).toEqual(traces[0]);
   expect(traces[0][traces[0].length - 1]).toContain("hi!!!");
   expect(traces[0][0]).toContain('href="/legal/usat"');
+  expect(traces[0][3]).toContain(
+    '<section class="route-dashboard"><h2>"Board!"</><button class="route-count">"2"</></><section class="route-dashboard"><h2>"Board! raw?"</>',
+  );
+  expect(traces[0][8]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
   expect(traces[0][0]).toContain('<div class="bare">"bare"</><span class="bare-inner"></>');
   expect(traces[0][0]).toContain('<span class="bare-inner"></>"4"');
   expect(traces[0][traces[0].length - 1]).toContain(

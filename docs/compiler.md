@@ -1610,6 +1610,44 @@ comparator over any type, as reason-react code writes it over the props object, 
 call it: a component renders again only when one of its props changes by `===`, and rendering is
 pure, so a comparator could only skip a render that would show the same.
 
+## Lazy components
+
+A route split into its own chunk is written as a reason-react app writes it, with a binding to npm's
+`lazy` (which melact-ppx turns into `React.lazy_`) over a dynamic import of the route's `make`:
+
+```reason
+[@mel.module "react"]
+external lazy_: (unit => Js.Promise.t({. "default": React.component('props)})) => React.component('props) = "lazy";
+
+let dashboard = lazy_(() => Js.import(Dashboard.make) |> Js.Promise.then_(make => Js.Promise.resolve({"default": make})));
+/* <React.Suspense fallback> {React.createElement(dashboard, Dashboard.makeProps(~title, ()))} </React.Suspense> */
+```
+
+The lazy component is a boundary of the compiler, not a function it can see through: nothing is
+spliced into or out of it, the route's hooks and memo cells live in the route's own instance, and
+the parent's update graph sees one component call. At run time `React.lazy_` is one instance of its
+own whose render waits on the import as `React.Experimental.usePromise` does: until the code arrives
+the nearest Suspense boundary shows its fallback, then the route renders inside it, with the same
+hook identity and updates as a component imported statically. The import starts at the first render
+or at `React.preloadLazy dashboard` (on hover, say), runs once, and is kept; a failed import is
+thrown to the nearest error boundary, as React keeps a rejected lazy. On the server a lazy
+component throws, so its Suspense boundary is left to the client with the fallback written.
+
+Melact's `make` is `%identity` and its JavaScript export does not exist, so under `-typed`
+`Js.import(Dashboard.make)` becomes `Js.import(Dashboard.makeProps)` with the same adapter as a
+component passed as a value: the chunk's `makeProps` builds the element from Melact's props or from
+a props object (`React.createElement(dashboard, {})`). Melange leaves out the static import of a module
+that the same file also imports dynamically, and a static call would pull the route back into the
+main chunk anyway, so in such a file a call to `Dashboard.makeProps` (or any `Dashboard.xProps`) is
+typed against it and then compiled as the props object reason-react would build
+(`React.lazy_props`, through a `[@mel.obj]` external of the call's labels), as `Lazy_import`
+arranges before melange.ppx. esbuild splits the chunk with `splitting: true` and `format: "esm"`.
+Laws: `test/team` (`Routes`: a binding to npm's `lazy`, two routes, `makeProps`, a props object and a
+JSX wrapper under one Suspense, click by click against reason-react on React 18) and
+`test/team/lazy.test.mjs` (the fallback until the code arrives, one load across renders and
+preloads, no fallback once preloaded). Mutants, each caught: the import not kept, its status not
+tracked from the start, `Js.import` of `make` left as it is.
+
 ## DOM elements built at run time
 
 Some reason-react code picks a tag at run time: `React.createElement (ReactDOM.stringToComponent
@@ -1737,7 +1775,7 @@ Each law has a mutant that fails it:
 - each of the two ordering fixes reverted.
 
 Known differences. Ids from `useId` are Melact's (`:m1:`), not React's (`:r0:`). `findDOMNode`,
-`React.lazy`, error boundaries written as classes (`componentDidCatch`) and Suspense inside library
+`React.lazy` called by an npm library (Melact code has its own, see "Lazy components"), error boundaries written as classes (`componentDidCatch`) and Suspense inside library
 code are not supported. `StrictMode` and `Profiler` render their children. `onChange` on an element
 that is not a field is approximate. A Melact component given a style object with numbers (react-window's row
 `style`) does not add `px`, since compiled style holes take strings: put the style on a DOM tag

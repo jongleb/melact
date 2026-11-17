@@ -41,6 +41,9 @@ external component : ('props, element) componentLike -> 'props component = "%ide
 (** A [[@react.component]]'s props: the element [makeProps] builds, typed by its labels ([< x : unit; y : unit option >]). *)
 type 'labels props = Props of element [@@unboxed]
 
+(** Props given as an object to a component loaded by [Js.import]; the server never renders it. *)
+external lazy_props : 'fields Js.t -> 'labels props = "%identity"
+
 module Context : sig
   (** A value passed down to every component below its provider. *)
   type 'value t = Context of 'value Melact_server.Context.t [@@unboxed]
@@ -616,6 +619,11 @@ val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t
 val forwardRef : ('props -> 'value ref Js.Nullable.t -> element) -> 'props component
 val memo : 'props component -> 'props component
 val memoCustomCompareProps : 'props component -> ('compared -> 'compared -> bool) -> 'props component
+
+(** React's [lazy]: on the server it never loads, and its Suspense boundary is left to the client with its fallback. *)
+val lazy_ : (unit -> < default : 'props component > Js.t Js.Promise.t) -> 'props component
+
+val preloadLazy : 'props component -> unit Js.Promise.t
 
 (** React's synthetic events, as reason-react declares them: typed on the server, never fired. *)
 module Event : module type of struct

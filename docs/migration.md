@@ -300,6 +300,12 @@ total, a Meltea screen with the list, and a Melact rating widget in every row.
 Effects in Meltea are values, so `update` stays pure and its tests need no DOM: compare the model
 and the commands it returns.
 
+Routes split with `React.lazy` keep their code: bind npm's `lazy` as reason-react apps do and import
+each route with `Js.import(Route.make)` (needs `-typed`); see "Lazy components" in
+[`compiler.md`](compiler.md). A `%raw` loader that reads `m.make` from a dynamically imported file
+gets nothing under Melact, where `make` has no JavaScript export: write `Js.import(Route.make)`
+instead, which works under both. `React.preloadLazy(route)` fetches a route's chunk ahead of time.
+
 ## Limits today
 
 - A program run by `MelteaProgram` is not read by `meltea-ppx` for the fields each message

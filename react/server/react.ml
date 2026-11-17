@@ -13,6 +13,8 @@ external component : ('props, element) componentLike -> 'props component = "%ide
 
 type 'labels props = Props of element [@@unboxed]
 
+external lazy_props : 'fields Js.t -> 'labels props = "%identity"
+
 module Context = struct
   type 'value t = Context of 'value Melact_server.Context.t [@@unboxed]
 
@@ -216,6 +218,13 @@ let actAsync run = run ()
 let forwardRef render props = render props Js.Nullable.null
 let memo component = component
 let memoCustomCompareProps component _ = component
+
+let lazy_ _ _ =
+  Element
+    (Melhole_server.element (fun _ ->
+         Js.Exn.raiseError "melact: a lazy component renders on the client; the server writes its Suspense boundary's fallback"))
+
+let preloadLazy _ = Js.Promise.resolve ()
 
 module Event = struct
   include Melact_event

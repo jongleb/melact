@@ -28,8 +28,6 @@ let builder_labels answer builder =
           | _, description ->
               let rec labels taken =
                 match Melhole_typed.Answer.view taken with
-                | Melhole_typed.Answer.Function ((Melhole_typed.Answer.Labelled "key" | Melhole_typed.Answer.Optional "key"), _, rest) ->
-                    labels rest
                 | Melhole_typed.Answer.Function (Melhole_typed.Answer.Labelled name, _, rest) ->
                     Option.map (List.cons (Ppxlib.Labelled name)) (labels rest)
                 | Melhole_typed.Answer.Function (Melhole_typed.Answer.Optional name, _, rest) ->

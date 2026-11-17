@@ -488,21 +488,18 @@ let labels_source (labels, preset) =
 
 let labels_found case =
   Option.map
-    (fun labels ->
-      List.sort compare
-        (List.map
-           (fun label -> match label with Ppxlib.Labelled name -> (name, `Labelled) | Ppxlib.Optional name -> (name, `Optional) | Ppxlib.Nolabel -> ("", `Labelled))
-           labels))
+    (List.map (fun label ->
+         match label with Ppxlib.Labelled name -> (name, `Labelled) | Ppxlib.Optional name -> (name, `Optional) | Ppxlib.Nolabel -> ("", `Labelled)))
     (Option.bind (answer (labels_source case)) (fun answer -> Melact_ppx.Typed.builder_labels answer (Ppxlib.Ldot (Ppxlib.Lident "M", "makeProps"))))
 
 let component_laws =
   let print found = match found with Some `Compiled -> "Compiled" | Some `Of_props -> "Of_props" | None -> "None" in
   [
-    Test.make ~count:300 ~name:"Labels: a compiled component is rebuilt with the labels its module's makeProps still takes"
+    Test.make ~count:300 ~name:"Labels: a compiled component is rebuilt with the labels its module's makeProps still takes, in its order, key included"
       ~print:labels_source
       (Gen.map (fun ((labels, preset) : (string * [ `Labelled | `Optional ]) list * [ `Preset | `As_built ]) -> match preset with `Preset -> (("p", `Labelled) :: labels, preset) | `As_built -> (labels, preset)) labels_case)
       (fun ((labels, preset) as case) ->
-        labels_found case = Some (List.sort compare (match preset with `Preset -> List.filter (fun (name, _) -> not (String.equal name "p")) labels | `As_built -> labels)));
+        labels_found case = Some ((match preset with `Preset -> List.filter (fun (name, _) -> not (String.equal name "p")) labels | `As_built -> labels) @ [ ("key", `Optional) ]));
     Test.make ~count:500 ~name:"Component: a function type is a component exactly as its expanded shape says"
       ~print:(fun case -> component_source case ^ "\nexpected " ^ print (component_expected case) ^ ", found " ^ print (component_found case))
       component_case

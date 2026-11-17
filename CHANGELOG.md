@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Lazy components, the team's request. A binding to npm's `lazy` becomes `React.lazy_`, a boundary
+  of the compiler: the route keeps its own instance, hooks and memo cells, its first render (or
+  `React.preloadLazy`) starts the import once, and until the code arrives the nearest Suspense
+  shows its fallback; on the server the boundary is left to the client. Under `-typed`,
+  `Js.import(Route.make)` loads `Route.makeProps` and adapts it as a component passed as a value,
+  and in a file that imports `Route` lazily a `Route.makeProps(…)` call is typed against it and
+  compiled as a props object (`React.lazy_props`), so the route stays in its chunk (Melange also
+  drops the static import of a module imported dynamically in the same file). `React.called_with`
+  now returns the props, so the adapter is typed exactly as the component. Laws: `test/team` `Routes`
+  against reason-react, `test/team/lazy.test.mjs`, and the builder-labels law now checks the labels'
+  order, `key` included. Mutants, each caught: the import not kept, its status not tracked from the
+  start, `Js.import` of `make` left alone.
+
 - Two from the team's check of 292fcf2. A component written where a value goes is rebuilt through the
   labels its module's `makeProps` takes, read from the type checker's environment, not the labels of
   its props type: a module that presets another's props (`let make = Base.make; let makeProps =

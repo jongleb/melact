@@ -62,6 +62,7 @@ let target package name type_ attributes =
   | "react", ("useContext" | "useTransition" | "useDeferredValue" | "startTransition" | "useDebugValue" | "createContext" | "memo"
              | "forwardRef" | "isValidElement" | "cloneElement" | "createRef") ->
       react Plain name
+  | "react", "lazy" -> react Plain "lazy_"
   | "react", ("useEffect" | "useLayoutEffect" | "useMemo" | "useCallback" | "useInsertionEffect") -> with_deps name 1
   | "react", "useImperativeHandle" -> with_deps name 2
   | "react-dom", ("createPortal" | "flushSync") -> dom name

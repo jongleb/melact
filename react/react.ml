@@ -15,7 +15,9 @@ external component : ('props, element) componentLike -> 'props component = "%ide
 
 type 'labels props = Props of element [@@unboxed]
 
-let called_with : 'labels props -> ('fields Js.t -> element) -> element =
+external lazy_props : 'fields Js.t -> 'labels props = "%identity"
+
+let called_with : 'labels props -> ('fields Js.t -> 'labels props) -> 'labels props =
   [%mel.raw
     {|function (props, build) {
         return props !== null && typeof props === "object" && typeof props.build === "function" && typeof props.patch === "function"
@@ -503,6 +505,26 @@ let actAsync run =
 let forwardRef render props = render props Js.Nullable.null
 let memo component = component
 let memoCustomCompareProps component _ = component
+
+external preloading : 'props component -> (unit -> unit Js.Promise.t) Js.undefined = "melactPreload" [@@mel.get]
+external set_preloading : 'props component -> (unit -> unit Js.Promise.t) -> unit = "melactPreload" [@@mel.set]
+
+let lazy_ load =
+  let definition = Component.make ~name:"React.lazy" and started = ref None in
+  let loaded () =
+    match !started with
+    | Some promise -> promise
+    | None ->
+        let promise = Js.Promise.then_ (fun exported -> Js.Promise.resolve exported##default) (load ()) in
+        let (`Fulfilled | `Rejected | `Pending) = Experimental.tracked promise in
+        started := Some promise;
+        promise
+  in
+  let deferred props = Instance.component definition [| View.Input props |] (fun () -> Experimental.usePromise (loaded ()) props) in
+  set_preloading deferred (fun () -> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) (loaded ()));
+  deferred
+
+let preloadLazy component = Option.fold ~none:(Js.Promise.resolve ()) ~some:(fun load -> load ()) (Js.Undefined.toOption (preloading component))
 
 module Event = struct
   include Melact_event

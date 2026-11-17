@@ -40,7 +40,10 @@ external component : ('props, element) componentLike -> 'props component = "%ide
 (** A [[@react.component]]'s props: the element [makeProps] builds, typed by its labels ([< x : unit; y : unit option >]). *)
 type 'labels props = Props of element [@@unboxed]
 
-val called_with : 'labels props -> ('fields Js.t -> element) -> element
+val called_with : 'labels props -> ('fields Js.t -> 'labels props) -> 'labels props
+
+(** Props given as an object to a component loaded by [Js.import], which builds its own props from them once its code arrives. *)
+external lazy_props : 'fields Js.t -> 'labels props = "%identity"
 
 module Context : sig
   (** A value passed down to every component below its provider. *)
@@ -639,6 +642,13 @@ val actAsync : (unit -> unit Js.Promise.t) -> unit Js.Promise.t
 val forwardRef : ('props -> 'value ref Js.Nullable.t -> element) -> 'props component
 val memo : 'props component -> 'props component
 val memoCustomCompareProps : 'props component -> ('compared -> 'compared -> bool) -> 'props component
+
+(** React's [lazy]: a component whose code [load] fetches, by a dynamic import ([Js.import M.make]), on its
+    first render or [preloadLazy], then keeps; until it arrives the nearest Suspense boundary shows its fallback. *)
+val lazy_ : (unit -> < default : 'props component > Js.t Js.Promise.t) -> 'props component
+
+(** Fetches a lazy component's code before it renders (on hover, say); settles at once for any other component. *)
+val preloadLazy : 'props component -> unit Js.Promise.t
 
 (** React's synthetic events, as reason-react declares them; in Melact they are the native DOM events. *)
 module Event : module type of struct

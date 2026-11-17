@@ -949,6 +949,18 @@ let component ~loc ~name ~hooks ~summary expression =
 
 let props_name name = match name with "make" -> "makeProps" | other -> other ^ "Props"
 
+let from_object ~loc builder labels =
+  pexp_apply ~loc builder
+    (List.filter_map
+       (fun label ->
+         match label with
+         | Optional "key" -> Some (label, [%expr None])
+         | Labelled name | Optional name ->
+             Some (label, pexp_send ~loc [%expr Js.OO.unsafe_downgrade __melact_object] { loc; txt = name })
+         | Nolabel -> None)
+       labels
+    @ [ (Nolabel, [%expr ()]) ])
+
 (** Marks a component React's [createElement], [jsx] or [memo] takes, which stays as it is. *)
 let taken = "melact.taken"
 
@@ -1625,6 +1637,46 @@ let mapper =
           let mapped = super#expression expression in
           react <- saved;
           mapped
+      | Pexp_apply
+          ( { pexp_desc = Pexp_ident { txt = Ldot (Lident "Js", "import"); _ }; _ },
+            [ (Nolabel, ({ pexp_desc = Pexp_ident { txt = Ldot (path, name) as component; _ }; _ } as imported)) ] )
+        when String.equal name (String.uncapitalize_ascii name)
+             && (match !Element.output with Element.Client_only | Element.Hydratable -> true | Element.Server -> false) ->
+          let builder = Ldot (path, props_name name) in
+          let question, asked = Melhole_typed.Question.expression imported in
+          Melhole_typed.Site.expression
+            { expression with pexp_desc = Pexp_apply ([%expr Js.import], [ (Nolabel, asked) ]) }
+            ~decide:(fun file escaped ->
+              Option.fold ~none:escaped
+                ~some:(fun labels ->
+                  [%expr
+                    Js.Promise.then_
+                      (fun __melact_built ->
+                        Js.Promise.resolve (fun __melact_props ->
+                            [%e pexp_ident ~loc { loc; txt = component }]
+                              (React.called_with __melact_props (fun __melact_object ->
+                                   [%e from_object ~loc [%expr __melact_built] labels]))))
+                      (Js.import [%e pexp_ident ~loc { loc; txt = builder }])])
+                (Option.bind (Melhole_typed.File.answer file question) (fun answer -> Typed.builder_labels answer builder)))
+      | Pexp_apply (callee, arguments)
+        when List.exists (fun attribute -> String.equal attribute.attr_name.txt Lazy_import.lazy_props) expression.pexp_attributes ->
+          Melhole_typed.Site.expression
+            {
+              expression with
+              pexp_desc = Pexp_apply (callee, List.map (fun (label, argument) -> (label, self#expression argument)) arguments);
+              pexp_attributes =
+                List.filter (fun attribute -> not (String.equal attribute.attr_name.txt Lazy_import.lazy_props)) expression.pexp_attributes;
+            }
+            ~decide:(fun _ escaped ->
+              match escaped.pexp_desc with
+              | Pexp_apply (_, given) ->
+                  [%expr
+                    React.lazy_props
+                      [%e
+                        pexp_apply ~loc [%expr Melact_lazy.props]
+                          (List.filter (fun (label, _) -> match label with Labelled _ | Optional _ -> true | Nolabel -> false) given
+                          @ [ (Nolabel, [%expr ()]) ])]]
+              | _ -> escaped)
       | Pexp_apply (callee, arguments)
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed") expression.pexp_attributes ->
           {
@@ -1660,18 +1712,7 @@ let mapper =
               | `Object_props (component, labels, given) ->
                   [%expr
                     let __melact_object = [%e self#expression given] in
-                    [%e evar ~loc component]
-                      [%e
-                        pexp_apply ~loc
-                          (evar ~loc (props_name component))
-                          (List.filter_map
-                             (fun label ->
-                               match label with
-                               | Labelled name | Optional name ->
-                                   Some (label, pexp_send ~loc [%expr Js.OO.unsafe_downgrade __melact_object] { loc; txt = name })
-                               | Nolabel -> None)
-                             labels
-                          @ [ (Nolabel, [%expr ()]) ])]]
+                    [%e evar ~loc component] [%e from_object ~loc (evar ~loc (props_name component)) labels]]
               | `Other -> super#expression expression
               | `Component ->
                   super#expression
@@ -1717,20 +1758,11 @@ let mapper =
               Melhole_typed.Site.expression asked ~decide:(fun file escaped ->
                   Option.fold ~none:escaped
                     ~some:(fun labels ->
-                      let field name = pexp_send ~loc [%expr Js.OO.unsafe_downgrade __melact_object] { loc; txt = name } in
                       [%expr
                         fun __melact_props ->
-                          React.called_with __melact_props (fun __melact_object ->
-                              [%e escaped]
-                                [%e
-                                  pexp_apply ~loc (pexp_ident ~loc { loc; txt = builder })
-                                    (List.filter_map
-                                       (fun label ->
-                                         match label with
-                                         | Labelled name | Optional name -> Some (label, field name)
-                                         | Nolabel -> None)
-                                       labels
-                                    @ [ (Nolabel, [%expr ()]) ])])])
+                          [%e escaped]
+                            (React.called_with __melact_props (fun __melact_object ->
+                                 [%e from_object ~loc (pexp_ident ~loc { loc; txt = builder }) labels]))])
                     (Option.bind (Melhole_typed.File.answer file question) (fun answer -> Typed.builder_labels answer builder)))
           | (`Value | `Called), (Element.Server | Element.Client_only | Element.Hydratable), (Some _ | None) -> super#expression expression)
       | _ -> super#expression expression
@@ -2492,5 +2524,5 @@ let () =
          Npm_react.structure
            ~keys:(fun file name ->
              match (List.mem file !hook_modules, List.mem name keyed_hooks) with true, true -> `Given | (true | false), (true | false) -> `Own)
-           (bound items)) ~position:Before)
+           (Lazy_import.structure (bound items))) ~position:Before)
     ~impl:structure ~intf:signature
