@@ -1,0 +1,27 @@
+open Testing
+
+let () =
+  describe "Stdlib calls that raise in Melange, in a typed module" (fun () ->
+      test "float_of_string_opt builds no exception for any string, where int_of_string_opt of a word builds one" (fun () ->
+          let melange_errors : (unit -> unit) -> int =
+            [%mel.raw
+              {|function (run) {
+  var count = 0, real = Object.defineProperty;
+  Object.defineProperty = function (target, key, described) {
+    if (key === "name" && described && described.value === "MelangeError") count++;
+    return real.call(Object, target, key, described);
+  };
+  try { run(); } finally { Object.defineProperty = real; }
+  return count;
+}|}]
+          in
+          let pieces = [| "0"; "12"; "."; "_"; "e"; "-"; "0x1p3"; "nan"; "inf"; "word"; " "; "" |] in
+          check
+            (property (tapes ~shortest:0 ~longest:6) (fun values ->
+                 let tape = tape values in
+                 let text = String.concat "" (List.init (Array.length values) (fun _ -> pieces.(draw tape (Array.length pieces)))) in
+                 expect
+                   ( melange_errors (fun () -> ignore (float_of_string_opt text)),
+                     melange_errors (fun () -> ignore (int_of_string_opt "word")) )
+                 |. to_equal (0, 1)))
+            [%mel.obj { numRuns = 300 }]))

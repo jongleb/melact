@@ -308,6 +308,26 @@ inert messages cancelled, effective ones not, none found inert, all found inert)
 identical to React's after every step; `remember` already keeps the evaluation of the sheet to
 the changes of `raws`.
 
+Against Svelte (its formulas in plain JavaScript) the steps that change cells were 1.2 to 2.0 times
+slower. A profile of `undo x10`: 140 ms of work against Svelte's 45, of which the sheet's
+evaluation took 139, nearly all of it building `MelangeError`s. Melange's `float_of_string`
+builds its `Failure` with the stack before it reads the string, for every cell that holds a number,
+and `float_of_string_opt` raises and catches it for every one that holds a word. With a hand-edited
+bundle reading floats without raising, the evaluation took 27.5 ms and the step 45 ms, Svelte's. So
+the typed pass now does it: `Unraised` finds `Stdlib.float_of_string_opt` by its exact path in the
+typed file and calls `Meltea_runtime.Numbers.float_of_string_opt`, Melange's own reading with `None`
+where it raised (a law that both agree on any string built from the pieces the syntax treats
+specially, and one that a typed module's call builds no exception where `int_of_string_opt` of a
+word builds one; four mutants: no rewrite, `nan`, underscores and minus infinity each dropped).
+`int_of_string` raises only when it fails, so it stays.
+
+Measured with it, the DOM identical to both after every step: Meltea's time on spreadsheet is
+0.37 to 0.92 of React's per step (the same OCaml formulas, which React's build still reads by
+raising), and against Svelte `undo x10` went from 2.03 to 0.90 and `delete 10 cells` from 1.78 to
+0.89; slower than Svelte only in `formula bar edit` (1.06) and `edit on double click` (1.07). Over
+the three apps the geometric mean is 0.75 of React's time (1x and 4x, slower in no step) and 0.88
+of Svelte's (0.89 at 4x, slower in 3 of 36 steps).
+
 Kanban: the DOM is identical to React's and to Svelte's after every step. Meltea's time is 0.80
 of React's (1x and 4x, faster in 23 of 24 steps and slower in none) and 0.88 of Svelte's (1x and
 4x, slower only in `close card with Escape` at 1x, 6.8 ms against 6.3, with one more style

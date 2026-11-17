@@ -23,7 +23,7 @@ export const next = (seed, bound) => {
   return seed.state % bound;
 };
 
-const words = [
+export const words = [
   "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo",
   "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango", "uniform",
   "victor", "whiskey", "xray", "yankee", "zulu", "pretty", "large", "small", "quaint", "elegant",

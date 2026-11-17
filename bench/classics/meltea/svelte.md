@@ -12,15 +12,19 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 24 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.88; Meltea slower (> 1.05) in 1, faster (< 0.95) in 16.
-- CPU 4x: 24 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.88; Meltea slower (> 1.05) in 1, faster (< 0.95) in 17.
+- CPU 1x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.88; Meltea slower (> 1.05) in 3, faster (< 0.95) in 24.
+- CPU 4x: 36 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 3, faster (< 0.95) in 23.
 
 ## Where Meltea is slower (ratio > 1.05)
 
 | app | cpu | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | styles S/M |
 |---|---|---|---:|---:|---:|---:|---:|
+| spreadsheet | 4x | edit on double click | 485.2 | 566.3 | 1.17 | 11/11 | 15/15 |
+| spreadsheet | 4x | formula bar edit | 443.7 | 509.1 | 1.15 | 16/16 | 16/16 |
 | kanban | 1x | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 |
 | todomvc | 4x | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 |
+| spreadsheet | 1x | edit on double click | 116.0 | 124.1 | 1.07 | 11/11 | 15/15 |
+| spreadsheet | 1x | formula bar edit | 114.7 | 121.9 | 1.06 | 16/16 | 16/16 |
 
 ## Where Meltea lays out or recalculates style more often
 
@@ -49,6 +53,18 @@ None.
 | kanban | collapse 4 columns | 23.5 | 23.0 | 0.98 | 4/4 | 4/4 | yes |
 | kanban | expand 4 columns | 85.7 | 77.8 | 0.91 | 4/4 | 4/4 | yes |
 | kanban | unmount | 10.6 | 9.0 | 0.84 | 1/1 | 1/0 | – |
+| spreadsheet | mount | 92.7 | 74.1 | 0.80 | 1/1 | 2/2 | yes |
+| spreadsheet | select 30 cells | 280.4 | 231.8 | 0.83 | 29/29 | 29/29 | yes |
+| spreadsheet | edit 10 cells | 489.4 | 479.7 | 0.98 | 40/40 | 80/80 | yes |
+| spreadsheet | edit A1 five times | 209.9 | 192.8 | 0.92 | 15/15 | 35/35 | yes |
+| spreadsheet | formula bar edit | 114.7 | 121.9 | 1.06 | 16/16 | 16/16 | yes |
+| spreadsheet | fill a column | 69.7 | 63.1 | 0.91 | 5/5 | 5/5 | yes |
+| spreadsheet | edit on double click | 116.0 | 124.1 | 1.07 | 11/11 | 15/15 | yes |
+| spreadsheet | arrow keys x40 | 390.4 | 303.2 | 0.78 | 41/41 | 41/41 | yes |
+| spreadsheet | delete 10 cells | 169.1 | 151.0 | 0.89 | 10/10 | 10/10 | yes |
+| spreadsheet | undo x10 | 134.9 | 121.2 | 0.90 | 8/8 | 8/8 | yes |
+| spreadsheet | undo the rest | 208.7 | 201.1 | 0.96 | 12/12 | 4/4 | yes |
+| spreadsheet | unmount | 8.2 | 4.7 | 0.58 | 1/1 | 2/2 | – |
 | todomvc | mount | 198.5 | 149.6 | 0.75 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 428.7 | 350.9 | 0.82 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 115.2 | 84.0 | 0.73 | 19/19 | 19/19 | yes |
@@ -79,6 +95,18 @@ None.
 | kanban | collapse 4 columns | 94.2 | 91.7 | 0.97 | 4/4 | 4/4 | yes |
 | kanban | expand 4 columns | 319.7 | 280.5 | 0.88 | 4/4 | 4/4 | yes |
 | kanban | unmount | 43.6 | 36.5 | 0.84 | 1/1 | 1/0 | – |
+| spreadsheet | mount | 343.0 | 330.3 | 0.96 | 1/1 | 2/2 | yes |
+| spreadsheet | select 30 cells | 1170.5 | 1002.5 | 0.86 | 29/29 | 29/29 | yes |
+| spreadsheet | edit 10 cells | 1988.7 | 2074.3 | 1.04 | 40/40 | 80/80 | yes |
+| spreadsheet | edit A1 five times | 897.2 | 858.9 | 0.96 | 15/15 | 35/35 | yes |
+| spreadsheet | formula bar edit | 443.7 | 509.1 | 1.15 | 16/16 | 16/16 | yes |
+| spreadsheet | fill a column | 285.9 | 280.4 | 0.98 | 5/5 | 5/5 | yes |
+| spreadsheet | edit on double click | 485.2 | 566.3 | 1.17 | 11/11 | 15/15 | yes |
+| spreadsheet | arrow keys x40 | 1613.0 | 1292.6 | 0.80 | 41/41 | 41/41 | yes |
+| spreadsheet | delete 10 cells | 698.8 | 611.4 | 0.88 | 10/10 | 10/10 | yes |
+| spreadsheet | undo x10 | 553.1 | 521.9 | 0.94 | 8/8 | 8/8 | yes |
+| spreadsheet | undo the rest | 913.2 | 822.0 | 0.90 | 12/12 | 4/4 | yes |
+| spreadsheet | unmount | 35.5 | 18.1 | 0.51 | 1/1 | 2/2 | – |
 | todomvc | mount | 795.2 | 656.4 | 0.83 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 1538.5 | 1263.9 | 0.82 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 434.7 | 324.5 | 0.75 | 19/19 | 19/19 | yes |
@@ -98,4 +126,5 @@ None.
 | app | Svelte 5 1x | Meltea 1x | Svelte 5 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
 | kanban | 22.45 | 4.44 | 22.56 | 4.27 |
+| spreadsheet | 15.30 | 3.67 | 15.29 | 3.66 |
 | todomvc | 1.53 | 1.73 | 1.53 | 1.69 |

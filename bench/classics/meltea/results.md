@@ -12,8 +12,8 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 24 steps of at least 5 ms under React; geometric mean Meltea/React 0.80; Meltea slower (> 1.05) in 0, faster (< 0.95) in 23.
-- CPU 4x: 24 steps of at least 5 ms under React; geometric mean Meltea/React 0.80; Meltea slower (> 1.05) in 0, faster (< 0.95) in 22.
+- CPU 1x: 36 steps of at least 5 ms under React; geometric mean Meltea/React 0.75; Meltea slower (> 1.05) in 0, faster (< 0.95) in 35.
+- CPU 4x: 36 steps of at least 5 ms under React; geometric mean Meltea/React 0.75; Meltea slower (> 1.05) in 0, faster (< 0.95) in 34.
 
 ## Where Meltea is slower (ratio > 1.05)
 
@@ -24,6 +24,8 @@ against Meltea's first run.
 
 | app | cpu | step | layouts R/M | styles R/M | React ms | Meltea ms |
 |---|---|---|---:|---:|---:|---:|
+| spreadsheet | 1x | undo the rest | 12/12 | 3/4 | 451.3 | 206.3 |
+| spreadsheet | 4x | undo the rest | 12/12 | 3/4 | 1906.8 | 805.5 |
 
 ## DOM differences and crashes
 
@@ -47,6 +49,18 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | kanban | collapse 4 columns | 25.1 | 21.8 | 0.87 | 4/4 | 4/4 | yes |
 | kanban | expand 4 columns | 82.0 | 77.6 | 0.95 | 4/4 | 4/4 | yes |
 | kanban | unmount | 13.3 | 8.8 | 0.66 | 1/1 | 0/0 | – |
+| spreadsheet | mount | 96.7 | 73.7 | 0.76 | 1/1 | 2/2 | yes |
+| spreadsheet | select 30 cells | 258.3 | 229.5 | 0.89 | 30/29 | 30/29 | yes |
+| spreadsheet | edit 10 cells | 628.5 | 470.3 | 0.75 | 60/40 | 96/80 | yes |
+| spreadsheet | edit A1 five times | 292.8 | 185.6 | 0.63 | 25/15 | 45/35 | yes |
+| spreadsheet | formula bar edit | 134.5 | 120.4 | 0.90 | 17/16 | 17/16 | yes |
+| spreadsheet | fill a column | 101.1 | 61.4 | 0.61 | 7/5 | 7/5 | yes |
+| spreadsheet | edit on double click | 136.4 | 124.1 | 0.91 | 13/11 | 17/15 | yes |
+| spreadsheet | arrow keys x40 | 335.1 | 308.6 | 0.92 | 81/41 | 78/41 | yes |
+| spreadsheet | delete 10 cells | 350.4 | 155.6 | 0.44 | 11/10 | 10/10 | yes |
+| spreadsheet | undo x10 | 329.7 | 121.6 | 0.37 | 8/8 | 8/8 | yes |
+| spreadsheet | undo the rest | 451.3 | 206.3 | 0.46 | 12/12 | 3/4 | yes |
+| spreadsheet | unmount | 5.9 | 4.5 | 0.77 | 1/1 | 2/2 | – |
 | todomvc | mount | 176.2 | 150.2 | 0.85 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 484.1 | 354.2 | 0.73 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 291.2 | 90.8 | 0.31 | 19/19 | 19/19 | yes |
@@ -77,6 +91,18 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | kanban | collapse 4 columns | 105.5 | 92.1 | 0.87 | 4/4 | 4/4 | yes |
 | kanban | expand 4 columns | 306.6 | 282.3 | 0.92 | 4/4 | 4/4 | yes |
 | kanban | unmount | 52.9 | 36.1 | 0.68 | 1/1 | 0/0 | – |
+| spreadsheet | mount | 404.6 | 310.2 | 0.77 | 1/1 | 2/2 | yes |
+| spreadsheet | select 30 cells | 1133.0 | 968.6 | 0.85 | 30/29 | 30/29 | yes |
+| spreadsheet | edit 10 cells | 2640.3 | 1974.6 | 0.75 | 60/40 | 96/80 | yes |
+| spreadsheet | edit A1 five times | 1238.9 | 833.3 | 0.67 | 25/15 | 45/35 | yes |
+| spreadsheet | formula bar edit | 522.4 | 479.2 | 0.92 | 17/16 | 17/16 | yes |
+| spreadsheet | fill a column | 451.3 | 265.7 | 0.59 | 7/5 | 7/5 | yes |
+| spreadsheet | edit on double click | 580.1 | 537.4 | 0.93 | 13/11 | 17/15 | yes |
+| spreadsheet | arrow keys x40 | 1423.9 | 1294.6 | 0.91 | 81/41 | 78/41 | yes |
+| spreadsheet | delete 10 cells | 1491.9 | 596.7 | 0.40 | 11/10 | 10/10 | yes |
+| spreadsheet | undo x10 | 1397.5 | 525.3 | 0.38 | 8/8 | 8/8 | yes |
+| spreadsheet | undo the rest | 1906.8 | 805.5 | 0.42 | 12/12 | 3/4 | yes |
+| spreadsheet | unmount | 25.4 | 18.1 | 0.71 | 1/1 | 2/2 | – |
 | todomvc | mount | 730.7 | 632.1 | 0.87 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 1466.7 | 1141.0 | 0.78 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 1187.7 | 295.6 | 0.25 | 19/19 | 19/19 | yes |
@@ -96,4 +122,5 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 | app | React 1x | Meltea 1x | React 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
 | kanban | 7.85 | 4.47 | 7.99 | 4.53 |
+| spreadsheet | 8.41 | 3.67 | 8.37 | 3.51 |
 | todomvc | 4.05 | 1.73 | 4.05 | 1.69 |
