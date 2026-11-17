@@ -328,6 +328,19 @@ raising), and against Svelte `undo x10` went from 2.03 to 0.90 and `delete 10 ce
 the three apps the geometric mean is 0.75 of React's time (1x and 4x, slower in no step) and 0.88
 of Svelte's (0.89 at 4x, slower in 3 of 36 steps).
 
+The two steps left, `formula bar edit` and `edit on double click`, were a compiler bug the
+`fanout` alert pointed at. The alert wrapped the handler it is about in a `let module`, and inside a
+list's row that made the row's closure unreadable to the loop compiler, so the sheet's body and its
+cells were built by `Html.array` at run time instead of compiled loops; an alert silenced with
+`[@alert "-fanout"]` wrapped it all the same. The alert is now a structure item of its own at the
+handler's place, as `Dead`'s are, with the handler's alert attributes on it, and the handler is
+untouched (`test/ppx/meltea/fanout.t`: such a list compiles to `View.rows` and still gets one
+alert; the old placement fails it). All three of the sheet's loops compile now, and on spreadsheet
+Meltea is slower than Svelte in no step (0.78 for `formula bar edit`, 1.00 for `edit on double
+click`). Over the three apps: 0.74 of React's time (0.73 at 4x) and 0.85 of Svelte's (0.86 at 4x),
+slower than Svelte in one step at each rate; measured at a load average of 11 to 17, so the
+milliseconds are high, and the ratios stand on runs that alternate the two builds.
+
 Kanban: the DOM is identical to React's and to Svelte's after every step. Meltea's time is 0.80
 of React's (1x and 4x, faster in 23 of 24 steps and slower in none) and 0.88 of Svelte's (1x and
 4x, slower only in `close card with Escape` at 1x, 6.8 ms against 6.3, with one more style
