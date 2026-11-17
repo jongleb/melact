@@ -1,0 +1,447 @@
+let rows = 100
+let columns = 50
+
+let column_name col =
+  let letter index = String.make 1 (Char.chr (Char.code 'A' + index)) in
+  match col < 26 with true -> letter col | false -> letter ((col / 26) - 1) ^ letter (col mod 26)
+
+let address row col = column_name col ^ string_of_int (row + 1)
+
+(** Formulas: tokens, the syntax tree, evaluation of a whole sheet. *)
+module Formula = struct
+  type token = Number of float | Cell of int * int | Name of string | Symbol of char
+
+  (** A parsed formula. *)
+  type expr =
+    | Literal of float
+    | Reference of int * int
+    | Aggregate of string * (int * int) * (int * int)
+    | Binary of char * expr * expr
+    | Negate of expr
+
+  (** Why a cell shows an error instead of a value. *)
+  type failure = Malformed | Cyclic | Division_by_zero | Out_of_range | Not_a_number
+
+  (** What a cell holds once its formula, if any, is computed. *)
+  type value = Blank | Amount of float | Text of string | Failure of failure
+
+  exception Failed of failure
+
+  let tokens text =
+    let length = String.length text in
+    let rec scan index found =
+      let span accept =
+        let rec stop at = match at < length && accept text.[at] with true -> stop (at + 1) | false -> at in
+        stop index
+      in
+      let is_digit c = c >= '0' && c <= '9' in
+      let is_letter c = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') in
+      match index >= length with
+      | true -> List.rev found
+      | false -> (
+          match text.[index] with
+          | ' ' -> scan (index + 1) found
+          | c when is_digit c || c = '.' ->
+              let stop = span (fun c -> is_digit c || c = '.') in
+              let number =
+                Option.value ~default:0. (float_of_string_opt (String.sub text index (stop - index)))
+              in
+              scan stop (Number number :: found)
+          | c when is_letter c ->
+              let letters_end = span is_letter in
+              let letters = String.uppercase_ascii (String.sub text index (letters_end - index)) in
+              let digits_end =
+                let rec stop at = match at < length && is_digit text.[at] with true -> stop (at + 1) | false -> at in
+                stop letters_end
+              in
+              (match digits_end > letters_end with
+               | true ->
+                   let col = String.fold_left (fun acc c -> (acc * 26) + (Char.code c - Char.code 'A' + 1)) 0 letters - 1 in
+                   let row = int_of_string (String.sub text letters_end (digits_end - letters_end)) - 1 in
+                   scan digits_end (Cell (col, row) :: found)
+               | false -> scan letters_end (Name letters :: found))
+          | ('+' | '-' | '*' | '/' | '(' | ')' | ':' | ',') as c -> scan (index + 1) (Symbol c :: found)
+          | _ -> raise (Failed Malformed))
+    in
+    scan 0 []
+
+  let parse text =
+    let rest = ref (tokens text) in
+    let peek () = match !rest with token :: _ -> Some token | [] -> None in
+    let advance () = match !rest with _ :: tail -> rest := tail | [] -> () in
+    let expect symbol =
+      match peek () with Some (Symbol c) when c = symbol -> advance () | _ -> raise (Failed Malformed)
+    in
+    let rec sum () =
+      let rec more left =
+        match peek () with
+        | Some (Symbol (('+' | '-') as op)) ->
+            advance ();
+            more (Binary (op, left, product ()))
+        | _ -> left
+      in
+      more (product ())
+    and product () =
+      let rec more left =
+        match peek () with
+        | Some (Symbol (('*' | '/') as op)) ->
+            advance ();
+            more (Binary (op, left, factor ()))
+        | _ -> left
+      in
+      more (factor ())
+    and factor () =
+      match peek () with
+      | Some (Number number) ->
+          advance ();
+          Literal number
+      | Some (Cell (col, row)) ->
+          advance ();
+          Reference (col, row)
+      | Some (Symbol '-') ->
+          advance ();
+          Negate (factor ())
+      | Some (Symbol '(') ->
+          advance ();
+          let inner = sum () in
+          expect ')';
+          inner
+      | Some (Name name) -> (
+          advance ();
+          expect '(';
+          match !rest with
+          | Cell (c1, r1) :: Symbol ':' :: Cell (c2, r2) :: Symbol ')' :: tail ->
+              rest := tail;
+              Aggregate (name, (min c1 c2, min r1 r2), (max c1 c2, max r1 r2))
+          | _ -> raise (Failed Malformed))
+      | Some (Symbol _) | None -> raise (Failed Malformed)
+    in
+    let tree = sum () in
+    match !rest with [] -> tree | _ :: _ -> raise (Failed Malformed)
+
+  let shift raw offset =
+    match String.length raw > 0 && raw.[0] = '=' with
+    | false -> raw
+    | true -> (
+        match tokens (String.sub raw 1 (String.length raw - 1)) with
+        | found ->
+            "="
+            ^ String.concat ""
+                (List.map
+                   (fun token ->
+                     match token with
+                     | Number number -> Js.Float.toString number
+                     | Cell (col, row) -> address (row + offset) col
+                     | Name name -> name
+                     | Symbol c -> String.make 1 c)
+                   found)
+        | exception Failed _ -> raw)
+
+  (** How far a cell's evaluation has got. *)
+  type progress = Pending | Visiting | Known of value
+
+  let evaluate raws =
+    let states = Array.make (Array.length raws) Pending in
+    let rec cell row col =
+      match row >= 0 && row < rows && col >= 0 && col < columns with
+      | false -> Failure Out_of_range
+      | true -> (
+          let index = (row * columns) + col in
+          match states.(index) with
+          | Known value -> value
+          | Visiting -> Failure Cyclic
+          | Pending ->
+              states.(index) <- Visiting;
+              let value = compute raws.(index) in
+              states.(index) <- Known value;
+              value)
+    and compute raw =
+      match String.trim raw with
+      | "" -> Blank
+      | text when text.[0] = '=' -> (
+          match number (parse (String.sub text 1 (String.length text - 1))) with
+          | result -> Amount result
+          | exception Failed failure -> Failure failure)
+      | text -> Option.fold ~none:(Text text) ~some:(fun number -> Amount number) (float_of_string_opt text)
+    and amount row col =
+      match cell row col with
+      | Amount number -> number
+      | Blank -> 0.
+      | Text _ -> raise (Failed Not_a_number)
+      | Failure failure -> raise (Failed failure)
+    and number expr =
+      match expr with
+      | Literal value -> value
+      | Reference (col, row) -> amount row col
+      | Negate inner -> -.number inner
+      | Binary (op, left, right) -> (
+          let left = number left and right = number right in
+          match op with
+          | '+' -> left +. right
+          | '-' -> left -. right
+          | '*' -> left *. right
+          | _ -> ( match right = 0. with true -> raise (Failed Division_by_zero) | false -> left /. right))
+      | Aggregate (name, (c1, r1), (c2, r2)) -> (
+          let found = ref [] in
+          for row = r1 to r2 do
+            for col = c1 to c2 do
+              match cell row col with
+              | Amount value -> found := value :: !found
+              | Blank | Text _ -> ()
+              | Failure failure -> raise (Failed failure)
+            done
+          done;
+          let values = !found in
+          let count = float_of_int (List.length values) in
+          match (name, values) with
+          | "SUM", _ -> List.fold_left ( +. ) 0. values
+          | "COUNT", _ -> count
+          | "AVG", _ :: _ -> List.fold_left ( +. ) 0. values /. count
+          | "MIN", first :: others -> List.fold_left Float.min first others
+          | "MAX", first :: others -> List.fold_left Float.max first others
+          | ("AVG" | "MIN" | "MAX"), [] -> 0.
+          | _ -> raise (Failed Malformed))
+    in
+    Array.init (Array.length raws) (fun index -> cell (index / columns) (index mod columns))
+
+  let display value =
+    match value with
+    | Blank -> ""
+    | Text text -> text
+    | Amount number -> (
+        match Float.is_integer number with
+        | true -> Js.Float.toString number
+        | false -> Js.Float.toFixed ~digits:2 number)
+    | Failure Malformed -> "#ERR"
+    | Failure Cyclic -> "#CYCLE"
+    | Failure Division_by_zero -> "#DIV/0!"
+    | Failure Out_of_range -> "#REF!"
+    | Failure Not_a_number -> "#VALUE!"
+end
+
+let initial =
+  let seed = Classic.Seed.make 11 in
+  Array.init (rows * columns) (fun index ->
+      let row = index / columns and col = index mod columns in
+      let line = string_of_int (row + 1) in
+      match col with
+      | 40 -> "=SUM(A" ^ line ^ ":J" ^ line ^ ")"
+      | 41 -> "=AVG(K" ^ line ^ ":T" ^ line ^ ")"
+      | 42 -> "=MAX(U" ^ line ^ ":AD" ^ line ^ ")"
+      | 43 -> "=MIN(AE" ^ line ^ ":AN" ^ line ^ ")"
+      | 44 -> "=AO" ^ line ^ "+AP" ^ line ^ "*2"
+      | 45 -> "=AS" ^ line ^ "/(AQ" ^ line ^ "-AR" ^ line ^ "+1)"
+      | 46 -> "=AT" ^ line ^ "*A1"
+      | 47 when row = 0 -> "=AU1"
+      | 47 -> "=AV" ^ string_of_int row ^ "+AU" ^ line
+      | 48 -> "=SUM(AO1:AO" ^ line ^ ")"
+      | 49 -> "=AV" ^ line ^ "-AW" ^ line
+      | _ -> (
+          match Classic.Seed.next seed 9 with
+          | 0 -> Classic.Seed.pick seed Classic.words
+          | 1 -> ""
+          | _ -> string_of_int (Classic.Seed.next seed 1000)))
+
+type position = { row : int; col : int }
+
+(** Whether the selected cell shows its editor, with the text typed there so far. *)
+type mode = Navigating | Editing of string
+
+type direction = Up | Down | Left | Right
+
+type model = { raws : string array; past : string array list; selection : position; mode : mode; formula : string }
+
+type message =
+  | Select of position
+  | Edit_cell of position * string
+  | Move of direction
+  | Begin_edit of string
+  | Retype of string
+  | Commit_edit
+  | Cancel_edit
+  | Retype_formula of string
+  | Commit_formula
+  | Reset_formula
+  | Fill_down
+  | Clear_selected
+  | Undo
+  | Ignore
+
+let column_indices = Array.init columns Fun.id
+let row_indices = Array.init rows Fun.id
+
+let update message model =
+  let index { row; col } = (row * columns) + col in
+  let shown model = { model with formula = model.raws.(index model.selection) } in
+  let change raws = { model with raws; past = model.raws :: List.filteri (fun at _ -> at < 99) model.past } in
+  let moved { row; col } direction =
+    match direction with
+    | Up -> { row = max 0 (row - 1); col }
+    | Down -> { row = min (rows - 1) (row + 1); col }
+    | Left -> { row; col = max 0 (col - 1) }
+    | Right -> { row; col = min (columns - 1) (col + 1) }
+  in
+  let committed target text =
+    let next = match model.raws.(index target) = text with true -> model | false -> (
+      let raws = Array.copy model.raws in
+      raws.(index target) <- text;
+      change raws)
+    in
+    ( shown { next with mode = Navigating; selection = moved target Down },
+      Cmd.batch [ Classic.focus ".sheet"; Classic.scroll ".grid td.focused" ] )
+  in
+  match message with
+  | Select selection ->
+      ( shown { model with selection; mode = Navigating },
+        Cmd.batch [ Classic.focus ".sheet"; Classic.scroll ".grid td.focused" ] )
+  | Edit_cell (selection, raw) -> (shown { model with selection; mode = Editing raw }, Classic.focus ".cell-editor")
+  | Move direction ->
+      (shown { model with selection = moved model.selection direction; mode = Navigating }, Classic.scroll ".grid td.focused")
+  | Begin_edit text -> ({ model with mode = Editing text }, Classic.focus ".cell-editor")
+  | Retype text -> (
+      match model.mode with
+      | Editing _ -> ({ model with mode = Editing text }, Cmd.none)
+      | Navigating -> (model, Cmd.none))
+  | Commit_edit -> (
+      match model.mode with Editing text -> committed model.selection text | Navigating -> (model, Cmd.none))
+  | Cancel_edit -> ({ model with mode = Navigating }, Classic.focus ".sheet")
+  | Retype_formula formula -> ({ model with formula }, Cmd.none)
+  | Commit_formula -> committed model.selection model.formula
+  | Reset_formula -> (shown model, Cmd.none)
+  | Fill_down ->
+      let { row; col } = model.selection in
+      let source = model.raws.(index model.selection) in
+      let raws = Array.copy model.raws in
+      for below = row + 1 to rows - 1 do
+        raws.((below * columns) + col) <- Formula.shift source (below - row)
+      done;
+      (shown (change raws), Cmd.none)
+  | Clear_selected ->
+      let raws = Array.copy model.raws in
+      raws.(index model.selection) <- "";
+      (shown (change raws), Cmd.none)
+  | Undo -> (
+      match model.past with
+      | previous :: older -> (shown { model with raws = previous; past = older; mode = Navigating }, Cmd.none)
+      | [] -> (model, Cmd.none))
+  | Ignore -> (model, Cmd.none)
+
+let view { raws; past; selection; mode; formula } =
+  let values = Formula.evaluate raws in
+  let shown = Array.map Formula.display values in
+  let formulas, errors, total =
+    Array.fold_left
+      (fun (formulas, errors, total) index ->
+        let raw = raws.(index) and value = values.(index) in
+        ( (match String.length raw > 0 && raw.[0] = '=' with true -> formulas + 1 | false -> formulas),
+          (match value with Formula.Failure _ -> errors + 1 | Blank | Amount _ | Text _ -> errors),
+          match value with Formula.Amount number -> total +. number | Blank | Text _ | Failure _ -> total ))
+      (0, 0, 0.)
+      (Array.init (Array.length raws) Fun.id)
+  in
+  let column_sum =
+    Array.fold_left
+      (fun sum row ->
+        match values.((row * columns) + selection.col) with
+        | Formula.Amount number -> sum +. number
+        | Blank | Text _ | Failure _ -> sum)
+      0. row_indices
+  in
+  <div className="spreadsheet">
+    <div className="toolbar">
+      <button id="undo" disabled=(match past with [] -> true | _ :: _ -> false) onClick=Undo>(Html.text "Undo")</button>
+      <button id="fill-down" onClick=Fill_down>(Html.text "Fill down")</button>
+      <button id="clear-cell" onClick=Clear_selected>(Html.text "Clear")</button>
+    </div>
+    <div className="formula-bar">
+      <span className="address">(Html.text (address selection.row selection.col))</span>
+      <span className="fx">(Html.text "fx")</span>
+      <input
+        id="formula"
+        value=formula
+        onInput=(fun text -> Retype_formula text)
+        onKeyDown=(fun key -> match key with "Enter" -> Commit_formula | "Escape" -> Reset_formula | _ -> Ignore) />
+    </div>
+    <div
+      className="sheet"
+      tabIndex=0
+      onKeyDown=(Html.prevent (fun key ->
+        match (mode, key) with
+        | Editing _, _ -> Ignore
+        | Navigating, "ArrowUp" -> Move Up
+        | Navigating, "ArrowDown" -> Move Down
+        | Navigating, "ArrowLeft" -> Move Left
+        | Navigating, "ArrowRight" -> Move Right
+        | Navigating, "Enter" -> Begin_edit raws.((selection.row * columns) + selection.col)
+        | Navigating, ("Delete" | "Backspace") -> Clear_selected
+        | Navigating, key when String.length key = 1 -> Begin_edit key
+        | Navigating, _ -> Ignore))>
+      <table className="grid">
+        <thead>
+          <tr>
+            <th className="corner" />
+            (Html.array
+               (Array.map
+                  (fun col ->
+                    <th key=(string_of_int col) className=(match selection.col = col with true -> "column-header current" | false -> "column-header")>
+                      (Html.text (column_name col))
+                    </th>)
+                  column_indices))
+          </tr>
+        </thead>
+        <tbody>
+          (Html.array
+             (Array.map
+                (fun row ->
+                  <tr key=(string_of_int row)>
+                    <th className=(match selection.row = row with true -> "row-header current" | false -> "row-header")>(Html.int (row + 1))</th>
+                    (Html.array
+                       (Array.map
+                          (fun col ->
+                            let index = (row * columns) + col in
+                            let raw = raws.(index) in
+                            let here = selection.row = row && selection.col = col in
+                            <td
+                              key=(string_of_int col)
+                              className=(String.concat " "
+                                 [ "cell";
+                                   (match (mode, here) with
+                                   | _, false -> ""
+                                   | Navigating, true -> "focused"
+                                   | Editing _, true -> "typing");
+                                   (match String.length raw > 0 && raw.[0] = '=' with true -> "formula" | false -> "") ])
+                              onClick=(Select { row; col })
+                              onDoubleClick=(Edit_cell ({ row; col }, raw))>
+                              (match (mode, here) with
+                               | Editing text, true ->
+                                   <input
+                                     className="cell-editor"
+                                     value=text
+                                     onInput=((fun text -> Retype text) [@alert "-fanout"])
+                                     onKeyDown=(fun key ->
+                                       match key with "Enter" -> Commit_edit | "Escape" -> Cancel_edit | _ -> Ignore) />
+                               | Editing _, false | Navigating, _ -> Html.text shown.(index))
+                            </td>)
+                          column_indices))
+                  </tr>)
+                row_indices))
+        </tbody>
+      </table>
+    </div>
+    <footer className="status-bar">
+      <span id="formula-count">(Html.text (string_of_int formulas ^ " formulas"))</span>
+      <span id="error-count">(Html.text (string_of_int errors ^ " errors"))</span>
+      <span id="sheet-total">(Html.text ("Total " ^ Formula.display (Amount total)))</span>
+      <span id="column-sum">(Html.text ("Sum of " ^ column_name selection.col ^ ": " ^ Formula.display (Amount column_sum)))</span>
+    </footer>
+  </div>
+
+let () =
+  Classic.start (fun root ->
+      Program.element
+        ~init:
+          ( { raws = initial; past = []; selection = { row = 0; col = 0 }; mode = Navigating; formula = initial.(0) },
+            Classic.focus ".sheet" )
+        ~update ~view
+        ~subscriptions:(fun _ -> Sub.none)
+        root)

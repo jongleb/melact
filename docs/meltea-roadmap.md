@@ -298,7 +298,17 @@ moving the portal's nodes, a new id ignored, nodes shown in place hidden from th
 A click inside the dialog stays there through `onClick=Html.stop`: bare, `Html.stop` and
 `Html.prevent` send nothing, and wrapped they still send (`Html.prevent (Html.stop message)`).
 
-Measured: the DOM is identical to React's and to Svelte's after every step. Meltea's time is 0.80
+Spreadsheet (100 by 50 cells of formulas, 11 steps) asked for the typed link the deltas track is
+about. Its sheet cancels the arrow keys and the characters it handles, and keys typed into a cell's
+editor bubble through the sheet, so cancelling every key would stop typing. Around a function,
+`Html.prevent` now cancels exactly the events whose message does something: `Dead`'s reading of
+`update` gives the messages whose branch leaves the model as it is and runs no command, and the
+handler matches the message it computed against them before it cancels (a law with four mutants:
+inert messages cancelled, effective ones not, none found inert, all found inert). The DOM is
+identical to React's after every step; `remember` already keeps the evaluation of the sheet to
+the changes of `raws`.
+
+Kanban: the DOM is identical to React's and to Svelte's after every step. Meltea's time is 0.80
 of React's (1x and 4x, faster in 23 of 24 steps and slower in none) and 0.88 of Svelte's (1x and
 4x, slower only in `close card with Escape` at 1x, 6.8 ms against 6.3, with one more style
 recalc). The bundle is 20.1 kB gzip (Svelte 26.2, React 53.0); the heap after the scenario is

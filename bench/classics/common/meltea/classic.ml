@@ -12,6 +12,9 @@ external add_event_listener : Dom.element -> string -> (Dom.event -> unit) -> un
 external request_animation_frame : (float -> unit) -> int = "requestAnimationFrame"
 external focus_element : Dom.element -> unit = "focus" [@@mel.send]
 
+external scroll_into_view : Dom.element -> < block : string ; inline : string > Js.t -> unit = "scrollIntoView"
+[@@mel.send]
+
 (** The program running on the root, while one is. *)
 type 'msg mounted = Unmounted | Mounted of 'msg Program.t
 
@@ -33,6 +36,16 @@ let focus selector =
   Cmd.port
     (fun selector ->
       ignore (request_animation_frame (fun _ -> Option.iter focus_element (query_selector document selector))))
+    selector
+
+let scroll selector =
+  Cmd.port
+    (fun selector ->
+      ignore
+        (request_animation_frame (fun _ ->
+             Option.iter
+               (fun element -> scroll_into_view element [%mel.obj { block = "nearest"; inline = "nearest" }])
+               (query_selector document selector))))
     selector
 
 (** A deterministic pseudo-random sequence, the same as the React builds' [Classic.Seed]. *)
