@@ -128,7 +128,7 @@ let view { todos; draft; editing; filter } =
   let completed = List.length todos - active in
   let link label target =
     <li>
-      <a href="#" className=(match filter = target with true -> "selected" | false -> "") onClick=(Show target)>
+      <a href="#" className=(match filter = target with true -> "selected" | false -> "") onClick=(Html.prevent (Show target))>
         (Html.text label)
       </a>
     </li>

@@ -274,9 +274,17 @@ Svelte's after every step. Results in `bench/classics/meltea/results.md` (agains
 than Svelte in `filter active` (1.28, 1.21 at 4x: about 1,650 of 5,000 rows leave the list),
 `edit one todo` at 4x (1.13) and `toggle all again` at 4x (1.07).
 
+`filter active` was not the rows: removing them took 2.6 ms in Meltea and 2.7 ms in Svelte. Half
+of Meltea's 12 ms was the native `click` following the filter link's `href="#"`, a fragment
+navigation that lays out the page, because a Meltea handler could not cancel the default action;
+Svelte's and React's do. `onClick=(Html.prevent (Show target))` now does: `meltea-ppx` takes the
+wrapper away and writes `preventDefault` into the handler, so the runtime is unchanged (a law in
+`test/meltea/prevent_laws_test.mlx`, with two mutants: never cancelling, cancelling every
+handler). The same step then takes 6.5 ms against Svelte's 10.4.
+
 Kanban, next, needs what Meltea does not have yet: a portal (its dialog renders into `#portal`),
-a subscription to the document's keys (Escape closes the dialog), `preventDefault` on drag events
-(without it a browser never fires `drop`) and the dragged card in the model instead of
+a subscription to the document's keys (Escape closes the dialog), a way to cancel `dragover`
+without sending a message (without it a browser never fires `drop`) and the dragged card in the model instead of
 `dataTransfer`.
 
 ## Guards
