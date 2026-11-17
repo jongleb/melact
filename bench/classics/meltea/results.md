@@ -7,13 +7,13 @@ busy time (CDP `TaskDuration` delta, from before the step until the page has set
 during two animation frames, a task and an idle callback), and of the `LayoutCount` and `RecalcStyleCount`
 deltas. Runs per app: 5 at 1x; 5 at 4x except the apps marked with their run count.
 Ratio is Meltea / React; above 1 Meltea is slower. DOM: the root's and the portal container's
-markup after the step (attributes sorted, an empty `class` and empty comments left out, form fields' `value` and `checked` attributes replaced by their live properties), React's first run
+markup after the step (attributes sorted, an empty `class` and empty comments left out, form fields' `value` and `checked` attributes and a `textarea`'s text replaced by their live properties), React's first run
 against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 12 steps of at least 5 ms under React; geometric mean Meltea/React 0.72; Meltea slower (> 1.05) in 0, faster (< 0.95) in 12.
-- CPU 4x: 12 steps of at least 5 ms under React; geometric mean Meltea/React 0.73; Meltea slower (> 1.05) in 0, faster (< 0.95) in 11.
+- CPU 1x: 24 steps of at least 5 ms under React; geometric mean Meltea/React 0.80; Meltea slower (> 1.05) in 0, faster (< 0.95) in 23.
+- CPU 4x: 24 steps of at least 5 ms under React; geometric mean Meltea/React 0.80; Meltea slower (> 1.05) in 0, faster (< 0.95) in 22.
 
 ## Where Meltea is slower (ratio > 1.05)
 
@@ -29,12 +29,24 @@ against Meltea's first run.
 
 None.
 
-Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's `domProps`, Meltea in source order) in: todomvc. The comparison above sorts attributes and adds each form field's `value` and `checked` properties.
+Raw `innerHTML` differs only in attribute order (React writes props in the order of reason-react's `domProps`, Meltea in source order) in: kanban, todomvc. The comparison above sorts attributes and adds each form field's `value` and `checked` properties.
 
 ## All steps, CPU 1x
 
 | app | step | React ms | Meltea ms | ratio | layouts R/M | style recalcs R/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| kanban | mount | 116.7 | 108.1 | 0.93 | 1/1 | 1/1 | yes |
+| kanban | move 30 cards by buttons | 234.0 | 204.4 | 0.87 | 29/29 | 29/29 | yes |
+| kanban | drag 20 cards | 155.6 | 136.4 | 0.88 | 18/18 | 18/18 | yes |
+| kanban | edit 10 cards in modal | 708.4 | 646.9 | 0.91 | 130/130 | 150/150 | yes |
+| kanban | open a card and edit | 98.2 | 97.0 | 0.99 | 21/21 | 22/22 | yes |
+| kanban | close card with Escape | 8.3 | 7.0 | 0.84 | 1/1 | 2/2 | yes |
+| kanban | add 10 cards | 783.0 | 730.0 | 0.93 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 20.4 | 18.1 | 0.89 | 1/1 | 1/1 | yes |
+| kanban | clear filter | 111.3 | 103.5 | 0.93 | 1/1 | 1/1 | yes |
+| kanban | collapse 4 columns | 25.1 | 21.8 | 0.87 | 4/4 | 4/4 | yes |
+| kanban | expand 4 columns | 82.0 | 77.6 | 0.95 | 4/4 | 4/4 | yes |
+| kanban | unmount | 13.3 | 8.8 | 0.66 | 1/1 | 0/0 | – |
 | todomvc | mount | 176.2 | 150.2 | 0.85 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 484.1 | 354.2 | 0.73 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 291.2 | 90.8 | 0.31 | 19/19 | 19/19 | yes |
@@ -53,6 +65,18 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 
 | app | step | React ms | Meltea ms | ratio | layouts R/M | style recalcs R/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| kanban | mount | 494.4 | 450.2 | 0.91 | 1/1 | 1/1 | yes |
+| kanban | move 30 cards by buttons | 937.9 | 790.4 | 0.84 | 29/29 | 29/29 | yes |
+| kanban | drag 20 cards | 600.4 | 516.1 | 0.86 | 18/18 | 18/18 | yes |
+| kanban | edit 10 cards in modal | 1996.6 | 1825.1 | 0.91 | 130/130 | 150/150 | yes |
+| kanban | open a card and edit | 267.2 | 277.6 | 1.04 | 21/21 | 22/22 | yes |
+| kanban | close card with Escape | 26.9 | 21.9 | 0.81 | 1/1 | 2/2 | yes |
+| kanban | add 10 cards | 2520.0 | 2341.9 | 0.93 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 71.8 | 65.1 | 0.91 | 1/1 | 1/1 | yes |
+| kanban | clear filter | 432.1 | 380.8 | 0.88 | 1/1 | 1/1 | yes |
+| kanban | collapse 4 columns | 105.5 | 92.1 | 0.87 | 4/4 | 4/4 | yes |
+| kanban | expand 4 columns | 306.6 | 282.3 | 0.92 | 4/4 | 4/4 | yes |
+| kanban | unmount | 52.9 | 36.1 | 0.68 | 1/1 | 0/0 | – |
 | todomvc | mount | 730.7 | 632.1 | 0.87 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 1466.7 | 1141.0 | 0.78 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 1187.7 | 295.6 | 0.25 | 19/19 | 19/19 | yes |
@@ -71,4 +95,5 @@ Raw `innerHTML` differs only in attribute order (React writes props in the order
 
 | app | React 1x | Meltea 1x | React 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
+| kanban | 7.85 | 4.47 | 7.99 | 4.53 |
 | todomvc | 4.05 | 1.73 | 4.05 | 1.69 |

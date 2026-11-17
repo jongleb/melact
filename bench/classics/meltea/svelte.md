@@ -7,24 +7,27 @@ busy time (CDP `TaskDuration` delta, from before the step until the page has set
 during two animation frames, a task and an idle callback), and of the `LayoutCount` and `RecalcStyleCount`
 deltas. Runs per app: 5 at 1x; 5 at 4x except the apps marked with their run count.
 Ratio is Meltea / Svelte 5; above 1 Meltea is slower. DOM: the root's and the portal container's
-markup after the step (attributes sorted, an empty `class` and empty comments left out, form fields' `value` and `checked` attributes replaced by their live properties), Svelte 5's first run
+markup after the step (attributes sorted, an empty `class` and empty comments left out, form fields' `value` and `checked` attributes and a `textarea`'s text replaced by their live properties), Svelte 5's first run
 against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 12 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.85; Meltea slower (> 1.05) in 0, faster (< 0.95) in 9.
-- CPU 4x: 12 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.87; Meltea slower (> 1.05) in 1, faster (< 0.95) in 9.
+- CPU 1x: 24 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.88; Meltea slower (> 1.05) in 1, faster (< 0.95) in 16.
+- CPU 4x: 24 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.88; Meltea slower (> 1.05) in 1, faster (< 0.95) in 17.
 
 ## Where Meltea is slower (ratio > 1.05)
 
 | app | cpu | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | styles S/M |
 |---|---|---|---:|---:|---:|---:|---:|
+| kanban | 1x | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 |
 | todomvc | 4x | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 |
 
 ## Where Meltea lays out or recalculates style more often
 
 | app | cpu | step | layouts S/M | styles S/M | Svelte 5 ms | Meltea ms |
 |---|---|---|---:|---:|---:|---:|
+| kanban | 1x | close card with Escape | 1/1 | 1/2 | 6.3 | 6.8 |
+| kanban | 4x | close card with Escape | 1/1 | 1/2 | 22.8 | 21.4 |
 
 ## DOM differences and crashes
 
@@ -34,6 +37,18 @@ None.
 
 | app | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | style recalcs S/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| kanban | mount | 139.6 | 110.6 | 0.79 | 1/1 | 1/1 | yes |
+| kanban | move 30 cards by buttons | 230.4 | 211.8 | 0.92 | 29/29 | 29/29 | yes |
+| kanban | drag 20 cards | 166.7 | 133.5 | 0.80 | 18/18 | 18/18 | yes |
+| kanban | edit 10 cards in modal | 641.1 | 628.1 | 0.98 | 140/130 | 160/150 | yes |
+| kanban | open a card and edit | 89.9 | 89.7 | 1.00 | 22/21 | 24/22 | yes |
+| kanban | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 | yes |
+| kanban | add 10 cards | 727.4 | 706.8 | 0.97 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 21.5 | 18.3 | 0.85 | 1/1 | 1/1 | yes |
+| kanban | clear filter | 130.7 | 102.7 | 0.79 | 1/1 | 1/1 | yes |
+| kanban | collapse 4 columns | 23.5 | 23.0 | 0.98 | 4/4 | 4/4 | yes |
+| kanban | expand 4 columns | 85.7 | 77.8 | 0.91 | 4/4 | 4/4 | yes |
+| kanban | unmount | 10.6 | 9.0 | 0.84 | 1/1 | 1/0 | – |
 | todomvc | mount | 198.5 | 149.6 | 0.75 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 428.7 | 350.9 | 0.82 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 115.2 | 84.0 | 0.73 | 19/19 | 19/19 | yes |
@@ -52,6 +67,18 @@ None.
 
 | app | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | style recalcs S/M | DOM identical |
 |---|---|---:|---:|---:|---:|---:|---|
+| kanban | mount | 578.3 | 466.3 | 0.81 | 1/1 | 1/1 | yes |
+| kanban | move 30 cards by buttons | 922.2 | 853.2 | 0.93 | 29/29 | 29/29 | yes |
+| kanban | drag 20 cards | 673.9 | 533.2 | 0.79 | 18/18 | 18/18 | yes |
+| kanban | edit 10 cards in modal | 1932.4 | 1943.7 | 1.01 | 140/130 | 160/150 | yes |
+| kanban | open a card and edit | 274.0 | 276.7 | 1.01 | 22/21 | 24/22 | yes |
+| kanban | close card with Escape | 22.8 | 21.4 | 0.94 | 1/1 | 1/2 | yes |
+| kanban | add 10 cards | 2458.5 | 2399.5 | 0.98 | 120/120 | 150/150 | yes |
+| kanban | filter by label | 75.2 | 63.5 | 0.84 | 1/1 | 1/1 | yes |
+| kanban | clear filter | 491.2 | 409.5 | 0.83 | 1/1 | 1/1 | yes |
+| kanban | collapse 4 columns | 94.2 | 91.7 | 0.97 | 4/4 | 4/4 | yes |
+| kanban | expand 4 columns | 319.7 | 280.5 | 0.88 | 4/4 | 4/4 | yes |
+| kanban | unmount | 43.6 | 36.5 | 0.84 | 1/1 | 1/0 | – |
 | todomvc | mount | 795.2 | 656.4 | 0.83 | 1/1 | 1/1 | yes |
 | todomvc | add 10 todos | 1538.5 | 1263.9 | 0.82 | 69/69 | 69/69 | yes |
 | todomvc | toggle 20 todos | 434.7 | 324.5 | 0.75 | 19/19 | 19/19 | yes |
@@ -70,4 +97,5 @@ None.
 
 | app | Svelte 5 1x | Meltea 1x | Svelte 5 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
+| kanban | 22.45 | 4.44 | 22.56 | 4.27 |
 | todomvc | 1.53 | 1.73 | 1.53 | 1.69 |

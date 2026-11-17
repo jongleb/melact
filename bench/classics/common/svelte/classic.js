@@ -30,4 +30,6 @@ const words = [
   "angry", "helpful", "odd", "table", "chair", "house", "desk", "pony", "cookie", "keyboard", "mouse",
 ];
 
-export const sentence = (seed, count) => Array.from({ length: count }, () => words[next(seed, words.length)]).join(" ");
+export const pick = (seed, choices) => choices[next(seed, choices.length)];
+
+export const sentence = (seed, count) => Array.from({ length: count }, () => pick(seed, words)).join(" ");

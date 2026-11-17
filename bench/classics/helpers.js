@@ -144,7 +144,7 @@
           }
           const tag = node.tagName.toLowerCase();
           out.push(`<${tag}${attributes.map((attribute) => " " + attribute).join("")}>`);
-          for (const child of node.childNodes) walk(child);
+          if (node.tagName !== "TEXTAREA") for (const child of node.childNodes) walk(child);
           out.push(`</${tag}>`);
         }
       };

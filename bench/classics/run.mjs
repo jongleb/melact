@@ -304,7 +304,7 @@ const writeMarkdown = (all) => {
     "during two animation frames, a task and an idle callback), and of the `LayoutCount` and `RecalcStyleCount`",
     "deltas. Runs per app: 5 at 1x; 5 at 4x except the apps marked with their run count.",
     `Ratio is ${otherName} / ${baseName}; above 1 ${otherName} is slower. DOM: the root's and the portal container's`,
-    `markup after the step (attributes sorted, an empty \`class\` and empty comments left out, form fields' \`value\` and \`checked\` attributes replaced by their live properties), ${baseName}'s first run`,
+    `markup after the step (attributes sorted, an empty \`class\` and empty comments left out, form fields' \`value\` and \`checked\` attributes and a \`textarea\`'s text replaced by their live properties), ${baseName}'s first run`,
     `against ${otherName}'s first run.`,
     "",
   ];

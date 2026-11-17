@@ -288,12 +288,22 @@ scenario 0.92 of Svelte's time. Measured again with it: the geometric mean is 0.
 and 0.85 of Svelte's (1x; 0.73 and 0.87 at 4x), Meltea faster than Svelte in 9 of 12 steps at
 both rates and slower only in `toggle all` at 4x (1.08); the heap is 1.73 MB (1.69 at 4x).
 
-Kanban, next, needs the dragged card in the model instead of `dataTransfer`. Escape now comes
+Kanban (1,500 cards in 8 columns, 11 steps) needed four things of Meltea. The dragged card lives in
+the model (`Drag_start id`, then `Drop column`), not in `dataTransfer`. Escape comes
 through `Sub.key_down`, its columns' `onDrop` cancels what a browser needs cancelled to drop there,
 and its dialog goes into `#portal` through `Html.portal ~into:"portal"`: a module of its own in
 `meltea.runtime` on `View.host`, made on first use, so a bundle without a portal carries none of it
 (a law in `test/meltea/portal_laws_test.mlx`, with four mutants: nodes left behind, the parent
 moving the portal's nodes, a new id ignored, nodes shown in place hidden from the parent).
+A click inside the dialog stays there through `onClick=Html.stop`: bare, `Html.stop` and
+`Html.prevent` send nothing, and wrapped they still send (`Html.prevent (Html.stop message)`).
+
+Measured: the DOM is identical to React's and to Svelte's after every step. Meltea's time is 0.80
+of React's (1x and 4x, faster in 23 of 24 steps and slower in none) and 0.88 of Svelte's (1x and
+4x, slower only in `close card with Escape` at 1x, 6.8 ms against 6.3, with one more style
+recalc). The bundle is 20.1 kB gzip (Svelte 26.2, React 53.0); the heap after the scenario is
+4.4 MB (React 7.9, Svelte 22.5: deep `$state` puts a proxy on every card, label array and member
+array).
 
 
 ## Guards
