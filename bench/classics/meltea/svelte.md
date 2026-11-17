@@ -12,20 +12,26 @@ against Meltea's first run.
 
 ## Summary
 
-- CPU 1x: 49 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 4, faster (< 0.95) in 32.
-- CPU 4x: 50 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 3, faster (< 0.95) in 32.
+- CPU 1x: 63 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.89; Meltea slower (> 1.05) in 6, faster (< 0.95) in 40.
+- CPU 4x: 64 steps of at least 5 ms under Svelte 5; geometric mean Meltea/Svelte 5 0.91; Meltea slower (> 1.05) in 7, faster (< 0.95) in 38.
 
 ## Where Meltea is slower (ratio > 1.05)
 
 | app | cpu | step | Svelte 5 ms | Meltea ms | ratio | layouts S/M | styles S/M |
 |---|---|---|---:|---:|---:|---:|---:|
+| hackernews | 4x | unvote 10 | 179.3 | 228.3 | 1.27 | 9/9 | 9/9 |
 | datagrid | 1x | reverse sort | 92.5 | 116.8 | 1.26 | 1/1 | 1/1 |
 | datagrid | 4x | reverse sort | 382.0 | 478.8 | 1.25 | 1/1 | 1/1 |
+| hackernews | 4x | upvote 30 stories | 201.5 | 239.7 | 1.19 | 29/29 | 29/29 |
+| hackernews | 1x | upvote 30 stories | 80.4 | 92.5 | 1.15 | 29/29 | 29/29 |
 | datagrid | 1x | select all | 28.3 | 32.4 | 1.15 | 1/1 | 1/1 |
+| hackernews | 1x | unvote 10 | 46.4 | 51.1 | 1.10 | 9/9 | 9/9 |
 | datagrid | 1x | sort by name | 102.1 | 111.0 | 1.09 | 1/1 | 1/1 |
+| hackernews | 4x | back to front page | 160.9 | 174.7 | 1.09 | 1/1 | 1/1 |
 | kanban | 1x | close card with Escape | 6.3 | 6.8 | 1.08 | 1/1 | 1/2 |
 | todomvc | 4x | toggle all | 170.8 | 184.7 | 1.08 | 1/1 | 1/1 |
 | datagrid | 4x | sort by name | 433.0 | 458.6 | 1.06 | 1/1 | 1/1 |
+| hackernews | 4x | expand them back | 1451.0 | 1525.8 | 1.05 | 49/49 | 49/49 |
 
 ## Where Meltea lays out or recalculates style more often
 
@@ -56,6 +62,20 @@ None.
 | datagrid | next page x5 | 365.1 | 369.9 | 1.01 | 4/4 | 4/4 | yes |
 | datagrid | close detail | 4.2 | 4.2 | 1.00 | 1/1 | 0/0 | yes |
 | datagrid | unmount | 6.3 | 6.1 | 0.98 | 1/1 | 1/1 | – |
+| hackernews | mount | 33.1 | 28.6 | 0.86 | 1/1 | 1/1 | yes |
+| hackernews | upvote 30 stories | 80.4 | 92.5 | 1.15 | 29/29 | 29/29 | yes |
+| hackernews | open a story | 180.4 | 161.3 | 0.89 | 1/1 | 1/1 | yes |
+| hackernews | collapse 50 comments | 355.0 | 358.0 | 1.01 | 49/49 | 49/49 | yes |
+| hackernews | expand them back | 363.6 | 376.5 | 1.04 | 49/49 | 49/49 | yes |
+| hackernews | collapse all top-level | 19.3 | 16.0 | 0.83 | 1/1 | 1/1 | yes |
+| hackernews | expand all top-level | 143.4 | 127.2 | 0.89 | 1/1 | 1/1 | yes |
+| hackernews | reply to a comment | 146.9 | 151.0 | 1.03 | 40/40 | 40/40 | yes |
+| hackernews | back to front page | 42.2 | 35.9 | 0.85 | 1/1 | 1/1 | yes |
+| hackernews | more | 54.8 | 30.5 | 0.56 | 1/1 | 1/1 | yes |
+| hackernews | more again | 27.4 | 27.3 | 1.00 | 1/1 | 1/1 | yes |
+| hackernews | hide 10 stories | 166.2 | 147.9 | 0.89 | 9/9 | 9/9 | yes |
+| hackernews | unvote 10 | 46.4 | 51.1 | 1.10 | 9/9 | 9/9 | yes |
+| hackernews | unmount | 8.0 | 7.4 | 0.92 | 1/1 | 1/0 | – |
 | kanban | mount | 139.6 | 110.6 | 0.79 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 230.4 | 211.8 | 0.92 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 166.7 | 133.5 | 0.80 | 18/18 | 18/18 | yes |
@@ -112,6 +132,20 @@ None.
 | datagrid | next page x5 | 1487.6 | 1504.2 | 1.01 | 4/4 | 4/4 | yes |
 | datagrid | close detail | 14.1 | 13.9 | 0.98 | 1/1 | 0/0 | yes |
 | datagrid | unmount | 25.1 | 25.6 | 1.02 | 1/1 | 1/1 | – |
+| hackernews | mount | 135.0 | 115.5 | 0.86 | 1/1 | 1/1 | yes |
+| hackernews | upvote 30 stories | 201.5 | 239.7 | 1.19 | 29/29 | 29/29 | yes |
+| hackernews | open a story | 669.2 | 630.5 | 0.94 | 1/1 | 1/1 | yes |
+| hackernews | collapse 50 comments | 1400.4 | 1460.6 | 1.04 | 49/49 | 49/49 | yes |
+| hackernews | expand them back | 1451.0 | 1525.8 | 1.05 | 49/49 | 49/49 | yes |
+| hackernews | collapse all top-level | 132.5 | 64.3 | 0.49 | 1/1 | 1/1 | yes |
+| hackernews | expand all top-level | 597.9 | 588.6 | 0.98 | 1/1 | 1/1 | yes |
+| hackernews | reply to a comment | 450.2 | 443.8 | 0.99 | 40/40 | 40/40 | yes |
+| hackernews | back to front page | 160.9 | 174.7 | 1.09 | 1/1 | 1/1 | yes |
+| hackernews | more | 132.5 | 122.7 | 0.93 | 1/1 | 1/1 | yes |
+| hackernews | more again | 116.8 | 114.3 | 0.98 | 1/1 | 1/1 | yes |
+| hackernews | hide 10 stories | 764.6 | 690.0 | 0.90 | 9/9 | 9/9 | yes |
+| hackernews | unvote 10 | 179.3 | 228.3 | 1.27 | 9/9 | 9/9 | yes |
+| hackernews | unmount | 33.0 | 31.1 | 0.94 | 1/1 | 1/0 | – |
 | kanban | mount | 578.3 | 466.3 | 0.81 | 1/1 | 1/1 | yes |
 | kanban | move 30 cards by buttons | 922.2 | 853.2 | 0.93 | 29/29 | 29/29 | yes |
 | kanban | drag 20 cards | 673.9 | 533.2 | 0.79 | 18/18 | 18/18 | yes |
@@ -155,6 +189,7 @@ None.
 | app | Svelte 5 1x | Meltea 1x | Svelte 5 4x | Meltea 4x |
 |---|---:|---:|---:|---:|
 | datagrid | 5.18 | 3.47 | 4.95 | 3.81 |
+| hackernews | 7.41 | 2.91 | 7.43 | 3.01 |
 | kanban | 22.45 | 4.44 | 22.56 | 4.27 |
 | spreadsheet | 15.30 | 3.73 | 15.29 | 3.82 |
 | todomvc | 1.53 | 1.73 | 1.53 | 1.69 |

@@ -408,7 +408,14 @@ node stays the same value, so the loops redraw only the node that changed, the s
 all steps but `upvote 30 stories` (1.07), `unvote 10` (1.06) and `reply to a comment` (1.03): the
 story rows are three `<tr>` each, so they go through a keyed list built at run time, which visits
 all 900 rows for one vote. Field gates through view functions (step 7) and selectors over a map read
-by the row's key would make the first, natural form fast as well.
+by the row's key would make the first, natural form fast as well. Against Svelte (a recursive `Comment` component
+with its own state, the broadcast through `$effect`), the DOM identical after every step, Meltea's
+time is lower or within 5% in every step but the votes: `upvote 30 stories` 1.15 (1.19 at 4x) and
+`unvote 10` 1.10 (1.27 at 4x), the keyed list visiting all 900 rows. An `each` over the stories with
+their three rows as one item was worse (`hide 10 stories` 1.95), since the rank shown is the index
+and every row after a hidden one is redrawn. What would remove it is a compiled loop whose row has
+several root elements: `rows` builds one element per item today. The bundle is 17.7 kB gzip (Svelte
+24.8, React 51.4) and the heap 2.9 MB (Svelte 7.4, React 11.5).
 ## Guards
 
 Every step, before it is pushed: `opam exec -- dune build`, `dune test`, `dune build @runtest-js &&
