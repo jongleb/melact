@@ -1667,7 +1667,8 @@ At a call the untyped pass nominates the labels the callee may clone (its fact, 
 scan), and compiles each JSX literal given in them twice: as usual, and as `React.clonable (fun overrides ->
 …)`, which a clone calls again with its props. A DOM literal becomes an element built from its props object
 with the clone's over it (`React.overridden`), patched prop by prop; a component literal reads each label
-through `React.override overrides "label" own`, and the typed pass adds every optional label of the callee's
+through `match React.overriding overrides "label" with Some given -> given | None -> own`, whose branches keep the label's expected type for constructors and fields found by type (an optional
+label reads through `overriding_optional`, undefined being `None`), and the typed pass adds every optional label of the callee's
 `makeProps` the literal left out, so that a clone can set it. The typed pass then keeps the clonable form
 only where the callee's fact, found through the file's environment, has the label, and makes a call with a
 literal in a cloned label it did not nominate (the callee reached through an open or an alias) a compile

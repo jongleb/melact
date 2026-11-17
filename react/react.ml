@@ -141,8 +141,10 @@ let cloneElement : element -> 'props -> element =
         return made;
       }|}]
 
-let override : overrides -> string -> 'value -> 'value =
-  [%mel.raw {|function (overrides, name, own) { return Object.prototype.hasOwnProperty.call(overrides, name) ? overrides[name] : own; }|}]
+external entries : overrides -> 'value Js.Dict.t = "%identity"
+
+let overriding overrides name = Js.Dict.get (entries overrides) name
+let overriding_optional overrides name = Option.map Js.Undefined.toOption (Js.Dict.get (entries overrides) name)
 
 let overridden : 'props -> overrides -> 'props = [%mel.raw {|function (props, overrides) { return Object.assign({}, props, overrides); }|}]
 let cloneElementUntraced element props = cloneElement element props

@@ -44,6 +44,13 @@ module App = {
       {double ? <Tabs.Tab name="a" /> : <Tabs.Tab name="b" />}
       <Tabs.Tab name="c" active=true />
     </Tabs>
+    <Hint label="gap"> <Gap gap={Adaptive(1, 2)} pad={top: 3} /> </Hint>
+    <Hint label="gap"> <Gap pad={top: 4} tone="t" /> </Hint>
+    <Gap.Wide> <Gap pad={top: 5} /> </Gap.Wide>
+    <Gap.Clear> <Gap pad={top: 6} tone="x" /> </Gap.Clear>
+    <Gap.Clear> <Gap pad={top: 7} /> </Gap.Clear>
+    <Gap.Clear> <Gap pad={top: 8} tone=?{Some("y")} note=?{Some(Some("n"))} /> </Gap.Clear>
+    <Gap.Wide> <Gap pad={top: 9} tone=?None /> </Gap.Wide>
     <Framed wrapper=Framed.NoWrapper> <button className="framed-plain"> {React.string("plain")} </button> </Framed>
     <Framed wrapper=Framed.Div> <span className="framed-inner"> {React.string("inner")} </span> </Framed>
     <Menu> <Menu.Item label="first" /> <Menu.Item label="second" /> <Menu.Item label="third" /> </Menu>

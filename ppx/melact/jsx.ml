@@ -2030,8 +2030,18 @@ let mapper =
                               (fun (label, value) ->
                                 match label with
                                 | Labelled ("key" | "children") | Nolabel -> (label, value)
-                                | Labelled name | Optional name ->
-                                    (label, [%expr React.override __melact_overrides [%e estring ~loc name] [%e value]]))
+                                | Labelled name ->
+                                    ( label,
+                                      [%expr
+                                        match React.overriding __melact_overrides [%e estring ~loc name] with
+                                        | Some __melact_given -> __melact_given
+                                        | None -> [%e value]] )
+                                | Optional name ->
+                                    ( label,
+                                      [%expr
+                                        match React.overriding_optional __melact_overrides [%e estring ~loc name] with
+                                        | Some __melact_given -> __melact_given
+                                        | None -> [%e value]] ))
                               arguments );
                     }])]
       | _ -> None
@@ -2110,7 +2120,7 @@ let mapper =
                         (fun label ->
                           match label with
                           | Optional name when not (String.equal name "key" || List.mem name named) ->
-                              Some (label, [%expr React.override __melact_overrides [%e estring ~loc name] None])
+                              Some (label, [%expr Stdlib.Option.join (React.overriding_optional __melact_overrides [%e estring ~loc name])])
                           | Optional _ | Labelled _ | Nolabel -> None)
                         labels
                     in

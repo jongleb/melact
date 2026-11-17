@@ -116,8 +116,11 @@ type overrides
 (** [clonable make]: the element [make] builds with no overrides, which [cloneElement] builds again with its props. *)
 val clonable : (overrides -> element) -> element
 
-(** [override overrides name own]: the prop a clone gives for [name], else [own]. *)
-val override : overrides -> string -> 'value -> 'value
+(** [overriding overrides name]: the prop a clone gives for [name], if it gives one. *)
+val overriding : overrides -> string -> 'value option
+
+(** [overriding_optional overrides name]: the prop a clone gives for an optional label [name], [None] for undefined. *)
+val overriding_optional : overrides -> string -> 'value option option
 
 (** [overridden props overrides]: a DOM element's props object with a clone's props over it. *)
 val overridden : 'props -> overrides -> 'props

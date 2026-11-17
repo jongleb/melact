@@ -1,44 +1,44 @@
 {
   "sizes": {
-    "bench/melact": 18666,
+    "bench/melact": 18669,
     "bench/meltea": 11039,
-    "bench/ssr/melact client": 19793,
+    "bench/ssr/melact client": 19794,
     "bench/ssr/meltea client": 12013,
-    "examples/counter": 12434,
-    "examples/todomvc": 18569,
+    "examples/counter": 12439,
+    "examples/todomvc": 18566,
     "meltea/examples/counter": 5003,
     "meltea/examples/todomvc": 20641,
     "meltea/examples/served client": 6352,
-    "bench/classics/admin": 29592,
-    "bench/classics/autocomplete": 27105,
-    "bench/classics/blocks": 29230,
-    "bench/classics/calendar": 43940,
+    "bench/classics/admin": 29591,
+    "bench/classics/autocomplete": 27102,
+    "bench/classics/blocks": 29231,
+    "bench/classics/calendar": 43943,
     "bench/classics/chat": 28933,
-    "bench/classics/chess": 28720,
-    "bench/classics/conduit": 30826,
-    "bench/classics/dashboard": 32374,
+    "bench/classics/chess": 28724,
+    "bench/classics/conduit": 30832,
+    "bench/classics/dashboard": 32369,
     "bench/classics/datagrid": 30172,
     "bench/classics/diff": 33783,
-    "bench/classics/email": 30337,
-    "bench/classics/eventtable": 28919,
-    "bench/classics/feed": 27285,
-    "bench/classics/filetree": 26936,
-    "bench/classics/gallery": 28056,
-    "bench/classics/gantt": 43357,
-    "bench/classics/hackernews": 26105,
-    "bench/classics/jsontree": 24901,
-    "bench/classics/kanban": 31128,
-    "bench/classics/logs": 28703,
-    "bench/classics/markdown": 30518,
-    "bench/classics/minesweeper": 21160,
-    "bench/classics/playlist": 44492,
-    "bench/classics/settings": 31208,
-    "bench/classics/shop": 28914,
-    "bench/classics/spreadsheet": 29600,
-    "bench/classics/todomvc": 22103,
-    "bench/classics/trace": 31142,
-    "bench/classics/virtuallist": 25116,
-    "bench/classics/wizard": 32143
+    "bench/classics/email": 30339,
+    "bench/classics/eventtable": 28916,
+    "bench/classics/feed": 27288,
+    "bench/classics/filetree": 26932,
+    "bench/classics/gallery": 28051,
+    "bench/classics/gantt": 43361,
+    "bench/classics/hackernews": 26108,
+    "bench/classics/jsontree": 24903,
+    "bench/classics/kanban": 31120,
+    "bench/classics/logs": 28704,
+    "bench/classics/markdown": 30515,
+    "bench/classics/minesweeper": 21159,
+    "bench/classics/playlist": 44487,
+    "bench/classics/settings": 31207,
+    "bench/classics/shop": 28921,
+    "bench/classics/spreadsheet": 29605,
+    "bench/classics/todomvc": 22104,
+    "bench/classics/trace": 31140,
+    "bench/classics/virtuallist": 25128,
+    "bench/classics/wizard": 32147
   },
   "growth": [
     {
@@ -1182,6 +1182,84 @@
         "bench/classics/diff": [
           33780,
           33783
+        ]
+      }
+    },
+    {
+      "date": "2026-11-17",
+      "reason": "cloneElement fix: React.overriding and overriding_optional in react.mjs rename minifier identifiers (up to +12 bytes, 12 bundles smaller); no bundle clones",
+      "grown": {
+        "bench/melact": [
+          18666,
+          18669
+        ],
+        "bench/ssr/melact client": [
+          19793,
+          19794
+        ],
+        "examples/counter": [
+          12434,
+          12439
+        ],
+        "bench/classics/blocks": [
+          29230,
+          29231
+        ],
+        "bench/classics/calendar": [
+          43940,
+          43943
+        ],
+        "bench/classics/chess": [
+          28720,
+          28724
+        ],
+        "bench/classics/conduit": [
+          30826,
+          30832
+        ],
+        "bench/classics/email": [
+          30337,
+          30339
+        ],
+        "bench/classics/feed": [
+          27285,
+          27288
+        ],
+        "bench/classics/gantt": [
+          43357,
+          43361
+        ],
+        "bench/classics/hackernews": [
+          26105,
+          26108
+        ],
+        "bench/classics/jsontree": [
+          24901,
+          24903
+        ],
+        "bench/classics/logs": [
+          28703,
+          28704
+        ],
+        "bench/classics/shop": [
+          28914,
+          28921
+        ],
+        "bench/classics/spreadsheet": [
+          29600,
+          29605
+        ],
+        "bench/classics/todomvc": [
+          22103,
+          22104
+        ],
+        "bench/classics/virtuallist": [
+          25116,
+          25128
+        ],
+        "bench/classics/wizard": [
+          32143,
+          32147
         ]
       }
     }

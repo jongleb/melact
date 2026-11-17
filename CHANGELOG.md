@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fix, from the team: a component literal in a cloned label lost the label's expected type, so a constructor or
+  record field found by that type (`<Hidden> <Section padding=NonAdaptive(…) /> </Hidden>`, the constructor not
+  in scope) failed with `Unbound constructor`. Each label now reads a clone's prop through
+  `match React.overriding overrides "label" with Some given -> given | None -> own`, whose branches are typed
+  against the label; an optional label reads it through `React.overriding_optional`, which takes undefined for
+  `None` as reason-react does. `test/team` `Gap`: constructors and fields found by type inside a cloning
+  component, clones that set a variant label and an optional label the literal left out or set, and clones that
+  give undefined to optional labels, one of them `option(option(string))`, against reason-react. Mutants caught:
+  the own value under a polymorphic function, undefined read as a value for an optional label set or left out.
+
 - `React.cloneElement` of an element written in the same function, from the team's build: a JSX literal bound by
   `let` and cloned, a prop rebound by a `match` whose other branch wraps it in a new element, both branches of a
   conditional, a literal written in the clone's argument. The untyped pass nominates every literal that may

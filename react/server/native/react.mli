@@ -108,7 +108,8 @@ val cloneElement : element -> 'props -> element
 type overrides
 
 val clonable : (overrides -> element) -> element
-val override : overrides -> string -> 'value -> 'value
+val overriding : overrides -> string -> 'value option
+val overriding_optional : overrides -> string -> 'value option option
 val overridden : 'props -> overrides -> 'props
 
 val cloneElementUntraced : element -> 'props -> element

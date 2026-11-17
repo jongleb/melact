@@ -51,6 +51,13 @@ test("constructors found by annotations and memoized components declared in .rei
   expect(traces[0][3]).toContain('<span class="hint"><button class="trigger open" title="tip">"hint"</><span class="hint-label">"tip"</></>');
   expect(traces[0][4]).toContain('<div class="hint-card"><span class="hint"><button class="trigger open" title="card">"card"</><span class="hint-label">"card"</>');
   expect(traces[0][6]).toContain('<button class="menu-item">"first"</><button class="menu-item focused">"second"</><button class="menu-item">"third"</><span class="menu-picked">"first"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"1/2:3"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"0:4t"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"7/8:5w"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"0:6"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"0:7"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"0:8"</>');
+  expect(traces[0][0]).toContain('<span class="gap">"7/8:9w"</>');
   expect(traces[0][0]).toContain(
     '<div class="framed"><iframe class="framed-frame" loading="lazy" title="frame"></><span class="tab">"local"</><i class="framed-off" title="off"></><u class="framed-direct" title="direct"></><span class="hint"><button class="trigger" title="framed">"framed"</></><button class="framed-plain" title="framed off">"plain"</></>',
   );
