@@ -117,8 +117,35 @@ let jsxKeyed make props ?key () =
 let jsxsKeyed make props ?key () =
   Option.fold ~none:(make props) ~some:(fun key -> of_child (View.with_key key (to_child (make props)))) key
 
-let cloneElement _ _ =
-  Js.Exn.raiseError "melact: React.cloneElement is not supported; pass props to the component instead"
+type overrides
+
+let clone_with : (overrides -> element) -> overrides -> element =
+  [%mel.raw
+    {|function (make, given) {
+        var element = make(given);
+        if (element !== null && typeof element === "object") element.melactClone = { make: make, given: given };
+        return element;
+      }|}]
+
+let clonable make = clone_with make [%mel.raw "{}"]
+
+let cloneElement : element -> 'props -> element =
+  [%mel.raw
+    {|function (element, props) {
+        var clone = element !== null && typeof element === "object" ? element.melactClone : undefined;
+        if (clone === undefined)
+          throw new Error("melact: React.cloneElement got an element that was not written as JSX where melact-ppx could see it reach this clone; write it inline in the prop the component clones");
+        var given = Object.assign({}, clone.given, props);
+        var made = clone.make(given);
+        if (made !== null && typeof made === "object") made.melactClone = { make: clone.make, given: given };
+        return made;
+      }|}]
+
+let override : overrides -> string -> 'value -> 'value =
+  [%mel.raw {|function (overrides, name, own) { return Object.prototype.hasOwnProperty.call(overrides, name) ? overrides[name] : own; }|}]
+
+let overridden : 'props -> overrides -> 'props = [%mel.raw {|function (props, overrides) { return Object.assign({}, props, overrides); }|}]
+let cloneElementUntraced element props = cloneElement element props
 
 let setDisplayName _ _ = ()
 let displayName _ = None

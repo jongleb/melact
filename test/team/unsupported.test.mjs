@@ -19,7 +19,7 @@ const raising = sources("react").flatMap((path) =>
 );
 
 test("every function that raises 'not supported' at run time is marked [@@alert unsupported] in its interface", () => {
-  expect(raising.length).toBeGreaterThanOrEqual(4);
+  expect(raising.length).toBeGreaterThanOrEqual(2);
   const unmarked = raising.filter(({ path, name }) => {
     const interfacePath = path.replace(/\.ml(\.in)?$/, (_, generated) => `.mli${generated ?? ""}`);
     if (!existsSync(interfacePath)) return true;

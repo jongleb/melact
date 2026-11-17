@@ -10,33 +10,33 @@
     "meltea/examples/todomvc": 20641,
     "meltea/examples/served client": 6352,
     "bench/classics/admin": 29592,
-    "bench/classics/autocomplete": 27103,
+    "bench/classics/autocomplete": 27105,
     "bench/classics/blocks": 29230,
     "bench/classics/calendar": 43940,
     "bench/classics/chat": 28933,
     "bench/classics/chess": 28720,
     "bench/classics/conduit": 30826,
     "bench/classics/dashboard": 32374,
-    "bench/classics/datagrid": 30174,
-    "bench/classics/diff": 33780,
-    "bench/classics/email": 30345,
+    "bench/classics/datagrid": 30172,
+    "bench/classics/diff": 33783,
+    "bench/classics/email": 30337,
     "bench/classics/eventtable": 28919,
     "bench/classics/feed": 27285,
-    "bench/classics/filetree": 26938,
-    "bench/classics/gallery": 28057,
-    "bench/classics/gantt": 43358,
+    "bench/classics/filetree": 26936,
+    "bench/classics/gallery": 28056,
+    "bench/classics/gantt": 43357,
     "bench/classics/hackernews": 26105,
     "bench/classics/jsontree": 24901,
     "bench/classics/kanban": 31128,
-    "bench/classics/logs": 28704,
-    "bench/classics/markdown": 30519,
+    "bench/classics/logs": 28703,
+    "bench/classics/markdown": 30518,
     "bench/classics/minesweeper": 21160,
     "bench/classics/playlist": 44492,
     "bench/classics/settings": 31208,
-    "bench/classics/shop": 28916,
+    "bench/classics/shop": 28914,
     "bench/classics/spreadsheet": 29600,
     "bench/classics/todomvc": 22103,
-    "bench/classics/trace": 31144,
+    "bench/classics/trace": 31142,
     "bench/classics/virtuallist": 25116,
     "bench/classics/wizard": 32143
   },
@@ -1168,6 +1168,20 @@
         "meltea/examples/served client": [
           6350,
           6352
+        ]
+      }
+    },
+    {
+      "date": "2026-11-17",
+      "reason": "React.cloneElement via compiled clones: new runtime functions in react.mjs rename minifier identifiers (+2 autocomplete, +3 diff; nine bundles smaller)",
+      "grown": {
+        "bench/classics/autocomplete": [
+          27103,
+          27105
+        ],
+        "bench/classics/diff": [
+          33780,
+          33783
         ]
       }
     }

@@ -306,21 +306,19 @@ each route with `Js.import(Route.make)` (needs `-typed`); see "Lazy components" 
 gets nothing under Melact, where `make` has no JavaScript export: write `Js.import(Route.make)`
 instead, which works under both. `React.preloadLazy(route)` fetches a route's chunk ahead of time.
 
-`React.cloneElement` cannot work on Melact's elements: a compiled element's props are compiled into its
-template, so nothing can merge new ones from outside. It raises at run time, and every call site gets the
-alert `unsupported` at build time (`-alert ++unsupported` makes it an error). What it is used for has a
-direct form:
-
-- A trigger that merges a ref and handlers into an arbitrary child (floating-ui's reference): a render
-  prop, `children(~ref, ~referenceProps)`. The child puts known fields on its own JSX, or, when the props
-  are an opaque object (`getReferenceProps(userProps)`), builds its element from it with
-  `ReactDOM.createElement("button", ~props=merged, children)`. A wrapper element is not a substitute here:
-  floating-ui measures the reference's box.
-- A list injecting state into each item (`isFocused`, `onClose`): a context the list provides and each
-  item reads with its own `~id`, or a `~renderItem` function.
-- Attributes spread onto a child (reason-react's `Spread`): give them to the child as a prop, and let it
-  apply them to its root, as typed props or as an object for `ReactDOM.createElement`; `data-*`, `aria-*`
-  and custom keys are written as React writes them.
+`React.cloneElement` works under `-typed` for elements written as JSX where the compiler can see them
+reach the clone. A component that clones a label (`children`, or any other), directly, through `let`,
+`React.Children.only`, `map`, `mapWithIndex`, `toArray`, any function that hands the elements to a callback,
+or by passing them on to another component's cloned label, records that on its `makeProps`, in its `.cmi`.
+Where a caller writes JSX into such a label (`<Tooltip> <button …/> </Tooltip>`, `<Menu> <Menu.Item …/> </Menu>`),
+each literal is compiled so that a clone can build it again with its props over the literal's own, as
+React does: a DOM element as one built from a props object, a component with every label it takes, also the
+optional ones the literal did not set (`isFocused` from a menu). Updates go through the usual guarded holes.
+Limits: a literal must be written in the call (a variable bound elsewhere, an element from JavaScript or from
+an array built at run time cannot be cloned, and its clone raises); a component reached through an open or a
+module alias (`module T = Tooltip`) is a compile error at the call, since its literals were compiled before
+typing could tell; a clone that the compiler cannot trace to a label is reported at build time by the alert
+`unsupported` (`-alert ++unsupported` makes it an error); the native server cannot clone.
 
 ## Limits today
 

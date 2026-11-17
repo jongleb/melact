@@ -1648,6 +1648,35 @@ JSX wrapper under one Suspense, click by click against reason-react on React 18)
 preloads, no fallback once preloaded). Mutants, each caught: the import not kept, its status not
 tracked from the start, `Js.import` of `make` left as it is.
 
+## Clones
+
+React's `cloneElement` reads an element's description and adds props to it; a Melact element is compiled
+code with its props in its template, so a clone has to be planned where the element is written. Under
+`-typed` the compiler does that from both ends.
+
+The component that clones is scanned on the typed tree of its `makeProps` (`Cloned`): a value comes from a
+label when it is that parameter, a `let` or `match` binding of it, `React.Children.only` or `toArray` of it,
+an element-typed parameter of a callback given to any function together with it (`Children.map`,
+`mapWithIndex`, `Array.mapi`, a helper of the app's own), or an item of an array of them. Identifiers are the
+type checker's, so shadowing and a list type of the app's own cannot mislead it, and names are resolved
+through opens and aliases. A label whose value reaches `React.cloneElement`, or is passed to a label another
+component clones, is recorded on `makeProps` as `[@melact.cloned ["children"]]`, which callers read from the
+`.cmi`.
+
+At a call the untyped pass nominates the labels the callee may clone (its fact, or this file's untyped
+scan), and compiles each JSX literal given in them twice: as usual, and as `React.clonable (fun overrides ->
+…)`, which a clone calls again with its props. A DOM literal becomes an element built from its props object
+with the clone's over it (`React.overridden`), patched prop by prop; a component literal reads each label
+through `React.override overrides "label" own`, and the typed pass adds every optional label of the callee's
+`makeProps` the literal left out, so that a clone can set it. The typed pass then keeps the clonable form
+only where the callee's fact, found through the file's environment, has the label, and makes a call with a
+literal in a cloned label it did not nominate (the callee reached through an open or an alias) a compile
+error. A `React.cloneElement` whose element it cannot trace to a label becomes `cloneElementUntraced`, which
+carries the alert `unsupported`. At run time `cloneElement` builds the element again with the merged props
+and keeps them for a clone of the clone. Laws: `test/team` `Hint`, `HintCard`, `Menu` and `Tabs` against
+reason-react on React 18, click by click; mutants that always keep the plain form, add no missing labels,
+ignore the overrides or do not follow callbacks each fail them.
+
 ## DOM elements built at run time
 
 Some reason-react code picks a tag at run time: `React.createElement (ReactDOM.stringToComponent

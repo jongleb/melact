@@ -964,6 +964,9 @@ let from_object ~loc builder labels =
 (** Marks a component React's [createElement], [jsx] or [memo] takes, which stays as it is. *)
 let taken = "melact.taken"
 
+(** Marks a component written as JSX that a clone builds again, whose labels read [__melact_overrides]. *)
+let overridden = "melact.overridden"
+
 (** Modules whose [use…] functions are React's hooks, from [-hook-modules]. *)
 let hook_modules = ref []
 
@@ -1239,6 +1242,9 @@ let mapper =
     (** The props builders the component rewrite made, which call the component's hooks inside, with their labels. *)
     val mutable made : (string * arg_label list) list = []
 
+    (** The labels each component of this file clones, by the names its [makeProps] has here, as the untyped pass sees them. *)
+    val mutable clones : (string * string list) list = []
+
     method private summary callee =
       match callee.pexp_desc with
       | Pexp_ident { txt = Lident name; _ } -> List.assoc_opt name custom
@@ -1465,13 +1471,51 @@ let mapper =
           let mapped =
             match List.concat_map snd expanded with
             | [] -> super#structure_item item
-            | makes ->
+            | makes -> (
                 let loc = item.pstr_loc in
-                super#structure_item
-                  (pstr_include ~loc
-                     (include_infos ~loc
-                        (pmod_structure ~loc
-                           ({ item with pstr_desc = Pstr_value (flag, List.map fst expanded) } :: makes))))
+                let cloned file structure =
+                  let found = Cloned.in_file file in
+                  let rec attached structure =
+                  List.map
+                    (fun item ->
+                      match item.pstr_desc with
+                      | Pstr_include ({ pincl_mod = { pmod_desc = Pmod_structure inner; _ } as included; _ } as infos) ->
+                          { item with pstr_desc = Pstr_include { infos with pincl_mod = { included with pmod_desc = Pmod_structure (attached inner) } } }
+                      | Pstr_value (flag, bindings) ->
+                          {
+                            item with
+                            pstr_desc =
+                              Pstr_value
+                                ( flag,
+                                  List.map
+                                    (fun binding ->
+                                      match
+                                        ( binding.pvb_pat.ppat_desc,
+                                          List.find_map
+                                            (fun (at, (scan : Cloned.t)) -> match Location.compare at binding.pvb_loc with 0 -> Some scan.labels | _ -> None)
+                                            found )
+                                      with
+                                      | Ppat_var { txt; _ }, Some (_ :: _ as labels) when List.mem txt (List.map snd !Cloned.components) ->
+                                          {
+                                            binding with
+                                            pvb_pat =
+                                              { binding.pvb_pat with ppat_attributes = Cloned.fact ~loc labels :: binding.pvb_pat.ppat_attributes };
+                                          }
+                                      | _, (Some _ | None) -> binding)
+                                    bindings );
+                          }
+                      | _ -> item)
+                    structure
+                  in
+                  attached structure
+                in
+                match
+                  Melhole_typed.Site.items
+                    [ { item with pstr_desc = Pstr_value (flag, List.map fst expanded) } ]
+                    ~decide:cloned
+                with
+                | sited ->
+                    super#structure_item (pstr_include ~loc (include_infos ~loc (pmod_structure ~loc (sited @ makes)))))
           in
           let decide file structure =
             let fact name =
@@ -1584,6 +1628,14 @@ let mapper =
               (self#qualified binding.pvb_expr)
           in
           made <- (props_name name, labels) :: made;
+          Cloned.components := (binding.pvb_loc, props_name name) :: !Cloned.components;
+          (match Cloned.candidates ~of_component:self#cloned_of (self#qualified binding.pvb_expr) with
+          | [] -> ()
+          | labels ->
+              clones <-
+                List.map (fun prefix -> (String.concat "." (prefix @ [ props_name name ]), labels))
+                  (List.init (List.length modules + 1) (fun taken -> List.rev (List.filteri (fun index _ -> index < taken) modules)))
+                @ clones);
           ( {
               binding with
               pvb_pat = pvar ~loc (props_name name);
@@ -1658,6 +1710,26 @@ let mapper =
                                    [%e from_object ~loc [%expr __melact_built] labels]))))
                       (Js.import [%e pexp_ident ~loc { loc; txt = builder }])])
                 (Option.bind (Melhole_typed.File.answer file question) (fun answer -> Typed.builder_labels answer builder)))
+      | Pexp_apply (({ pexp_desc = Pexp_ident { txt; _ }; _ } as callee), arguments)
+        when String.equal (Longident.last_exn txt) "cloneElement"
+             && not (List.exists (fun attribute -> String.equal attribute.attr_name.txt "melact.keyed") expression.pexp_attributes) ->
+          let question, asked = Melhole_typed.Question.expression callee in
+          Melhole_typed.Site.expression
+            { expression with pexp_desc = Pexp_apply (asked, List.map (fun (label, argument) -> (label, self#expression argument)) arguments) }
+            ~decide:(fun file escaped ->
+              match
+                ( List.exists
+                    (fun (_, (scan : Cloned.t)) -> List.exists (fun at -> Location.compare at loc = 0) scan.traced)
+                    (Cloned.in_file file),
+                  Option.bind (Melhole_typed.File.answer file question) (fun answer ->
+                      Option.bind (Ocaml_common.Longident.unflatten (Longident.flatten_exn txt)) (fun name ->
+                          match Ocaml_common.Env.find_value_by_name name answer.Melhole_typed.Answer.env with
+                          | exception Not_found -> None
+                          | path, _ -> Some (Ocaml_common.Path.name (Ocaml_common.Env.normalize_value_path None answer.Melhole_typed.Answer.env path)))),
+                  escaped.pexp_desc )
+              with
+              | false, Some "React.cloneElement", Pexp_apply (_, given) -> { escaped with pexp_desc = Pexp_apply ([%expr React.cloneElementUntraced], given) }
+              | (true | false), _, _ -> escaped)
       | Pexp_apply (callee, arguments)
         when List.exists (fun attribute -> String.equal attribute.attr_name.txt Lazy_import.lazy_props) expression.pexp_attributes ->
           Melhole_typed.Site.expression
@@ -1733,7 +1805,12 @@ let mapper =
           | Some attributes, Pexp_ident { txt = Lident tag; _ } ->
               Element.lowercase self#frontend ~loc ~attributes tag arguments
           | Some _, Pexp_ident { txt = Ldot (path, name); _ } ->
-              self#uppercase ~loc path
+              self#uppercase ~loc
+                ~given:
+                  (match List.exists (fun attribute -> String.equal attribute.attr_name.txt overridden) expression.pexp_attributes with
+                  | true -> `Overridden
+                  | false -> `Own)
+                path
                 (match name with "createElement" -> "make" | other -> other)
                 arguments
           | Some _, _ -> Location.raise_errorf ~loc "melact: JSX needs a tag or a module name")
@@ -1858,7 +1935,7 @@ let mapper =
           | (Labelled _ | Optional _), _ -> [ (label, self#expression value) ])
         arguments
 
-    method private uppercase ~loc path name arguments =
+    method private uppercase ~loc ~given path name arguments =
       match foreign path name with
       | `Foreign engine ->
           let key =
@@ -1877,14 +1954,109 @@ let mapper =
           Option.fold ~none:call
             ~some:(fun key -> [%expr React.of_child (Melhole.View.with_key ([%e key] : string) [%e unwrap ~loc call])])
             key
-      | `Melact -> self#melact_uppercase ~loc path name arguments
+      | `Melact -> self#melact_uppercase ~loc ~given path name arguments
 
-    method private melact_uppercase ~loc path name arguments =
+    method private cloned_of builder =
+      Option.value ~default:(Cloned.imported builder) (List.assoc_opt (String.concat "." (Longident.flatten_exn builder)) clones)
+
+    method private clonable expression =
+      let found = ref `None in
+      let rewritten =
+        (object
+           inherit Ast_traverse.map as super
+
+           method! expression inner =
+             match Option.map (fun _ -> self#clonable_literal inner) (Element.without_jsx inner.pexp_attributes) with
+             | Some (Some clonable) ->
+                 found := `Some;
+                 clonable
+             | Some None -> inner
+             | None -> super#expression inner
+        end)
+          #expression
+          expression
+      in
+      match !found with `Some -> Some rewritten | `None -> None
+
+    method private clonable_literal item =
+      let loc = item.pexp_loc in
+      match (Element.without_jsx item.pexp_attributes, item.pexp_desc) with
+      | Some _, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident tag; _ }; _ }, arguments) ->
+          let props =
+            List.filter (fun (label, _) -> match label with Labelled "children" | Nolabel -> false | Labelled _ | Optional _ -> true) arguments
+          and kids =
+            List.concat_map
+              (fun (label, value) ->
+                match label with
+                | Labelled "children" -> Option.value ~default:[ value ] (Element.list_items value)
+                | Labelled _ | Optional _ | Nolabel -> [])
+              arguments
+          in
+          Some
+            [%expr
+              React.clonable (fun __melact_overrides ->
+                  ReactDOM.createElement [%e estring ~loc tag]
+                    ~props:(React.overridden [%e pexp_apply ~loc [%expr ReactDOM.domProps] (props @ [ (Nolabel, [%expr ()]) ])] __melact_overrides)
+                    [%e pexp_array ~loc kids])]
+      | Some _, Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot (_, "createElement"); _ }; _ } as callee), arguments) ->
+          Some
+            [%expr
+              React.clonable (fun __melact_overrides ->
+                  [%e
+                    {
+                      item with
+                      pexp_attributes = attribute ~loc ~name:{ loc; txt = overridden } ~payload:(PStr []) :: item.pexp_attributes;
+                      pexp_desc =
+                        Pexp_apply
+                          ( callee,
+                            List.map
+                              (fun (label, value) ->
+                                match label with
+                                | Labelled ("key" | "children") | Nolabel -> (label, value)
+                                | Labelled name | Optional name ->
+                                    (label, [%expr React.override __melact_overrides [%e estring ~loc name] [%e value]]))
+                              arguments );
+                    }])]
+      | _ -> None
+
+    method private melact_uppercase ~loc ~given:origin path name arguments =
       let key =
         List.find_map
           (fun (label, value) ->
             match label with
             | Labelled "key" -> Some (self#expression value)
+            | Labelled _ | Optional _ | Nolabel -> None)
+          arguments
+      in
+      let builder = Ldot (path, props_name name) in
+      let nominated = self#cloned_of builder in
+      let question, asked = Melhole_typed.Question.expression (pexp_ident ~loc { loc; txt = builder }) in
+      let cloned_by file =
+        Option.value ~default:[]
+          (Option.bind (Melhole_typed.File.answer file question) (fun answer ->
+               Option.bind (Ocaml_common.Longident.unflatten (Longident.flatten_exn builder)) (fun found ->
+                   match Ocaml_common.Env.find_value_by_name found answer.Melhole_typed.Answer.env with
+                   | exception Not_found -> None
+                   | _, description -> Some (Cloned.known file description))))
+      in
+      let given label value =
+        match (List.mem label nominated, self#clonable value) with
+        | true, Some clonable ->
+            Melhole_typed.Site.choice (self#expression clonable)
+              ~among:[ (`Plain, self#expression value) ]
+              ~decide:(fun file -> match List.mem label (cloned_by file) with true -> None | false -> Some `Plain)
+        | (true | false), (Some _ | None) -> self#expression value
+      in
+      let unprepared =
+        List.filter_map
+          (fun (label, value) ->
+            match label with
+            | (Labelled name | Optional name)
+              when (not (List.mem name nominated))
+                   && List.exists
+                        (fun item -> Option.is_some (Element.without_jsx item.pexp_attributes))
+                        (Option.value ~default:[ value ] (Element.list_items value)) ->
+                Some name
             | Labelled _ | Optional _ | Nolabel -> None)
           arguments
       in
@@ -1894,25 +2066,53 @@ let mapper =
             match (label, Element.list_items value) with
             | Labelled "key", _ | Nolabel, _ -> []
             | Labelled "children", Some [] -> []
-            | Labelled "children", Some [ only ] -> [ (label, self#expression only) ]
+            | Labelled "children", Some [ only ] -> [ (label, given "children" only) ]
             | Labelled "children", Some items ->
                 [
                   ( label,
-                    [%expr React.array [%e pexp_array ~loc (List.map self#expression items)]]
+                    [%expr React.array [%e pexp_array ~loc (List.map (given "children") items)]]
                   );
                 ]
-            | (Labelled _ | Optional _), _ -> [ (label, self#expression value) ])
+            | (Labelled named | Optional named), _ -> [ (label, given named value) ])
           arguments
       in
       let call =
-        pexp_apply ~loc
-          (pexp_ident ~loc { loc; txt = Ldot (path, name) })
-          [
-            ( Nolabel,
-              pexp_apply ~loc
-                (pexp_ident ~loc { loc; txt = Ldot (path, props_name name) })
-                (passed @ [ (Nolabel, [%expr ()]) ]) );
-          ]
+        match origin with
+        | `Own ->
+            pexp_apply ~loc (pexp_ident ~loc { loc; txt = Ldot (path, name) }) [ (Nolabel, pexp_apply ~loc asked (passed @ [ (Nolabel, [%expr ()]) ])) ]
+        | `Overridden ->
+            let component, made = Melhole_typed.Question.expression (pexp_ident ~loc { loc; txt = Ldot (path, name) }) in
+            Melhole_typed.Site.expression
+              (pexp_apply ~loc made [ (Nolabel, pexp_apply ~loc asked (passed @ [ (Nolabel, [%expr ()]) ])) ])
+              ~decide:(fun file escaped ->
+                match (Option.bind (Melhole_typed.File.answer file component) (fun answer -> Typed.builder_labels answer builder), escaped.pexp_desc) with
+                | Some labels, Pexp_apply (made, [ (Nolabel, ({ pexp_desc = Pexp_apply (builder, given); _ } as props)) ]) ->
+                    let named = List.filter_map (fun (label, _) -> match label with Labelled name | Optional name -> Some name | Nolabel -> None) given in
+                    let missing =
+                      List.filter_map
+                        (fun label ->
+                          match label with
+                          | Optional name when not (String.equal name "key" || List.mem name named) ->
+                              Some (label, [%expr React.override __melact_overrides [%e estring ~loc name] None])
+                          | Optional _ | Labelled _ | Nolabel -> None)
+                        labels
+                    in
+                    { escaped with pexp_desc = Pexp_apply (made, [ (Nolabel, { props with pexp_desc = Pexp_apply (builder, missing @ given) }) ]) }
+                | (Some _ | None), _ -> escaped)
+      in
+      let call =
+        match unprepared with
+        | [] -> call
+        | _ :: _ ->
+            Melhole_typed.Site.expression call ~decide:(fun file escaped ->
+                match List.filter (fun label -> List.mem label (cloned_by file)) unprepared with
+                | [] -> escaped
+                | missed :: _ ->
+                    Location.raise_errorf ~loc
+                      "melact: %s clones the elements given as ~%s, which melact-ppx could not see before typing (it reaches \
+                       the component through an open or a module alias), so they were not compiled to be cloned: name the \
+                       component by its module here"
+                      (String.concat "." (Longident.flatten_exn path)) missed)
       in
       Option.fold ~none:call
         ~some:(fun key ->
@@ -1926,6 +2126,7 @@ let mapper =
   end
 
 let structure items =
+  Cloned.components := [];
   let items = Melhole_compiler.Interpolation.expanded items in
   let loc = Location.none in
   let calls_hook bearing expression =

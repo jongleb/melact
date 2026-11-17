@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `React.cloneElement`, compiled. Under `-typed` the compiler follows, on the typed tree of each component,
+  which labels reach a clone: directly, through `let` and `match`, `React.Children.only`, `toArray`, and any
+  function that hands the elements to a callback (`Children.map`, `mapWithIndex`, `Array.mapi`, …), or by
+  passing them to another component's cloned label. It records them on `makeProps` (`[@melact.cloned]`, in
+  the `.cmi`). A caller's JSX literals in such a label compile so that a clone builds them again with its
+  props over theirs (`React.clonable`): a DOM element from a props object, a component with every label its
+  `makeProps` takes, including optional ones the literal left out, so a menu can inject `isFocused`. The
+  untyped pass only nominates the calls; the typed pass decides each one from the fact, resolved through the
+  file's opens and aliases, and makes a call it could not prepare a compile error. A clone it cannot trace
+  gets the alert `unsupported`. `test/team`: `Hint` (a tooltip merging handlers and attributes into a DOM
+  element), `HintCard` (forwarding), `Menu` (`Children.mapWithIndex`, labels the items left out), `Tabs` (a
+  label other than children, `Children.only`, `toArray` with `Array.mapi`, literals in both branches of a
+  conditional), click by click against reason-react. Mutants, each caught: the plain form always chosen,
+  missing labels not added, overrides ignored, callbacks not followed.
+
 - Two from the team's `cloneElement` question. Every function Melact cannot do and that raises at run
   time ("not supported": `React.cloneElement` on the client, the server and natively,
   `ReactDOMTestUtils.isElementOfType`) carries the alert `unsupported`, so one build lists every call

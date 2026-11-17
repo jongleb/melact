@@ -104,8 +104,25 @@ val jsxKeyed : 'props component -> 'props -> ?key:string -> unit -> element
 val jsxsKeyed : 'props component -> 'props -> ?key:string -> unit -> element
 
 (** Fails, as on the client: pass props to the component instead. *)
+(** [cloneElement element props]: [element] as its creation site would build it with [props] over its own, as
+    React's; melact-ppx compiles the sites whose elements reach a clone so that they can be built again. *)
 val cloneElement : element -> 'props -> element
-[@@alert unsupported "melact: React.cloneElement raises at run time: a compiled element's props are compiled into its template and cannot be merged from outside; pass the props to the component (a render prop, a context, or attributes the child applies itself; see docs/migration.md)"]
+
+(** Props a clone gives over an element's own. *)
+type overrides
+
+(** [clonable make]: the element [make] builds with no overrides, which [cloneElement] builds again with its props. *)
+val clonable : (overrides -> element) -> element
+
+(** [override overrides name own]: the prop a clone gives for [name], else [own]. *)
+val override : overrides -> string -> 'value -> 'value
+
+(** [overridden props overrides]: a DOM element's props object with a clone's props over it. *)
+val overridden : 'props -> overrides -> 'props
+
+(** A clone of an element whose creation site melact-ppx could not see: it works only if that site was compiled clonable. *)
+val cloneElementUntraced : element -> 'props -> element
+[@@alert unsupported "melact: this element's creation site cannot be traced to here, so it may not be clonable: clone a prop that callers write inline as JSX (children, or another label), directly or through let, React.Children.only, map, mapWithIndex or toArray"]
 val setDisplayName : ('props -> element) -> string -> unit
 val displayName : ('props -> element) -> string option
 val createContext : 'value -> 'value Context.t

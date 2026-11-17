@@ -85,7 +85,14 @@ let jsxKeyed make props ?key:_ () = make props
 let jsxsKeyed make props ?key:_ () = make props
 
 let cloneElement _ _ =
-  failwith "melact: React.cloneElement is not supported; pass props to the component instead"
+  failwith "melact: React.cloneElement is not supported natively; render the cloned elements on a Melange server or on the client"
+
+type overrides = Overrides
+
+let clonable make = make Overrides
+let override Overrides _ own = own
+let overridden props Overrides = props
+let cloneElementUntraced element props = cloneElement element props
 
 let setDisplayName _ _ = ()
 let displayName _ = None

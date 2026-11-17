@@ -100,9 +100,20 @@ val jsxs : 'props component -> 'props -> element
 val jsxKeyed : 'props component -> 'props -> ?key:string -> unit -> element
 val jsxsKeyed : 'props component -> 'props -> ?key:string -> unit -> element
 
-(** Fails, as on the client: pass props to the component instead. *)
+(** Fails natively: a clone needs the props objects of a Melange build. *)
 val cloneElement : element -> 'props -> element
-[@@alert unsupported "melact: React.cloneElement raises at run time: a compiled element's props are compiled into its template and cannot be merged from outside; pass the props to the component (a render prop, a context, or attributes the child applies itself; see docs/migration.md)"]
+[@@alert unsupported "melact: React.cloneElement fails on the native server: render the cloned elements on a Melange server or on the client"]
+
+(** Props a clone gives over an element's own; natively there are none, since [cloneElement] fails. *)
+type overrides
+
+val clonable : (overrides -> element) -> element
+val override : overrides -> string -> 'value -> 'value
+val overridden : 'props -> overrides -> 'props
+
+val cloneElementUntraced : element -> 'props -> element
+[@@alert unsupported "melact: React.cloneElement fails on the native server: render the cloned elements on a Melange server or on the client"]
+
 val setDisplayName : ('props -> element) -> string -> unit
 val displayName : ('props -> element) -> string option
 val createContext : 'value -> 'value Context.t
