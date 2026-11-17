@@ -15,28 +15,28 @@
     "bench/classics/calendar": 43940,
     "bench/classics/chat": 28933,
     "bench/classics/chess": 28720,
-    "bench/classics/conduit": 30827,
-    "bench/classics/dashboard": 32373,
-    "bench/classics/datagrid": 30172,
+    "bench/classics/conduit": 30826,
+    "bench/classics/dashboard": 32374,
+    "bench/classics/datagrid": 30174,
     "bench/classics/diff": 33780,
-    "bench/classics/email": 30337,
+    "bench/classics/email": 30345,
     "bench/classics/eventtable": 28919,
     "bench/classics/feed": 27285,
     "bench/classics/filetree": 26938,
     "bench/classics/gallery": 28057,
-    "bench/classics/gantt": 43359,
+    "bench/classics/gantt": 43358,
     "bench/classics/hackernews": 26105,
     "bench/classics/jsontree": 24901,
     "bench/classics/kanban": 31128,
-    "bench/classics/logs": 28703,
-    "bench/classics/markdown": 30518,
+    "bench/classics/logs": 28704,
+    "bench/classics/markdown": 30519,
     "bench/classics/minesweeper": 21160,
     "bench/classics/playlist": 44492,
     "bench/classics/settings": 31208,
-    "bench/classics/shop": 28914,
+    "bench/classics/shop": 28916,
     "bench/classics/spreadsheet": 29600,
     "bench/classics/todomvc": 22103,
-    "bench/classics/trace": 31142,
+    "bench/classics/trace": 31144,
     "bench/classics/virtuallist": 25116,
     "bench/classics/wizard": 32143
   },
@@ -1120,6 +1120,40 @@
         "meltea/examples/served client": [
           6349,
           6350
+        ]
+      }
+    },
+    {
+      "date": "2026-11-17",
+      "reason": "minifier names shift in bench/classics from View.fixed in view.mjs (Meltea's change); unminified bundles are identical with and without the cloneElement/unknown-props change (approved by the user 2026-11-17)",
+      "grown": {
+        "bench/classics/dashboard": [
+          32373,
+          32374
+        ],
+        "bench/classics/datagrid": [
+          30172,
+          30174
+        ],
+        "bench/classics/email": [
+          30337,
+          30345
+        ],
+        "bench/classics/logs": [
+          28703,
+          28704
+        ],
+        "bench/classics/markdown": [
+          30518,
+          30519
+        ],
+        "bench/classics/shop": [
+          28914,
+          28916
+        ],
+        "bench/classics/trace": [
+          31142,
+          31144
         ]
       }
     }

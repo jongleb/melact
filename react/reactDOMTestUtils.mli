@@ -9,6 +9,7 @@ val isElement : 'element -> bool [@@deprecated "ReactDOMTestUtils is deprecated,
 
 (** Melact keeps no component type on an element, so this raises, as [React.cloneElement] does. *)
 val isElementOfType : 'element -> 'props React.component -> bool [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
+[@@alert unsupported "melact: ReactDOMTestUtils.isElementOfType raises at run time: an element keeps no component type"]
 
 val isDOMComponent : 'element -> bool [@@deprecated "ReactDOMTestUtils is deprecated, and will be removed in next version. Please use melange-testing-library instead."]
 

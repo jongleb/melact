@@ -60,6 +60,7 @@ type applying =
   | Ref_value
   | Inner_html_value
   | Skipped
+  | Unknown_attribute of string  (** A prop React does not know either: written as React 18 writes one. *)
 
 [@@@melact.dom_props]
 
@@ -84,6 +85,10 @@ let dom tag props children =
         | Default_checked_prop -> Some (Melact_server.Dom.Default_checked (match (read props name : bool) with true -> On | false -> Off))
         | Style_value -> Some (Melact_server.Dom.Style (Style.declarations (read props name)))
         | Inner_html_value -> Some (Melact_server.Dom.Inner_html (html_of (read props name)))
+        | Unknown_attribute attribute ->
+            Option.map
+              (fun text -> Melact_server.Dom.Attribute (attribute, text))
+              (Js.Nullable.toOption (unknown_attribute attribute (read props name)))
         | Event _ | Ref_value | Skipped -> None)
       (List.filter
          (fun name -> not (String.equal name "key" || String.equal name "children"))

@@ -278,5 +278,5 @@ let () =
       (match given with [] -> "" | _ -> "fun " ^ String.concat " " given ^ " -> ")
       (String.concat " " (String.concat "." (name :: path @ [ description.pval_name.txt ]) :: given))
   in
-  Format.printf "@[<v>[@@@@@@alert \"-deprecated\"]@,module type Upstream = sig@,%a@,end@,module _ : Upstream = %s@,%s@]@." Pprintast.signature kept name
+  Format.printf "@[<v>[@@@@@@alert \"-deprecated\"]@,[@@@@@@alert \"-unsupported\"]@,module type Upstream = sig@,%a@,end@,module _ : Upstream = %s@,%s@]@." Pprintast.signature kept name
     (String.concat "\n" (List.map called values))

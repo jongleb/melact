@@ -306,6 +306,22 @@ each route with `Js.import(Route.make)` (needs `-typed`); see "Lazy components" 
 gets nothing under Melact, where `make` has no JavaScript export: write `Js.import(Route.make)`
 instead, which works under both. `React.preloadLazy(route)` fetches a route's chunk ahead of time.
 
+`React.cloneElement` cannot work on Melact's elements: a compiled element's props are compiled into its
+template, so nothing can merge new ones from outside. It raises at run time, and every call site gets the
+alert `unsupported` at build time (`-alert ++unsupported` makes it an error). What it is used for has a
+direct form:
+
+- A trigger that merges a ref and handlers into an arbitrary child (floating-ui's reference): a render
+  prop, `children(~ref, ~referenceProps)`. The child puts known fields on its own JSX, or, when the props
+  are an opaque object (`getReferenceProps(userProps)`), builds its element from it with
+  `ReactDOM.createElement("button", ~props=merged, children)`. A wrapper element is not a substitute here:
+  floating-ui measures the reference's box.
+- A list injecting state into each item (`isFocused`, `onClose`): a context the list provides and each
+  item reads with its own `~id`, or a `~renderItem` function.
+- Attributes spread onto a child (reason-react's `Spread`): give them to the child as a prop, and let it
+  apply them to its root, as typed props or as an object for `ReactDOM.createElement`; `data-*`, `aria-*`
+  and custom keys are written as React writes them.
+
 ## Limits today
 
 - A program run by `MelteaProgram` is not read by `meltea-ppx` for the fields each message

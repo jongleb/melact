@@ -1662,7 +1662,12 @@ says how each prop reaches the element: an attribute (text, flag, `"true"`/`"fal
 property, a controlled value, a delegated event, a style, a ref or inner HTML. A patch with the same
 tag keeps the element, writes only the props whose values changed (`===`), removes those that went
 and updates the children; another tag builds a new element. An app that does not use these functions
-does not carry the table. A dual law builds elements all five ways from random tags, classes,
+does not carry the table. A prop the table does not have is one React does not know either
+(`data-state`, `aria-expanded` as a key, a custom attribute from floating-ui's `getReferenceProps`), and it is
+written as React 18 writes one, on the client and on the server: as an attribute of its own name with the
+value as text, a boolean only for `data-*` and `aria-*` (as `"true"`/`"false"`), and nothing for `null`,
+`undefined`, a function, a symbol, a name starting with `on` or an invalid name; a later render without it
+removes it ([`test/team`](../test/team) `Spread`, against reason-react). A dual law builds elements all five ways from random tags, classes,
 titles, flags, styles, handlers and children, and checks the page and the element's identity against
 a model after every render and click, under React 18 and Melact.
 

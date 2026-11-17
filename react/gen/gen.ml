@@ -145,18 +145,34 @@ let () =
           ])
         ([ ("key", "string"); ("children", "React.element") ] @ List.map (fun (name, kind) -> (name, label_type kind)) props)
   in
+  let unknown =
+    [
+      "";
+      "let unknown_attribute : string -> 'value -> string Js.Nullable.t =";
+      "  [%mel.raw";
+      "    {|function (name, value) {";
+      "  if (name === \"innerHTML\" || (name.length > 2 && (name[0] === \"o\" || name[0] === \"O\") && (name[1] === \"n\" || name[1] === \"N\"))) return null;";
+      "  if (!/^[:A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD][:A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040]*$/.test(name)) return null;";
+      "  if (value === null || value === undefined || typeof value === \"function\" || typeof value === \"symbol\") return null;";
+      "  if (typeof value === \"boolean\") { var prefix = name.toLowerCase().slice(0, 5); return prefix === \"data-\" || prefix === \"aria-\" ? \"\" + value : null; }";
+      "  return \"\" + value;";
+      "}|}]";
+    ]
+  in
   let generated =
     match part with
     | "impl" ->
         external_props
         @ [ ""; "let applying name ="; "  match name with" ]
         @ List.map (fun (label, kind) -> Printf.sprintf "  | %S -> %s" label (applying kind)) props
-        @ [ "  | _ -> Skipped" ]
+        @ [ "  | name -> Unknown_attribute name" ]
+        @ unknown
     | "server_impl" ->
         external_props
         @ [ ""; "let applying name ="; "  match name with" ]
         @ List.map (fun (label, kind) -> Printf.sprintf "  | %S -> %s" label (server_applying (label, kind))) props
-        @ [ "  | _ -> Skipped" ]
+        @ [ "  | name -> Unknown_attribute name" ]
+        @ unknown
     | "native_impl" ->
         [
           "type domProps = { children : React.element option; props : Melact_server.Dom.prop list }";

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Two from the team's `cloneElement` question. Every function Melact cannot do and that raises at run
+  time ("not supported": `React.cloneElement` on the client, the server and natively,
+  `ReactDOMTestUtils.isElementOfType`) carries the alert `unsupported`, so one build lists every call
+  site; a law in `test/team` holds every future one to it. Elements built at run time from a props object
+  write the props React does not know either, as React 18 writes them, on the client and the server:
+  `data-*`, `aria-*` (booleans as text), custom attributes; functions, `null`, `on*` names and invalid
+  names are dropped, and a prop a later render leaves out is removed. They were all skipped.
+  `docs/migration.md` shows what to write instead of `cloneElement`. Laws: `test/team` `Spread`
+  against reason-react, `unsupported.test.mjs`. Mutants, each caught: unknown props skipped, not removed
+  when gone, `data-*` booleans dropped, an alert taken off.
+
 - Lazy components, the team's request. A binding to npm's `lazy` becomes `React.lazy_`, a boundary
   of the compiler: the route keeps its own instance, hooks and memo cells, its first render (or
   `React.preloadLazy`) starts the import once, and until the code arrives the nearest Suspense

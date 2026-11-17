@@ -105,6 +105,7 @@ val jsxsKeyed : 'props component -> 'props -> ?key:string -> unit -> element
 
 (** Fails, as on the client: pass props to the component instead. *)
 val cloneElement : element -> 'props -> element
+[@@alert unsupported "melact: React.cloneElement raises at run time: a compiled element's props are compiled into its template and cannot be merged from outside; pass the props to the component (a render prop, a context, or attributes the child applies itself; see docs/migration.md)"]
 val setDisplayName : ('props -> element) -> string -> unit
 val displayName : ('props -> element) -> string option
 val createContext : 'value -> 'value Context.t

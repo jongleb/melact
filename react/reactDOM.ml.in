@@ -457,6 +457,7 @@ type applying =
   | Ref_value
   | Inner_html_value
   | Skipped
+  | Unknown_attribute of string  (** A prop React does not know either: written as React 18 writes one. *)
 
 [@@@melact.dom_props]
 
@@ -541,6 +542,11 @@ let apply built props name =
           | (Shown | Released), _ -> ())
   | Inner_html_value -> Dom_api.set_inner_html element (read props name)##__html
   | Skipped -> ()
+  | Unknown_attribute attribute ->
+      Option.fold
+        ~none:(Dom_api.remove_attribute element attribute)
+        ~some:(Dom_api.set_attribute element attribute)
+        (Js.Nullable.toOption (unknown_attribute attribute (read props name)))
 
 let clear built name =
   let element = built.element in
@@ -561,6 +567,7 @@ let clear built name =
   | Inner_html_value -> Dom_api.set_inner_html element ""
   | Ref_value -> Option.iter (fun reference -> Ref.attach reference Js.Nullable.null) (Js.Undefined.toOption (lookup built.shown name))
   | Skipped -> ()
+  | Unknown_attribute attribute -> Dom_api.remove_attribute element attribute
 
 let dom_built =
   lazy
@@ -625,7 +632,7 @@ let dom tag props children =
                         apply built props name)
                 | Text_attribute _ | Flag_attribute _ | Booleanish_attribute _ | Integer_attribute _
                 | Decimal_attribute _ | Property_value _ | Controlled_value _ | Event _ | Style_value
-                | Inner_html_value | Skipped ->
+                | Inner_html_value | Skipped | Unknown_attribute _ ->
                     if not (Dom_api.same (read old name) (read props name)) then apply built props name)
               (given props);
             built.shown <- props;
