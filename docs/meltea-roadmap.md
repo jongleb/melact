@@ -277,18 +277,21 @@ than Svelte in `filter active` (1.28, 1.21 at 4x: about 1,650 of 5,000 rows leav
 `filter active` was not the rows: removing them took 2.6 ms in Meltea and 2.7 ms in Svelte. Half
 of Meltea's 12 ms was the native `click` following the filter link's `href="#"`, a fragment
 navigation that lays out the page, because a Meltea handler could not cancel the default action;
-Svelte's and React's do. `onClick=(Html.prevent (Show target))` now does: `meltea-ppx` takes the
-wrapper away and writes `preventDefault` into the handler, so the runtime is unchanged (a law in
-`test/meltea/prevent_laws_test.mlx`, with two mutants: never cancelling, cancelling every
-handler). The same step then takes 6.5 ms against Svelte's 10.4 in a profile, and in the
+Svelte's and React's do. Now the element says it: a link to `#` goes nowhere, so `meltea-ppx`
+writes `preventDefault` into its `onClick` at build time; an element with `onDrop` takes drops, so
+its `drop`, `dragenter` and `dragover` are cancelled, the last two with no message when the view
+gives none; `onSubmit` was already cancelled. Elsewhere `Html.prevent message` asks for it. The
+runtime is unchanged (a law in `test/meltea/prevent_laws_test.mlx`, with six mutants: never
+cancelling, cancelling every handler, a link to `#` not cancelled, any link cancelled, no
+`dragover` added, only `drop` cancelled). The same step then takes 6.5 ms against Svelte's 10.4 in a profile, and in the
 scenario 0.92 of Svelte's time. Measured again with it: the geometric mean is 0.72 of React's
 and 0.85 of Svelte's (1x; 0.73 and 0.87 at 4x), Meltea faster than Svelte in 9 of 12 steps at
 both rates and slower only in `toggle all` at 4x (1.08); the heap is 1.73 MB (1.69 at 4x).
 
-Kanban, next, needs what Meltea does not have yet: a portal (its dialog renders into `#portal`),
-a subscription to the document's keys (Escape closes the dialog), a way to cancel `dragover`
-without sending a message (without it a browser never fires `drop`) and the dragged card in the model instead of
-`dataTransfer`.
+Kanban, next, needs a portal (its dialog renders into `#portal`) and the dragged card in the
+model instead of `dataTransfer`. Escape now comes through `Sub.key_down`, and its columns' `onDrop`
+cancels what a browser needs cancelled to drop there.
+
 
 ## Guards
 
