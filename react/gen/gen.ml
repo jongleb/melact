@@ -37,7 +37,10 @@ let applying (kind : Melhole_compiler.Dom_props.kind) =
   | Attribute (name, Text) -> Printf.sprintf "Text_attribute %S" name
   | Attribute (name, Flag) -> Printf.sprintf "Flag_attribute %S" name
   | Attribute (name, Booleanish) -> Printf.sprintf "Booleanish_attribute %S" name
-  | Attribute (name, Integer) -> Printf.sprintf "Integer_attribute %S" name
+  | Attribute (name, Integer) -> (
+      match Melhole_compiler.Dom_props.positive name with
+      | `Positive -> Printf.sprintf "Positive_attribute %S" name
+      | `Any -> Printf.sprintf "Integer_attribute %S" name)
   | Attribute (name, Decimal) -> Printf.sprintf "Decimal_attribute %S" name
   | Property (name, _) -> Printf.sprintf "Property_value %S" name
   | Controlled (name, _) -> Printf.sprintf "Controlled_value %S" name

@@ -449,6 +449,7 @@ type applying =
   | Flag_attribute of string
   | Booleanish_attribute of string
   | Integer_attribute of string
+  | Positive_attribute of string  (** A number React writes only from 1 up: cols, rows, size, span. *)
   | Decimal_attribute of string
   | Property_value of string
   | Controlled_value of string
@@ -494,6 +495,10 @@ let apply built props name =
   | Booleanish_attribute attribute ->
       Dom_api.set_attribute element attribute (match (read props name : bool) with true -> "true" | false -> "false")
   | Integer_attribute attribute -> Dom_api.set_attribute element attribute (string_of_int (read props name : int))
+  | Positive_attribute attribute -> (
+      match (read props name : int) with
+      | value when value >= 1 -> Dom_api.set_attribute element attribute (string_of_int value)
+      | _ -> Dom_api.remove_attribute element attribute)
   | Decimal_attribute attribute -> Dom_api.set_attribute element attribute (Js.Float.toString (read props name : float))
   | Property_value property -> Dom_api.set_property element property (read props name)
   | Controlled_value property ->
@@ -555,6 +560,7 @@ let clear built name =
   | Flag_attribute attribute
   | Booleanish_attribute attribute
   | Integer_attribute attribute
+  | Positive_attribute attribute
   | Decimal_attribute attribute ->
       Dom_api.remove_attribute element attribute
   | Property_value property -> Dom_api.set_property element property Js.undefined
@@ -580,7 +586,13 @@ let dom_built =
       built.life <- Released;
       clear built "ref"))
 
-let given props = Js.Array.filter ~f:(fun name -> not (String.equal name "key" || String.equal name "children")) (keys props)
+let given props =
+  Js.Array.filter
+    ~f:(fun name ->
+      match (name, Js.Nullable.toOption (read props name : _ Js.Nullable.t)) with
+      | ("key" | "children"), _ | _, None -> false
+      | _, Some _ -> true)
+    (keys props)
 
 let dom tag props children =
   let content () =
@@ -618,7 +630,7 @@ let dom tag props children =
         | Some built when String.equal built.tag tag ->
             let old = built.shown in
             Array.iter
-              (fun name -> match Js.Undefined.toOption (lookup props name) with None -> clear built name | Some _ -> ())
+              (fun name -> match Js.Nullable.toOption (read props name : _ Js.Nullable.t) with None -> clear built name | Some _ -> ())
               (given old);
             Array.iter
               (fun name ->
@@ -630,7 +642,7 @@ let dom tag props children =
                     | _ ->
                         clear built name;
                         apply built props name)
-                | Text_attribute _ | Flag_attribute _ | Booleanish_attribute _ | Integer_attribute _
+                | Text_attribute _ | Flag_attribute _ | Booleanish_attribute _ | Integer_attribute _ | Positive_attribute _
                 | Decimal_attribute _ | Property_value _ | Controlled_value _ | Event _ | Style_value
                 | Inner_html_value | Skipped | Unknown_attribute _ ->
                     if not (Dom_api.same (read old name) (read props name)) then apply built props name)

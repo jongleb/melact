@@ -2136,9 +2136,9 @@ let mapper =
                 | [] -> escaped
                 | missed :: _ ->
                     Location.raise_errorf ~loc
-                      "melact: %s clones the elements given as ~%s, which melact-ppx could not see before typing (it reaches \
-                       the component through an open or a module alias), so they were not compiled to be cloned: name the \
-                       component by its module here"
+                      "melact: %s clones the elements given as ~%s, which melact-ppx could not see before typing, so they were not \
+                       compiled to be cloned: if the component is reached through an open or a module alias, name it by its \
+                       module here"
                       (String.concat "." (Longident.flatten_exn path)) missed)
       in
       Option.fold ~none:call

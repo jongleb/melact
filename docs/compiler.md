@@ -1682,10 +1682,18 @@ the typed scan of the whole file, components or not, sees the clonable form as a
 a clone it traces. A clone is traced only when every element that can reach it comes from a label or a
 literal: a `match` with one branch of unknown origin (an element taken out of an option, a call) leaves it
 `cloneElementUntraced`. At run time `cloneElement` builds the element again with the merged props
-and keeps them for a clone of the clone. Laws: `test/team` `Hint`, `HintCard`, `Menu`, `Tabs` and `Framed` against
+and keeps them for a clone of the clone. Laws: [`test/clones`](../test/clones), random renders with random clone plans (props objects over an element's
+labels and DOM props, `undefined` and click handlers among them, clones of clones) through every way an element
+reaches a clone, against reason-react on React 18, page and handlers after every render and click; in
+`test/typed/laws`, random chains of `let`, `if`, `match` and `Children.only` over labels, literals and calls the
+scan does not follow, cloned directly or in a callback of `List.fold_left`: a clone is traced exactly when every
+leaf is a label or a literal, with those labels and literals recorded, and the untyped pass nominates every label
+the typed scan finds; `test/team` `Hint`, `HintCard`, `Menu`, `Tabs` and `Framed` against
 reason-react on React 18, click by click, and `Framed.Partial` compiled untraced; mutants that always keep the
-plain form, add no missing labels, ignore the overrides, do not follow callbacks, nominate no literal or trace a
-clone some of whose branches are unknown each fail them.
+plain form, add no missing labels, ignore the overrides, do not follow callbacks, nominate no literal, trace a
+clone some of whose branches are unknown, merge in the wrong order, forget a clone's props in its clone, read
+undefined as a value, do not follow a `let` in an expression or `Children.only`, or write `size="0"`, each fail
+them.
 
 ## DOM elements built at run time
 
@@ -1706,7 +1714,9 @@ does not carry the table. A prop the table does not have is one React does not k
 written as React 18 writes one, on the client and on the server: as an attribute of its own name with the
 value as text, a boolean only for `data-*` and `aria-*` (as `"true"`/`"false"`), and nothing for `null`,
 `undefined`, a function, a symbol, a name starting with `on` or an invalid name; a later render without it
-removes it ([`test/team`](../test/team) `Spread`, against reason-react). A dual law builds elements all five ways from random tags, classes,
+removes it ([`test/team`](../test/team) `Spread`, against reason-react). A known prop given as `null` or
+`undefined` is not given, and one that held a value before is removed; `cols`, `rows`, `size` and `span`
+are written only from 1 up, as React writes them and as compiled templates already did. A dual law builds elements all five ways from random tags, classes,
 titles, flags, styles, handlers and children, and checks the page and the element's identity against
 a model after every render and click, under React 18 and Melact.
 

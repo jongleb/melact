@@ -506,4 +506,131 @@ let component_laws =
       (fun case -> component_found case = component_expected case);
   ]
 
-let () = exit (QCheck_base_runner.run_tests ~verbose:true (mutability_laws @ component_laws))
+(** Where the element a generated clone is given comes from. *)
+type origin =
+  | From_label of string  (** A labelled parameter of the component: [children] or [trigger]. *)
+  | From_literal  (** A JSX literal, as the untyped pass compiles a clonable one. *)
+  | From_unknown  (** The result of a function the scan does not follow. *)
+  | Bound of origin  (** [let element = … in element]. *)
+  | Either of origin * origin  (** [if flag then … else …]. *)
+  | Cases of origin list  (** [match n with 0 -> … | … | _ -> …], the last one under [_]. *)
+  | Only of origin  (** [React.Children.only …]. *)
+
+(** Where the generated component clones its element. *)
+type site = Direct | Folded  (** [Folded]: in a callback of [List.fold_left], given the element as its start. *)
+
+let origin =
+  let open Gen in
+  sized_size (int_bound 4)
+  @@ fix (fun origin size ->
+         let leaves = [ map (fun label -> From_label label) (oneof_list [ "children"; "trigger" ]); pure From_literal; pure From_unknown ] in
+         match size with
+         | 0 -> oneof leaves
+         | _ ->
+             let smaller = origin (size / 2) in
+             oneof
+               (leaves
+               @ [
+                   map (fun inner -> Bound inner) smaller;
+                   map2 (fun yes no -> Either (yes, no)) smaller smaller;
+                   map (fun cases -> Cases cases) (list_size (int_range 1 3) smaller);
+                   map (fun inner -> Only inner) smaller;
+                 ]))
+
+let clone_case = Gen.pair origin (Gen.oneof_list [ Direct; Folded ])
+
+let clone_source (tree, site) =
+  let rec written tree =
+    match tree with
+    | From_label label -> label
+    | From_literal -> "(React.clonable (fun () -> React.null))"
+    | From_unknown -> "(unknown ())"
+    | Bound inner -> Printf.sprintf "(let element = %s in element)" (written inner)
+    | Either (yes, no) -> Printf.sprintf "(if flag then %s else %s)" (written yes) (written no)
+    | Cases cases ->
+        Printf.sprintf "(match n with %s)"
+          (String.concat " | "
+             (List.mapi
+                (fun at case -> Printf.sprintf "%s -> %s" (match at = List.length cases - 1 with true -> "_" | false -> string_of_int at) (written case))
+                cases))
+    | Only inner -> Printf.sprintf "(React.Children.only %s)" (written inner)
+  in
+  String.concat "\n"
+    [
+      "module React = struct";
+      "  type element";
+      "  let null : element = Obj.magic 0";
+      "  let clonable (make : unit -> element) : element = make ()";
+      "  let cloneElement (element : element) (_ : 'props) : element = element";
+      "  module Children = struct let only (element : element) : element = element end";
+      "end";
+      "let unknown () = React.null";
+      "let makeProps ~(children : React.element) ~(trigger : React.element) ~(flag : bool) ~(n : int) () =";
+      (match site with
+      | Direct -> Printf.sprintf "  React.cloneElement %s ()" (written tree)
+      | Folded -> Printf.sprintf "  List.fold_left (fun element plan -> React.cloneElement element plan) %s [ () ]" (written tree));
+    ]
+
+let clone_expected (tree, _) =
+  let rec leaves tree =
+    match tree with
+    | From_label label -> [ `Label label ]
+    | From_literal -> [ `Literal ]
+    | From_unknown -> [ `Unknown ]
+    | Bound inner | Only inner -> leaves inner
+    | Either (yes, no) -> leaves yes @ leaves no
+    | Cases cases -> List.concat_map leaves cases
+  in
+  let found = leaves tree in
+  match List.mem `Unknown found with
+  | true -> (`Untraced, [], 0)
+  | false ->
+      ( `Traced,
+        List.sort_uniq String.compare (List.filter_map (fun leaf -> match leaf with `Label label -> Some label | `Literal | `Unknown -> None) found),
+        List.length (List.filter (fun leaf -> leaf = `Literal) found) )
+
+let clone_found case =
+  let structure = Ppxlib.Parse.implementation (Lexing.from_string (clone_source case)) in
+  let binding =
+    List.find_map
+      (fun item ->
+        match item.Ppxlib.pstr_desc with
+        | Pstr_value (_, [ ({ pvb_pat = { ppat_desc = Ppat_var { txt = "makeProps"; _ }; _ }; _ } as binding) ]) -> Some binding
+        | _ -> None)
+      structure
+  in
+  Option.bind binding (fun binding ->
+      Melact_ppx.Cloned.components := [ (binding.pvb_loc, "makeProps") ];
+      Option.bind (Melhole_typed.File.of_structure structure) (fun file ->
+          Option.map
+            (fun (_, (scan : Melact_ppx.Cloned.t)) ->
+              ( (match scan.traced with [] -> `Untraced | _ :: _ -> `Traced),
+                scan.labels,
+                List.length scan.literals,
+                Melact_ppx.Cloned.candidates ~of_component:(fun _ -> []) binding.pvb_expr ))
+            (List.nth_opt (Melact_ppx.Cloned.in_file file) 0)))
+
+let clone_laws =
+  let print (traced, labels, literals) =
+    Printf.sprintf "%s [%s] %d literals" (match traced with `Traced -> "traced" | `Untraced -> "untraced") (String.concat "; " labels) literals
+  in
+  let shown case =
+    clone_source case ^ "\nexpected "
+    ^ print (clone_expected case)
+    ^ ", found "
+    ^ Option.fold ~none:"nothing" ~some:(fun (traced, labels, literals, _) -> print (traced, labels, literals)) (clone_found case)
+  in
+  [
+    Test.make ~count:400
+      ~name:"Clones: a clone is traced exactly when every element that can reach it comes from a label or a literal, which it records"
+      ~print:shown clone_case
+      (fun case ->
+        Option.map (fun (traced, labels, literals, _) -> (traced, labels, literals)) (clone_found case) = Some (clone_expected case));
+    Test.make ~count:400 ~name:"Clones: the untyped pass nominates every label the typed scan finds cloned" ~print:shown clone_case
+      (fun case ->
+        Option.fold ~none:false
+          ~some:(fun (_, labels, _, nominated) -> List.for_all (fun label -> List.mem label nominated) labels)
+          (clone_found case));
+  ]
+
+let () = exit (QCheck_base_runner.run_tests ~verbose:true (mutability_laws @ component_laws @ clone_laws))

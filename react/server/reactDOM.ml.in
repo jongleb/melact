@@ -50,6 +50,7 @@ type applying =
   | Flag_attribute of string
   | Booleanish_attribute of string
   | Integer_attribute of string
+  | Positive_attribute of string  (** A number React writes only from 1 up: cols, rows, size, span. *)
   | Decimal_attribute of string
   | Property_value of string
   | Controlled_value of string
@@ -75,6 +76,8 @@ let dom tag props children =
         | Booleanish_attribute attribute ->
             Some (Melact_server.Dom.Attribute (attribute, match (read props name : bool) with true -> "true" | false -> "false"))
         | Integer_attribute attribute -> Some (Melact_server.Dom.Number (attribute, read props name))
+        | Positive_attribute attribute -> (
+            match (read props name : int) with value when value >= 1 -> Some (Melact_server.Dom.Number (attribute, value)) | _ -> None)
         | Decimal_attribute attribute -> Some (Melact_server.Dom.Attribute (attribute, Melhole_server.float (read props name)))
         | Property_value "value" | Controlled_value "value" -> Some (Melact_server.Dom.Value (read props name))
         | Property_value "checked" | Controlled_value "checked" -> Some (Melact_server.Dom.Checked (match (read props name : bool) with true -> On | false -> Off))
@@ -91,7 +94,10 @@ let dom tag props children =
               (Js.Nullable.toOption (unknown_attribute attribute (read props name)))
         | Event _ | Ref_value | Skipped -> None)
       (List.filter
-         (fun name -> not (String.equal name "key" || String.equal name "children"))
+         (fun name ->
+           match (name, Js.Nullable.toOption (read props name : _ Js.Nullable.t)) with
+           | ("key" | "children"), _ | _, None -> false
+           | _, Some _ -> true)
          (Array.to_list (keys props)))
   in
   let content =

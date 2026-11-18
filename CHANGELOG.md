@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Property laws for `React.cloneElement`. `test/clones`: random renders, each with random clone plans (props
+  objects over the element's labels and DOM props, `undefined` and click handlers among them, clones of clones)
+  and random own props, through every way an element reaches a clone (a label through `Array.fold_left`,
+  forwarding, `Children.map`, `Children.only`, literals bound by `let` or written in the clone, a `switch` mixing
+  a label and literals), against reason-react on React 18: the page and the handlers called after every render
+  and click. `test/typed/laws`: random chains of `let`, `if`, `match` and `Children.only` over labels, literals
+  and unknown calls, cloned directly or in a callback: a clone is traced exactly when every leaf is a label or a
+  literal, and the untyped pass nominates every label the typed scan finds. What they found, fixed: elements built
+  at run time (clones, `ReactDOM.createElement`, `domProps`) wrote `size="0"` where React writes nothing for
+  `cols`, `rows`, `size`, `span` below 1, and `title="undefined"` for a prop given as `undefined` or `null`, on the
+  client and the server; the untyped pass followed only `map`-like functions, so a clone in a callback of
+  `fold_left` was a compile error at the call, and now follows any callback as the typed scan does; neither scan
+  followed a `let` written inside an expression. Mutants, each caught: merge order reversed, host overrides
+  ignored, a clone of a clone that forgets, `undefined` kept, `undefined` read as a value, the `size` rule
+  dropped, branches of unknown origin ignored, `let` or `Children.only` or callbacks not followed.
+
 - Fix, from the team: a component literal in a cloned label lost the label's expected type, so a constructor or
   record field found by that type (`<Hidden> <Section padding=NonAdaptive(…) /> </Hidden>`, the constructor not
   in scope) failed with `Unbound constructor`. Each label now reads a clone's prop through

@@ -1,0 +1,2 @@
+; Clone laws in Reason, built with Melact (staged, -typed) and with reason-react; clones.test.mjs renders both.
+(dirs melact react)
