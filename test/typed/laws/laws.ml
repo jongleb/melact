@@ -610,7 +610,90 @@ let clone_found case =
                 Melact_ppx.Cloned.candidates ~of_component:(fun _ -> []) binding.pvb_expr ))
             (List.nth_opt (Melact_ppx.Cloned.in_file file) 0)))
 
+(** What a generated caller gives to the label its callee clones. *)
+type given =
+  | Given_label  (** The caller's own [children], passed on. *)
+  | Given_literal
+  | Given_unknown
+  | Given_null  (** [React.null], which [Children.map] and [toArray] skip. *)
+  | Given_bound of given
+  | Given_either of given * given
+  | Given_clone of given  (** [React.cloneElement …], whose result a clone can clone again. *)
+
+let given =
+  let open Gen in
+  sized_size (int_bound 4)
+  @@ fix (fun given size ->
+         let leaves = [ pure Given_label; pure Given_literal; pure Given_unknown; pure Given_null ] in
+         match size with
+         | 0 -> oneof leaves
+         | _ ->
+             let smaller = given (size / 2) in
+             oneof
+               (leaves
+               @ [
+                   map (fun inner -> Given_bound inner) smaller;
+                   map2 (fun yes no -> Given_either (yes, no)) smaller smaller;
+                   map (fun inner -> Given_clone inner) smaller;
+                 ]))
+
+let caller_source tree =
+  let rec written tree =
+    match tree with
+    | Given_label -> "children"
+    | Given_literal -> "(React.clonable (fun () -> React.null))"
+    | Given_unknown -> "(unknown ())"
+    | Given_null -> "React.null"
+    | Given_bound inner -> Printf.sprintf "(let element = %s in element)" (written inner)
+    | Given_either (yes, no) -> Printf.sprintf "(if flag then %s else %s)" (written yes) (written no)
+    | Given_clone inner -> Printf.sprintf "(React.cloneElement %s ())" (written inner)
+  in
+  String.concat "\n"
+    [
+      "module React = struct";
+      "  type element";
+      "  let null : element = Obj.magic 0";
+      "  let clonable (make : unit -> element) : element = make ()";
+      "  let cloneElement (element : element) (_ : 'props) : element = element";
+      "end";
+      "let unknown () = React.null";
+      "let calleeProps ~(children : React.element) () = React.cloneElement children ()";
+      "let makeProps ~(children : React.element) ~(flag : bool) () =";
+      Printf.sprintf "  calleeProps ~children:%s ()" (written tree);
+    ]
+
+let caller_expected tree =
+  let rec unknown tree =
+    match tree with
+    | Given_unknown -> `Unknown
+    | Given_label | Given_literal | Given_null -> `Known
+    | Given_bound inner | Given_clone inner -> unknown inner
+    | Given_either (yes, no) -> ( match (unknown yes, unknown no) with `Known, `Known -> `Known | (`Known | `Unknown), (`Known | `Unknown) -> `Unknown)
+  in
+  match unknown tree with `Unknown -> 1 | `Known -> 0
+
+let caller_found tree =
+  let structure = Ppxlib.Parse.implementation (Lexing.from_string (caller_source tree)) in
+  Melact_ppx.Cloned.components :=
+    List.filter_map
+      (fun item ->
+        match item.Ppxlib.pstr_desc with
+        | Pstr_value (_, [ ({ pvb_pat = { ppat_desc = Ppat_var { txt = ("calleeProps" | "makeProps") as name; _ }; _ }; _ } as binding) ]) ->
+            Some (binding.pvb_loc, name)
+        | _ -> None)
+      structure;
+  Option.map (fun file -> List.length (Melact_ppx.Cloned.whole file).misses) (Melhole_typed.File.of_structure structure)
+
 let clone_laws =
+  let reported =
+    Test.make ~count:400
+      ~name:"Clones: a caller's element for a cloned label is reported exactly when one of its branches is not a label, a literal, null or a clone"
+      ~print:(fun tree ->
+        caller_source tree ^ Printf.sprintf "\nexpected %d, found %s" (caller_expected tree) (Option.fold ~none:"nothing" ~some:string_of_int (caller_found tree)))
+      given
+      (fun tree -> caller_found tree = Some (caller_expected tree))
+  in
+  reported ::
   let print (traced, labels, literals) =
     Printf.sprintf "%s [%s] %d literals" (match traced with `Traced -> "traced" | `Untraced -> "untraced") (String.concat "; " labels) literals
   in

@@ -148,6 +148,7 @@ let overriding_optional overrides name = Option.map Js.Undefined.toOption (Js.Di
 
 let overridden : 'props -> overrides -> 'props = [%mel.raw {|function (props, overrides) { return Object.assign({}, props, overrides); }|}]
 let cloneElementUntraced element props = cloneElement element props
+let unclonable element = element
 
 let setDisplayName _ _ = ()
 let displayName _ = None

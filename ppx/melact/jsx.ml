@@ -2556,8 +2556,9 @@ let structure items =
         | _ -> super#expression expression
     end
   in
-  [%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
-  :: Polymorphic.instantiated (mapper#structure (inliner#structure (annotated items)))
+  Melhole_typed.Site.items ~decide:Cloned.flagged
+    ([%stri [@@@alert "-hook"]] :: [%stri let () = React.reason_react_is_also_in_this_build_remove_it ()]
+    :: Polymorphic.instantiated (mapper#structure (inliner#structure (annotated items))))
 let signature items =
   declaring := Interface_file;
   match mapper#signature items with

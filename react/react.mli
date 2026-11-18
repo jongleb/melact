@@ -134,6 +134,10 @@ val createContext : 'value -> 'value Context.t
 val useContext : 'value Context.t -> 'value
 [@@alert hook "React calls hooks in the same order on every render: call them at the top level of a component, not in a branch, a loop or a callback"]
 
+(** [unclonable element]: [element], where melact-ppx reports it given to a cloned label without being traced. *)
+val unclonable : element -> element
+[@@alert unclonable "melact: a component clones the elements given in this label, and melact-ppx cannot see this one written as JSX (a call's result, an element from an option, a list or another module), so React.cloneElement throws on it at run time: write it as JSX here, bind it with let or match in this function, or pass on a label of this component that its callers write as JSX"]
+
 (** The slot of a [useState] or [useReducer] call. *)
 type ('state, 'action) state
 

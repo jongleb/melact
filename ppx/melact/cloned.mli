@@ -5,6 +5,8 @@ type t = {
   labels : string list;  (** The labels whose elements reach a clone, directly or through another component's cloned label. *)
   traced : Ppxlib.Location.t list;  (** The [React.cloneElement] calls whose element comes, on every path, from labels or literals. *)
   literals : Ppxlib.Location.t list;  (** The JSX literals whose elements reach one of those calls. *)
+  misses : Ppxlib.Location.t list;  (** Elements given to a label their component clones, from somewhere the scan cannot see as JSX. *)
+  checked : Ppxlib.Location.t list;  (** Elements given to a label their component clones, traced to labels or literals. *)
 }
 
 (** Labels the untyped pass nominates, for sites the typed pass then decides. *)
@@ -29,3 +31,6 @@ val whole : Melhole_typed.File.t -> t
 
 (** The cloned labels of the [makeProps] a typed identifier names: its fact, or this file's scan. *)
 val known : Melhole_typed.File.t -> Ocaml_common.Types.value_description -> string list
+
+(** A typed file's structure with every element in [misses] wrapped in [React.unclonable], whose alert reports it. *)
+val flagged : Melhole_typed.File.t -> Ppxlib.structure -> Ppxlib.structure

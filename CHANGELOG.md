@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- From the team: an element given to a label the callee clones, from somewhere melact-ppx cannot see as JSX (a
+  call's result, `if` with a call in a branch, an element from an option or a list), threw only in the browser.
+  The typed pass now checks every caller with the callee's `.cmi` fact: an element must come from the caller's
+  own label, a literal, a clone's result or `React.null`, through `let`, `match` and `if`; any other is wrapped
+  in `React.unclonable`, whose alert `unclonable` names each site at build time. `test/team` `Unclonable`: two
+  reported, seven forms not; a law in `test/typed/laws` over random chains of those. Mutants, each caught.
+
 - From the team: under `-foreign-engine island`, a `[@react.component] external` without `[@mel.module]` went to
   an island, though its JavaScript lives in the app's own module, whose `react` is melact.compat once coloured: a
   `%mel.raw` function component with `useState` crashed with melact.compat's hook called inside React 18's

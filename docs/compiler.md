@@ -1681,7 +1681,12 @@ untyped pass nominates every literal that may reach a clone through such binding
 the typed scan of the whole file, components or not, sees the clonable form as an origin and keeps it only for
 a clone it traces. A clone is traced only when every element that can reach it comes from a label or a
 literal: a `match` with one branch of unknown origin (an element taken out of an option, a call) leaves it
-`cloneElementUntraced`. At run time `cloneElement` builds the element again with the merged props
+`cloneElementUntraced`. A caller is checked the same way: every element it gives to a label the callee's fact
+records as cloned must come from a label of its own, a literal, a clone's result or `React.null` (which
+`Children.map` and `toArray` skip), through `let`, `match` and `if`; any other (a call's result, an element taken
+out of an option or a list) is wrapped in `React.unclonable`, whose alert `unclonable` reports it at build time
+instead of a throw in the browser. An element the scan of a component checks is not reported by the scan of the
+whole file, which does not know the component's labels. At run time `cloneElement` builds the element again with the merged props
 and keeps them for a clone of the clone. Laws: [`test/clones`](../test/clones), random renders with random clone plans (props objects over an element's
 labels and DOM props, `undefined` and click handlers among them, clones of clones) through every way an element
 reaches a clone, against reason-react on React 18, page and handlers after every render and click; in
@@ -1693,7 +1698,10 @@ reason-react on React 18, click by click, and `Framed.Partial` compiled untraced
 plain form, add no missing labels, ignore the overrides, do not follow callbacks, nominate no literal, trace a
 clone some of whose branches are unknown, merge in the wrong order, forget a clone's props in its clone, read
 undefined as a value, do not follow a `let` in an expression or `Children.only`, or write `size="0"`, each fail
-them.
+them. In `test/typed/laws`, a caller gives a cloning callee random chains of its own label, literals, unknown
+calls, `React.null`, `let`, `if` and clones: it is reported exactly when a leaf is unknown; `test/team`
+`Unclonable` has the team's shapes. Mutants that report checked elements, do not skip `null`, do not follow a
+clone's result or memoized JSX, or do not wrap, each fail them.
 
 ## DOM elements built at run time
 

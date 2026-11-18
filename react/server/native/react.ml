@@ -94,6 +94,7 @@ let overriding Overrides _ = None
 let overriding_optional Overrides _ = None
 let overridden props Overrides = props
 let cloneElementUntraced element props = cloneElement element props
+let unclonable element = element
 
 let setDisplayName _ _ = ()
 let displayName _ = None

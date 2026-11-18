@@ -20,7 +20,7 @@
 // show what reason-react on React 18 shows, click after click.
 import * as Reason from "../../_build/default/test/team/react/output/test/team/react/Main.mjs";
 import * as Melact from "../../_build/default/test/team/melact/output/test/team/melact/Main.mjs";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { tick, shown } from "../compat/harness.mjs";
 
 const settle = async (root) => {
@@ -95,6 +95,15 @@ test("a clone is traced only when every element that can reach it was written as
   const compiled = readFileSync("_build/default/test/team/melact/output/test/team/melact/Framed.mjs", "utf8");
   expect(compiled.match(/React\.cloneElementUntraced\(/g)).toHaveLength(1);
   expect(compiled.match(/React\.cloneElement\(/g)).toHaveLength(5);
+});
+
+test("an element given to a cloned label from where the compiler cannot see JSX is reported at build time", () => {
+  const compiled = readFileSync("_build/default/test/team/melact/output/test/team/melact/Unclonable.mjs", "utf8");
+  expect(compiled.match(/React\.unclonable\(/g)).toHaveLength(2);
+  const others = readdirSync("_build/default/test/team/melact/output/test/team/melact")
+    .filter((name) => name.endsWith(".mjs") && name !== "Unclonable.mjs")
+    .filter((name) => readFileSync(`_build/default/test/team/melact/output/test/team/melact/${name}`, "utf8").includes("React.unclonable("));
+  expect(others).toEqual([]);
 });
 
 test("a closure a data hook calls only in its effect leaves the component pure, as one it calls while rendering does not", () => {
