@@ -2637,18 +2637,16 @@ let bound items =
     match (explicit, !engine) with
     | Some chosen, _ -> chosen
     | None, Compat -> Compat
-    | None, Island -> (
-        match
-          List.exists
-            (fun attribute ->
-              match (attribute.attr_name.txt, attribute.attr_payload) with
-              | "mel.module", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (package, _, _)); _ }, _); _ } ] ->
-                  List.mem package hooked
-              | _ -> false)
-            description.pval_attributes
-        with
-        | true -> Compat
-        | false -> Island)
+    | None, Island ->
+        Option.fold ~none:Compat
+          ~some:(fun package -> match List.mem package hooked with true -> Compat | false -> Island)
+          (List.find_map
+             (fun attribute ->
+               match (attribute.attr_name.txt, attribute.attr_payload) with
+               | "mel.module", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (package, _, _)); _ }, _); _ } ] ->
+                   Some package
+               | _ -> None)
+             description.pval_attributes)
   in
   let foreign_of items =
     let rec gather path items =

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- From the team: under `-foreign-engine island`, a `[@react.component] external` without `[@mel.module]` went to
+  an island, though its JavaScript lives in the app's own module, whose `react` is melact.compat once coloured: a
+  `%mel.raw` function component with `useState` crashed with melact.compat's hook called inside React 18's
+  render, and a class ran on npm's React with melact.compat's `Component`. Such an external now stays on
+  melact.compat; `[@melact.engine island]` still sends it to an island. `test/compat/bundle`: a `%mel.raw` class
+  and a function with a hook, bundled with `esbuildColours`, clicked among the drags, against React 18. The
+  reverted default fails it.
+
 - Property laws for `React.cloneElement`. `test/clones`: random renders, each with random clone plans (props
   objects over the element's labels and DOM props, `undefined` and click handlers among them, clones of clones)
   and random own props, through every way an element reaches a clone (a label through `Array.fold_left`,

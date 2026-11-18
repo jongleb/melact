@@ -1928,7 +1928,11 @@ at the root, no tree order, captured effects dropped, a new props object on ever
 a provider must share their context, so it runs there too. Under `-foreign-engine island`, melact-ppx
 therefore picks the engine per package: the components of a package from which the same file binds a
 `use…` external stay on melact.compat, and the others go to islands, their imports written as
-`melact-island:<package>`; melact.island imports npm's React the same way. A bound component of one
+`melact-island:<package>`; melact.island imports npm's React the same way. A component external without
+`[@mel.module]` names JavaScript of the app's own module (a `%mel.raw` class, a function with hooks), whose
+`react` is that module's, melact.compat once coloured, so it stays on melact.compat
+([`test/compat/bundle`](../test/compat/bundle): a class and a function with `useState` from `%mel.raw`, which
+crashed on an island with melact.compat's hook outside its render). A bound component of one
 engine written among the children of one of the other is Melact content there. When the hooks of a
 package are bound in another file than its components, `[@melact.engine compat]` (or `island`) on a
 component external decides for it; a hook marked `island` is a compile error, since a hook runs in the

@@ -1,5 +1,6 @@
 // An app with both kinds of JavaScript React library in one bundle: test/compat/bundle/app.mlx, a recharts
-// chart on an island and react-dnd from OCaml components on melact.compat. Bundled by esbuild as an app is:
+// chart on an island, react-dnd from OCaml components on melact.compat, and a class component and a function
+// component with a hook written in JavaScript in the app's own module, bound without [@mel.module], on melact.compat. Bundled by esbuild as an app is:
 // with reason-react, everything on npm's React; with Melact, coloured by melact.island's plugin. Both bundles
 // get the same drags and must show the same board and chart and log the same drops, and the plugin must
 // bundle no module in both colours: palette.js, which imports no React, is one object for the app and the island.
@@ -57,6 +58,7 @@ const app = (at) => () => at.build.mount_board(at.root, (line) => at.log.push(li
 // Each step of a drag is its own task, a frame or more after the last, as dragstart and dragover are separate
 // events while a hand moves the card; dragend follows drop at once.
 const perform = (at, [card, bin]) => {
+  if (card === "raw") return at.root.querySelector(".raw-counter").click();
   const backend = at.mounted[1].getBackend();
   const later = (count, step) => setTimeout(() => (count === 0 ? step() : later(count - 1, step)), 0);
   const source = at.root.querySelector(`.card[title="${card}"]`);
@@ -72,10 +74,10 @@ const perform = (at, [card, bin]) => {
   });
 };
 
-const move = fc.tuple(fc.constantFrom("a", "b", "c"), fc.constantFrom("left", "right"));
+const move = fc.tuple(fc.constantFrom("a", "b", "c", "raw"), fc.constantFrom("left", "right"));
 
 test("recharts on an island and react-dnd on melact.compat in one bundle agree with React 18", async () => {
-  await run(sides(), app, [["a", "right"], ["b", "right"], ["a", "left"]], perform);
+  await run(sides(), app, [["a", "right"], ["raw", "left"], ["b", "right"], ["raw", "left"], ["a", "left"]], perform);
   await fc.assert(
     fc.asyncProperty(fc.array(move, { minLength: 1, maxLength: 8 }), async (moves) => {
       await run(sides(), app, moves, perform);

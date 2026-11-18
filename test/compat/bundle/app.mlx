@@ -5,6 +5,32 @@
    drives both bundles. palette.js, which imports no React, is read by the app and by swatch.js on the island,
    so the island must see the app's palette, as one npm bundle does. *)
 
+[%%mel.raw
+{|
+import OwnReact from "react";
+var RawBox = (function (Component) {
+  function RawBox(props) { Component.call(this, props); }
+  RawBox.prototype = Object.create(Component.prototype);
+  RawBox.prototype.render = function () { return OwnReact.createElement("div", { className: "box" }, this.props.children); };
+  return RawBox;
+})(OwnReact.Component);
+function RawCounter(props) {
+  var state = OwnReact.useState(0);
+  return OwnReact.createElement("button", { className: "raw-counter", onClick: function () { state[1](state[0] + 1); } }, props.label + state[0]);
+}
+|}]
+
+(* A class component and a function component with a hook of the app's own, written in JavaScript in this file and
+   bound without [@mel.module]: their "react" is this module's, melact.compat once coloured, so Melact must render
+   them there, not on an island. *)
+module Box = struct
+  external make : children:React.element -> React.element = "RawBox" [@@react.component]
+end
+
+module Counter = struct
+  external make : label:string -> React.element = "RawCounter" [@@react.component]
+end
+
 (** A bar of the chart: how many cards a bin holds. *)
 type bar = < name : string ; cards : int > Js.t
 
@@ -139,6 +165,8 @@ module Board = struct
     <Provider.DndProvider manager>
       <Drag_layer />
       <div className="board">
+        <Box><h3>(React.string (string_of_int (Array.length left)))</h3></Box>
+        <Counter label="raw " />
         <Bin name="left" cards=left onDrop=(moved "left") />
         <Bin name="right" cards=right onDrop=(moved "right") />
         <BarChart data width=300 height=150>

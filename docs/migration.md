@@ -83,7 +83,9 @@ and `react` and `react-dom` 18 among its npm dependencies:
 + (preprocess (staged_pps melange.ppx melact-ppx -- -typed -foreign-engine island))
 ```
 
-Components run on npm's React, in islands; a package whose hooks the same binding file binds
+Components run on npm's React, in islands; a component bound without `[@mel.module]` (JavaScript of the
+app's own, such as a `%mel.raw` class) stays on `melact.compat` with the app's `react` (add `melact.compat` to
+the libraries), and `[@@melact.engine island]` sends it to an island; a package whose hooks the same binding file binds
 (`useDrag` from react-dnd) stays on `melact.compat` (add `melact.compat` to the libraries), with its
 providers. A component bound in a file without its package's hooks, such as a `DndProvider` bound
 apart from `useDrag`, takes `[@@melact.engine compat]`; hooks bound anywhere need no mark. Bundle the app with melact.island's esbuild plugin, which gives each module the React it
