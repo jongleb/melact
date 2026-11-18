@@ -108,6 +108,8 @@ val cloneElement : element -> 'props -> element
 type overrides
 
 val clonable : (overrides -> element) -> element
+val recording : string array -> 'f -> 'f
+val describing : 'props -> element array -> 'props
 val overriding : overrides -> string -> 'value option
 val overriding_optional : overrides -> string -> 'value option option
 val overridden : 'props -> overrides -> 'props

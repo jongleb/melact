@@ -90,6 +90,8 @@ let cloneElement _ _ =
 type overrides = Overrides
 
 let clonable make = make Overrides
+let recording _ make = make
+let describing props _ = props
 let overriding Overrides _ = None
 let overriding_optional Overrides _ = None
 let overridden props Overrides = props

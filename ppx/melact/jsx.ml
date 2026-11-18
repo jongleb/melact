@@ -2012,9 +2012,13 @@ let mapper =
           Some
             [%expr
               React.clonable (fun __melact_overrides ->
+                  let __melact_kids = [%e pexp_array ~loc kids] in
                   ReactDOM.createElement [%e estring ~loc tag]
-                    ~props:(React.overridden [%e pexp_apply ~loc [%expr ReactDOM.domProps] (props @ [ (Nolabel, [%expr ()]) ])] __melact_overrides)
-                    [%e pexp_array ~loc kids])]
+                    ~props:
+                      (React.describing
+                         (React.overridden [%e pexp_apply ~loc [%expr ReactDOM.domProps] (props @ [ (Nolabel, [%expr ()]) ])] __melact_overrides)
+                         __melact_kids)
+                    __melact_kids)]
       | Some _, Pexp_apply (({ pexp_desc = Pexp_ident { txt = Ldot (_, "createElement"); _ }; _ } as callee), arguments) ->
           Some
             [%expr
@@ -2124,7 +2128,19 @@ let mapper =
                           | Optional _ | Labelled _ | Nolabel -> None)
                         labels
                     in
-                    { escaped with pexp_desc = Pexp_apply (made, [ (Nolabel, { props with pexp_desc = Pexp_apply (builder, missing @ given) }) ]) }
+                    let names =
+                      pexp_array ~loc
+                        (List.filter_map
+                           (fun label -> match label with Labelled name | Optional name -> Some (estring ~loc name) | Nolabel -> None)
+                           labels)
+                    in
+                    {
+                      escaped with
+                      pexp_desc =
+                        Pexp_apply
+                          ( made,
+                            [ (Nolabel, { props with pexp_desc = Pexp_apply ([%expr React.recording [%e names] [%e builder]], missing @ given) }) ] );
+                    }
                 | (Some _ | None), _ -> escaped)
       in
       let call =

@@ -90,27 +90,65 @@ let jsxsKeyed make props ?key:_ () = make props
 
 type overrides
 
-let clone_with : (overrides -> element) -> overrides -> element =
+(** The props the clonable element being built said it has, until [clone_with] puts them on it. *)
+type described
+
+let described : described = [%mel.raw "{ props: undefined }"]
+
+let clone_with : described -> (overrides -> element) -> overrides -> element =
   [%mel.raw
-    {|function (make, given) {
+    {|function (described, make, given) {
+        described.props = undefined;
         var element = make(given);
-        if (element !== null && typeof element === "object") element.melactClone = { make: make, given: given };
+        if (element !== null && typeof element === "object") {
+          element.melactClone = { make: make, given: given };
+          if (described.props !== undefined) element.props = Object.assign({}, described.props, given);
+        }
+        described.props = undefined;
         return element;
       }|}]
 
-let clonable make = clone_with make [%mel.raw "{}"]
+let clonable make = clone_with described make [%mel.raw "{}"]
 
-let cloneElement : element -> 'props -> element =
-  [%mel.raw
-    {|function (element, props) {
+let cloneElement element props =
+  ([%mel.raw
+     {|function (clone_with, described, element, props) {
         var clone = element !== null && typeof element === "object" ? element.melactClone : undefined;
         if (clone === undefined)
           throw new Error("melact: React.cloneElement got an element that was not written as JSX where melact-ppx could see it reach this clone; write it inline in the prop the component clones");
-        var given = Object.assign({}, clone.given, props);
-        var made = clone.make(given);
-        if (made !== null && typeof made === "object") made.melactClone = { make: clone.make, given: given };
-        return made;
+        return clone_with(described, clone.make, Object.assign({}, clone.given, props));
       }|}]
+    : (described -> (overrides -> element) -> overrides -> element) -> described -> element -> 'props -> element)
+    clone_with described element props
+
+let recording names make =
+  ([%mel.raw
+     {|function (described, names, make) {
+        var recorder = function () {
+          var props = {};
+          for (var at = 0; at < names.length; at++)
+            if (names[at] !== "key" && arguments[at] !== undefined) props[names[at]] = arguments[at];
+          var made = make.apply(undefined, arguments);
+          described.props = props;
+          return made;
+        };
+        Object.defineProperty(recorder, "length", { value: make.length });
+        return recorder;
+      }|}]
+    : described -> string array -> 'f -> 'f)
+    described names make
+
+let describing props kids =
+  ([%mel.raw
+     {|function (described, props, kids) {
+        var all = Object.assign({}, props);
+        if (kids.length === 1) all.children = kids[0];
+        else if (kids.length > 1) all.children = kids;
+        described.props = all;
+        return props;
+      }|}]
+    : described -> 'props -> element array -> 'props)
+    described props kids
 
 external entries : overrides -> 'value Js.Dict.t = "%identity"
 

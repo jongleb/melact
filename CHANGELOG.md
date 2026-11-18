@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- From the team: libraries that read a child's props before cloning it (`child.props.label`, `child.props.disabled`
+  in a menu that keeps the focusable items). A JSX literal written in a label its component clones now carries
+  React's `props`: a component literal its labels as the clone builds them (the call to `makeProps` goes through
+  `React.recording`, an identity of its type, so labels keep their expected types) and a clone's other props, a
+  DOM literal its DOM props and children (`React.describing`). The scans follow the functions that return some of
+  their argument's elements (`Belt.Array.keep`, `Js.Array.filter`, `List.filter`, `slice`, `reverse`, `of_list`, …),
+  and `->` pipes inside an element's derivation; the names they match were never found before, as the compiler
+  writes `Stdlib__Array.get`, now read as `Stdlib.Array.get`. `test/team` `Picker`, against reason-react; the clone
+  law shows the props of elements given and cloned. Mutants, each caught: props not recorded or described, a
+  clone's other props dropped, subsets or pipes not followed.
+
 - From the team: an element given to a label the callee clones, from somewhere melact-ppx cannot see as JSX (a
   call's result, `if` with a call in a branch, an element from an option or a list), threw only in the browser.
   The typed pass now checks every caller with the callee's `.cmi` fact: an element must come from the caller's

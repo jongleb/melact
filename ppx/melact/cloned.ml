@@ -47,11 +47,8 @@ let reached ~of_component sources expression =
             @ sources)
             inner
       | None, (Pexp_constraint (inner, _) | Pexp_sequence (_, inner)) -> derived_in sources inner
-      | None, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Ldot (Lident "React", "Children"), ("only" | "toArray")); _ }; _ }, [ (_, inner) ])
-        ->
-          derived_in sources inner
-      | None, Pexp_apply ({ pexp_desc = Pexp_ident { txt = Ldot (Lident "React", "cloneElement"); _ }; _ }, (_, inner) :: _) ->
-          derived_in sources inner
+      | None, Pexp_apply (_, arguments) ->
+          List.concat_map (fun (_, argument) -> match argument.pexp_desc with Pexp_function _ -> [] | _ -> derived_in sources argument) arguments
       | None, Pexp_match (_, cases) -> List.concat_map (fun case -> derived_in sources case.pc_rhs) cases
       | None, Pexp_ifthenelse (_, yes, no) -> derived_in sources yes @ Option.fold ~none:[] ~some:(derived_in sources) no
       | None, _ -> []
@@ -176,7 +173,15 @@ let of_attributes (attributes : Ocaml_common.Typedtree.attributes) =
 let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
   let open Ocaml_common in
   let found = ref [] and calls = ref [] and misses = ref [] and checked = ref [] in
-  let value_name env path = match Env.normalize_value_path None env path with exception _ -> Path.name path | normal -> Path.name normal in
+  let value_name env path =
+    List.fold_left
+      (fun name (packed, plain) ->
+        match String.starts_with ~prefix:packed name with
+        | true -> plain ^ String.sub name (String.length packed) (String.length name - String.length packed)
+        | false -> name)
+      (match Env.normalize_value_path None env path with exception _ -> Path.name path | normal -> Path.name normal)
+      [ ("Stdlib__", "Stdlib."); ("Belt__Belt_", "Belt_"); ("Js__Js_", "Js_"); ("Melact_runtime__", "Melact_runtime.") ]
+  in
   let elements sources (pattern : Typedtree.pattern) origins =
     List.concat_map
       (fun (ident, _, type_expr, _) ->
@@ -187,9 +192,32 @@ let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
     @ sources
   in
   let given arguments = List.filter_map (fun (label, argument) -> match argument with Typedtree.Arg value -> Some (label, value) | Typedtree.Omitted () -> None) arguments in
+  let rec flat (expression : Typedtree.expression) =
+    match expression.exp_desc with
+    | Texp_apply ({ exp_desc = Texp_apply _; _ } as inner, outer) -> (
+        match (flat inner).Typedtree.exp_desc with
+        | Texp_apply (callee, first) -> { expression with Typedtree.exp_desc = Texp_apply (callee, first @ outer) }
+        | _ -> expression)
+    | _ -> expression
+  in
+  let rec memoized (expression : Typedtree.expression) =
+    match expression.exp_desc with
+    | Texp_let (_, _, body) -> memoized body
+    | Texp_match (_, cases, _, _) ->
+        List.find_map
+          (fun (case : Typedtree.computation Typedtree.case) ->
+            match case.c_rhs.exp_desc with
+            | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments)
+              when String.equal (value_name exp_env path) "Melact_runtime.Memo.store" -> (
+                match given arguments with [ _; _; _; (_, value) ] -> Some value | _ -> None)
+            | _ -> None)
+          cases
+    | _ -> None
+  in
   let rec walk sources (expression : Typedtree.expression) =
     let rec derived_in ~blank sources (expression : Typedtree.expression) =
       let derived = derived_in ~blank sources in
+      let expression = flat expression in
       let every branches =
         List.fold_left (fun all branch -> Option.bind all (fun all -> Option.map (fun more -> all @ more) (derived branch))) (Some []) branches
       in
@@ -209,23 +237,20 @@ let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
             body
       | Texp_sequence (_, body) -> derived body
       | Texp_ifthenelse (_, yes, Some no) -> every [ yes; no ]
-      | Texp_match ({ exp_desc = Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, _); _ }, cases, _, _)
-        when List.mem (value_name exp_env path) [ "Melact_runtime.Memo.kept"; "Melact_runtime__Memo.kept" ] ->
-          List.find_map
-            (fun (case : Typedtree.computation Typedtree.case) ->
-              match case.c_rhs.exp_desc with
-              | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments)
-                when List.mem (value_name exp_env path) [ "Melact_runtime.Memo.store"; "Melact_runtime__Memo.store" ] -> (
-                  match given arguments with [ _; _; _; (_, value) ] -> derived value | _ -> None)
-              | _ -> None)
-            cases
+      | Texp_match _ when Option.is_some (memoized expression) -> Option.bind (memoized expression) derived
       | Texp_match (_, cases, _, _) -> every (List.map (fun (case : Typedtree.computation Typedtree.case) -> case.c_rhs) cases)
       | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments) -> (
           match (value_name exp_env path, List.map snd (given arguments)) with
           | "React.clonable", _ -> Some [ Literal expression.exp_loc ]
-          | ("React.Children.only" | "React.Children.toArray" | "Stdlib.Array.get" | "Stdlib.Array.unsafe_get" | "Stdlib.List.hd" | "Stdlib.List.nth"
-            | "Stdlib.Option.get" | "Belt_Array.getExn" | "Belt_Array.getUnsafe" | "Belt_List.headExn" | "Belt_List.getExn"), given :: _ ->
+          | ( "React.Children.only" | "React.Children.toArray" | "Stdlib.Array.get" | "Stdlib.Array.unsafe_get" | "Stdlib.List.hd" | "Stdlib.List.nth"
+            | "Stdlib.Option.get" | "Belt_Array.getExn" | "Belt_Array.getUnsafe" | "Belt_List.headExn" | "Belt_List.getExn" | "Belt_Array.keep"
+            | "Belt_Array.keepWithIndex" | "Belt_Array.slice" | "Belt_Array.sliceToEnd" | "Belt_Array.reverse" | "Belt_List.keep" | "Belt_List.toArray"
+            | "Belt_List.fromArray" | "Belt_List.reverse" | "Js_array.copy" | "Stdlib.Array.of_list" | "Stdlib.Array.to_list" | "Stdlib.Array.sub" | "Stdlib.Array.copy" | "Stdlib.List.rev"
+            | "Stdlib.List.tl" ),
+            given :: _ ->
               derived given
+          | ("Stdlib.List.filter" | "Stdlib.List.filteri" | "Js_array.filter" | "Js_array.filteri" | "Js_array.slice"), (_ :: _ as all) ->
+              derived (List.nth all (List.length all - 1))
           | ("Stdlib.|>" | "|."), [ given; _ ] | "React.cloneElement", given :: _ -> derived given
           | _ -> None)
       | _ -> None
@@ -235,17 +260,7 @@ let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
       let iterator = { Tast_iterator.default_iterator with expr = (fun _ inner -> walk sources inner) } in
       Tast_iterator.default_iterator.expr iterator expression
     in
-    let expression =
-      let rec flat (expression : Typedtree.expression) =
-        match expression.Typedtree.exp_desc with
-        | Texp_apply ({ exp_desc = Texp_apply _; _ } as inner, outer) -> (
-            match (flat inner).Typedtree.exp_desc with
-            | Texp_apply (callee, first) -> { expression with Typedtree.exp_desc = Texp_apply (callee, first @ outer) }
-            | _ -> expression)
-        | _ -> expression
-      in
-      flat expression
-    in
+    let expression = flat expression in
     match expression.exp_desc with
     | Texp_let (_, bindings, body) ->
         List.iter (fun (binding : Typedtree.value_binding) -> walk sources binding.vb_expr) bindings;

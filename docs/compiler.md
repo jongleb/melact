@@ -1685,7 +1685,11 @@ literal: a `match` with one branch of unknown origin (an element taken out of an
 records as cloned must come from a label of its own, a literal, a clone's result or `React.null` (which
 `Children.map` and `toArray` skip), through `let`, `match` and `if`; any other (a call's result, an element taken
 out of an option or a list) is wrapped in `React.unclonable`, whose alert `unclonable` reports it at build time
-instead of a throw in the browser. An element the scan of a component checks is not reported by the scan of the
+instead of a throw in the browser. A clonable element also carries React's `props`, which libraries read before
+cloning (`child.props.label`): a component literal calls its `makeProps` through `React.recording names`, an
+identity of the function's type that keeps every label's expected type and records the arguments by label, and
+a DOM literal hands its props object and children to `React.describing`; `clone_with` puts them on the element
+with a clone's props over them, as React's `{...props, ...given}`. An element the scan of a component checks is not reported by the scan of the
 whole file, which does not know the component's labels. At run time `cloneElement` builds the element again with the merged props
 and keeps them for a clone of the clone. Laws: [`test/clones`](../test/clones), random renders with random clone plans (props objects over an element's
 labels and DOM props, `undefined` and click handlers among them, clones of clones) through every way an element

@@ -35,7 +35,7 @@ test("constructors found by annotations and memoized components declared in .rei
     build.mount(root);
     await settle(root);
     const trace = [shown({ root, layer }).root];
-    for (const selector of [".tabs-next", ".tabs-next", '[title="tip"]', '[title="card"]', '[title="tip"]', ".menu-item", ".menu-item", '[title="framed off"]', '[title="framed off"]', '[title="framed"]', ".spread-toggle", ".spread-toggle", ".spread-toggle", ".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
+    for (const selector of [".tabs-next", ".tabs-next", '[title="tip"]', '[title="card"]', '[title="tip"]', ".menu-item", ".menu-item", '[title="framed off"]', '[title="framed off"]', '[title="framed"]', ".picker-next", ".picker-next", ".spread-toggle", ".spread-toggle", ".spread-toggle", ".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
       root.querySelectorAll(selector)[0].click();
       await settle(root);
       trace.push(shown({ root, layer }).root);
@@ -66,14 +66,20 @@ test("constructors found by annotations and memoized components declared in .rei
   );
   expect(traces[0][9]).toContain('<div class="framed-wrap" title="framed on"><span class="framed-inner">"inner"</></>');
   expect(traces[0][10]).toContain('<span class="hint"><button class="trigger open" title="framed">"framed"</><span class="hint-label">"framed"</></>');
-  expect([traces[0][10], traces[0][11]].map((trace) => trace.match(/<span[^>]*>"spread"/)[0])).toEqual([
+  expect(traces[0][0]).toContain(
+    '<div class="picker"><span class="picker-item focused">"one"</><span class="picker-item">"three"</><button class="picker-next">"one/one"</></>',
+  );
+  expect(traces[0][11]).toContain('<span class="picker-item">"one"</><span class="picker-item focused">"three"</><button class="picker-next">"three/three"</>');
+  expect(traces[0][12]).toContain('<span class="picker-item focused">"one"</><span class="picker-item">"three"</><button class="picker-next">"one/one"</>');
+  expect(traces[0][0]).toContain('<div class="picker-hosts"><b class="kept first" title="first"></><i class="kept last" title="last"></></>');
+  expect([traces[0][12], traces[0][13]].map((trace) => trace.match(/<span[^>]*>"spread"/)[0])).toEqual([
     '<span aria-expanded="false" aria-label="L" count="3" custom="c" data-flag="true" data-n="0" data-state="closed" id="spread-a">"spread"',
     '<span aria-controls="menu" aria-expanded="true" custom="d" data-flag="false" data-state="open" id="spread-b" nothing="now">"spread"',
   ]);
-  expect(traces[0][16]).toContain(
+  expect(traces[0][18]).toContain(
     '<section class="route-dashboard"><h2>"Board!"</><button class="route-count">"2"</></><section class="route-dashboard"><h2>"Board! raw?"</>',
   );
-  expect(traces[0][21]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
+  expect(traces[0][23]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
   expect(traces[0][0]).toContain('<div class="bare">"bare"</><span class="bare-inner"></>');
   expect(traces[0][0]).toContain('<span class="bare-inner"></>"4"');
   expect(traces[0][traces[0].length - 1]).toContain(

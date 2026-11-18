@@ -114,6 +114,14 @@ type overrides
 (** [clonable make]: the element [make] builds with no overrides, which [cloneElement] builds again with its props. *)
 val clonable : (overrides -> element) -> element
 
+(** [recording names make]: [make], a component's [makeProps], whose labels, named in order, a clonable element
+    being built then shows as its [props], as React's elements do. *)
+val recording : string array -> 'f -> 'f
+
+(** [describing props children]: [props], which with [children] a clonable DOM element being built shows as its
+    [props]. *)
+val describing : 'props -> element array -> 'props
+
 (** [overriding overrides name]: the prop a clone gives for [name], if it gives one. *)
 val overriding : overrides -> string -> 'value option
 

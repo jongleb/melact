@@ -3,7 +3,7 @@
 // switch mixing a label and literals), built with reason-react on React 18 and with Melact. Both builds get the
 // same random renders, each with random clone plans (props objects over the element's labels and DOM props,
 // undefined and click handlers among them) and random own props, and must show the same DOM and call the same
-// handlers after every render and click.
+// handlers after every render and click, and the props a library reads of the elements given and cloned.
 import fc from "fast-check";
 import * as Reason from "../../_build/default/test/clones/react/output/test/clones/react/Clones.mjs";
 import * as Melact from "../../_build/default/test/clones/melact/output/test/clones/melact/Clones.mjs";

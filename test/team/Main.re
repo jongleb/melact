@@ -51,6 +51,8 @@ module App = {
     <Gap.Clear> <Gap pad={top: 7} /> </Gap.Clear>
     <Gap.Clear> <Gap pad={top: 8} tone=?{Some("y")} note=?{Some(Some("n"))} /> </Gap.Clear>
     <Gap.Wide> <Gap pad={top: 9} tone=?None /> </Gap.Wide>
+    <Picker> <Picker.Item label="one" /> <Picker.Item label="two" disabled=true /> <Picker.Item label="three" /> </Picker>
+    <Picker.Hosts> <b title="first" /> <b title="skip" /> <i title="last" /> </Picker.Hosts>
     <Framed wrapper=Framed.NoWrapper> <button className="framed-plain"> {React.string("plain")} </button> </Framed>
     <Framed wrapper=Framed.Div> <span className="framed-inner"> {React.string("inner")} </span> </Framed>
     <Menu> <Menu.Item label="first" /> <Menu.Item label="second" /> <Menu.Item label="third" /> </Menu>

@@ -1,6 +1,6 @@
 /* Every way an element reaches React.cloneElement, driven by clones.test.mjs: each form clones its element once per
    plan, the clone of the previous clone after the first, so random plans check merging, overriding and clones of
-   clones; the element's own props change between renders. */
+   clones; the element's own props change between renders; some forms show the props a library reads. */
 type size =
   | Small
   | Medium
@@ -8,6 +8,17 @@ type size =
 
 /* A props object written by the test. */
 type plan;
+
+/* An element's props as libraries read them, children and functions left out, keys sorted. */
+let described: React.element => string = [%raw
+  {|function (element) {
+      var props = element.props, shown = {};
+      Object.keys(props).sort().forEach(function (key) {
+        if (key !== "children" && typeof props[key] !== "function") shown[key] = props[key];
+      });
+      return JSON.stringify(shown);
+    }|}
+];
 
 module Leaf = {
   [@react.component]
@@ -30,8 +41,10 @@ module Leaf = {
 
 module ByLabel = {
   [@react.component]
-  let make = (~plans: array(plan), ~children) =>
-    <div className="by-label"> {Array.fold_left((element, plan) => React.cloneElement(element, plan), children, plans)} </div>;
+  let make = (~plans: array(plan), ~children) => {
+    let cloned = Array.fold_left((element, plan) => React.cloneElement(element, plan), children, plans);
+    <div className="by-label"> cloned <span className="props"> {React.string(described(children) ++ " " ++ described(cloned))} </span> </div>;
+  };
 };
 
 module Forward = {
@@ -77,7 +90,8 @@ module Branch = {
       | 1 => <i className="wrap"> children </i>
       | _ => <Leaf label="branch" count=wrap />
       };
-    <div className="branch"> {Array.fold_left((element, plan) => React.cloneElement(element, plan), element, plans)} </div>;
+    let cloned = Array.fold_left((element, plan) => React.cloneElement(element, plan), element, plans);
+    <div className="branch"> cloned <span className="props"> {React.string(described(cloned))} </span> </div>;
   };
 };
 
