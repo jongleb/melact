@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- From the team: `ReactDOM.domRef` was a variant (`Current | Callback`), so a JavaScript library bound on it
+  (react-dnd's connectors, floating-ui's `useMergeRefs` and `refs.setFloating`) got `{TAG, _0}` instead of a ref:
+  react-dnd took it for a DOM node and threw `addEventListener is not a function`, a merge set `current` on the
+  wrapper. It is now abstract with React's representation, a ref object or a function, as in reason-react, so
+  refs cross bindings in both directions unchanged; `Ref.domRef` and `Ref.callbackDomRef` are identities.
+  `test/team` `Refs`: a connector that takes a ref object or a node and a merge of a ref object and a function,
+  bound with `[@mel.module]`, against reason-react. The variant fails it.
+
+- From the team: `<Wrapper> (renderIfTrue cond <Child />) </Wrapper>`, about 780 times, was reported `unclonable`,
+  as `renderIfTrue` returns an argument from another module. The typed pass now derives, for every function of a
+  structure, which arguments its result comes from and whether it can be `React.null`, and records it on the
+  binding (`[@melact.passes [1; null]]`, in the `.cmi`); calls are followed into those arguments, from any file.
+  With an `.rei`, the fact is written there by hand. `test/team` `Render` and `Unclonable`, `Hint` over
+  `renderIfTrue` against reason-react; the caller and callee laws gain helpers. Mutants, each caught: facts not
+  derived, not written to the `.cmi`, `null` of a fact taken as clonable in a clone.
+
 - From the team: libraries that read a child's props before cloning it (`child.props.label`, `child.props.disabled`
   in a menu that keeps the focusable items). A JSX literal written in a label its component clones now carries
   React's `props`: a component literal its labels as the clone builds them (the call to `makeProps` goes through

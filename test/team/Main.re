@@ -40,6 +40,7 @@ module App = {
     <Spread />
     <Hint label="tip"> <button className="hint-trigger"> {React.string("hint")} </button> </Hint>
     <HintCard> <button className="card-trigger"> {React.string("card")} </button> </HintCard>
+    <Hint label="cond"> {Render.renderIfTrue(true, <button className="cond-trigger"> {React.string("cond")} </button>)} </Hint>
     <Tabs trigger={<button className="tabs-next"> {React.string("next")} </button>}>
       {double ? <Tabs.Tab name="a" /> : <Tabs.Tab name="b" />}
       <Tabs.Tab name="c" active=true />
@@ -51,6 +52,8 @@ module App = {
     <Gap.Clear> <Gap pad={top: 7} /> </Gap.Clear>
     <Gap.Clear> <Gap pad={top: 8} tone=?{Some("y")} note=?{Some(Some("n"))} /> </Gap.Clear>
     <Gap.Wide> <Gap pad={top: 9} tone=?None /> </Gap.Wide>
+    <Refs />
+    <Folded> <Folded.Row label="alpha" /> <Folded.Row label="beta" /> </Folded>
     <Picker> <Picker.Item label="one" /> <Picker.Item label="two" disabled=true /> <Picker.Item label="three" /> </Picker>
     <Picker.Hosts> <b title="first" /> <b title="skip" /> <i title="last" /> </Picker.Hosts>
     <Framed wrapper=Framed.NoWrapper> <button className="framed-plain"> {React.string("plain")} </button> </Framed>

@@ -5,39 +5,39 @@
     "bench/ssr/melact client": 19794,
     "bench/ssr/meltea client": 12013,
     "examples/counter": 12439,
-    "examples/todomvc": 18565,
+    "examples/todomvc": 18567,
     "meltea/examples/counter": 5003,
     "meltea/examples/todomvc": 20641,
     "meltea/examples/served client": 6352,
-    "bench/classics/admin": 29590,
-    "bench/classics/autocomplete": 27102,
-    "bench/classics/blocks": 29231,
-    "bench/classics/calendar": 43943,
-    "bench/classics/chat": 28933,
+    "bench/classics/admin": 29585,
+    "bench/classics/autocomplete": 27092,
+    "bench/classics/blocks": 29214,
+    "bench/classics/calendar": 43880,
+    "bench/classics/chat": 28909,
     "bench/classics/chess": 28724,
     "bench/classics/conduit": 30832,
-    "bench/classics/dashboard": 32369,
+    "bench/classics/dashboard": 32356,
     "bench/classics/datagrid": 30172,
-    "bench/classics/diff": 33783,
-    "bench/classics/email": 30339,
-    "bench/classics/eventtable": 28916,
-    "bench/classics/feed": 27288,
-    "bench/classics/filetree": 26932,
-    "bench/classics/gallery": 28054,
-    "bench/classics/gantt": 43359,
+    "bench/classics/diff": 33764,
+    "bench/classics/email": 30323,
+    "bench/classics/eventtable": 28864,
+    "bench/classics/feed": 27261,
+    "bench/classics/filetree": 26925,
+    "bench/classics/gallery": 28053,
+    "bench/classics/gantt": 43333,
     "bench/classics/hackernews": 26108,
     "bench/classics/jsontree": 24903,
-    "bench/classics/kanban": 31118,
-    "bench/classics/logs": 28704,
-    "bench/classics/markdown": 30515,
-    "bench/classics/minesweeper": 21159,
-    "bench/classics/playlist": 44487,
+    "bench/classics/kanban": 31100,
+    "bench/classics/logs": 28707,
+    "bench/classics/markdown": 30482,
+    "bench/classics/minesweeper": 21161,
+    "bench/classics/playlist": 44486,
     "bench/classics/settings": 31207,
     "bench/classics/shop": 28921,
-    "bench/classics/spreadsheet": 29605,
-    "bench/classics/todomvc": 22104,
-    "bench/classics/trace": 31140,
-    "bench/classics/virtuallist": 25126,
+    "bench/classics/spreadsheet": 29587,
+    "bench/classics/todomvc": 22095,
+    "bench/classics/trace": 31116,
+    "bench/classics/virtuallist": 25108,
     "bench/classics/wizard": 32147
   },
   "growth": [
@@ -1270,6 +1270,24 @@
         "bench/classics/gallery": [
           28051,
           28054
+        ]
+      }
+    },
+    {
+      "date": "2026-11-18",
+      "reason": "domRef carries React's representation; telling a ref object from a ref function costs 2-3 bytes",
+      "grown": {
+        "examples/todomvc": [
+          18565,
+          18567
+        ],
+        "bench/classics/logs": [
+          28704,
+          28707
+        ],
+        "bench/classics/minesweeper": [
+          21159,
+          21161
         ]
       }
     }

@@ -10,6 +10,7 @@ type origin =
   | Label of string  (** The elements a component is given as this label. *)
   | Literal of Location.t  (** The JSX literal at this location. *)
   | Blank  (** [React.null], which [Children.map] and [toArray] skip, given where a caller's elements are checked. *)
+  | Argument of int  (** The argument at this position of a function whose result a fact describes. *)
 
 let rec bound pattern =
   match pattern.ppat_desc with
@@ -131,12 +132,12 @@ let candidates ~of_component expression =
   in
   let parameters, body = split expression in
   List.sort_uniq String.compare
-    (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank -> None) (reached ~of_component parameters body))
+    (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank | Argument _ -> None) (reached ~of_component parameters body))
 
 let literals ~of_component bindings =
   List.concat_map
     (fun binding ->
-      List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank -> None) (reached ~of_component [] binding.pvb_expr))
+      List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank | Argument _ -> None) (reached ~of_component [] binding.pvb_expr))
     bindings
 
 let element_kind env type_expr =
@@ -170,92 +171,114 @@ let of_attributes (attributes : Ocaml_common.Typedtree.attributes) =
       | _ -> None)
     attributes
 
-let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
+let value_name env path =
+  let open Ocaml_common in
+  List.fold_left
+    (fun name (packed, plain) ->
+      match String.starts_with ~prefix:packed name with
+      | true -> plain ^ String.sub name (String.length packed) (String.length name - String.length packed)
+      | false -> name)
+    (match Env.normalize_value_path None env path with exception _ -> Path.name path | normal -> Path.name normal)
+    [ ("Stdlib__", "Stdlib."); ("Belt__Belt_", "Belt_"); ("Js__Js_", "Js_"); ("Melact_runtime__", "Melact_runtime.") ]
+
+let elements sources (pattern : Ocaml_common.Typedtree.pattern) origins =
+  let open Ocaml_common in
+  List.concat_map
+    (fun (ident, _, type_expr, _) ->
+      match element_kind pattern.pat_env type_expr with
+      | `Element | `Elements -> List.map (fun origin -> (ident, origin)) origins
+      | `Other -> [])
+    (Typedtree.pat_bound_idents_full pattern)
+  @ sources
+
+
+let given arguments =
+  List.filter_map (fun (label, argument) -> match argument with Ocaml_common.Typedtree.Arg value -> Some (label, value) | Ocaml_common.Typedtree.Omitted () -> None) arguments
+
+let rec flat (expression : Ocaml_common.Typedtree.expression) =
+  let open Ocaml_common in
+  match expression.exp_desc with
+  | Texp_apply ({ exp_desc = Texp_apply _; _ } as inner, outer) -> (
+      match (flat inner).Typedtree.exp_desc with
+      | Texp_apply (callee, first) -> { expression with Typedtree.exp_desc = Texp_apply (callee, first @ outer) }
+      | _ -> expression)
+  | _ -> expression
+
+let rec memoized (expression : Ocaml_common.Typedtree.expression) =
+  let open Ocaml_common in
+  match expression.exp_desc with
+  | Texp_let (_, _, body) -> memoized body
+  | Texp_match (_, cases, _, _) ->
+      List.find_map
+        (fun (case : Typedtree.computation Typedtree.case) ->
+          match case.c_rhs.exp_desc with
+          | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments)
+            when String.equal (value_name exp_env path) "Melact_runtime.Memo.store" -> (
+              match given arguments with [ _; _; _; (_, value) ] -> Some value | _ -> None)
+          | _ -> None)
+        cases
+  | _ -> None
+
+let rec derivation ~passes ~blank sources (expression : Ocaml_common.Typedtree.expression) =
+  let open Ocaml_common in
+  let derived_in = derivation ~passes ~blank in
+  let derived = derived_in sources in
+  let expression = flat expression in
+  let every branches =
+    List.fold_left (fun all branch -> Option.bind all (fun all -> Option.map (fun more -> all @ more) (derived branch))) (Some []) branches
+  in
+  match expression.exp_desc with
+  | Texp_ident (Path.Pident ident, _, _) -> (
+      match List.filter_map (fun (bound, origin) -> match Ident.same bound ident with true -> Some origin | false -> None) sources with
+      | [] -> None
+      | origins -> Some origins)
+  | Texp_ident (path, _, _) when String.equal (value_name expression.exp_env path) "React.null" -> (
+      match blank with `Clonable -> Some [ Blank ] | `Unknown -> None)
+  | Texp_let (_, bindings, body) ->
+      derived_in
+        (List.fold_left
+           (fun inner (binding : Typedtree.value_binding) ->
+             Option.fold ~none:inner ~some:(elements inner binding.vb_pat) (derived binding.vb_expr))
+           sources bindings)
+        body
+  | Texp_sequence (_, body) -> derived body
+  | Texp_ifthenelse (_, yes, Some no) -> every [ yes; no ]
+  | Texp_match _ when Option.is_some (memoized expression) -> Option.bind (memoized expression) derived
+  | Texp_match (_, cases, _, _) -> every (List.map (fun (case : Typedtree.computation Typedtree.case) -> case.c_rhs) cases)
+  | Texp_apply ({ exp_desc = Texp_ident (path, _, description); exp_env; _ }, arguments) -> (
+      match (value_name exp_env path, List.map snd (given arguments)) with
+      | "React.clonable", _ -> Some [ Literal expression.exp_loc ]
+      | ( "React.Children.only" | "React.Children.toArray" | "Stdlib.Array.get" | "Stdlib.Array.unsafe_get" | "Stdlib.List.hd" | "Stdlib.List.nth"
+        | "Stdlib.Option.get" | "Belt_Array.getExn" | "Belt_Array.getUnsafe" | "Belt_List.headExn" | "Belt_List.getExn" | "Belt_Array.keep"
+        | "Belt_Array.keepWithIndex" | "Belt_Array.slice" | "Belt_Array.sliceToEnd" | "Belt_Array.reverse" | "Belt_List.keep" | "Belt_List.toArray"
+        | "Belt_List.fromArray" | "Belt_List.reverse" | "Js_array.copy" | "Stdlib.Array.of_list" | "Stdlib.Array.to_list" | "Stdlib.Array.sub" | "Stdlib.Array.copy" | "Stdlib.List.rev"
+        | "Stdlib.List.tl" ),
+        given :: _ ->
+          derived given
+      | ("Stdlib.List.filter" | "Stdlib.List.filteri" | "Js_array.filter" | "Js_array.filteri" | "Js_array.slice"), (_ :: _ as all) ->
+          derived (List.nth all (List.length all - 1))
+      | ("Stdlib.|>" | "|."), [ given; _ ] | "React.cloneElement", given :: _ -> derived given
+      | _ ->
+          Option.bind (passes description) (fun fact ->
+              List.fold_left
+                (fun all origin ->
+                  Option.bind all (fun all ->
+                      Option.map
+                        (fun more -> all @ more)
+                        (match origin with
+                        | Argument at ->
+                            Option.bind (List.nth_opt arguments at) (fun (_, argument) ->
+                                match argument with Typedtree.Arg value -> derived value | Typedtree.Omitted () -> None)
+                        | Blank -> ( match blank with `Clonable -> Some [ Blank ] | `Unknown -> None)
+                        | Label _ | Literal _ -> None)))
+                (Some []) fact))
+  | _ -> None
+
+let traced ~known ~passes ~seeded (expression : Ocaml_common.Typedtree.expression) =
   let open Ocaml_common in
   let found = ref [] and calls = ref [] and misses = ref [] and checked = ref [] in
-  let value_name env path =
-    List.fold_left
-      (fun name (packed, plain) ->
-        match String.starts_with ~prefix:packed name with
-        | true -> plain ^ String.sub name (String.length packed) (String.length name - String.length packed)
-        | false -> name)
-      (match Env.normalize_value_path None env path with exception _ -> Path.name path | normal -> Path.name normal)
-      [ ("Stdlib__", "Stdlib."); ("Belt__Belt_", "Belt_"); ("Js__Js_", "Js_"); ("Melact_runtime__", "Melact_runtime.") ]
-  in
-  let elements sources (pattern : Typedtree.pattern) origins =
-    List.concat_map
-      (fun (ident, _, type_expr, _) ->
-        match element_kind pattern.pat_env type_expr with
-        | `Element | `Elements -> List.map (fun origin -> (ident, origin)) origins
-        | `Other -> [])
-      (Typedtree.pat_bound_idents_full pattern)
-    @ sources
-  in
-  let given arguments = List.filter_map (fun (label, argument) -> match argument with Typedtree.Arg value -> Some (label, value) | Typedtree.Omitted () -> None) arguments in
-  let rec flat (expression : Typedtree.expression) =
-    match expression.exp_desc with
-    | Texp_apply ({ exp_desc = Texp_apply _; _ } as inner, outer) -> (
-        match (flat inner).Typedtree.exp_desc with
-        | Texp_apply (callee, first) -> { expression with Typedtree.exp_desc = Texp_apply (callee, first @ outer) }
-        | _ -> expression)
-    | _ -> expression
-  in
-  let rec memoized (expression : Typedtree.expression) =
-    match expression.exp_desc with
-    | Texp_let (_, _, body) -> memoized body
-    | Texp_match (_, cases, _, _) ->
-        List.find_map
-          (fun (case : Typedtree.computation Typedtree.case) ->
-            match case.c_rhs.exp_desc with
-            | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments)
-              when String.equal (value_name exp_env path) "Melact_runtime.Memo.store" -> (
-                match given arguments with [ _; _; _; (_, value) ] -> Some value | _ -> None)
-            | _ -> None)
-          cases
-    | _ -> None
-  in
   let rec walk sources (expression : Typedtree.expression) =
-    let rec derived_in ~blank sources (expression : Typedtree.expression) =
-      let derived = derived_in ~blank sources in
-      let expression = flat expression in
-      let every branches =
-        List.fold_left (fun all branch -> Option.bind all (fun all -> Option.map (fun more -> all @ more) (derived branch))) (Some []) branches
-      in
-      match expression.exp_desc with
-      | Texp_ident (Path.Pident ident, _, _) -> (
-          match List.filter_map (fun (bound, origin) -> match Ident.same bound ident with true -> Some origin | false -> None) sources with
-          | [] -> None
-          | origins -> Some origins)
-      | Texp_ident (path, _, _) when String.equal (value_name expression.exp_env path) "React.null" -> (
-          match blank with `Clonable -> Some [ Blank ] | `Unknown -> None)
-      | Texp_let (_, bindings, body) ->
-          derived_in ~blank
-            (List.fold_left
-               (fun inner (binding : Typedtree.value_binding) ->
-                 Option.fold ~none:inner ~some:(elements inner binding.vb_pat) (derived binding.vb_expr))
-               sources bindings)
-            body
-      | Texp_sequence (_, body) -> derived body
-      | Texp_ifthenelse (_, yes, Some no) -> every [ yes; no ]
-      | Texp_match _ when Option.is_some (memoized expression) -> Option.bind (memoized expression) derived
-      | Texp_match (_, cases, _, _) -> every (List.map (fun (case : Typedtree.computation Typedtree.case) -> case.c_rhs) cases)
-      | Texp_apply ({ exp_desc = Texp_ident (path, _, _); exp_env; _ }, arguments) -> (
-          match (value_name exp_env path, List.map snd (given arguments)) with
-          | "React.clonable", _ -> Some [ Literal expression.exp_loc ]
-          | ( "React.Children.only" | "React.Children.toArray" | "Stdlib.Array.get" | "Stdlib.Array.unsafe_get" | "Stdlib.List.hd" | "Stdlib.List.nth"
-            | "Stdlib.Option.get" | "Belt_Array.getExn" | "Belt_Array.getUnsafe" | "Belt_List.headExn" | "Belt_List.getExn" | "Belt_Array.keep"
-            | "Belt_Array.keepWithIndex" | "Belt_Array.slice" | "Belt_Array.sliceToEnd" | "Belt_Array.reverse" | "Belt_List.keep" | "Belt_List.toArray"
-            | "Belt_List.fromArray" | "Belt_List.reverse" | "Js_array.copy" | "Stdlib.Array.of_list" | "Stdlib.Array.to_list" | "Stdlib.Array.sub" | "Stdlib.Array.copy" | "Stdlib.List.rev"
-            | "Stdlib.List.tl" ),
-            given :: _ ->
-              derived given
-          | ("Stdlib.List.filter" | "Stdlib.List.filteri" | "Js_array.filter" | "Js_array.filteri" | "Js_array.slice"), (_ :: _ as all) ->
-              derived (List.nth all (List.length all - 1))
-          | ("Stdlib.|>" | "|."), [ given; _ ] | "React.cloneElement", given :: _ -> derived given
-          | _ -> None)
-      | _ -> None
-    in
-    let derived expression = derived_in ~blank:`Unknown sources expression in
+    let derived expression = derivation ~passes ~blank:`Unknown sources expression in
     let inside (expression : Typedtree.expression) =
       let iterator = { Tast_iterator.default_iterator with expr = (fun _ inner -> walk sources inner) } in
       Tast_iterator.default_iterator.expr iterator expression
@@ -312,7 +335,7 @@ let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
                           ~some:(fun origins ->
                             checked := item.exp_loc :: !checked;
                             found := origins @ !found)
-                          (derived_in ~blank:`Clonable sources item))
+                          (derivation ~passes ~blank:`Clonable sources item))
                       (match argument.exp_desc with
                       | Texp_array (_, items) | Texp_apply (_, [ (_, Typedtree.Arg { exp_desc = Texp_array (_, items); _ }) ]) -> items
                       | _ -> [ argument ]);
@@ -353,14 +376,84 @@ let traced ~known ~seeded (expression : Ocaml_common.Typedtree.expression) =
   in
   (match seeded with `Labels -> parameters [] expression | `Unseeded -> walk [] expression);
   {
-    labels = List.sort_uniq String.compare (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank -> None) !found);
+    labels = List.sort_uniq String.compare (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank | Argument _ -> None) !found);
     traced = !calls;
-    literals = List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank -> None) !found;
+    literals = List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank | Argument _ -> None) !found;
     misses = !misses;
     checked = !checked;
   }
 
+let returned ~passes (expression : Ocaml_common.Typedtree.expression) =
+  let open Ocaml_common in
+  let rec parameters (expression : Typedtree.expression) =
+    match expression.exp_desc with
+    | Texp_function (given, Tfunction_body body) ->
+        let more, inner = parameters body in
+        (given @ more, inner)
+    | _ -> ([], expression)
+  in
+  match parameters expression with
+  | [], _ -> None
+  | given, body ->
+      Option.bind
+        (derivation ~passes ~blank:`Clonable
+           (List.concat
+              (List.mapi
+                 (fun at (parameter : Typedtree.function_param) ->
+                   match parameter.fp_kind with
+                   | Tparam_pat { pat_desc = Tpat_var (ident, _, _); _ } -> [ (ident, Argument at) ]
+                   | Tparam_pat _ | Tparam_optional_default _ -> [])
+                 given))
+           body)
+        (fun origins ->
+          match
+            ( List.for_all (fun origin -> match origin with Argument _ | Blank -> true | Label _ | Literal _ -> false) origins,
+              List.exists (fun origin -> match origin with Argument _ -> true | Label _ | Literal _ | Blank -> false) origins )
+          with
+          | true, true -> Some (List.sort_uniq compare origins)
+          | (true | false), (true | false) -> None)
+
 let fact ~loc labels = attribute ~loc ~name:{ loc; txt = name } ~payload:(PStr [ pstr_eval ~loc (elist ~loc (List.map (estring ~loc) labels)) [] ])
+
+let passes_name = "melact.passes"
+
+let passes_fact ~loc origins =
+  attribute ~loc ~name:{ loc; txt = passes_name }
+    ~payload:
+      (PStr
+         [
+           pstr_eval ~loc
+             (elist ~loc
+                (List.filter_map
+                   (fun origin ->
+                     match origin with Argument at -> Some (eint ~loc at) | Blank -> Some (evar ~loc "null") | Label _ | Literal _ -> None)
+                   origins))
+             [];
+         ])
+
+let passes_of (attributes : Ocaml_common.Typedtree.attributes) =
+  let rec origins expression =
+    match expression.pexp_desc with
+    | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> Some []
+    | Pexp_construct ({ txt = Lident "::"; _ }, Some { pexp_desc = Pexp_tuple [ item; rest ]; _ }) ->
+        Option.bind
+          (match item.pexp_desc with
+          | Pexp_constant (Pconst_integer (at, None)) -> Option.map (fun at -> Argument at) (int_of_string_opt at)
+          | Pexp_ident { txt = Lident "null"; _ } -> Some Blank
+          | _ -> None)
+          (fun origin -> Option.map (List.cons origin) (origins rest))
+    | _ -> None
+  in
+  List.find_map
+    (fun (attribute : Ocaml_common.Typedtree.attribute) ->
+      match (attribute.attr_name.txt, attribute.attr_payload) with
+      | found, PStr payload when String.equal found passes_name -> (
+          match Ppxlib_ast.Selected_ast.of_ocaml Structure payload with
+          | [ { pstr_desc = Pstr_eval (listed, _); _ } ] -> origins listed
+          | _ -> None
+          | exception _ -> None)
+      | _ -> None)
+    attributes
 
 let environment = lazy (match Ocaml_common.Compmisc.initial_env () with environment -> Some environment | exception _ -> None)
 
@@ -386,6 +479,31 @@ let scanned =
     match !cached with
     | Some (seen, found) when seen == file -> found
     | Some _ | None ->
+        let typed = Melhole_typed.File.typed file in
+        let helpers = ref [] in
+        let passes (description : Ocaml_common.Types.value_description) =
+          Option.fold
+            ~none:(List.find_map (fun (at, fact) -> match Location.compare at description.val_loc with 0 -> Some fact | _ -> None) !helpers)
+            ~some:Option.some (passes_of description.val_attributes)
+        in
+        let functions =
+          {
+            Ocaml_common.Tast_iterator.default_iterator with
+            structure_item =
+              (fun self (item : Ocaml_common.Typedtree.structure_item) ->
+                (match item.str_desc with
+                | Tstr_value (_, bindings) ->
+                    List.iter
+                      (fun (binding : Ocaml_common.Typedtree.value_binding) ->
+                        match binding.vb_pat.pat_desc with
+                        | Tpat_var (_, name, _) -> Option.iter (fun fact -> helpers := (name.loc, fact) :: !helpers) (returned ~passes binding.vb_expr)
+                        | _ -> ())
+                      bindings
+                | _ -> ());
+                Ocaml_common.Tast_iterator.default_iterator.structure_item self item);
+          }
+        in
+        functions.structure functions typed;
         let found = ref [] in
         let iterator =
           {
@@ -397,18 +515,18 @@ let scanned =
                   when List.exists
                          (fun (at, props) -> Location.compare at binding.vb_loc = 0 && String.equal props (Ocaml_common.Ident.name ident))
                          !components ->
-                    found := (binding.vb_loc, binding.vb_pat.pat_loc, traced ~known:(labels_in !found) ~seeded:`Labels binding.vb_expr) :: !found
+                    found :=
+                      (binding.vb_loc, binding.vb_pat.pat_loc, traced ~known:(labels_in !found) ~passes ~seeded:`Labels binding.vb_expr) :: !found
                 | _ -> ());
                 Ocaml_common.Tast_iterator.default_iterator.value_binding self binding);
           }
         in
-        let typed = Melhole_typed.File.typed file in
         iterator.structure iterator typed;
         let loose = ref [] in
         let everywhere =
           {
             Ocaml_common.Tast_iterator.default_iterator with
-            expr = (fun _ expression -> loose := traced ~known:(labels_in !found) ~seeded:`Unseeded expression :: !loose);
+            expr = (fun _ expression -> loose := traced ~known:(labels_in !found) ~passes ~seeded:`Unseeded expression :: !loose);
           }
         in
         everywhere.structure everywhere typed;
@@ -427,16 +545,23 @@ let scanned =
             checked = List.concat_map (fun scan -> scan.checked) scans;
           }
         in
-        cached := Some (file, (!found, whole));
-        (!found, whole)
+        cached := Some (file, (!found, whole, !helpers));
+        (!found, whole, !helpers)
 
-let in_file file = List.map (fun (at, _, scan) -> (at, scan)) (fst (scanned file))
+let in_file file =
+  let found, _, _ = scanned file in
+  List.map (fun (at, _, scan) -> (at, scan)) found
 
-let whole file = snd (scanned file)
+let whole file =
+  let _, whole, _ = scanned file in
+  whole
 
-let known file description = labels_in (fst (scanned file)) description
+let known file description =
+  let found, _, _ = scanned file in
+  labels_in found description
 
 let flagged file structure =
+  let _, whole, helpers = scanned file in
   let rec mapper misses =
     object
       inherit Ast_traverse.map as super
@@ -447,6 +572,16 @@ let flagged file structure =
             let loc = expression.pexp_loc in
             [%expr React.unclonable [%e (mapper (List.filter (fun other -> Location.compare other at <> 0) misses))#expression expression]])
           (List.find_opt (fun at -> Location.compare at expression.pexp_loc = 0) misses)
+
+      method! value_binding binding =
+        let binding = super#value_binding binding in
+        match binding.pvb_pat.ppat_desc with
+        | Ppat_var { loc; _ } ->
+            Option.fold ~none:binding
+              ~some:(fun fact ->
+                { binding with pvb_pat = { binding.pvb_pat with ppat_attributes = passes_fact ~loc fact :: binding.pvb_pat.ppat_attributes } })
+              (List.find_map (fun (at, fact) -> match Location.compare at loc with 0 -> Some fact | _ -> None) helpers)
+        | _ -> binding
     end
   in
-  (mapper (whole file).misses)#structure structure
+  (mapper whole.misses)#structure structure

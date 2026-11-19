@@ -1685,7 +1685,14 @@ literal: a `match` with one branch of unknown origin (an element taken out of an
 records as cloned must come from a label of its own, a literal, a clone's result or `React.null` (which
 `Children.map` and `toArray` skip), through `let`, `match` and `if`; any other (a call's result, an element taken
 out of an option or a list) is wrapped in `React.unclonable`, whose alert `unclonable` reports it at build time
-instead of a throw in the browser. A clonable element also carries React's `props`, which libraries read before
+instead of a throw in the browser. A function that returns one of its arguments (`let renderIfTrue = (flag,
+element) => flag ? element : React.null`) gets a fact of its own: the typed pass derives, for every function of a
+structure, the arguments its result can come from and whether it can be `React.null`, and records them on the
+binding as `[@melact.passes [1; null]]`, which reaches the `.cmi`. A call of such a function, from this file or
+another, is followed into those arguments, so `<Wrapper> (renderIfTrue cond <Child />) </Wrapper>` compiles the
+literal clonable and is not reported; a clone of the result in the cloning component stays untraced when the
+function can return `null`, since a clone of `null` throws. A module with an interface has its `.cmi` from the
+`.rei`, where the fact is written by hand on the `val`, and trusted. A clonable element also carries React's `props`, which libraries read before
 cloning (`child.props.label`): a component literal calls its `makeProps` through `React.recording names`, an
 identity of the function's type that keeps every label's expected type and records the arguments by label, and
 a DOM literal hands its props object and children to `React.describing`; `clone_with` puts them on the element
@@ -1704,8 +1711,17 @@ clone some of whose branches are unknown, merge in the wrong order, forget a clo
 undefined as a value, do not follow a `let` in an expression or `Children.only`, or write `size="0"`, each fail
 them. In `test/typed/laws`, a caller gives a cloning callee random chains of its own label, literals, unknown
 calls, `React.null`, `let`, `if` and clones: it is reported exactly when a leaf is unknown; `test/team`
-`Unclonable` has the team's shapes. Mutants that report checked elements, do not skip `null`, do not follow a
+`Unclonable` has the team's shapes, with helpers of another module (`Render`) and of the same file, returning an
+argument, one of two or a new element; the laws include helpers of the file that pick their argument or not. Mutants that report checked elements, do not skip `null`, do not follow a
 clone's result or memoized JSX, or do not wrap, each fail them.
+
+## Refs
+
+`ReactDOM.domRef` is abstract and holds what React holds: a ref object, whose `current` the element is written to,
+or a function called with it. `Ref.domRef` and `Ref.callbackDomRef` are identities, and the runtime tells the two
+apart as React does, by `typeof`, so a ref given to a JavaScript library bound with `[@mel.module]` (react-dnd's
+connectors, floating-ui's `useMergeRefs`) or taken back from one is what it would be under React
+([`test/team`](../test/team) `Refs`, against reason-react).
 
 ## DOM elements built at run time
 

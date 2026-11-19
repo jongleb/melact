@@ -32,5 +32,6 @@ val whole : Melhole_typed.File.t -> t
 (** The cloned labels of the [makeProps] a typed identifier names: its fact, or this file's scan. *)
 val known : Melhole_typed.File.t -> Ocaml_common.Types.value_description -> string list
 
-(** A typed file's structure with every element in [misses] wrapped in [React.unclonable], whose alert reports it. *)
+(** A typed file's structure with every element in [misses] wrapped in [React.unclonable], whose alert reports it, and
+    every function that returns one of its arguments marked [[@melact.passes]] for the [.cmi]. *)
 val flagged : Melhole_typed.File.t -> Ppxlib.structure -> Ppxlib.structure

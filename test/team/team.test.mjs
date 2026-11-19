@@ -35,7 +35,7 @@ test("constructors found by annotations and memoized components declared in .rei
     build.mount(root);
     await settle(root);
     const trace = [shown({ root, layer }).root];
-    for (const selector of [".tabs-next", ".tabs-next", '[title="tip"]', '[title="card"]', '[title="tip"]', ".menu-item", ".menu-item", '[title="framed off"]', '[title="framed off"]', '[title="framed"]', ".picker-next", ".picker-next", ".spread-toggle", ".spread-toggle", ".spread-toggle", ".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
+    for (const selector of [".tabs-next", ".tabs-next", '[title="tip"]', '[title="card"]', '[title="tip"]', ".menu-item", ".menu-item", '[title="framed off"]', '[title="framed off"]', '[title="framed"]', ".picker-next", ".picker-next", ".folded-next", ".spread-toggle", ".spread-toggle", ".spread-toggle", ".route-count", ".route-title", ".route-count", ".route-switch", ".route-settings", ".route-title", ".route-switch", ".route-count", ".notify", ".double", ".gadt", ".gadt-whole", ".client-badge", ".shadowed", "button", ".say", ".remote", "button", ".tone", ".pattern", ".say", ".tone", ".remote", ".shared", ".pattern", ".tone", ".remote", ".say", ".shared"]) {
       root.querySelectorAll(selector)[0].click();
       await settle(root);
       trace.push(shown({ root, layer }).root);
@@ -71,15 +71,18 @@ test("constructors found by annotations and memoized components declared in .rei
   );
   expect(traces[0][11]).toContain('<span class="picker-item">"one"</><span class="picker-item focused">"three"</><button class="picker-next">"three/three"</>');
   expect(traces[0][12]).toContain('<span class="picker-item focused">"one"</><span class="picker-item">"three"</><button class="picker-next">"one/one"</>');
+  expect(traces[0][13]).toContain('<ul class="folded"><li class="folded-row">"alpha"</><li class="folded-row focused">"beta"</>');
+  expect(traces[0][0]).toContain('<b class="refs-seen">"set set called"</>');
+  expect(traces[0][0]).toContain('<ul class="folded"><li class="folded-row focused">"alpha"</><li class="folded-row">"beta"</>');
   expect(traces[0][0]).toContain('<div class="picker-hosts"><b class="kept first" title="first"></><i class="kept last" title="last"></></>');
-  expect([traces[0][12], traces[0][13]].map((trace) => trace.match(/<span[^>]*>"spread"/)[0])).toEqual([
+  expect([traces[0][13], traces[0][14]].map((trace) => trace.match(/<span[^>]*>"spread"/)[0])).toEqual([
     '<span aria-expanded="false" aria-label="L" count="3" custom="c" data-flag="true" data-n="0" data-state="closed" id="spread-a">"spread"',
     '<span aria-controls="menu" aria-expanded="true" custom="d" data-flag="false" data-state="open" id="spread-b" nothing="now">"spread"',
   ]);
-  expect(traces[0][18]).toContain(
+  expect(traces[0][19]).toContain(
     '<section class="route-dashboard"><h2>"Board!"</><button class="route-count">"2"</></><section class="route-dashboard"><h2>"Board! raw?"</>',
   );
-  expect(traces[0][23]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
+  expect(traces[0][24]).toContain('<h2>"Board!! jsx?"</><button class="route-count">"0"</>');
   expect(traces[0][0]).toContain('<div class="bare">"bare"</><span class="bare-inner"></>');
   expect(traces[0][0]).toContain('<span class="bare-inner"></>"4"');
   expect(traces[0][traces[0].length - 1]).toContain(
@@ -105,7 +108,7 @@ test("a clone is traced only when every element that can reach it was written as
 
 test("an element given to a cloned label from where the compiler cannot see JSX is reported at build time", () => {
   const compiled = readFileSync("_build/default/test/team/melact/output/test/team/melact/Unclonable.mjs", "utf8");
-  expect(compiled.match(/React\.unclonable\(/g)).toHaveLength(2);
+  expect(compiled.match(/React\.unclonable\(/g)).toHaveLength(3);
   const others = readdirSync("_build/default/test/team/melact/output/test/team/melact")
     .filter((name) => name.endsWith(".mjs") && name !== "Unclonable.mjs")
     .filter((name) => readFileSync(`_build/default/test/team/melact/output/test/team/melact/${name}`, "utf8").includes("React.unclonable("));

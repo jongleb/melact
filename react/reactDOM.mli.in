@@ -363,10 +363,9 @@ end
 (** reason-react's name for {!Style.t}. *)
 type style = Style.t
 
-(** What a [ref] prop receives. *)
-type domRef =
-  | Current of Dom.element Js.nullable React.ref  (** Set to the element once mounted. *)
-  | Callback of (Dom.element Js.nullable -> unit)  (** Called with the element once mounted. *)
+(** What a [ref] prop receives: a ref object, set to the element once mounted, or a function called with it, as
+    React's, so a JavaScript library given one or giving one back sees what it would under React. *)
+type domRef
 
 module Ref : sig
   (** reason-react's names for the two kinds of ref, kept for code typed against them. *)
@@ -375,8 +374,8 @@ module Ref : sig
   type currentDomRef = Dom.element Js.nullable React.ref
   type callbackDomRef = Dom.element Js.nullable -> unit
 
-  val domRef : currentDomRef -> domRef
-  val callbackDomRef : callbackDomRef -> domRef
+  external domRef : currentDomRef -> domRef = "%identity"
+  external callbackDomRef : callbackDomRef -> domRef = "%identity"
   val attach : domRef -> Dom.element Js.nullable -> unit
 
   (** What React compares to tell a ref from another: the ref object, or the function. *)

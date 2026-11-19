@@ -2,30 +2,32 @@
 
 type style = Style.t
 
-type domRef =
-  | Current of Dom.element Js.nullable React.ref
-  | Callback of (Dom.element Js.nullable -> unit)
+type domRef
 
 module Ref = struct
   type t = domRef
   type currentDomRef = Dom.element Js.nullable React.ref
   type callbackDomRef = Dom.element Js.nullable -> unit
 
-  let domRef target = Current target
-  let callbackDomRef apply = Callback apply
+  external domRef : currentDomRef -> domRef = "%identity"
+  external callbackDomRef : callbackDomRef -> domRef = "%identity"
+  external held : domRef -> 'held = "%identity"
+
+  (** A ref as React tells them apart: a function, or an object whose [current] it sets. *)
+  type view = Current of currentDomRef | Callback of callbackDomRef
+
+  let view reference = match Js.typeof reference with "function" -> Callback (held reference) | _ -> Current (held reference)
 
   let attach reference element =
-    match reference with
-    | Current target -> target.current <- element
-    | Callback apply -> apply element
+    match view reference with Current target -> target.current <- element | Callback apply -> apply element
 
   type identity = Identity : 'a -> identity [@@unboxed]
 
-  let identity reference = match reference with Current target -> Identity target | Callback apply -> Identity apply
+  let identity reference = Identity reference
   let absent = Identity ()
 
   let forwarded reference =
-    match reference with
+    match Option.map view reference with
     | Some (Current target) -> Js.Nullable.return target
     | Some (Callback _) | None -> Js.Nullable.null
 end

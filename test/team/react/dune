@@ -1,11 +1,15 @@
 (copy_files
  (files ../*.{re,rei}))
 
+(copy_files
+ (files ../*.js))
+
 (melange.emit
  (target output)
  (compile_flags
   (:standard -w +4 -warn-error +4))
  (alias runtest-js)
+ (runtime_deps connector.js)
  (libraries reason-react melange.dom melange.belt)
  (module_systems
   (es6 mjs))

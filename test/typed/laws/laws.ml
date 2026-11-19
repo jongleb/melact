@@ -515,6 +515,7 @@ type origin =
   | Either of origin * origin  (** [if flag then … else …]. *)
   | Cases of origin list  (** [match n with 0 -> … | … | _ -> …], the last one under [_]. *)
   | Only of origin  (** [React.Children.only …]. *)
+  | Picked of origin  (** [pick flag …], a function of the file that returns its argument or [React.null]. *)
 
 (** Where the generated component clones its element. *)
 type site = Direct | Folded  (** [Folded]: in a callback of [List.fold_left], given the element as its start. *)
@@ -535,6 +536,7 @@ let origin =
                    map2 (fun yes no -> Either (yes, no)) smaller smaller;
                    map (fun cases -> Cases cases) (list_size (int_range 1 3) smaller);
                    map (fun inner -> Only inner) smaller;
+                   map (fun inner -> Picked inner) smaller;
                  ]))
 
 let clone_case = Gen.pair origin (Gen.oneof_list [ Direct; Folded ])
@@ -554,6 +556,7 @@ let clone_source (tree, site) =
                 (fun at case -> Printf.sprintf "%s -> %s" (match at = List.length cases - 1 with true -> "_" | false -> string_of_int at) (written case))
                 cases))
     | Only inner -> Printf.sprintf "(React.Children.only %s)" (written inner)
+    | Picked inner -> Printf.sprintf "(pick flag %s)" (written inner)
   in
   String.concat "\n"
     [
@@ -565,6 +568,7 @@ let clone_source (tree, site) =
       "  module Children = struct let only (element : element) : element = element end";
       "end";
       "let unknown () = React.null";
+      "let pick flag element = if flag then element else React.null";
       "let makeProps ~(children : React.element) ~(trigger : React.element) ~(flag : bool) ~(n : int) () =";
       (match site with
       | Direct -> Printf.sprintf "  React.cloneElement %s ()" (written tree)
@@ -578,6 +582,7 @@ let clone_expected (tree, _) =
     | From_literal -> [ `Literal ]
     | From_unknown -> [ `Unknown ]
     | Bound inner | Only inner -> leaves inner
+    | Picked inner -> leaves inner @ [ `Unknown ]
     | Either (yes, no) -> leaves yes @ leaves no
     | Cases cases -> List.concat_map leaves cases
   in
@@ -619,6 +624,8 @@ type given =
   | Given_bound of given
   | Given_either of given * given
   | Given_clone of given  (** [React.cloneElement …], whose result a clone can clone again. *)
+  | Given_picked of given  (** [pick flag …]: a function of the file that returns its argument or [React.null]. *)
+  | Given_wrapped of given  (** [wrap …]: a function of the file that returns something else. *)
 
 let given =
   let open Gen in
@@ -635,6 +642,8 @@ let given =
                    map (fun inner -> Given_bound inner) smaller;
                    map2 (fun yes no -> Given_either (yes, no)) smaller smaller;
                    map (fun inner -> Given_clone inner) smaller;
+                   map (fun inner -> Given_picked inner) smaller;
+                   map (fun inner -> Given_wrapped inner) smaller;
                  ]))
 
 let caller_source tree =
@@ -647,6 +656,8 @@ let caller_source tree =
     | Given_bound inner -> Printf.sprintf "(let element = %s in element)" (written inner)
     | Given_either (yes, no) -> Printf.sprintf "(if flag then %s else %s)" (written yes) (written no)
     | Given_clone inner -> Printf.sprintf "(React.cloneElement %s ())" (written inner)
+    | Given_picked inner -> Printf.sprintf "(pick flag %s)" (written inner)
+    | Given_wrapped inner -> Printf.sprintf "(wrap %s)" (written inner)
   in
   String.concat "\n"
     [
@@ -657,6 +668,8 @@ let caller_source tree =
       "  let cloneElement (element : element) (_ : 'props) : element = element";
       "end";
       "let unknown () = React.null";
+      "let pick flag element = if flag then element else React.null";
+      "let wrap (element : React.element) = ignore element; unknown ()";
       "let calleeProps ~(children : React.element) () = React.cloneElement children ()";
       "let makeProps ~(children : React.element) ~(flag : bool) () =";
       Printf.sprintf "  calleeProps ~children:%s ()" (written tree);
@@ -667,7 +680,8 @@ let caller_expected tree =
     match tree with
     | Given_unknown -> `Unknown
     | Given_label | Given_literal | Given_null -> `Known
-    | Given_bound inner | Given_clone inner -> unknown inner
+    | Given_bound inner | Given_clone inner | Given_picked inner -> unknown inner
+    | Given_wrapped _ -> `Unknown
     | Given_either (yes, no) -> ( match (unknown yes, unknown no) with `Known, `Known -> `Known | (`Known | `Unknown), (`Known | `Unknown) -> `Unknown)
   in
   match unknown tree with `Unknown -> 1 | `Known -> 0
@@ -687,7 +701,7 @@ let caller_found tree =
 let clone_laws =
   let reported =
     Test.make ~count:400
-      ~name:"Clones: a caller's element for a cloned label is reported exactly when one of its branches is not a label, a literal, null or a clone"
+      ~name:"Clones: a caller's element for a cloned label is reported exactly when one of its branches is not a label, a literal, null, a clone or a function's argument it returns"
       ~print:(fun tree ->
         caller_source tree ^ Printf.sprintf "\nexpected %d, found %s" (caller_expected tree) (Option.fold ~none:"nothing" ~some:string_of_int (caller_found tree)))
       given

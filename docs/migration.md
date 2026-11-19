@@ -320,9 +320,13 @@ works too: bound by `let`, returned by a branch of a `match` or `if` (the other 
 written in the clone's argument. Updates go through the usual guarded holes.
 Limits: a literal must be written in the call or in the cloning function (an element carried in a record or a
 variant, from JavaScript or from an array built at run time cannot be cloned: carry a function that takes the
-injected props instead, such as `render: (~isFocused, ~onClose) => React.element`); a clone is traced only when
+injected props instead, such as `render: (~isFocused, ~onClose) => React.element`, or the clone itself, built
+where the child is still a label: `Item({render: isFocused => React.cloneElement(child, {"isFocused": isFocused})})`); a clone is traced only when
 every branch that can reach it is traced; an element given to a cloned label from a call or an option is reported
-at build time by the alert `unclonable` (`-alert ++unclonable` makes it an error); a component reached through an open or a
+at build time by the alert `unclonable` (`-alert ++unclonable` makes it an error), unless it comes from a function
+that returns one of its arguments, which melact-ppx finds by itself (in a module with an `.rei`, write
+`[@melact.passes [1, null]]` on its `val` there: the arguments by position, and `null` if it can return
+`React.null`); a component reached through an open or a
 module alias (`module T = Tooltip`) is a compile error at the call, since its literals were compiled before
 typing could tell; a clone that the compiler cannot trace to a label is reported at build time by the alert
 `unsupported` (`-alert ++unsupported` makes it an error); the native server cannot clone.
