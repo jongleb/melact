@@ -324,9 +324,9 @@ injected props instead, such as `render: (~isFocused, ~onClose) => React.element
 where the child is still a label: `Item({render: isFocused => React.cloneElement(child, {"isFocused": isFocused})})`); a clone is traced only when
 every branch that can reach it is traced; an element given to a cloned label from a call or an option is reported
 at build time by the alert `unclonable` (`-alert ++unclonable` makes it an error), unless it comes from a function
-that returns one of its arguments, which melact-ppx finds by itself (in a module with an `.rei`, write
-`[@melact.passes [1, null]]` on its `val` there: the arguments by position, and `null` if it can return
-`React.null`); a component reached through an open or a
+that returns one of its arguments or what a function written in the call returns, which melact-ppx finds by itself
+(in a module with an `.rei`, write `[@melact.passes [1, null]]` on its `val` there: the arguments by position,
+`called(1)` for what the function at that position returns, and `null` if it can return `React.null`); a component reached through an open or a
 module alias (`module T = Tooltip`) is a compile error at the call, since its literals were compiled before
 typing could tell; a clone that the compiler cannot trace to a label is reported at build time by the alert
 `unsupported` (`-alert ++unsupported` makes it an error); the native server cannot clone.

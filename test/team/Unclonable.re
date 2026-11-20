@@ -1,8 +1,8 @@
 /* Elements given to a label a component clones: a call's result and an if with a call in a branch are reported
    at build time by the alert unclonable (silenced here, the law reads the compiled calls); JSX, React.null in a
    branch, a clone's result, a literal bound by let, a label passed on, JSX the component's hooks memoize and helpers
-   that return one of their arguments, from another module or this one, are not; a helper that wraps its argument in a
-   new element is.
+   that return one of their arguments or what a function written in the call returns, from another module or this one,
+   here or bound by let, are not; a helper that wraps its argument in a new element is, and so is a render function given by name.
    Not mounted. */
 [@alert "-unclonable"];
 
@@ -15,11 +15,14 @@ let wrappedChildren = () => <b className="wrapped" />;
 
 let shown = (flag, element) => flag ? element : React.null;
 
+let rendered = value => <b title={string_of_int(value)} />;
+
 module Caller = {
   [@react.component]
   let make = (~flag) => {
     let (count, setCount) = React.useState(() => 0);
     let local = <em />;
+    let picked = Render.renderDefaultNull(Some(count), value => <mark title={string_of_int(value)} />);
     <div>
       <Floating> {wrappedChildren()} </Floating>
       <Floating> {flag ? wrappedChildren() : <i />} </Floating>
@@ -30,6 +33,10 @@ module Caller = {
       <Floating> {Render.renderIfTrue(flag, <em />)} </Floating>
       <Floating> {Render.either(flag, <em />, local)} </Floating>
       <Floating> {Render.wrapped(<em />)} </Floating>
+      <Floating> {Render.renderDefaultNull(Some(count), value => <em title={string_of_int(value)} />)} </Floating>
+      <Floating> {Render.renderSome(Some(count), value => flag ? <em title={string_of_int(value)} /> : local)} </Floating>
+      <Floating> {Render.renderDefaultNull(Some(count), rendered)} </Floating>
+      <Floating> picked </Floating>
       <Floating> {shown(flag, <strong />)} </Floating>
       <Floating> <button title={string_of_int(count)} onClick={_ => setCount(c => c + 1)} /> </Floating>
     </div>;

@@ -108,7 +108,7 @@ test("a clone is traced only when every element that can reach it was written as
 
 test("an element given to a cloned label from where the compiler cannot see JSX is reported at build time", () => {
   const compiled = readFileSync("_build/default/test/team/melact/output/test/team/melact/Unclonable.mjs", "utf8");
-  expect(compiled.match(/React\.unclonable\(/g)).toHaveLength(3);
+  expect(compiled.match(/React\.unclonable\(/g)).toHaveLength(4);
   const others = readdirSync("_build/default/test/team/melact/output/test/team/melact")
     .filter((name) => name.endsWith(".mjs") && name !== "Unclonable.mjs")
     .filter((name) => readFileSync(`_build/default/test/team/melact/output/test/team/melact/${name}`, "utf8").includes("React.unclonable("));

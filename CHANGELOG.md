@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- From the team: `renderDefaultNull(opt, x => <Child />)` given to a cloned label was reported `unclonable`, as the
+  helper returns what its callback returns, not an argument. A fact now also records `called 1`: a call is followed
+  into the body of the function written at that position (one given by name is not, and stays reported). An element
+  bound by `let` before it is given is derived as it would be given, `null` included, and a clone refuses such a
+  binding when it can be `null`. `test/team` `Render` and `Unclonable`: a render helper, the same through another
+  helper, from a `let`, and a render function given by name; the caller law gains render helpers and `let`-bound
+  elements, the clone law a `let` before the clone. Mutants, each caught: the callback's body not followed, a
+  function given by name followed, a parameter's call not recorded, an empty derivation taken as traced, `let`
+  bindings derived without `null`, a `null` binding accepted by a clone; the untyped pass not nominating literals in
+  callbacks is caught by `Unclonable`.
+
 - From the team: `ReactDOM.domRef` was a variant (`Current | Callback`), so a JavaScript library bound on it
   (react-dnd's connectors, floating-ui's `useMergeRefs` and `refs.setFloating`) got `{TAG, _0}` instead of a ref:
   react-dnd took it for a DOM node and threw `addEventListener is not a function`, a merge set `current` on the

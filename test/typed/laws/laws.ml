@@ -518,7 +518,10 @@ type origin =
   | Picked of origin  (** [pick flag …], a function of the file that returns its argument or [React.null]. *)
 
 (** Where the generated component clones its element. *)
-type site = Direct | Folded  (** [Folded]: in a callback of [List.fold_left], given the element as its start. *)
+type site =
+  | Direct
+  | Folded  (** In a callback of [List.fold_left], given the element as its start. *)
+  | Let_first  (** [let element = … in React.cloneElement element ()]. *)
 
 let origin =
   let open Gen in
@@ -539,7 +542,7 @@ let origin =
                    map (fun inner -> Picked inner) smaller;
                  ]))
 
-let clone_case = Gen.pair origin (Gen.oneof_list [ Direct; Folded ])
+let clone_case = Gen.pair origin (Gen.oneof_list [ Direct; Folded; Let_first ])
 
 let clone_source (tree, site) =
   let rec written tree =
@@ -572,7 +575,8 @@ let clone_source (tree, site) =
       "let makeProps ~(children : React.element) ~(trigger : React.element) ~(flag : bool) ~(n : int) () =";
       (match site with
       | Direct -> Printf.sprintf "  React.cloneElement %s ()" (written tree)
-      | Folded -> Printf.sprintf "  List.fold_left (fun element plan -> React.cloneElement element plan) %s [ () ]" (written tree));
+      | Folded -> Printf.sprintf "  List.fold_left (fun element plan -> React.cloneElement element plan) %s [ () ]" (written tree)
+      | Let_first -> Printf.sprintf "  let element = %s in\n  React.cloneElement element ()" (written tree));
     ]
 
 let clone_expected (tree, _) =
@@ -626,6 +630,9 @@ type given =
   | Given_clone of given  (** [React.cloneElement …], whose result a clone can clone again. *)
   | Given_picked of given  (** [pick flag …]: a function of the file that returns its argument or [React.null]. *)
   | Given_wrapped of given  (** [wrap …]: a function of the file that returns something else. *)
+  | Given_rendered of given  (** [render (Some 1) (fun _ -> …)]: a function of the file that returns what its callback does, or [React.null]. *)
+  | Given_forwarded of given  (** [forward (Some 1) (fun _ -> …)]: a function of the file that returns what [render] does. *)
+  | Given_named of given  (** [render (Some 1) made], with the callback bound by [let] and given by name. *)
 
 let given =
   let open Gen in
@@ -644,9 +651,17 @@ let given =
                    map (fun inner -> Given_clone inner) smaller;
                    map (fun inner -> Given_picked inner) smaller;
                    map (fun inner -> Given_wrapped inner) smaller;
+                   map (fun inner -> Given_rendered inner) smaller;
+                   map (fun inner -> Given_forwarded inner) smaller;
+                   map (fun inner -> Given_named inner) smaller;
                  ]))
 
-let caller_source tree =
+(** Where a generated caller writes the element it gives. *)
+type placement = Inline | Let_bound  (** [Let_bound]: [let element = … in calleeProps ~children:element ()]. *)
+
+let caller_case = Gen.pair given (Gen.oneof_list [ Inline; Let_bound ])
+
+let caller_source (tree, placement) =
   let rec written tree =
     match tree with
     | Given_label -> "children"
@@ -658,6 +673,9 @@ let caller_source tree =
     | Given_clone inner -> Printf.sprintf "(React.cloneElement %s ())" (written inner)
     | Given_picked inner -> Printf.sprintf "(pick flag %s)" (written inner)
     | Given_wrapped inner -> Printf.sprintf "(wrap %s)" (written inner)
+    | Given_rendered inner -> Printf.sprintf "(render (Some 1) (fun _ -> %s))" (written inner)
+    | Given_forwarded inner -> Printf.sprintf "(forward (Some 1) (fun _ -> %s))" (written inner)
+    | Given_named inner -> Printf.sprintf "(let made = fun _ -> %s in render (Some 1) made)" (written inner)
   in
   String.concat "\n"
     [
@@ -670,24 +688,28 @@ let caller_source tree =
       "let unknown () = React.null";
       "let pick flag element = if flag then element else React.null";
       "let wrap (element : React.element) = ignore element; unknown ()";
+      "let render option f = match option with Some value -> f value | None -> React.null";
+      "let forward option f = render option f";
       "let calleeProps ~(children : React.element) () = React.cloneElement children ()";
       "let makeProps ~(children : React.element) ~(flag : bool) () =";
-      Printf.sprintf "  calleeProps ~children:%s ()" (written tree);
+      (match placement with
+      | Inline -> Printf.sprintf "  calleeProps ~children:%s ()" (written tree)
+      | Let_bound -> Printf.sprintf "  let element = %s in\n  calleeProps ~children:element ()" (written tree));
     ]
 
-let caller_expected tree =
+let caller_expected (tree, _) =
   let rec unknown tree =
     match tree with
     | Given_unknown -> `Unknown
     | Given_label | Given_literal | Given_null -> `Known
-    | Given_bound inner | Given_clone inner | Given_picked inner -> unknown inner
-    | Given_wrapped _ -> `Unknown
+    | Given_bound inner | Given_clone inner | Given_picked inner | Given_rendered inner | Given_forwarded inner -> unknown inner
+    | Given_wrapped _ | Given_named _ -> `Unknown
     | Given_either (yes, no) -> ( match (unknown yes, unknown no) with `Known, `Known -> `Known | (`Known | `Unknown), (`Known | `Unknown) -> `Unknown)
   in
   match unknown tree with `Unknown -> 1 | `Known -> 0
 
-let caller_found tree =
-  let structure = Ppxlib.Parse.implementation (Lexing.from_string (caller_source tree)) in
+let caller_found case =
+  let structure = Ppxlib.Parse.implementation (Lexing.from_string (caller_source case)) in
   Melact_ppx.Cloned.components :=
     List.filter_map
       (fun item ->
@@ -701,11 +723,11 @@ let caller_found tree =
 let clone_laws =
   let reported =
     Test.make ~count:400
-      ~name:"Clones: a caller's element for a cloned label is reported exactly when one of its branches is not a label, a literal, null, a clone or a function's argument it returns"
-      ~print:(fun tree ->
-        caller_source tree ^ Printf.sprintf "\nexpected %d, found %s" (caller_expected tree) (Option.fold ~none:"nothing" ~some:string_of_int (caller_found tree)))
-      given
-      (fun tree -> caller_found tree = Some (caller_expected tree))
+      ~name:"Clones: a caller's element for a cloned label is reported exactly when one of its branches is not a label, a literal, null, a clone, a function's argument it returns or what its callback written in the call returns"
+      ~print:(fun case ->
+        caller_source case ^ Printf.sprintf "\nexpected %d, found %s" (caller_expected case) (Option.fold ~none:"nothing" ~some:string_of_int (caller_found case)))
+      caller_case
+      (fun case -> caller_found case = Some (caller_expected case))
   in
   reported ::
   let print (traced, labels, literals) =

@@ -11,6 +11,7 @@ type origin =
   | Literal of Location.t  (** The JSX literal at this location. *)
   | Blank  (** [React.null], which [Children.map] and [toArray] skip, given where a caller's elements are checked. *)
   | Argument of int  (** The argument at this position of a function whose result a fact describes. *)
+  | Called of int  (** What the function given at this position returns, called by a function a fact describes. *)
 
 let rec bound pattern =
   match pattern.ppat_desc with
@@ -49,7 +50,13 @@ let reached ~of_component sources expression =
             inner
       | None, (Pexp_constraint (inner, _) | Pexp_sequence (_, inner)) -> derived_in sources inner
       | None, Pexp_apply (_, arguments) ->
-          List.concat_map (fun (_, argument) -> match argument.pexp_desc with Pexp_function _ -> [] | _ -> derived_in sources argument) arguments
+          let rec results lambda =
+            match lambda.pexp_desc with
+            | Pexp_function (_, _, Pfunction_body inner) -> results inner
+            | Pexp_function (_, _, Pfunction_cases (cases, _, _)) -> List.concat_map (fun case -> derived_in sources case.pc_rhs) cases
+            | _ -> derived_in sources lambda
+          in
+          List.concat_map (fun (_, argument) -> match argument.pexp_desc with Pexp_function _ -> results argument | _ -> derived_in sources argument) arguments
       | None, Pexp_match (_, cases) -> List.concat_map (fun case -> derived_in sources case.pc_rhs) cases
       | None, Pexp_ifthenelse (_, yes, no) -> derived_in sources yes @ Option.fold ~none:[] ~some:(derived_in sources) no
       | None, _ -> []
@@ -132,12 +139,12 @@ let candidates ~of_component expression =
   in
   let parameters, body = split expression in
   List.sort_uniq String.compare
-    (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank | Argument _ -> None) (reached ~of_component parameters body))
+    (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank | Argument _ | Called _ -> None) (reached ~of_component parameters body))
 
 let literals ~of_component bindings =
   List.concat_map
     (fun binding ->
-      List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank | Argument _ -> None) (reached ~of_component [] binding.pvb_expr))
+      List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank | Argument _ | Called _ -> None) (reached ~of_component [] binding.pvb_expr))
     bindings
 
 let element_kind env type_expr =
@@ -227,11 +234,31 @@ let rec derivation ~passes ~blank sources (expression : Ocaml_common.Typedtree.e
   let every branches =
     List.fold_left (fun all branch -> Option.bind all (fun all -> Option.map (fun more -> all @ more) (derived branch))) (Some []) branches
   in
+  let called ident =
+    Option.bind
+      (List.fold_left
+         (fun all (bound, origin) ->
+           Option.bind all (fun all ->
+               match (Ident.same bound ident, origin) with
+               | false, _ -> Some all
+               | true, Argument at -> Some (Called at :: all)
+               | true, (Label _ | Literal _ | Blank | Called _) -> None))
+         (Some []) sources)
+      (fun found -> match found with [] -> None | _ :: _ -> Some found)
+  in
   match expression.exp_desc with
+  | Texp_apply ({ exp_desc = Texp_ident (Path.Pident ident, _, _); _ }, _) when List.exists (fun (bound, _) -> Ident.same bound ident) sources -> called ident
   | Texp_ident (Path.Pident ident, _, _) -> (
       match List.filter_map (fun (bound, origin) -> match Ident.same bound ident with true -> Some origin | false -> None) sources with
       | [] -> None
-      | origins -> Some origins)
+      | origins -> (
+          match blank with
+          | `Clonable -> Some origins
+          | `Unknown ->
+              List.fold_left
+                (fun all origin ->
+                  Option.bind all (fun all -> match origin with Blank -> None | Label _ | Literal _ | Argument _ | Called _ -> Some (origin :: all)))
+                (Some []) origins))
   | Texp_ident (path, _, _) when String.equal (value_name expression.exp_env path) "React.null" -> (
       match blank with `Clonable -> Some [ Blank ] | `Unknown -> None)
   | Texp_let (_, bindings, body) ->
@@ -269,6 +296,14 @@ let rec derivation ~passes ~blank sources (expression : Ocaml_common.Typedtree.e
                         | Argument at ->
                             Option.bind (List.nth_opt arguments at) (fun (_, argument) ->
                                 match argument with Typedtree.Arg value -> derived value | Typedtree.Omitted () -> None)
+                        | Called at ->
+                            Option.bind (List.nth_opt arguments at) (fun (_, argument) ->
+                                match argument with
+                                | Typedtree.Arg { exp_desc = Texp_function (_, Tfunction_body body); _ } -> derived body
+                                | Typedtree.Arg { exp_desc = Texp_function (_, Tfunction_cases { cases; _ }); _ } ->
+                                    every (List.map (fun (case : Typedtree.value Typedtree.case) -> case.c_rhs) cases)
+                                | Typedtree.Arg { exp_desc = Texp_ident (Path.Pident ident, _, _); _ } -> called ident
+                                | Typedtree.Arg _ | Typedtree.Omitted () -> None)
                         | Blank -> ( match blank with `Clonable -> Some [ Blank ] | `Unknown -> None)
                         | Label _ | Literal _ -> None)))
                 (Some []) fact))
@@ -290,7 +325,7 @@ let traced ~known ~passes ~seeded (expression : Ocaml_common.Typedtree.expressio
         walk
           (List.fold_left
              (fun sources (binding : Typedtree.value_binding) ->
-               Option.fold ~none:sources ~some:(elements sources binding.vb_pat) (derived binding.vb_expr))
+               Option.fold ~none:sources ~some:(elements sources binding.vb_pat) (derivation ~passes ~blank:`Clonable sources binding.vb_expr))
              sources bindings)
           body
     | Texp_match (scrutinee, cases, _, _) ->
@@ -376,9 +411,9 @@ let traced ~known ~passes ~seeded (expression : Ocaml_common.Typedtree.expressio
   in
   (match seeded with `Labels -> parameters [] expression | `Unseeded -> walk [] expression);
   {
-    labels = List.sort_uniq String.compare (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank | Argument _ -> None) !found);
+    labels = List.sort_uniq String.compare (List.filter_map (fun origin -> match origin with Label label -> Some label | Literal _ | Blank | Argument _ | Called _ -> None) !found);
     traced = !calls;
-    literals = List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank | Argument _ -> None) !found;
+    literals = List.filter_map (fun origin -> match origin with Literal at -> Some at | Label _ | Blank | Argument _ | Called _ -> None) !found;
     misses = !misses;
     checked = !checked;
   }
@@ -407,8 +442,8 @@ let returned ~passes (expression : Ocaml_common.Typedtree.expression) =
            body)
         (fun origins ->
           match
-            ( List.for_all (fun origin -> match origin with Argument _ | Blank -> true | Label _ | Literal _ -> false) origins,
-              List.exists (fun origin -> match origin with Argument _ -> true | Label _ | Literal _ | Blank -> false) origins )
+            ( List.for_all (fun origin -> match origin with Argument _ | Called _ | Blank -> true | Label _ | Literal _ -> false) origins,
+              List.exists (fun origin -> match origin with Argument _ | Called _ -> true | Label _ | Literal _ | Blank -> false) origins )
           with
           | true, true -> Some (List.sort_uniq compare origins)
           | (true | false), (true | false) -> None)
@@ -426,7 +461,11 @@ let passes_fact ~loc origins =
              (elist ~loc
                 (List.filter_map
                    (fun origin ->
-                     match origin with Argument at -> Some (eint ~loc at) | Blank -> Some (evar ~loc "null") | Label _ | Literal _ -> None)
+                     match origin with
+                     | Argument at -> Some (eint ~loc at)
+                     | Called at -> Some (eapply ~loc (evar ~loc "called") [ eint ~loc at ])
+                     | Blank -> Some (evar ~loc "null")
+                     | Label _ | Literal _ -> None)
                    origins))
              [];
          ])
@@ -440,6 +479,8 @@ let passes_of (attributes : Ocaml_common.Typedtree.attributes) =
           (match item.pexp_desc with
           | Pexp_constant (Pconst_integer (at, None)) -> Option.map (fun at -> Argument at) (int_of_string_opt at)
           | Pexp_ident { txt = Lident "null"; _ } -> Some Blank
+          | Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident "called"; _ }; _ }, [ (Nolabel, { pexp_desc = Pexp_constant (Pconst_integer (at, None)); _ }) ]) ->
+              Option.map (fun at -> Called at) (int_of_string_opt at)
           | _ -> None)
           (fun origin -> Option.map (List.cons origin) (origins rest))
     | _ -> None

@@ -1690,7 +1690,12 @@ element) => flag ? element : React.null`) gets a fact of its own: the typed pass
 structure, the arguments its result can come from and whether it can be `React.null`, and records them on the
 binding as `[@melact.passes [1; null]]`, which reaches the `.cmi`. A call of such a function, from this file or
 another, is followed into those arguments, so `<Wrapper> (renderIfTrue cond <Child />) </Wrapper>` compiles the
-literal clonable and is not reported; a clone of the result in the cloning component stays untraced when the
+literal clonable and is not reported. A function that returns what a function it is given returns
+(`let renderDefaultNull = (option, render) => switch (option) { | Some(value) => render(value) | None => React.null }`)
+records it as `called 1`: a call is followed into the body of the function written in it, so
+`renderDefaultNull(opt, value => <Child value />)` is traced, while a function given by name is not followed. An
+element bound by `let` before it is given is derived as it would be given, `null` included; a clone refuses a
+binding that can be `null`. A clone of the result in the cloning component stays untraced when the
 function can return `null`, since a clone of `null` throws. A module with an interface has its `.cmi` from the
 `.rei`, where the fact is written by hand on the `val`, and trusted. A clonable element also carries React's `props`, which libraries read before
 cloning (`child.props.label`): a component literal calls its `makeProps` through `React.recording names`, an
